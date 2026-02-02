@@ -1,0 +1,39 @@
+appId: com.totality.app
+productName: Totality
+directories:
+  buildResources: resources
+  output: release
+files:
+  - dist
+  - dist-electron
+  - package.json
+  - "!**/*.map"
+  - "!**/*.d.ts"
+
+# Keep only English locale to reduce bundle size by ~30MB
+electronLanguages:
+  - en-US
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.png
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  include: resources/installer.nsh
+
+mac:
+  target:
+    - dmg
+  icon: resources/icon.icns
+
+linux:
+  target:
+    - AppImage
+  icon: resources/icon.png
+  category: Utility

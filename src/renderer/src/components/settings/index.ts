@@ -1,0 +1,7 @@
+export { SettingsPanel } from './SettingsPanel'
+export { QualitySettingsTab } from './tabs/QualitySettingsTab'
+export { ServicesTab } from './tabs/ServicesTab'
+export { AppearanceTab } from './tabs/AppearanceTab'
+export { DataManagementTab } from './tabs/DataManagementTab'
+export { MonitoringTab } from './tabs/MonitoringTab'
+export { TroubleshootTab } from './tabs/TroubleshootTab'
