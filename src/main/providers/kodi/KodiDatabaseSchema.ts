@@ -37,7 +37,7 @@ function getNfsMountMappings(): Record<string, string> {
       cachedNfsMappings = {}
     }
   }
-  return cachedNfsMappings
+  return cachedNfsMappings!
 }
 
 /**

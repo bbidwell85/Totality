@@ -58,7 +58,7 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
 
   // Modal state
   const [modalStack, setModalStack] = useState<string[]>([])
-  const [previousFocus, setPreviousFocus] = useState<FocusState | null>(null)
+  const [_previousFocus, setPreviousFocus] = useState<FocusState | null>(null)
   const focusRestoreStack = useRef<FocusState[]>([])
 
   const isModalOpen = modalStack.length > 0

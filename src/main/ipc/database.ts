@@ -164,7 +164,7 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  ipcMain.handle('settings:testNfsMapping', async (_event, nfsPath: string, localPath: string) => {
+  ipcMain.handle('settings:testNfsMapping', async (_event, _nfsPath: string, localPath: string) => {
     try {
       const stats = await fs.stat(localPath)
       if (!stats.isDirectory()) {

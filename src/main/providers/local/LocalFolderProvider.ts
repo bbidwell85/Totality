@@ -28,6 +28,7 @@ import type {
   ProgressCallback,
   SourceConfig,
   ProviderType,
+  AudioStreamInfo,
 } from '../base/MediaProvider'
 import type { MediaItem, AudioTrack } from '../../types/database'
 
@@ -1790,16 +1791,7 @@ export class LocalFolderProvider implements MediaProvider {
    */
   private convertMediaItemToMetadata(item: MediaItem): MediaMetadata {
     // Parse audio tracks from JSON string
-    let audioTracks: Array<{
-      codec?: string
-      channels?: number
-      bitrate?: number
-      language?: string
-      title?: string
-      isDefault?: boolean
-      hasObjectAudio?: boolean
-      index?: number
-    }> = []
+    let audioTracks: AudioStreamInfo[] = []
     if (item.audio_tracks) {
       try {
         const tracks = JSON.parse(item.audio_tracks) as AudioTrack[]
