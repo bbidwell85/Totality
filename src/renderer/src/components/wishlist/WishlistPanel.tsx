@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { X, Filter, ArrowUpDown, Film, Tv, Music, Loader2, ListTodo, CircleFadingArrowUp, Download, CheckCircle2, Circle } from 'lucide-react'
+import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
 import { useWishlist, WishlistMediaType, WishlistPriority, WishlistReason, WishlistStatus } from '../../contexts/WishlistContext'
 import { WishlistItemCard } from './WishlistItemCard'
 import { WishlistEmptyState } from './WishlistEmptyState'
@@ -36,6 +37,27 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
 
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const exportButtonRef = useRef<HTMLButtonElement>(null)
+  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
+
+  // Register close button for keyboard navigation
+  useEffect(() => {
+    if (isOpen && closeButtonRef.current) {
+      registerFocusable('wishlist-panel-close', closeButtonRef.current, 'panel', 0)
+    }
+    return () => unregisterFocusable('wishlist-panel-close')
+  }, [isOpen, registerFocusable, unregisterFocusable])
+
+  // Register export button
+  useEffect(() => {
+    if (isOpen && exportButtonRef.current && counts.total > 0) {
+      registerFocusable('wishlist-panel-export', exportButtonRef.current, 'panel', 1)
+    }
+    return () => unregisterFocusable('wishlist-panel-export')
+  }, [isOpen, counts.total, registerFocusable, unregisterFocusable])
+
+  const isCloseButtonFocused = focusedId === 'wishlist-panel-close' && isNavigationActive
+  const isExportButtonFocused = focusedId === 'wishlist-panel-export' && isNavigationActive
 
   // Auto-focus close button when panel opens
   useEffect(() => {
@@ -171,9 +193,10 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
         <div className="flex items-center gap-1">
           {counts.total > 0 && (
             <button
+              ref={exportButtonRef}
               onClick={handleExport}
               disabled={isExporting}
-              className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+              className={`p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none disabled:opacity-50 ${isExportButtonFocused ? 'ring-2 ring-primary' : ''}`}
               aria-label="Export wishlist to CSV"
               title="Export to CSV"
             >
@@ -187,7 +210,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
           <button
             ref={closeButtonRef}
             onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+            className={`p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${isCloseButtonFocused ? 'ring-2 ring-primary' : ''}`}
             aria-label="Close wishlist panel"
           >
             <X className="w-4 h-4 text-muted-foreground" />

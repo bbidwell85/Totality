@@ -1,5 +1,7 @@
-import { useState, useMemo, useCallback, memo } from 'react'
+import { useState, useMemo, useCallback, memo, useRef, useEffect } from 'react'
 import { X, CircleFadingArrowUp } from 'lucide-react'
+import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { MissingItemPopup } from './MissingItemPopup'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 
@@ -46,6 +48,30 @@ export const CollectionModal = memo(function CollectionModal({
   onMovieClick
 }: CollectionModalProps) {
   const [selectedMissing, setSelectedMissing] = useState<MissingMovie | null>(null)
+  const { openModal, closeModal } = useKeyboardNavigation()
+  const modalRef = useRef<HTMLDivElement>(null)
+
+  // Focus trap
+  useFocusTrap(true, modalRef)
+
+  // Modal registration
+  useEffect(() => {
+    openModal('collection-modal')
+    return () => closeModal()
+  }, [openModal, closeModal])
+
+  // Handle Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
 
   // Parse missing movies from JSON
   const missingMovies = useMemo<MissingMovie[]>(() => {
@@ -113,7 +139,7 @@ export const CollectionModal = memo(function CollectionModal({
         />
 
         {/* Modal */}
-        <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+        <div ref={modalRef} className="relative bg-card border border-border rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border/30 bg-black/30 rounded-t-lg flex-shrink-0">
             <div>

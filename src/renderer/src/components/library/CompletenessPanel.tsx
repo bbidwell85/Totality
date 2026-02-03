@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, RefreshCw, Tv, Film, Music, Square, Settings, Clock, Loader2 } from 'lucide-react'
+import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
 
 type CompletenessTaskType = 'series-completeness' | 'collection-completeness' | 'music-completeness'
 
@@ -84,6 +85,51 @@ export function CompletenessPanel({
   const [queueState, setQueueState] = useState<any>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const settingsButtonRef = useRef<HTMLButtonElement>(null)
+  const seriesButtonRef = useRef<HTMLButtonElement>(null)
+  const collectionsButtonRef = useRef<HTMLButtonElement>(null)
+  const musicButtonRef = useRef<HTMLButtonElement>(null)
+  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
+
+  // Register close button for keyboard navigation
+  useEffect(() => {
+    if (isOpen && closeButtonRef.current) {
+      registerFocusable('completeness-panel-close', closeButtonRef.current, 'panel', 0)
+    }
+    return () => unregisterFocusable('completeness-panel-close')
+  }, [isOpen, registerFocusable, unregisterFocusable])
+
+  // Register action buttons when panel is open
+  useEffect(() => {
+    if (!isOpen) return
+
+    let index = 1
+    if (settingsButtonRef.current) {
+      registerFocusable('completeness-panel-settings', settingsButtonRef.current, 'panel', index++)
+    }
+    if (seriesButtonRef.current) {
+      registerFocusable('completeness-panel-series', seriesButtonRef.current, 'panel', index++)
+    }
+    if (collectionsButtonRef.current) {
+      registerFocusable('completeness-panel-collections', collectionsButtonRef.current, 'panel', index++)
+    }
+    if (musicButtonRef.current) {
+      registerFocusable('completeness-panel-music', musicButtonRef.current, 'panel', index++)
+    }
+
+    return () => {
+      unregisterFocusable('completeness-panel-settings')
+      unregisterFocusable('completeness-panel-series')
+      unregisterFocusable('completeness-panel-collections')
+      unregisterFocusable('completeness-panel-music')
+    }
+  }, [isOpen, isKeyConfigured, hasTV, hasMovies, hasMusic, isAnalyzing, analysisType, registerFocusable, unregisterFocusable])
+
+  const isCloseButtonFocused = focusedId === 'completeness-panel-close' && isNavigationActive
+  const isSettingsButtonFocused = focusedId === 'completeness-panel-settings' && isNavigationActive
+  const isSeriesButtonFocused = focusedId === 'completeness-panel-series' && isNavigationActive
+  const isCollectionsButtonFocused = focusedId === 'completeness-panel-collections' && isNavigationActive
+  const isMusicButtonFocused = focusedId === 'completeness-panel-music' && isNavigationActive
 
   // Helper to check if a task type is queued or running
   const getTaskStatus = useCallback((taskType: CompletenessTaskType): 'queued' | 'running' | null => {
@@ -277,7 +323,7 @@ export function CompletenessPanel({
         <button
           ref={closeButtonRef}
           onClick={onClose}
-          className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+          className={`p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${isCloseButtonFocused ? 'ring-2 ring-primary' : ''}`}
           aria-label="Close completeness panel"
         >
           <X className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
@@ -294,8 +340,9 @@ export function CompletenessPanel({
               To analyze TV/movie completeness, you need to configure a TMDB API key in Settings.
             </p>
             <button
+              ref={settingsButtonRef}
               onClick={() => onOpenSettings?.('services')}
-              className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
+              className={`flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 focus:outline-none ${isSettingsButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
             >
               <Settings className="w-4 h-4" />
               Open Settings
@@ -395,8 +442,9 @@ export function CompletenessPanel({
               if (isAnalyzing && analysisType === 'series') {
                 return (
                   <button
+                    ref={seriesButtonRef}
                     onClick={() => onCancel('series')}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm"
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm focus:outline-none ${isSeriesButtonFocused ? 'ring-2 ring-destructive ring-offset-2 ring-offset-background' : ''}`}
                   >
                     <Square className="w-4 h-4" />
                     Stop Analysis
@@ -406,6 +454,7 @@ export function CompletenessPanel({
               if (taskStatus === 'running') {
                 return (
                   <button
+                    ref={seriesButtonRef}
                     disabled
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary/70 text-primary-foreground rounded-md text-sm cursor-not-allowed"
                   >
@@ -417,6 +466,7 @@ export function CompletenessPanel({
               if (taskStatus === 'queued') {
                 return (
                   <button
+                    ref={seriesButtonRef}
                     disabled
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-md text-sm cursor-not-allowed"
                   >
@@ -427,9 +477,10 @@ export function CompletenessPanel({
               }
               return (
                 <button
+                  ref={seriesButtonRef}
                   onClick={handleAnalyzeSeries}
                   disabled={!isKeyConfigured}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm focus:outline-none ${isSeriesButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
                 >
                   <RefreshCw className="w-4 h-4" />
                   Analyze Series
@@ -475,8 +526,9 @@ export function CompletenessPanel({
               if (isAnalyzing && analysisType === 'collections') {
                 return (
                   <button
+                    ref={collectionsButtonRef}
                     onClick={() => onCancel('collections')}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm"
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm focus:outline-none ${isCollectionsButtonFocused ? 'ring-2 ring-destructive ring-offset-2 ring-offset-background' : ''}`}
                   >
                     <Square className="w-4 h-4" />
                     Stop Analysis
@@ -486,6 +538,7 @@ export function CompletenessPanel({
               if (taskStatus === 'running') {
                 return (
                   <button
+                    ref={collectionsButtonRef}
                     disabled
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary/70 text-primary-foreground rounded-md text-sm cursor-not-allowed"
                   >
@@ -497,6 +550,7 @@ export function CompletenessPanel({
               if (taskStatus === 'queued') {
                 return (
                   <button
+                    ref={collectionsButtonRef}
                     disabled
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-md text-sm cursor-not-allowed"
                   >
@@ -507,9 +561,10 @@ export function CompletenessPanel({
               }
               return (
                 <button
+                  ref={collectionsButtonRef}
                   onClick={handleAnalyzeCollections}
                   disabled={!isKeyConfigured}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm focus:outline-none ${isCollectionsButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
                 >
                   <RefreshCw className="w-4 h-4" />
                   Analyze Collections
@@ -555,8 +610,9 @@ export function CompletenessPanel({
               if (isAnalyzing && analysisType === 'music') {
                 return (
                   <button
+                    ref={musicButtonRef}
                     onClick={() => onCancel('music')}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm"
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm focus:outline-none ${isMusicButtonFocused ? 'ring-2 ring-destructive ring-offset-2 ring-offset-background' : ''}`}
                   >
                     <Square className="w-4 h-4" />
                     Stop Analysis
@@ -566,6 +622,7 @@ export function CompletenessPanel({
               if (taskStatus === 'running') {
                 return (
                   <button
+                    ref={musicButtonRef}
                     disabled
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary/70 text-primary-foreground rounded-md text-sm cursor-not-allowed"
                   >
@@ -577,6 +634,7 @@ export function CompletenessPanel({
               if (taskStatus === 'queued') {
                 return (
                   <button
+                    ref={musicButtonRef}
                     disabled
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-md text-sm cursor-not-allowed"
                   >
@@ -587,8 +645,9 @@ export function CompletenessPanel({
               }
               return (
                 <button
+                  ref={musicButtonRef}
                   onClick={handleAnalyzeMusic}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm focus:outline-none ${isMusicButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
                 >
                   <RefreshCw className="w-4 h-4" />
                   Analyze Music

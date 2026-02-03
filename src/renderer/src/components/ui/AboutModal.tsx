@@ -4,8 +4,10 @@
  * Displays app version, credits, and legal information with tabbed navigation.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, Info, Heart, Scale } from 'lucide-react'
+import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import tmdbLogo from '../../assets/tmdb-logo.svg'
 import musicbrainzLogo from '../../assets/musicbrainz-logo.svg'
 import logoImage from '../../assets/logo.png'
@@ -31,12 +33,40 @@ const tabs: Tab[] = [
 
 export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>('about')
+  const { openModal, closeModal } = useKeyboardNavigation()
+  const modalRef = useRef<HTMLDivElement>(null)
+
+  // Focus trap
+  useFocusTrap(isOpen, modalRef)
+
+  // Modal registration
+  useEffect(() => {
+    if (isOpen) {
+      openModal('about-modal')
+      return () => closeModal()
+    }
+  }, [isOpen, openModal, closeModal])
+
+  // Handle Escape key
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
 
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150]">
-      <div className="bg-card border border-border rounded-lg w-full max-w-lg mx-4 shadow-xl max-h-[90vh] flex flex-col">
+      <div ref={modalRef} className="bg-card border border-border rounded-lg w-full max-w-lg mx-4 shadow-xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border/30 bg-black/30 rounded-t-lg">
           <h2 className="text-lg font-semibold">About Totality</h2>

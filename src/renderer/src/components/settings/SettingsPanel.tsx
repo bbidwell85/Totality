@@ -1,5 +1,7 @@
 import { useState, useCallback, useId, useRef, useEffect } from 'react'
 import { X, Sliders, Wrench, Palette, Database, Activity, Bug } from 'lucide-react'
+import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { QualitySettingsTab } from './tabs/QualitySettingsTab'
 import { ServicesTab } from './tabs/ServicesTab'
 import { AppearanceTab } from './tabs/AppearanceTab'
@@ -32,9 +34,22 @@ const TABS: Tab[] = [
 
 export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>(initialTab || 'quality')
+  const { openModal, closeModal } = useKeyboardNavigation()
   const titleId = useId()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const tabListRef = useRef<HTMLDivElement>(null)
+  const modalRef = useRef<HTMLDivElement>(null)
+
+  // Focus trap
+  useFocusTrap(isOpen, modalRef, false)
+
+  // Modal registration
+  useEffect(() => {
+    if (isOpen) {
+      openModal('settings-panel')
+      return () => closeModal()
+    }
+  }, [isOpen, openModal, closeModal])
 
   // Focus close button when modal opens, and set initial tab
   useEffect(() => {
@@ -124,6 +139,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
       onClick={handleBackdropClick}
     >
       <div
+        ref={modalRef}
         className="bg-card border border-border/30 rounded-2xl w-full max-w-4xl h-[680px] flex flex-col shadow-xl mx-4"
         onClick={(e) => e.stopPropagation()}
       >

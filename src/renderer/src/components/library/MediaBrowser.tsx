@@ -83,6 +83,19 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
   const [searchResultIndex, setSearchResultIndex] = useState(-1)
   const searchContainerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const moviesTabRef = useRef<HTMLButtonElement>(null)
+  const tvTabRef = useRef<HTMLButtonElement>(null)
+  const musicTabRef = useRef<HTMLButtonElement>(null)
+  const completenessButtonRef = useRef<HTMLButtonElement>(null)
+  const wishlistButtonRef = useRef<HTMLButtonElement>(null)
+  const settingsButtonRef = useRef<HTMLButtonElement>(null)
+  // Filter refs - using Map for dynamic buttons
+  const tierFilterRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+  const qualityFilterRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+  const alphabetFilterRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+  const gridViewRef = useRef<HTMLButtonElement>(null)
+  const listViewRef = useRef<HTMLButtonElement>(null)
+  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
   const [debouncedTierFilter, setDebouncedTierFilter] = useState<'all' | 'SD' | '720p' | '1080p' | '4K'>('all')
   const [debouncedQualityFilter, setDebouncedQualityFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all')
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null)
@@ -158,7 +171,11 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
       // W - Toggle wishlist panel
       if (e.key === 'w' || e.key === 'W') {
         e.preventDefault()
-        setShowWishlistPanel(prev => !prev)
+        setShowWishlistPanel(prev => {
+          const newState = !prev
+          if (newState) setShowCompletenessPanel(false)
+          return newState
+        })
       }
     }
 
@@ -224,6 +241,105 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
       pendingUpdateRef.current = null
     }, 500) // 500ms debounce for live updates
   }, [activeSourceId, loadActiveSourceLibraries, scanProgress.size])
+
+  // Register toolbar elements for keyboard navigation
+  useEffect(() => {
+    // Toolbar elements: search, view tabs, panel buttons, settings
+    if (searchInputRef.current) {
+      registerFocusable('toolbar-search', searchInputRef.current, 'toolbar', 0)
+    }
+    if (moviesTabRef.current) {
+      registerFocusable('toolbar-movies', moviesTabRef.current, 'toolbar', 1)
+    }
+    if (tvTabRef.current) {
+      registerFocusable('toolbar-tv', tvTabRef.current, 'toolbar', 2)
+    }
+    if (musicTabRef.current) {
+      registerFocusable('toolbar-music', musicTabRef.current, 'toolbar', 3)
+    }
+    if (completenessButtonRef.current) {
+      registerFocusable('toolbar-completeness', completenessButtonRef.current, 'toolbar', 4)
+    }
+    if (wishlistButtonRef.current) {
+      registerFocusable('toolbar-wishlist', wishlistButtonRef.current, 'toolbar', 5)
+    }
+    if (settingsButtonRef.current) {
+      registerFocusable('toolbar-settings', settingsButtonRef.current, 'toolbar', 6)
+    }
+    return () => {
+      unregisterFocusable('toolbar-search')
+      unregisterFocusable('toolbar-movies')
+      unregisterFocusable('toolbar-tv')
+      unregisterFocusable('toolbar-music')
+      unregisterFocusable('toolbar-completeness')
+      unregisterFocusable('toolbar-wishlist')
+      unregisterFocusable('toolbar-settings')
+    }
+  }, [registerFocusable, unregisterFocusable])
+
+  // Check which toolbar elements are focused
+  const isSearchFocused = focusedId === 'toolbar-search' && isNavigationActive
+  const isMoviesTabFocused = focusedId === 'toolbar-movies' && isNavigationActive
+  const isTvTabFocused = focusedId === 'toolbar-tv' && isNavigationActive
+  const isMusicTabFocused = focusedId === 'toolbar-music' && isNavigationActive
+  const isCompletenessButtonFocused = focusedId === 'toolbar-completeness' && isNavigationActive
+  const isWishlistButtonFocused = focusedId === 'toolbar-wishlist' && isNavigationActive
+  const isSettingsButtonFocused = focusedId === 'toolbar-settings' && isNavigationActive
+
+  // Register filter elements for keyboard navigation
+  useEffect(() => {
+    let filterIndex = 0
+
+    // Tier filter buttons
+    const tierOptions = ['all', '4K', '1080p', '720p', 'SD']
+    tierOptions.forEach((tier) => {
+      const ref = tierFilterRefs.current.get(tier)
+      if (ref) {
+        registerFocusable(`filter-tier-${tier}`, ref, 'filters', filterIndex++)
+      }
+    })
+
+    // Quality filter buttons
+    const qualityOptions = ['all', 'high', 'medium', 'low']
+    qualityOptions.forEach((quality) => {
+      const ref = qualityFilterRefs.current.get(quality)
+      if (ref) {
+        registerFocusable(`filter-quality-${quality}`, ref, 'filters', filterIndex++)
+      }
+    })
+
+    // View toggle buttons
+    if (gridViewRef.current) {
+      registerFocusable('filter-view-grid', gridViewRef.current, 'filters', filterIndex++)
+    }
+    if (listViewRef.current) {
+      registerFocusable('filter-view-list', listViewRef.current, 'filters', filterIndex++)
+    }
+
+    // Alphabet filter buttons
+    const alphabetOptions = [null, '#', ...Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ')]
+    alphabetOptions.forEach((letter) => {
+      const key = letter === null ? 'all' : letter
+      const ref = alphabetFilterRefs.current.get(key)
+      if (ref) {
+        registerFocusable(`filter-alpha-${key}`, ref, 'filters', filterIndex++)
+      }
+    })
+
+    return () => {
+      tierOptions.forEach((tier) => unregisterFocusable(`filter-tier-${tier}`))
+      qualityOptions.forEach((quality) => unregisterFocusable(`filter-quality-${quality}`))
+      unregisterFocusable('filter-view-grid')
+      unregisterFocusable('filter-view-list')
+      alphabetOptions.forEach((letter) => {
+        const key = letter === null ? 'all' : letter
+        unregisterFocusable(`filter-alpha-${key}`)
+      })
+    }
+  }, [registerFocusable, unregisterFocusable, view])
+
+  // Helper to check if a filter element is focused
+  const isFilterFocused = (type: string, value: string) => focusedId === `filter-${type}-${value}` && isNavigationActive
 
   useEffect(() => {
     loadMedia()
@@ -1177,7 +1293,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
               }}
               onFocus={() => setShowSearchResults(true)}
               onKeyDown={handleSearchKeyDown}
-              className="w-full pl-10 pr-8 py-2 bg-muted/50 border border-border/50 rounded-lg text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className={`w-full pl-10 pr-8 py-2 bg-muted/50 border border-border/50 rounded-lg text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary ${isSearchFocused ? 'ring-2 ring-primary' : ''}`}
               aria-label="Search all libraries"
               aria-autocomplete="list"
               aria-controls="search-results-listbox"
@@ -1472,6 +1588,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
             <div className="flex gap-1">
                 {/* Movies Button - Always visible */}
                 <button
+                  ref={moviesTabRef}
                   onClick={() => {
                     if (!hasMovies) return
                     setView('movies')
@@ -1481,11 +1598,11 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                     setSelectedAlbum(null)
                   }}
                   disabled={!hasMovies}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
                     view === 'movies'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50`}
+                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50 ${isMoviesTabFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
                   role="tab"
                   aria-selected={view === 'movies'}
                   aria-controls="library-content"
@@ -1497,6 +1614,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
 
                 {/* TV Shows Button - Always visible */}
                 <button
+                  ref={tvTabRef}
                   onClick={() => {
                     if (!hasTV) return
                     setView('tv')
@@ -1506,11 +1624,11 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                     setSelectedAlbum(null)
                   }}
                   disabled={!hasTV}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
                     view === 'tv'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50`}
+                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50 ${isTvTabFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
                   role="tab"
                   aria-selected={view === 'tv'}
                   aria-controls="library-content"
@@ -1522,6 +1640,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
 
                 {/* Music Button - Always visible */}
                 <button
+                  ref={musicTabRef}
                   onClick={() => {
                     if (!hasMusic) return
                     setView('music')
@@ -1531,11 +1650,11 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                     setSelectedAlbum(null)
                   }}
                   disabled={!hasMusic}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
                     view === 'music'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50`}
+                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50 ${isMusicTabFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
                   role="tab"
                   aria-selected={view === 'music'}
                   aria-controls="library-content"
@@ -1559,12 +1678,17 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
           {/* Right Section: Panel Toggle & Settings */}
           <div className="flex items-center justify-end flex-1 gap-2">
             <button
-              onClick={() => setShowCompletenessPanel(!showCompletenessPanel)}
-              className={`p-2.5 rounded-md transition-colors flex items-center gap-1 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black ${
+              ref={completenessButtonRef}
+              onClick={() => {
+                const newState = !showCompletenessPanel
+                if (newState) setShowWishlistPanel(false)
+                setShowCompletenessPanel(newState)
+              }}
+              className={`p-2.5 rounded-md transition-colors flex items-center gap-1 flex-shrink-0 focus:outline-none ${
                 showCompletenessPanel
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-              }`}
+              } ${isCompletenessButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
               aria-label={showCompletenessPanel ? 'Hide completeness panel' : 'Show completeness panel'}
               aria-expanded={showCompletenessPanel}
               aria-controls="completeness-panel"
@@ -1573,12 +1697,17 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
               {!tmdbApiKeySet && <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full" aria-label="API key not configured" />}
             </button>
             <button
-              onClick={() => setShowWishlistPanel(!showWishlistPanel)}
-              className={`p-2.5 rounded-md transition-colors flex items-center gap-1.5 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black ${
+              ref={wishlistButtonRef}
+              onClick={() => {
+                const newState = !showWishlistPanel
+                if (newState) setShowCompletenessPanel(false)
+                setShowWishlistPanel(newState)
+              }}
+              className={`p-2.5 rounded-md transition-colors flex items-center gap-1.5 flex-shrink-0 focus:outline-none ${
                 showWishlistPanel
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-              }`}
+              } ${isWishlistButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
               aria-label={showWishlistPanel ? 'Hide wishlist panel' : 'Show wishlist panel'}
               aria-expanded={showWishlistPanel}
               aria-controls="wishlist-panel"
@@ -1592,8 +1721,9 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
             </button>
             <ActivityPanel />
             <button
+              ref={settingsButtonRef}
               onClick={() => onOpenSettings?.()}
-              className="p-2.5 rounded-md transition-colors flex-shrink-0 bg-muted/50 text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black"
+              className={`p-2.5 rounded-md transition-colors flex-shrink-0 bg-muted/50 text-muted-foreground hover:bg-muted focus:outline-none ${isSettingsButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
               aria-label="Open settings"
             >
               <Settings className="w-4 h-4" aria-hidden="true" />
@@ -1651,12 +1781,16 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                       {['all', '4K', '1080p', '720p', 'SD'].map((tier) => (
                         <button
                           key={tier}
+                          ref={(el) => {
+                            if (el) tierFilterRefs.current.set(tier, el)
+                            else tierFilterRefs.current.delete(tier)
+                          }}
                           onClick={() => setTierFilter(tier as typeof tierFilter)}
-                          className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
+                          className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-none ${
                             tierFilter === tier
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                          }`}
+                          } ${isFilterFocused('tier', tier) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                         >
                           {tier === 'all' ? 'All' : tier}
                         </button>
@@ -1679,12 +1813,16 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                       {['all', 'high', 'medium', 'low'].map((quality) => (
                         <button
                           key={quality}
+                          ref={(el) => {
+                            if (el) qualityFilterRefs.current.set(quality, el)
+                            else qualityFilterRefs.current.delete(quality)
+                          }}
                           onClick={() => setQualityFilter(quality as typeof qualityFilter)}
-                          className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
+                          className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-none ${
                             qualityFilter === quality
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                          }`}
+                          } ${isFilterFocused('quality', quality) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                         >
                           {quality.charAt(0).toUpperCase() + quality.slice(1)}
                         </button>
@@ -1717,22 +1855,24 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                  !(view === 'music' && musicViewMode === 'tracks') && (
                   <div className="flex gap-1">
                     <button
+                      ref={gridViewRef}
                       onClick={() => setViewType('grid')}
-                      className={`p-1.5 rounded-md transition-colors ${
+                      className={`p-1.5 rounded-md transition-colors focus:outline-none ${
                         viewType === 'grid'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                      }`}
+                      } ${isFilterFocused('view', 'grid') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                     >
                       <Grid3x3 className="w-4 h-4" />
                     </button>
                     <button
+                      ref={listViewRef}
                       onClick={() => setViewType('list')}
-                      className={`p-1.5 rounded-md transition-colors ${
+                      className={`p-1.5 rounded-md transition-colors focus:outline-none ${
                         viewType === 'list'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                      }`}
+                      } ${isFilterFocused('view', 'list') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                     >
                       <List className="w-4 h-4" />
                     </button>
@@ -1745,12 +1885,16 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
             <div className="flex justify-center" role="group" aria-label="Filter by letter">
               <div className="flex gap-0.5 items-center">
                 <button
+                  ref={(el) => {
+                    if (el) alphabetFilterRefs.current.set('all', el)
+                    else alphabetFilterRefs.current.delete('all')
+                  }}
                   onClick={() => setAlphabetFilter(null)}
-                  className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${
+                  className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors focus:outline-none ${
                     alphabetFilter === null
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                  }`}
+                  } ${isFilterFocused('alpha', 'all') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                   title="Show all"
                   aria-label="Show all items"
                   aria-pressed={alphabetFilter === null}
@@ -1758,12 +1902,16 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                   All
                 </button>
                 <button
+                  ref={(el) => {
+                    if (el) alphabetFilterRefs.current.set('#', el)
+                    else alphabetFilterRefs.current.delete('#')
+                  }}
                   onClick={() => setAlphabetFilter('#')}
-                  className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${
+                  className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors focus:outline-none ${
                     alphabetFilter === '#'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                  }`}
+                  } ${isFilterFocused('alpha', '#') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                   title="Numbers and special characters"
                   aria-label="Filter by numbers and special characters"
                   aria-pressed={alphabetFilter === '#'}
@@ -1773,12 +1921,16 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                 {Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ').map((letter) => (
                   <button
                     key={letter}
+                    ref={(el) => {
+                      if (el) alphabetFilterRefs.current.set(letter, el)
+                      else alphabetFilterRefs.current.delete(letter)
+                    }}
                     onClick={() => setAlphabetFilter(letter)}
-                    className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${
+                    className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors focus:outline-none ${
                       alphabetFilter === letter
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                    }`}
+                    } ${isFilterFocused('alpha', letter) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                     aria-label={`Filter by letter ${letter}`}
                     aria-pressed={alphabetFilter === letter}
                   >

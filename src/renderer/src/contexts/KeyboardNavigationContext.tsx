@@ -1,20 +1,40 @@
 import React, { createContext, useContext, useEffect, useCallback, useRef, useState } from 'react'
 
+// All navigable regions in the app
+type Region = 'sidebar' | 'toolbar' | 'filters' | 'content' | 'panel' | 'modal'
+
+// Region cycle order (excluding modal which is handled separately)
+const REGION_CYCLE: Region[] = ['sidebar', 'toolbar', 'filters', 'content', 'panel']
+
+interface FocusState {
+  id: string
+  region: Region
+}
+
 interface KeyboardNavigationContextType {
   // Register a focusable element in a specific region
-  registerFocusable: (id: string, element: HTMLElement, region: string, index: number) => void
+  registerFocusable: (id: string, element: HTMLElement, region: Region, index: number) => void
   // Unregister a focusable element
   unregisterFocusable: (id: string) => void
   // Current focused element ID
   focusedId: string | null
-  // Current region (sidebar, content, modal)
-  currentRegion: string
+  // Current region
+  currentRegion: Region
   // Set the current region
-  setCurrentRegion: (region: string) => void
+  setCurrentRegion: (region: Region) => void
   // Focus a specific element
   focusElement: (id: string) => void
   // Check if keyboard navigation is active
   isNavigationActive: boolean
+  // Modal management
+  openModal: (modalId: string) => void
+  closeModal: () => void
+  isModalOpen: boolean
+  // Navigate to next/previous region
+  navigateToNextRegion: () => void
+  navigateToPreviousRegion: () => void
+  // Jump to specific region
+  jumpToRegion: (region: Region) => void
 }
 
 const KeyboardNavigationContext = createContext<KeyboardNavigationContextType | null>(null)
@@ -22,17 +42,28 @@ const KeyboardNavigationContext = createContext<KeyboardNavigationContextType | 
 interface FocusableElement {
   id: string
   element: HTMLElement
-  region: string
+  region: Region
   index: number
 }
 
 export function KeyboardNavigationProvider({ children }: { children: React.ReactNode }) {
   const focusableElements = useRef<Map<string, FocusableElement>>(new Map())
   const [focusedId, setFocusedId] = useState<string | null>(null)
-  const [currentRegion, setCurrentRegion] = useState<string>('content')
+  const [currentRegion, setCurrentRegion] = useState<Region>('content')
   const [isNavigationActive, setIsNavigationActive] = useState(false)
 
-  const registerFocusable = useCallback((id: string, element: HTMLElement, region: string, index: number) => {
+  // Feature toggle - set to false to disable custom keyboard navigation
+  // All code remains in place but the feature is inactive
+  const isEnabled = false
+
+  // Modal state
+  const [modalStack, setModalStack] = useState<string[]>([])
+  const [previousFocus, setPreviousFocus] = useState<FocusState | null>(null)
+  const focusRestoreStack = useRef<FocusState[]>([])
+
+  const isModalOpen = modalStack.length > 0
+
+  const registerFocusable = useCallback((id: string, element: HTMLElement, region: Region, index: number) => {
     focusableElements.current.set(id, { id, element, region, index })
   }, [])
 
@@ -50,7 +81,7 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
   }, [])
 
   // Get elements in current region sorted by index
-  const getRegionElements = useCallback((region: string) => {
+  const getRegionElements = useCallback((region: Region) => {
     const elements: FocusableElement[] = []
     focusableElements.current.forEach((el) => {
       if (el.region === region) {
@@ -59,6 +90,101 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
     })
     return elements.sort((a, b) => a.index - b.index)
   }, [])
+
+  // Focus first element in a region
+  const focusFirstInRegion = useCallback((region: Region): boolean => {
+    const elements = getRegionElements(region)
+    if (elements.length > 0) {
+      elements[0].element.focus()
+      elements[0].element.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      setFocusedId(elements[0].id)
+      setCurrentRegion(region)
+      return true
+    }
+    return false
+  }, [getRegionElements])
+
+  // Navigate to next region (F6)
+  const navigateToNextRegion = useCallback(() => {
+    if (isModalOpen) return // Don't navigate regions when modal is open
+
+    setIsNavigationActive(true)
+    const currentIndex = REGION_CYCLE.indexOf(currentRegion)
+
+    // Try each region in order until we find one with elements
+    for (let i = 1; i <= REGION_CYCLE.length; i++) {
+      const nextIndex = (currentIndex + i) % REGION_CYCLE.length
+      const nextRegion = REGION_CYCLE[nextIndex]
+      if (focusFirstInRegion(nextRegion)) {
+        return
+      }
+    }
+  }, [currentRegion, focusFirstInRegion, isModalOpen])
+
+  // Navigate to previous region (Shift+F6)
+  const navigateToPreviousRegion = useCallback(() => {
+    if (isModalOpen) return
+
+    setIsNavigationActive(true)
+    const currentIndex = REGION_CYCLE.indexOf(currentRegion)
+
+    for (let i = 1; i <= REGION_CYCLE.length; i++) {
+      const prevIndex = (currentIndex - i + REGION_CYCLE.length) % REGION_CYCLE.length
+      const prevRegion = REGION_CYCLE[prevIndex]
+      if (focusFirstInRegion(prevRegion)) {
+        return
+      }
+    }
+  }, [currentRegion, focusFirstInRegion, isModalOpen])
+
+  // Jump to specific region
+  const jumpToRegion = useCallback((region: Region) => {
+    if (isModalOpen && region !== 'modal') return
+
+    setIsNavigationActive(true)
+    focusFirstInRegion(region)
+  }, [focusFirstInRegion, isModalOpen])
+
+  // Open modal - save current focus and switch to modal region
+  const openModal = useCallback((modalId: string) => {
+    // Save current focus state to restore later
+    if (focusedId && currentRegion !== 'modal') {
+      focusRestoreStack.current.push({ id: focusedId, region: currentRegion })
+      setPreviousFocus({ id: focusedId, region: currentRegion })
+    }
+
+    setModalStack(prev => [...prev, modalId])
+    setCurrentRegion('modal')
+  }, [focusedId, currentRegion])
+
+  // Close modal - restore previous focus
+  const closeModal = useCallback(() => {
+    setModalStack(prev => {
+      const newStack = prev.slice(0, -1)
+
+      // If no more modals, restore focus
+      if (newStack.length === 0) {
+        const savedFocus = focusRestoreStack.current.pop()
+        if (savedFocus) {
+          // Use setTimeout to allow modal to close first
+          setTimeout(() => {
+            const focusable = focusableElements.current.get(savedFocus.id)
+            if (focusable) {
+              focusable.element.focus()
+              setFocusedId(savedFocus.id)
+              setCurrentRegion(savedFocus.region)
+            } else {
+              // If element no longer exists, focus first in saved region
+              focusFirstInRegion(savedFocus.region)
+            }
+          }, 0)
+        }
+        setPreviousFocus(null)
+      }
+
+      return newStack
+    })
+  }, [focusFirstInRegion])
 
   // Find element by grid position (for 2D navigation in content area)
   const findElementByDirection = useCallback((
@@ -87,10 +213,89 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
       if (direction === 'down' && currentIndex < regionElements.length - 1) {
         return regionElements[currentIndex + 1]
       }
-      // Right arrow moves to content
+      // Right arrow moves to toolbar first, then content
       if (direction === 'right') {
+        const toolbarElements = getRegionElements('toolbar')
+        if (toolbarElements.length > 0) return toolbarElements[0]
         const contentElements = getRegionElements('content')
         return contentElements[0] || null
+      }
+      return null
+    }
+
+    // For toolbar (horizontal list)
+    if (current.region === 'toolbar') {
+      if (direction === 'left' && currentIndex > 0) {
+        return regionElements[currentIndex - 1]
+      }
+      if (direction === 'right' && currentIndex < regionElements.length - 1) {
+        return regionElements[currentIndex + 1]
+      }
+      // Down goes to filters or content
+      if (direction === 'down') {
+        const filterElements = getRegionElements('filters')
+        if (filterElements.length > 0) return filterElements[0]
+        const contentElements = getRegionElements('content')
+        return contentElements[0] || null
+      }
+      // Left at beginning goes to sidebar
+      if (direction === 'left' && currentIndex === 0) {
+        const sidebarElements = getRegionElements('sidebar')
+        return sidebarElements[0] || null
+      }
+      return null
+    }
+
+    // For filters (horizontal list)
+    if (current.region === 'filters') {
+      if (direction === 'left' && currentIndex > 0) {
+        return regionElements[currentIndex - 1]
+      }
+      if (direction === 'right' && currentIndex < regionElements.length - 1) {
+        return regionElements[currentIndex + 1]
+      }
+      // Left at first element goes to sidebar
+      if (direction === 'left' && currentIndex === 0) {
+        const sidebarElements = getRegionElements('sidebar')
+        return sidebarElements[0] || null
+      }
+      // Up goes to toolbar
+      if (direction === 'up') {
+        const toolbarElements = getRegionElements('toolbar')
+        return toolbarElements[0] || null
+      }
+      // Down goes to content
+      if (direction === 'down') {
+        const contentElements = getRegionElements('content')
+        return contentElements[0] || null
+      }
+      return null
+    }
+
+    // For panel (vertical list)
+    if (current.region === 'panel') {
+      if (direction === 'up' && currentIndex > 0) {
+        return regionElements[currentIndex - 1]
+      }
+      if (direction === 'down' && currentIndex < regionElements.length - 1) {
+        return regionElements[currentIndex + 1]
+      }
+      // Left goes to content
+      if (direction === 'left') {
+        const contentElements = getRegionElements('content')
+        return contentElements[0] || null
+      }
+      return null
+    }
+
+    // For modal (vertical/grid depending on content)
+    if (current.region === 'modal') {
+      // Simple up/down navigation in modal
+      if (direction === 'up' && currentIndex > 0) {
+        return regionElements[currentIndex - 1]
+      }
+      if (direction === 'down' && currentIndex < regionElements.length - 1) {
+        return regionElements[currentIndex + 1]
       }
       return null
     }
@@ -153,6 +358,20 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
         return sidebarElements[0] || null
       }
 
+      // If right and no match found, go to panel if open
+      if (direction === 'right' && !bestMatch) {
+        const panelElements = getRegionElements('panel')
+        if (panelElements.length > 0) return panelElements[0]
+      }
+
+      // If up and no match found, go to filters
+      if (direction === 'up' && !bestMatch) {
+        const filterElements = getRegionElements('filters')
+        if (filterElements.length > 0) return filterElements[0]
+        const toolbarElements = getRegionElements('toolbar')
+        return toolbarElements[0] || null
+      }
+
       return bestMatch
     }
 
@@ -162,7 +381,21 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
   // Global keyboard handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if in an input field
+      // Feature disabled - don't handle any custom keyboard navigation
+      if (!isEnabled) return
+
+      // F6 - Cycle through regions
+      if (e.key === 'F6') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          navigateToPreviousRegion()
+        } else {
+          navigateToNextRegion()
+        }
+        return
+      }
+
+      // Ignore arrow keys if in an input field
       if (
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
@@ -171,8 +404,9 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
         return
       }
 
-      // Arrow key navigation
+      // Arrow key navigation - disabled when modal is open (let modal handle it)
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        if (isModalOpen) return // Modal has its own navigation
         e.preventDefault()
         setIsNavigationActive(true)
 
@@ -198,28 +432,45 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
         }
       }
 
-      // Tab to switch regions
-      if (e.key === 'Tab') {
+      // Tab to move within region or to next region
+      if (e.key === 'Tab' && !isModalOpen) {
         setIsNavigationActive(true)
-        const regions = ['sidebar', 'content']
-        const currentIndex = regions.indexOf(currentRegion)
-        const nextIndex = e.shiftKey
-          ? (currentIndex - 1 + regions.length) % regions.length
-          : (currentIndex + 1) % regions.length
-        const nextRegion = regions[nextIndex]
 
-        const nextRegionElements = getRegionElements(nextRegion)
-        if (nextRegionElements.length > 0) {
-          e.preventDefault()
-          const firstElement = nextRegionElements[0]
-          firstElement.element.focus()
-          setFocusedId(firstElement.id)
-          setCurrentRegion(nextRegion)
+        // Get current region elements
+        const regionElements = getRegionElements(currentRegion)
+        const currentIndex = focusedId
+          ? regionElements.findIndex(el => el.id === focusedId)
+          : -1
+
+        if (e.shiftKey) {
+          // Shift+Tab - go to previous element or previous region
+          if (currentIndex > 0) {
+            e.preventDefault()
+            const prevElement = regionElements[currentIndex - 1]
+            prevElement.element.focus()
+            setFocusedId(prevElement.id)
+          } else {
+            // At first element, go to previous region
+            e.preventDefault()
+            navigateToPreviousRegion()
+          }
+        } else {
+          // Tab - go to next element or next region
+          if (currentIndex < regionElements.length - 1 && currentIndex >= 0) {
+            e.preventDefault()
+            const nextElement = regionElements[currentIndex + 1]
+            nextElement.element.focus()
+            setFocusedId(nextElement.id)
+          } else {
+            // At last element, go to next region
+            e.preventDefault()
+            navigateToNextRegion()
+          }
         }
       }
 
-      // Escape to clear focus
-      if (e.key === 'Escape') {
+      // Escape to clear focus (but not in modal - let modal handle it)
+      if (e.key === 'Escape' && !isModalOpen) {
         setFocusedId(null)
         setIsNavigationActive(false)
         const activeElement = document.activeElement as HTMLElement
@@ -239,7 +490,7 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('mousedown', handleMouseDown)
     }
-  }, [focusedId, currentRegion, findElementByDirection, getRegionElements])
+  }, [focusedId, currentRegion, findElementByDirection, getRegionElements, navigateToNextRegion, navigateToPreviousRegion, jumpToRegion, isModalOpen])
 
   return (
     <KeyboardNavigationContext.Provider
@@ -250,7 +501,14 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
         currentRegion,
         setCurrentRegion,
         focusElement,
-        isNavigationActive,
+        // When disabled, always report as inactive so no focus rings appear
+        isNavigationActive: isEnabled && isNavigationActive,
+        openModal,
+        closeModal,
+        isModalOpen,
+        navigateToNextRegion,
+        navigateToPreviousRegion,
+        jumpToRegion,
       }}
     >
       {children}
@@ -267,7 +525,7 @@ export function useKeyboardNavigation() {
 }
 
 // Hook to register a focusable element
-export function useFocusable(id: string, region: string, index: number) {
+export function useFocusable(id: string, region: Region, index: number) {
   const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
   const ref = useRef<HTMLElement>(null)
 
@@ -284,3 +542,6 @@ export function useFocusable(id: string, region: string, index: number) {
 
   return { ref, isFocused }
 }
+
+// Export Region type for use in components
+export type { Region }

@@ -7,6 +7,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Server, HardDrive } from 'lucide-react'
 import { useSources, type ProviderType } from '../../contexts/SourceContext'
+import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { PlexAuthFlow } from './PlexAuthFlow'
 import { JellyfinAuthFlow } from './JellyfinAuthFlow'
 import { KodiConnectionFlow } from './KodiConnectionFlow'
@@ -58,10 +60,20 @@ const providers: Array<{
 
 export function AddSourceModal({ onClose, onSuccess }: AddSourceModalProps) {
   const { supportedProviders } = useSources()
+  const { openModal, closeModal } = useKeyboardNavigation()
   const [selectedProvider, setSelectedProvider] = useState<ProviderType | null>(null)
   const [focusedIndex, setFocusedIndex] = useState(0)
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const modalRef = useRef<HTMLDivElement>(null)
+
+  // Focus trap and modal registration
+  useFocusTrap(true, modalRef, false) // Don't auto-focus, we handle it manually
+
+  useEffect(() => {
+    openModal('add-source-modal')
+    return () => closeModal()
+  }, [openModal, closeModal])
 
   // Filter to only show supported providers
   const availableProviders = providers.filter(p => supportedProviders.includes(p.type))
@@ -137,7 +149,7 @@ export function AddSourceModal({ onClose, onSuccess }: AddSourceModalProps) {
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
     >
-      <div className="bg-card rounded-lg shadow-xl w-full max-w-xs mx-4 max-h-[90vh] overflow-y-auto">
+      <div ref={modalRef} className="bg-card rounded-lg shadow-xl w-full max-w-xs mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-black/30 rounded-t-lg">
           <h2 className="text-sm font-semibold">

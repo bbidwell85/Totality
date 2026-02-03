@@ -90,15 +90,26 @@ export function Sidebar({ onOpenAbout }: SidebarProps) {
   const [renamingSourceId, setRenamingSourceId] = useState<string | null>(null)
   const [taskQueueState, setTaskQueueState] = useState<TaskQueueState | null>(null)
   const addSourceButtonRef = useRef<HTMLButtonElement>(null)
+  const aboutButtonRef = useRef<HTMLButtonElement>(null)
   const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
   const addSourceFocusId = 'sidebar-add-source'
+  const aboutFocusId = 'sidebar-about'
   const isAddSourceFocused = focusedId === addSourceFocusId && isNavigationActive
+  const isAboutFocused = focusedId === aboutFocusId && isNavigationActive
 
   useEffect(() => {
     if (addSourceButtonRef.current && sources.length > 0) {
       registerFocusable(addSourceFocusId, addSourceButtonRef.current, 'sidebar', sources.length)
     }
     return () => unregisterFocusable(addSourceFocusId)
+  }, [sources.length, registerFocusable, unregisterFocusable])
+
+  // Register About button (always last in sidebar)
+  useEffect(() => {
+    if (aboutButtonRef.current) {
+      registerFocusable(aboutFocusId, aboutButtonRef.current, 'sidebar', sources.length + 1)
+    }
+    return () => unregisterFocusable(aboutFocusId)
   }, [sources.length, registerFocusable, unregisterFocusable])
 
   // Listen for library updates to refresh sidebar when libraries are toggled
@@ -401,8 +412,9 @@ export function Sidebar({ onOpenAbout }: SidebarProps) {
       {/* Footer */}
       <div className="p-4 border-t border-border">
         <button
+          ref={aboutButtonRef}
           onClick={onOpenAbout}
-          className="w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+          className={`w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${isAboutFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background text-foreground' : ''}`}
           aria-label="About Totality"
         >
           <Info className="w-3.5 h-3.5" aria-hidden="true" />
@@ -513,6 +525,10 @@ function SourceItem({
   }
   const buttonRef = useRef<HTMLButtonElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const manageButtonRef = useRef<HTMLButtonElement>(null)
+  const renameButtonRef = useRef<HTMLButtonElement>(null)
+  const deleteButtonRef = useRef<HTMLButtonElement>(null)
+  const libraryRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
   const focusId = `sidebar-source-${source.source_id}`
   const isFocused = focusedId === focusId && isNavigationActive
@@ -520,6 +536,55 @@ function SourceItem({
   const [isDeleting, setIsDeleting] = useState(false)
   const [renameValue, setRenameValue] = useState(source.display_name)
   const confirmTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Register library items when expanded
+  useEffect(() => {
+    if (isExpanded && !isManaging && libraries.length > 0) {
+      libraries.forEach((library, libIndex) => {
+        const ref = libraryRefs.current.get(library.id)
+        if (ref) {
+          // Libraries start after the source button (index + 1 + libIndex)
+          registerFocusable(
+            `sidebar-lib-${source.source_id}-${library.id}`,
+            ref,
+            'sidebar',
+            index + 1 + libIndex
+          )
+        }
+      })
+    }
+    return () => {
+      libraries.forEach((library) => {
+        unregisterFocusable(`sidebar-lib-${source.source_id}-${library.id}`)
+      })
+    }
+  }, [isExpanded, isManaging, libraries, source.source_id, index, registerFocusable, unregisterFocusable])
+
+  // Register action buttons when expanded
+  useEffect(() => {
+    if (isExpanded) {
+      const baseIndex = index + 1 + libraries.length
+      if (manageButtonRef.current) {
+        registerFocusable(`sidebar-manage-${source.source_id}`, manageButtonRef.current, 'sidebar', baseIndex)
+      }
+      if (renameButtonRef.current) {
+        registerFocusable(`sidebar-rename-${source.source_id}`, renameButtonRef.current, 'sidebar', baseIndex + 1)
+      }
+      if (deleteButtonRef.current) {
+        registerFocusable(`sidebar-delete-${source.source_id}`, deleteButtonRef.current, 'sidebar', baseIndex + 2)
+      }
+    }
+    return () => {
+      unregisterFocusable(`sidebar-manage-${source.source_id}`)
+      unregisterFocusable(`sidebar-rename-${source.source_id}`)
+      unregisterFocusable(`sidebar-delete-${source.source_id}`)
+    }
+  }, [isExpanded, libraries.length, source.source_id, index, registerFocusable, unregisterFocusable])
+
+  // Check if action buttons are focused
+  const isManageFocused = focusedId === `sidebar-manage-${source.source_id}` && isNavigationActive
+  const isRenameFocused = focusedId === `sidebar-rename-${source.source_id}` && isNavigationActive
+  const isDeleteFocused = focusedId === `sidebar-delete-${source.source_id}` && isNavigationActive
 
   // Focus input when renaming starts
   useEffect(() => {
@@ -712,17 +777,34 @@ function SourceItem({
 
                 const libraryKey = `${source.source_id}:${library.id}`
                 const newItemCount = newItemCounts.get(libraryKey)
+                const libFocusId = `sidebar-lib-${source.source_id}-${library.id}`
+                const isLibFocused = focusedId === libFocusId && isNavigationActive
 
                 return (
                   <div
                     key={library.id}
+                    ref={(el) => {
+                      if (el) libraryRefs.current.set(library.id, el)
+                      else libraryRefs.current.delete(library.id)
+                    }}
+                    tabIndex={0}
+                    role="button"
                     onClick={() => {
                       onSelect()
                       if (newItemCount) {
                         onClearNewItems(libraryKey)
                       }
                     }}
-                    className="px-2 py-1.5 bg-muted/30 rounded group cursor-pointer hover:bg-muted/50 transition-colors"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onSelect()
+                        if (newItemCount) {
+                          onClearNewItems(libraryKey)
+                        }
+                      }
+                    }}
+                    className={`px-2 py-1.5 bg-muted/30 rounded group cursor-pointer hover:bg-muted/50 transition-colors focus:outline-none ${isLibFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
@@ -859,33 +941,36 @@ function SourceItem({
           {/* Action Buttons */}
           <div className="flex gap-1 mt-2 justify-end">
             <button
+              ref={manageButtonRef}
               onClick={(e) => { e.stopPropagation(); onManageLibraries() }}
-              className={`p-2 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-primary ${
+              className={`p-2 rounded transition-colors focus:outline-none ${
                 isManaging
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
+              } ${isManageFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
               aria-label={isManaging ? 'Done managing libraries' : 'Manage libraries'}
               title={isManaging ? 'Done' : 'Libraries'}
             >
               <Settings className="w-4 h-4" aria-hidden="true" />
             </button>
             <button
+              ref={renameButtonRef}
               onClick={(e) => { e.stopPropagation(); onStartRename() }}
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+              className={`p-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-colors focus:outline-none ${isRenameFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
               aria-label={`Rename ${source.display_name}`}
               title="Rename"
             >
               <Pencil className="w-4 h-4" aria-hidden="true" />
             </button>
             <button
+              ref={deleteButtonRef}
               onClick={handleDeleteClick}
               disabled={isDeleting}
-              className={`p-2 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 ${
+              className={`p-2 rounded transition-colors focus:outline-none disabled:opacity-50 ${
                 confirmDelete
                   ? 'bg-red-500 text-white hover:bg-red-600'
                   : 'text-red-400 hover:text-red-300 hover:bg-red-500/10'
-              }`}
+              } ${isDeleteFocused ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-background' : ''}`}
               aria-label={confirmDelete ? `Confirm remove ${source.display_name}` : `Remove ${source.display_name}`}
               title={confirmDelete ? 'Confirm?' : 'Remove'}
             >
