@@ -205,23 +205,6 @@ export function TroubleshootTab() {
     }
   }, [])
 
-  const getLevelClass = useCallback((level: string) => {
-    switch (level) {
-      case 'error':
-        return 'bg-red-500/10 border-red-500/20'
-      case 'warn':
-        return 'bg-yellow-500/10 border-yellow-500/20'
-      case 'info':
-        return 'bg-blue-500/10 border-blue-500/20'
-      case 'debug':
-        return 'bg-purple-500/10 border-purple-500/20'
-      case 'verbose':
-        return 'bg-gray-500/10 border-gray-500/20'
-      default:
-        return 'bg-muted/30 border-border/30'
-    }
-  }, [])
-
   const formatTime = useCallback((timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString('en-US', {
       hour12: false,
@@ -242,7 +225,7 @@ export function TroubleshootTab() {
       return (
         <div style={style} className="px-2 py-0.5">
           <div
-            className={`rounded border h-full flex items-center gap-2 px-2 ${getLevelClass(entry.level)} ${
+            className={`rounded h-full flex items-center gap-2 px-2 ${
               entry.details ? 'cursor-pointer hover:bg-white/5' : ''
             } ${isSelected ? 'ring-1 ring-primary' : ''}`}
             onClick={() => entry.details && setSelectedLogId(isSelected ? null : entry.id)}
@@ -264,7 +247,7 @@ export function TroubleshootTab() {
         </div>
       )
     },
-    [filteredLogs, selectedLogId, getLevelClass, getLevelIcon, formatTime]
+    [filteredLogs, selectedLogId, getLevelIcon, formatTime]
   )
 
   if (isLoading) {

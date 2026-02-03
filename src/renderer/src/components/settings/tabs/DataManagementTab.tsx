@@ -1,11 +1,51 @@
+/**
+ * DataManagementTab - Settings tab for database and export management
+ *
+ * Features:
+ * - Database location display
+ * - Working document CSV export
+ * - Full database backup/restore
+ * - Database reset (danger zone)
+ */
+
 import { useState, useEffect } from 'react'
-import { Loader2, FolderOpen, Download, Upload, Trash2, AlertTriangle, FileSpreadsheet, X } from 'lucide-react'
+import { Loader2, FolderOpen, Download, Upload, Trash2, AlertTriangle, FileSpreadsheet, X, Database, RefreshCw } from 'lucide-react'
 
 interface CSVExportOptions {
   includeUpgrades: boolean
   includeMissingMovies: boolean
   includeMissingEpisodes: boolean
   includeMissingAlbums: boolean
+}
+
+// Toggle switch component (matching MonitoringTab)
+function Toggle({
+  checked,
+  onChange,
+  disabled = false,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => !disabled && onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+      } ${checked ? 'bg-primary' : 'bg-muted'}`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition-transform ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  )
 }
 
 export function DataManagementTab() {
@@ -127,111 +167,123 @@ export function DataManagementTab() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Database Location */}
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">Database Location</h3>
-          <p className="text-xs text-muted-foreground">
-            Your media library data is stored locally on your computer
-          </p>
-        </div>
-        <div className="bg-muted/30 rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <FolderOpen className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-            <code className="text-xs text-muted-foreground break-all">
+    <div className="p-6 space-y-5">
+      {/* Database Location Section */}
+      <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border/40">
+        <div className="flex items-center gap-3">
+          <Database className="w-7 h-7 text-primary" />
+          <div>
+            <h3 className="text-sm font-medium text-foreground">Database Location</h3>
+            <p className="text-xs text-muted-foreground break-all max-w-[280px]">
               {dbPath}
-            </code>
+            </p>
           </div>
         </div>
+        <button
+          onClick={() => navigator.clipboard.writeText(dbPath)}
+          className="px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 rounded-md transition-colors"
+        >
+          Copy Path
+        </button>
       </div>
 
-      {/* Working Document Export */}
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">Working Document</h3>
-          <p className="text-xs text-muted-foreground">
-            Export a CSV file tracking items that need upgrades or completion
-          </p>
-        </div>
-        <div className="bg-muted/30 rounded-lg p-4">
-          <div className="flex items-center justify-between">
+      {/* Export Options */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground">Export Options</h3>
+
+        <div className="bg-muted/30 rounded-lg border border-border/40 divide-y divide-border/30">
+          {/* Working Document */}
+          <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-3">
               <FileSpreadsheet className="w-5 h-5 text-muted-foreground" />
               <div>
-                <p className="text-sm">Export Working Document</p>
+                <span className="text-sm text-foreground">Working Document</span>
                 <p className="text-xs text-muted-foreground">
-                  CSV file with upgrade candidates and missing items
+                  CSV with upgrade candidates and missing items
                 </p>
               </div>
             </div>
             <button
               onClick={() => setShowCSVExportModal(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
             >
-              <Download className="w-4 h-4" />
-              Export CSV
+              <Download className="w-3.5 h-3.5" />
+              Export
             </button>
           </div>
-        </div>
-      </div>
 
-      {/* Full Backup Export/Import */}
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">Full Backup</h3>
-          <p className="text-xs text-muted-foreground">
-            Backup your complete database or transfer it to another computer
-          </p>
-        </div>
-        <div className="bg-muted/30 rounded-lg p-4">
-          <div className="flex gap-3">
+          {/* Full Backup */}
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <FolderOpen className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <span className="text-sm text-foreground">Full Backup</span>
+                <p className="text-xs text-muted-foreground">
+                  Complete database backup (JSON)
+                </p>
+              </div>
+            </div>
             <button
               onClick={handleExport}
               disabled={isExporting}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-muted hover:bg-muted/80 rounded-md transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 rounded-md transition-colors disabled:opacity-50"
             >
               {isExporting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
               )}
-              Export Backup (JSON)
-            </button>
-            <button
-              onClick={handleImport}
-              disabled={isImporting}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-muted hover:bg-muted/80 rounded-md transition-colors disabled:opacity-50"
-            >
-              {isImporting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Upload className="w-4 h-4" />
-              )}
-              Import Backup
+              Export
             </button>
           </div>
         </div>
       </div>
 
-      {/* Reset Database */}
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold text-red-400">Danger Zone</h3>
-          <p className="text-xs text-muted-foreground">
-            Irreversible actions that affect your data
-          </p>
+      {/* Import Options */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground">Import</h3>
+
+        <div className="bg-muted/30 rounded-lg border border-border/40">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Upload className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <span className="text-sm text-foreground">Restore Backup</span>
+                <p className="text-xs text-muted-foreground">
+                  Import a previously exported database
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleImport}
+              disabled={isImporting}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 rounded-md transition-colors disabled:opacity-50"
+            >
+              {isImporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Upload className="w-3.5 h-3.5" />
+              )}
+              Import
+            </button>
+          </div>
         </div>
-        <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+      </div>
+
+      {/* Danger Zone */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-red-400">Danger Zone</h3>
+
+        <div className="bg-red-500/5 rounded-lg border border-red-500/20">
           {showResetConfirm ? (
-            <div className="space-y-4">
+            <div className="p-4 space-y-4">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                 <div>
@@ -247,37 +299,39 @@ export function DataManagementTab() {
                 <button
                   onClick={() => setShowResetConfirm(false)}
                   disabled={isResetting}
-                  className="px-4 py-2 text-sm hover:bg-muted rounded-md transition-colors"
+                  className="px-3 py-1.5 text-xs hover:bg-muted rounded-md transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleReset}
                   disabled={isResetting}
-                  className="flex items-center gap-2 px-4 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors disabled:opacity-50"
                 >
                   {isResetting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   )}
                   Yes, Reset Database
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Reset Database</p>
-                <p className="text-xs text-muted-foreground">
-                  Delete all data and start fresh
-                </p>
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Trash2 className="w-5 h-5 text-red-400" />
+                <div>
+                  <span className="text-sm text-foreground">Reset Database</span>
+                  <p className="text-xs text-muted-foreground">
+                    Delete all data and start fresh
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setShowResetConfirm(true)}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md transition-colors"
               >
-                <Trash2 className="w-4 h-4" />
                 Reset
               </button>
             </div>
@@ -288,7 +342,7 @@ export function DataManagementTab() {
       {/* Status message */}
       {message && (
         <div
-          className={`p-4 rounded-lg text-sm ${
+          className={`p-3 rounded-lg text-xs ${
             message.type === 'success'
               ? 'bg-green-500/10 border border-green-500/30 text-green-400'
               : 'bg-red-500/10 border border-red-500/30 text-red-400'
@@ -304,85 +358,77 @@ export function DataManagementTab() {
           <div className="bg-background border border-border rounded-lg shadow-xl w-full max-w-md mx-4">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <h2 className="text-lg font-semibold">Export Working Document</h2>
+              <h2 className="text-base font-medium">Export Working Document</h2>
               <button
                 onClick={() => setShowCSVExportModal(false)}
                 className="p-1 hover:bg-muted rounded transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Modal Content */}
-            <div className="p-4 space-y-4">
-              <p className="text-sm text-muted-foreground">
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
                 Select what to include in the CSV export:
               </p>
 
-              <div className="space-y-3">
+              <div className="bg-muted/30 rounded-lg border border-border/40 divide-y divide-border/30">
                 {/* Upgrade Candidates */}
-                <label className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={csvOptions.includeUpgrades}
-                    onChange={() => toggleCSVOption('includeUpgrades')}
-                    className="mt-0.5 w-4 h-4 rounded border-border"
-                  />
+                <div className="flex items-center justify-between px-4 py-2.5">
                   <div>
-                    <p className="text-sm font-medium">Upgrade Candidates</p>
+                    <span className="text-sm text-foreground">Upgrade Candidates</span>
                     <p className="text-xs text-muted-foreground">
-                      Movies and TV episodes that need quality upgrades
+                      Movies and episodes that need quality upgrades
                     </p>
                   </div>
-                </label>
+                  <Toggle
+                    checked={csvOptions.includeUpgrades}
+                    onChange={() => toggleCSVOption('includeUpgrades')}
+                  />
+                </div>
 
                 {/* Missing Movies */}
-                <label className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={csvOptions.includeMissingMovies}
-                    onChange={() => toggleCSVOption('includeMissingMovies')}
-                    className="mt-0.5 w-4 h-4 rounded border-border"
-                  />
+                <div className="flex items-center justify-between px-4 py-2.5">
                   <div>
-                    <p className="text-sm font-medium">Missing Movies</p>
+                    <span className="text-sm text-foreground">Missing Movies</span>
                     <p className="text-xs text-muted-foreground">
                       Movies missing from incomplete collections
                     </p>
                   </div>
-                </label>
+                  <Toggle
+                    checked={csvOptions.includeMissingMovies}
+                    onChange={() => toggleCSVOption('includeMissingMovies')}
+                  />
+                </div>
 
                 {/* Missing Episodes */}
-                <label className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={csvOptions.includeMissingEpisodes}
-                    onChange={() => toggleCSVOption('includeMissingEpisodes')}
-                    className="mt-0.5 w-4 h-4 rounded border-border"
-                  />
+                <div className="flex items-center justify-between px-4 py-2.5">
                   <div>
-                    <p className="text-sm font-medium">Missing TV Episodes</p>
+                    <span className="text-sm text-foreground">Missing TV Episodes</span>
                     <p className="text-xs text-muted-foreground">
                       Episodes missing from incomplete TV series
                     </p>
                   </div>
-                </label>
+                  <Toggle
+                    checked={csvOptions.includeMissingEpisodes}
+                    onChange={() => toggleCSVOption('includeMissingEpisodes')}
+                  />
+                </div>
 
                 {/* Missing Albums */}
-                <label className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={csvOptions.includeMissingAlbums}
-                    onChange={() => toggleCSVOption('includeMissingAlbums')}
-                    className="mt-0.5 w-4 h-4 rounded border-border"
-                  />
+                <div className="flex items-center justify-between px-4 py-2.5">
                   <div>
-                    <p className="text-sm font-medium">Missing Albums</p>
+                    <span className="text-sm text-foreground">Missing Albums</span>
                     <p className="text-xs text-muted-foreground">
-                      Albums, EPs, and singles missing from artist discographies
+                      Albums missing from artist discographies
                     </p>
                   </div>
-                </label>
+                  <Toggle
+                    checked={csvOptions.includeMissingAlbums}
+                    onChange={() => toggleCSVOption('includeMissingAlbums')}
+                  />
+                </div>
               </div>
             </div>
 
@@ -390,19 +436,19 @@ export function DataManagementTab() {
             <div className="flex gap-3 justify-end p-4 border-t border-border">
               <button
                 onClick={() => setShowCSVExportModal(false)}
-                className="px-4 py-2 text-sm hover:bg-muted rounded-md transition-colors"
+                className="px-3 py-1.5 text-xs hover:bg-muted rounded-md transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleExportCSV}
                 disabled={isExportingCSV}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {isExportingCSV ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
                 )}
                 Export CSV
               </button>

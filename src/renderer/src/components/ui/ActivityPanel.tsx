@@ -10,6 +10,23 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
+  DndContext,
+  pointerWithin,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
   Activity,
   X,
   Trash2,
@@ -101,6 +118,64 @@ const MIN_HEIGHT = 300
 const MAX_WIDTH = 700
 const MAX_HEIGHT = 800
 
+// ============================================================================
+// Sortable Queue Item Component
+// ============================================================================
+
+function SortableQueueItem({
+  task,
+  onRemove,
+}: {
+  task: QueuedTask
+  onRemove: (id: string) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 px-4 py-2.5 ${isDragging ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
+      {...attributes}
+    >
+      <GripVertical
+        className={`w-4 h-4 flex-shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
+          isDragging ? 'text-primary' : 'text-muted-foreground/50'
+        }`}
+        {...listeners}
+      />
+      <span className="text-sm flex-1 truncate">{task.label}</span>
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          onRemove(task.id)
+        }}
+        className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-red-400 flex-shrink-0"
+        title="Remove"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  )
+}
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
 export function ActivityPanel() {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'tasks' | 'monitoring'>('tasks')
@@ -113,7 +188,14 @@ export function ActivityPanel() {
   const [taskHistory, setTaskHistory] = useState<ActivityLogEntry[]>([])
   const [monitoringEvents, setMonitoringEvents] = useState<MonitoringEvent[]>([])
   const [isMonitoringActive, setIsMonitoringActive] = useState(false)
-  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+
+  // Configure dnd-kit sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   // Resize state
   const [panelSize, setPanelSize] = useState({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
@@ -309,37 +391,23 @@ export function ActivityPanel() {
     setMonitoringEvents([])
   }, [])
 
-  // Drag and drop handlers for queue reordering
-  const handleDragStart = useCallback((taskId: string) => {
-    setDraggedTaskId(taskId)
-  }, [])
+  // dnd-kit drag handler
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
 
-  const handleDragOver = useCallback((e: React.DragEvent, targetTaskId: string) => {
-    e.preventDefault()
-    if (!draggedTaskId || draggedTaskId === targetTaskId) return
+    if (over && active.id !== over.id) {
+      setQueueState((prev) => {
+        const oldIndex = prev.queue.findIndex((t) => t.id === active.id)
+        const newIndex = prev.queue.findIndex((t) => t.id === over.id)
+        const newQueue = arrayMove(prev.queue, oldIndex, newIndex)
 
-    setQueueState((prev) => {
-      const draggedIndex = prev.queue.findIndex((t) => t.id === draggedTaskId)
-      const targetIndex = prev.queue.findIndex((t) => t.id === targetTaskId)
+        // Commit to service
+        window.electronAPI.taskQueueReorderQueue?.(newQueue.map((t) => t.id))
 
-      if (draggedIndex === -1 || targetIndex === -1) return prev
-
-      const newQueue = [...prev.queue]
-      const [draggedItem] = newQueue.splice(draggedIndex, 1)
-      newQueue.splice(targetIndex, 0, draggedItem)
-
-      return { ...prev, queue: newQueue }
-    })
-  }, [draggedTaskId])
-
-  const handleDragEnd = useCallback(() => {
-    if (draggedTaskId) {
-      // Commit the new order to the service
-      const taskIds = queueState.queue.map((t) => t.id)
-      window.electronAPI.taskQueueReorderQueue?.(taskIds)
+        return { ...prev, queue: newQueue }
+      })
     }
-    setDraggedTaskId(null)
-  }, [draggedTaskId, queueState.queue])
+  }, [])
 
   // ============================================================================
   // Helpers
@@ -526,33 +594,29 @@ export function ActivityPanel() {
                 </p>
               </div>
             ) : (
-              <>
-                {queueState.queue.map((task) => (
-                  <div
-                    key={task.id}
-                    draggable
-                    onDragStart={() => handleDragStart(task.id)}
-                    onDragOver={(e) => handleDragOver(e, task.id)}
-                    onDragEnd={handleDragEnd}
-                    className={`flex items-center gap-2 px-4 py-2 hover:bg-muted/30 cursor-grab active:cursor-grabbing transition-colors ${
-                      draggedTaskId === task.id ? 'opacity-50' : ''
-                    }`}
-                  >
-                    <GripVertical className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
-                    <span className="text-sm flex-1 truncate">{task.label}</span>
-                    <button
-                      onClick={() => handleRemoveTask(task.id)}
-                      className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-red-400 flex-shrink-0"
-                      title="Remove"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={pointerWithin}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={queueState.queue.map((t) => t.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="divide-y divide-border/10">
+                    {queueState.queue.map((task) => (
+                      <SortableQueueItem
+                        key={task.id}
+                        task={task}
+                        onRemove={handleRemoveTask}
+                      />
+                    ))}
                   </div>
-                ))}
-                <p className="px-4 py-1.5 text-xs text-muted-foreground/60 italic border-t border-border/20">
-                  Drag to reorder
-                </p>
-              </>
+                  <p className="px-4 py-1.5 text-xs text-muted-foreground/60 italic border-t border-border/20">
+                    Drag to reorder
+                  </p>
+                </SortableContext>
+              </DndContext>
             )}
           </div>
         </div>

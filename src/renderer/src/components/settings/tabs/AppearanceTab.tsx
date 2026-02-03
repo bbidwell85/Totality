@@ -1,5 +1,13 @@
+/**
+ * AppearanceTab - Settings tab for visual customization
+ *
+ * Features:
+ * - Theme selection with live preview
+ * - 9 color themes to choose from
+ */
+
 import { useState, useEffect } from 'react'
-import { Loader2 } from 'lucide-react'
+import { RefreshCw, Palette } from 'lucide-react'
 
 type ThemeOption = 'dark' | 'slate' | 'ember' | 'midnight' | 'oled' | 'velvet' | 'emerald' | 'cobalt' | 'carbon'
 
@@ -224,22 +232,34 @@ export function AppearanceTab() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold">Theme</h3>
-          <p className="text-xs text-muted-foreground">
-            Choose your preferred color scheme
-          </p>
+    <div className="p-6 space-y-5">
+      {/* Theme Header */}
+      <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border/40">
+        <div className="flex items-center gap-3">
+          <Palette className="w-7 h-7 text-primary" />
+          <div>
+            <h3 className="text-sm font-medium text-foreground">Theme</h3>
+            <p className="text-xs text-muted-foreground">
+              Choose your preferred color scheme
+            </p>
+          </div>
         </div>
-        <div className="bg-muted/30 rounded-lg p-4">
+        <span className="px-2 py-1 text-xs bg-primary/20 text-primary rounded-md">
+          {THEMES.find(t => t.id === theme)?.label}
+        </span>
+      </div>
+
+      {/* Theme Selection */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground">Available Themes</h3>
+        <div className="bg-muted/30 rounded-lg border border-border/40 p-4">
           <div className="grid grid-cols-3 gap-4">
             {THEMES.map((themeConfig) => {
               const isActive = theme === themeConfig.id
