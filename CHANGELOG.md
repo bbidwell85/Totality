@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.5](https://github.com/bbidwell85/totality/compare/v0.1.1...v0.1.5) (2026-02-03)
+
+
+### Bug Fixes
+
+* externalize chokidar and fsevents for macOS CI builds ([09d8768](https://github.com/bbidwell85/totality/commit/09d87684c3d566793a44ac50363510427fb935e2))
+* resolve TypeScript strict mode errors for CI builds ([0c8203b](https://github.com/bbidwell85/totality/commit/0c8203b6e0a1b809a1e525e40821379ba6e06879))
+
 ### [0.1.4](https://github.com/bbidwell85/totality/compare/v0.1.1...v0.1.4) (2026-02-03)
 
 
