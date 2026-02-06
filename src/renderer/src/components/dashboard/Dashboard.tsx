@@ -78,7 +78,7 @@ const SECTION_HEADER_HEIGHT = 36    // Season/type section header
 const TYPE_SECTION_GAP = 12         // space-y-3 gap between album type groups
 
 export function Dashboard({
-  onNavigateToLibrary,
+  onNavigateToLibrary: _onNavigateToLibrary,
   onAddSource,
   sidebarCollapsed = false,
   hasMovies = false,
