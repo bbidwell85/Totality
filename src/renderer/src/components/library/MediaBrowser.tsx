@@ -22,6 +22,12 @@ import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
 import { MoviePlaceholder, TvPlaceholder, EpisodePlaceholder } from '../ui/MediaPlaceholders'
 import { useMenuClose } from '../../hooks/useMenuClose'
 
+// Import extracted hooks (more hooks available in ./hooks for gradual migration)
+import {
+  useThemeAccent,
+  usePanelState,
+} from './hooks'
+
 // Import types from shared types file
 import type {
   MusicArtist,
@@ -70,19 +76,21 @@ export function MediaBrowser({
   const { count: wishlistCount } = useWishlist()
   const { pendingNavigation, clearNavigation } = useNavigation()
 
-  // Get theme accent color from document root (outside of any scoped dark class)
-  const [themeAccentColor, setThemeAccentColor] = useState('')
-  useEffect(() => {
-    const updateAccentColor = () => {
-      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
-      setThemeAccentColor(accent ? `hsl(${accent})` : '')
-    }
-    updateAccentColor()
-    // Watch for class changes on documentElement (theme switches)
-    const observer = new MutationObserver(updateAccentColor)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
-    return () => observer.disconnect()
-  }, [])
+  // Use extracted hooks
+  const themeAccentColor = useThemeAccent()
+
+  // Panel state (completeness/wishlist panels)
+  const {
+    showCompletenessPanel,
+    showWishlistPanel,
+    setShowCompletenessPanel,
+    setShowWishlistPanel,
+  } = usePanelState({
+    externalShowCompletenessPanel,
+    externalShowWishlistPanel,
+    onToggleCompleteness: externalToggleCompleteness,
+    onToggleWishlist: externalToggleWishlist,
+  })
 
   const [items, setItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -145,21 +153,7 @@ export function MediaBrowser({
   const [musicCompletenessStats, setMusicCompletenessStats] = useState<MusicCompletenessStats | null>(null)
   const [artistCompleteness, setArtistCompleteness] = useState<Map<string, ArtistCompletenessData>>(new Map())
   const [allAlbumCompleteness, setAllAlbumCompleteness] = useState<Map<number, AlbumCompletenessData>>(new Map())
-  // Internal panel state (used when external state not provided)
-  const [internalShowCompletenessPanel, setInternalShowCompletenessPanel] = useState(false)
-  const [internalShowWishlistPanel, setInternalShowWishlistPanel] = useState(false)
-
-  // Use external state if provided, otherwise use internal
-  const showCompletenessPanel = externalShowCompletenessPanel ?? internalShowCompletenessPanel
-  const showWishlistPanel = externalShowWishlistPanel ?? internalShowWishlistPanel
-
-  const setShowCompletenessPanel = externalToggleCompleteness
-    ? () => externalToggleCompleteness()
-    : setInternalShowCompletenessPanel
-
-  const setShowWishlistPanel = externalToggleWishlist
-    ? () => externalToggleWishlist()
-    : setInternalShowWishlistPanel
+  // Panel state now managed by usePanelState hook (defined above)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null)
   const [analysisType, setAnalysisType] = useState<'series' | 'collections' | 'music' | null>(null)

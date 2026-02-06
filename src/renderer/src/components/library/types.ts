@@ -5,9 +5,13 @@
  */
 
 import type { ProviderType } from '../../contexts/SourceContext'
+import type { MediaSourceResponse } from '@preload/index'
 
 // Re-export for convenience
 export type { ProviderType }
+
+// Alias for MediaSourceResponse used in hooks
+export type MediaSource = MediaSourceResponse
 
 // ============================================================================
 // Music Types
