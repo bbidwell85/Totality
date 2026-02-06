@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronRight, Loader2, RefreshCw, Plus, Film, Tv, Music, Folder, Trash2, Pencil, Info, Square, Server, HardDrive, Settings, Eye, EyeOff, Clock } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, RefreshCw, Plus, Film, Tv, Music, Folder, Trash2, Pencil, Info, Square, Server, HardDrive, Settings, Eye, EyeOff, Clock, PanelLeftClose, PanelLeft } from 'lucide-react'
 import { useSources, type ProviderType } from '../../contexts/SourceContext'
 import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
 import { AddSourceModal } from '../sources/AddSourceModal'
@@ -58,9 +58,11 @@ function formatRelativeTime(dateStr?: string): string | null {
 
 interface SidebarProps {
   onOpenAbout: () => void
+  isCollapsed: boolean
+  onToggleCollapse: () => void
 }
 
-export function Sidebar({ onOpenAbout }: SidebarProps) {
+export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarProps) {
   const {
     sources,
     isLoading,
@@ -74,6 +76,7 @@ export function Sidebar({ onOpenAbout }: SidebarProps) {
     removeSource,
     newItemCounts,
     clearNewItems,
+    refreshLibraryTypes,
   } = useSources()
 
   const [showAddModal, setShowAddModal] = useState(false)
@@ -129,6 +132,27 @@ export function Sidebar({ onOpenAbout }: SidebarProps) {
           setSourceLibraries(new Map())
         }
       }
+    })
+    return () => cleanup?.()
+  }, [])
+
+  // Update cached library timestamps when a scan completes
+  useEffect(() => {
+    const cleanup = window.electronAPI.onScanCompleted?.((data) => {
+      if (!data.sourceId) return
+
+      const sourceId = data.sourceId
+      setSourceLibraries(prev => {
+        if (!prev.has(sourceId)) return prev
+        const next = new Map(prev)
+        const libs = next.get(sourceId)!.map(lib =>
+          lib.id === data.libraryId
+            ? { ...lib, scannedAt: new Date().toISOString() }
+            : lib
+        )
+        next.set(sourceId, libs)
+        return next
+      })
     })
     return () => cleanup?.()
   }, [])
@@ -241,6 +265,9 @@ export function Sidebar({ onOpenAbout }: SidebarProps) {
         }
         return next
       })
+
+      // Refresh library types in context so TopBar/Dashboard update
+      await refreshLibraryTypes()
     } catch (err) {
       console.error('Failed to toggle library:', err)
     }
@@ -310,18 +337,82 @@ export function Sidebar({ onOpenAbout }: SidebarProps) {
     return scanningLibrary.slice(sourceId.length + 1)
   }
 
+  // Unified sidebar with conditional collapsed/expanded content
   return (
     <aside
-      className="fixed left-4 top-[88px] bottom-4 w-64 bg-card rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden"
+      className={`fixed left-4 top-[88px] bottom-4 ${isCollapsed ? 'w-16' : 'w-64'} bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[width] duration-300 ease-out will-change-[width]`}
       role="navigation"
       aria-label="Media sources"
     >
+      {/* Header - adapts to collapsed/expanded state */}
+      <div className={`flex items-center transition-[padding,border] duration-300 ease-out ${isCollapsed ? 'p-2 border-b border-border justify-center' : 'p-4 pb-0 justify-between'}`}>
+        {!isCollapsed && (
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 whitespace-nowrap">
+            Media Sources
+          </h2>
+        )}
+        <button
+          onClick={onToggleCollapse}
+          className={`rounded-md text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 ${isCollapsed ? 'w-12 h-10 rounded-lg flex items-center justify-center hover:bg-white/10' : 'p-2 hover:bg-muted/50'}`}
+          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {isCollapsed ? <PanelLeft className="w-5 h-5" /> : <PanelLeftClose className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {/* Collapsed view: Source icons only */}
+      {isCollapsed && (
+        <div className="flex-1 p-2 overflow-y-auto flex flex-col items-center gap-2 transition-opacity duration-300 ease-out">
+          {isLoading && sources.length === 0 && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {sources.map((source) => {
+            const color = PROVIDER_COLORS[source.source_type as ProviderType] || 'bg-gray-500'
+            const isActive = activeSourceId === source.source_id
+
+            return (
+              <button
+                key={source.source_id}
+                onClick={() => setActiveSource(source.source_id)}
+                className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all ${
+                  isActive
+                    ? 'bg-primary ring-2 ring-primary-foreground/30'
+                    : 'hover:bg-white/10'
+                }`}
+                title={source.display_name}
+                aria-label={`Select ${source.display_name}`}
+              >
+                <div className={`w-8 h-8 ${color} rounded-md flex items-center justify-center`}>
+                  {source.source_type === 'local' ? (
+                    <HardDrive className="w-4 h-4 text-white" />
+                  ) : (
+                    <Server className="w-4 h-4 text-white" />
+                  )}
+                </div>
+              </button>
+            )
+          })}
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="w-12 h-12 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+            title="Add Source"
+            aria-label="Add media source"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
+      {/* Expanded view: Full source list */}
+      {!isCollapsed && (
+        <>
       {/* Media Sources Section */}
-      <div className="flex-1 p-4 overflow-y-auto space-y-2">
-        {/* Section Header */}
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-3">
-          Media Sources
-        </h2>
+      <div className="flex-1 p-4 pt-2 overflow-y-auto space-y-2">
 
         {/* Loading State */}
         {isLoading && sources.length === 0 && (
@@ -408,17 +499,19 @@ export function Sidebar({ onOpenAbout }: SidebarProps) {
           </button>
         )}
       </div>
+        </>
+      )}
 
-      {/* Footer */}
-      <div className="p-4 border-t border-border">
+      {/* Footer - always visible */}
+      <div className={`border-t border-border ${isCollapsed ? 'p-2' : 'p-4'}`}>
         <button
           ref={aboutButtonRef}
           onClick={onOpenAbout}
           className={`w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${isAboutFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background text-foreground' : ''}`}
           aria-label="About Totality"
         >
-          <Info className="w-3.5 h-3.5" aria-hidden="true" />
-          About Totality
+          <Info className={isCollapsed ? 'w-5 h-5' : 'w-3.5 h-3.5'} aria-hidden="true" />
+          {!isCollapsed && 'About Totality'}
         </button>
       </div>
 
@@ -466,7 +559,7 @@ interface SourceItemProps {
 
 function LibraryIcon({ type }: { type: string }) {
   const Icon = LIBRARY_ICONS[type] || Folder
-  return <Icon className="w-3.5 h-3.5 text-white" />
+  return <Icon className="w-3.5 h-3.5 text-foreground" />
 }
 
 function SourceItem({

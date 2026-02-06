@@ -308,7 +308,7 @@ export function CompletenessPanel({
     <aside
       ref={panelRef}
       id="completeness-panel"
-      className={`fixed top-[88px] bottom-4 right-4 w-80 bg-card rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-all duration-300 ease-out ${
+      className={`fixed top-[88px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
         isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
       }`}
       onKeyDown={handleKeyDown}
@@ -422,15 +422,15 @@ export function CompletenessPanel({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Complete</span>
-                  <span className="font-medium text-green-500">{seriesStats.completeSeries}</span>
+                  <span className="font-medium text-foreground">{seriesStats.completeSeries}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Incomplete</span>
-                  <span className="font-medium text-yellow-500">{seriesStats.incompleteSeries}</span>
+                  <span className="font-medium text-foreground">{seriesStats.incompleteSeries}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Missing</span>
-                  <span className="font-medium text-orange-500">{seriesStats.totalMissingEpisodes}</span>
+                  <span className="font-medium text-foreground">{seriesStats.totalMissingEpisodes}</span>
                 </div>
               </div>
             ) : (
@@ -506,15 +506,15 @@ export function CompletenessPanel({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Complete</span>
-                  <span className="font-medium text-green-500">{collectionStats.complete}</span>
+                  <span className="font-medium text-foreground">{collectionStats.complete}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Incomplete</span>
-                  <span className="font-medium text-yellow-500">{collectionStats.incomplete}</span>
+                  <span className="font-medium text-foreground">{collectionStats.incomplete}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Missing</span>
-                  <span className="font-medium text-orange-500">{collectionStats.totalMissing}</span>
+                  <span className="font-medium text-foreground">{collectionStats.totalMissing}</span>
                 </div>
               </div>
             ) : (
@@ -590,15 +590,15 @@ export function CompletenessPanel({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Complete</span>
-                  <span className="font-medium text-green-500">{musicStats.completeArtists}</span>
+                  <span className="font-medium text-foreground">{musicStats.completeArtists}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Incomplete</span>
-                  <span className="font-medium text-yellow-500">{musicStats.incompleteArtists}</span>
+                  <span className="font-medium text-foreground">{musicStats.incompleteArtists}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Missing</span>
-                  <span className="font-medium text-orange-500">{musicStats.totalMissingAlbums}</span>
+                  <span className="font-medium text-foreground">{musicStats.totalMissingAlbums}</span>
                 </div>
               </div>
             ) : (

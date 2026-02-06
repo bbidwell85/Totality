@@ -174,7 +174,7 @@ export function DataManagementTab() {
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-6 space-y-5 overflow-y-auto">
       {/* Database Location Section */}
       <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border/40">
         <div className="flex items-center gap-3">

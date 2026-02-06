@@ -3336,6 +3336,11 @@ export class DatabaseService {
     return this.musicRepo.getQualityScore(albumId)
   }
 
+  /** Get albums that need quality upgrades */
+  getAlbumsNeedingUpgrade(limit?: number) {
+    return this.musicRepo.getAlbumsNeedingUpgrade(limit)
+  }
+
   /** Insert or update artist completeness data */
   async upsertArtistCompleteness(data: ArtistCompleteness): Promise<void> {
     return this.musicRepo.upsertArtistCompleteness(data)
@@ -3982,6 +3987,107 @@ export class DatabaseService {
       createdAt: dbRow.created_at,
       readAt: dbRow.read_at || undefined,
     }
+  }
+
+  /**
+   * Global search across all media types
+   */
+  globalSearch(query: string, maxResults = 5): {
+    movies: Array<{ id: number; title: string; year?: number; poster_url?: string }>
+    tvShows: Array<{ id: number; title: string; poster_url?: string }>
+    episodes: Array<{ id: number; title: string; series_title: string; season_number: number; episode_number: number; poster_url?: string }>
+    artists: Array<{ id: number; name: string; thumb_url?: string }>
+    albums: Array<{ id: number; title: string; artist_name: string; year?: number; thumb_url?: string }>
+    tracks: Array<{ id: number; title: string; album_id?: number; album_title?: string; artist_name?: string; album_thumb_url?: string }>
+  } {
+    if (!this.db || !query || query.length < 2) {
+      return { movies: [], tvShows: [], episodes: [], artists: [], albums: [], tracks: [] }
+    }
+
+    const searchQuery = `%${query.toLowerCase()}%`
+
+    // Helper to convert SQL.js result to array
+    const toArray = <T>(result: any[]): T[] => {
+      if (!result || result.length === 0) return []
+      const { columns, values } = result[0]
+      return values.map((row: any[]) => {
+        const obj: Record<string, any> = {}
+        columns.forEach((col: string, i: number) => {
+          obj[col] = row[i]
+        })
+        return obj as T
+      })
+    }
+
+    // Search movies
+    const movies = toArray<{ id: number; title: string; year?: number; poster_url?: string }>(
+      this.db.exec(`
+        SELECT id, title, year, poster_url
+        FROM media_items
+        WHERE type = 'movie' AND LOWER(title) LIKE ?
+        ORDER BY title
+        LIMIT ?
+      `, [searchQuery, maxResults])
+    )
+
+    // Search TV shows (unique series titles)
+    const tvShows = toArray<{ id: number; title: string; poster_url?: string }>(
+      this.db.exec(`
+        SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url
+        FROM media_items
+        WHERE type = 'episode' AND series_title IS NOT NULL AND LOWER(series_title) LIKE ?
+        GROUP BY series_title
+        ORDER BY series_title
+        LIMIT ?
+      `, [searchQuery, maxResults])
+    )
+
+    // Search episodes
+    const episodes = toArray<{ id: number; title: string; series_title: string; season_number: number; episode_number: number; poster_url?: string }>(
+      this.db.exec(`
+        SELECT id, title, series_title, season_number, episode_number, episode_thumb_url as poster_url
+        FROM media_items
+        WHERE type = 'episode' AND (LOWER(title) LIKE ? OR LOWER(series_title) LIKE ?)
+        ORDER BY series_title, season_number, episode_number
+        LIMIT ?
+      `, [searchQuery, searchQuery, maxResults])
+    )
+
+    // Search artists
+    const artists = toArray<{ id: number; name: string; thumb_url?: string }>(
+      this.db.exec(`
+        SELECT id, name, thumb_url
+        FROM music_artists
+        WHERE LOWER(name) LIKE ?
+        ORDER BY name
+        LIMIT ?
+      `, [searchQuery, maxResults])
+    )
+
+    // Search albums
+    const albums = toArray<{ id: number; title: string; artist_name: string; year?: number; thumb_url?: string }>(
+      this.db.exec(`
+        SELECT id, title, artist_name, year, thumb_url
+        FROM music_albums
+        WHERE LOWER(title) LIKE ? OR LOWER(artist_name) LIKE ?
+        ORDER BY title
+        LIMIT ?
+      `, [searchQuery, searchQuery, maxResults])
+    )
+
+    // Search tracks
+    const tracks = toArray<{ id: number; title: string; album_id?: number; album_title?: string; artist_name?: string; album_thumb_url?: string }>(
+      this.db.exec(`
+        SELECT t.id, t.title, t.album_id, a.title as album_title, a.artist_name, a.thumb_url as album_thumb_url
+        FROM music_tracks t
+        LEFT JOIN music_albums a ON t.album_id = a.id
+        WHERE LOWER(t.title) LIKE ?
+        ORDER BY t.title
+        LIMIT ?
+      `, [searchQuery, maxResults])
+    )
+
+    return { movies, tvShows, episodes, artists, albums, tracks }
   }
 }
 

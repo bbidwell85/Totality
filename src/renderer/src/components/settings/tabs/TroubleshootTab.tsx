@@ -124,6 +124,8 @@ export function TroubleshootTab() {
 
   // Measure container height with ResizeObserver
   useEffect(() => {
+    if (isLoading) return
+
     const container = containerRef.current
     if (!container) return
 
@@ -134,15 +136,15 @@ export function TroubleshootTab() {
       }
     }
 
-    // Initial measurement
-    updateHeight()
+    // Delay initial measurement to ensure flex layout has resolved
+    requestAnimationFrame(updateHeight)
 
     // Watch for resize
     const observer = new ResizeObserver(updateHeight)
     observer.observe(container)
 
     return () => observer.disconnect()
-  }, [])
+  }, [isLoading])
 
   const loadLogs = async () => {
     try {
@@ -259,7 +261,7 @@ export function TroubleshootTab() {
   }
 
   return (
-    <div className="p-6 flex flex-col h-full">
+    <div className="p-6 flex flex-col flex-1 min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <h3 className="text-sm font-semibold">Application Logs</h3>
@@ -325,7 +327,7 @@ export function TroubleshootTab() {
       </div>
 
       {/* Log viewer with virtualization - min-h-0 is critical for flex shrinking */}
-      <div className="flex-1 min-h-0 bg-black/50 rounded-lg border border-border/30 font-mono overflow-hidden relative">
+      <div className="flex-1 min-h-0 bg-muted rounded-lg border border-border/30 font-mono overflow-hidden relative">
         {filteredLogs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             No logs to display
@@ -361,8 +363,8 @@ export function TroubleshootTab() {
 
             {/* Details panel - overlay at bottom */}
             {selectedLog?.details && (
-              <div className="absolute bottom-0 left-0 right-0 z-20 border-t border-border/30 bg-black/95 h-[120px] overflow-y-auto">
-                <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/20 sticky top-0 bg-black/95">
+              <div className="absolute bottom-0 left-0 right-0 z-20 border-t border-border/30 bg-muted h-[120px] overflow-y-auto">
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/20 sticky top-0 bg-muted">
                   <span className="text-xs text-muted-foreground font-medium">Details</span>
                   <button
                     onClick={() => setSelectedLogId(null)}

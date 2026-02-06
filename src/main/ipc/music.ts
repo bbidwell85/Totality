@@ -253,6 +253,19 @@ export function registerMusicHandlers(): void {
   })
 
   /**
+   * Get albums that need quality upgrades
+   */
+  ipcMain.handle('music:getAlbumsNeedingUpgrade', async (_event, limit?: number) => {
+    try {
+      const db = getDatabaseService()
+      return db.getAlbumsNeedingUpgrade(limit)
+    } catch (error: any) {
+      console.error('[music:getAlbumsNeedingUpgrade] Error:', error)
+      throw error
+    }
+  })
+
+  /**
    * Analyze quality for all albums
    */
   ipcMain.handle('music:analyzeAllQuality', async (event, sourceId?: string) => {

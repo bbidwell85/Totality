@@ -389,6 +389,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Music Quality Analysis
   musicGetAlbumQuality: (albumId: number) => ipcRenderer.invoke('music:getAlbumQuality', albumId),
+  musicGetAlbumsNeedingUpgrade: (limit?: number) => ipcRenderer.invoke('music:getAlbumsNeedingUpgrade', limit),
   musicAnalyzeAllQuality: (sourceId?: string) => ipcRenderer.invoke('music:analyzeAllQuality', sourceId),
   onMusicQualityProgress: (callback: (progress: unknown) => void) => {
     const handler = (_event: any, progress: unknown) => callback(progress)
@@ -433,6 +434,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Database - Statistics
   getLibraryStats: (sourceId?: string) => ipcRenderer.invoke('db:getLibraryStats', sourceId),
+
+  // Database - Global Search
+  mediaSearch: (query: string) => ipcRenderer.invoke('media:search', query),
 
   // ============================================================================
   // WISHLIST / SHOPPING LIST
@@ -1173,6 +1177,7 @@ export interface ElectronAPI {
 
   // Music Quality Analysis
   musicGetAlbumQuality: (albumId: number) => Promise<unknown | null>
+  musicGetAlbumsNeedingUpgrade: (limit?: number) => Promise<unknown[]>
   musicAnalyzeAllQuality: (sourceId?: string) => Promise<{ success: boolean; analyzed: number }>
   onMusicQualityProgress: (callback: (progress: unknown) => void) => () => void
 
@@ -1228,6 +1233,16 @@ export interface ElectronAPI {
     movieAverageQualityScore: number
     tvNeedsUpgradeCount: number
     tvAverageQualityScore: number
+  }>
+
+  // Database - Global Search
+  mediaSearch: (query: string) => Promise<{
+    movies: Array<{ id: number; title: string; year?: number; poster_url?: string }>
+    tvShows: Array<{ id: number; title: string; poster_url?: string }>
+    episodes: Array<{ id: number; title: string; series_title: string; season_number: number; episode_number: number; poster_url?: string }>
+    artists: Array<{ id: number; name: string; thumb_url?: string }>
+    albums: Array<{ id: number; title: string; artist_name: string; year?: number; thumb_url?: string }>
+    tracks: Array<{ id: number; title: string; album_id?: number; album_title?: string; artist_name?: string }>
   }>
 
   // ============================================================================

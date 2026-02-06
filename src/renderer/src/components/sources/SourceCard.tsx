@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Server, HardDrive } from 'lucide-react'
+import { Server, HardDrive, Film, Tv, Music, Folder } from 'lucide-react'
 import { useSources, type ProviderType } from '../../contexts/SourceContext'
 import type { MediaSourceResponse, MediaLibraryResponse } from '../../../../preload/index'
 
@@ -473,9 +473,15 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
                       />
                     </button>
 
-                    <span className="text-lg">
-                      {lib.type === 'movie' ? '🎬' : lib.type === 'show' ? '📺' : lib.type === 'music' ? '🎵' : '📁'}
-                    </span>
+                    {lib.type === 'movie' ? (
+                      <Film className="w-4 h-4 text-foreground" />
+                    ) : lib.type === 'show' ? (
+                      <Tv className="w-4 h-4 text-foreground" />
+                    ) : lib.type === 'music' ? (
+                      <Music className="w-4 h-4 text-foreground" />
+                    ) : (
+                      <Folder className="w-4 h-4 text-foreground" />
+                    )}
                     <span className={`text-sm ${!lib.isEnabled ? 'text-muted-foreground' : ''}`}>{lib.name}</span>
                     {lib.itemCount !== undefined && (
                       <span className="text-xs text-muted-foreground">({lib.itemCount} items)</span>

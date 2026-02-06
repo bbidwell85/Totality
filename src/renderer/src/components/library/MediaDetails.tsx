@@ -277,7 +277,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch }: MediaDe
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[150]">
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]">
         <div className="bg-card rounded-xl p-8 shadow-2xl">
           <div className="text-muted-foreground">Loading...</div>
         </div>
@@ -287,7 +287,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch }: MediaDe
 
   if (error || !media) {
     return (
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[150]">
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]">
         <div className="bg-card rounded-xl p-8 shadow-2xl text-center">
           <div className="text-destructive mb-4">{error || 'Media not found'}</div>
           <button onClick={onClose} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg">
@@ -303,13 +303,13 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch }: MediaDe
   const displayTitle = media.type === 'episode' && media.series_title ? media.series_title : media.title
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[150] p-6" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-6" onClick={onClose}>
       <div
         className="bg-card rounded-xl w-full max-w-4xl max-h-[calc(100vh-48px)] overflow-hidden flex flex-col shadow-2xl border border-border"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Compact Header */}
-        <div className="flex gap-4 p-4 border-b border-border/30 bg-black/30 rounded-t-xl">
+        <div className="flex gap-4 p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-xl">
           {/* Poster */}
           {(media.poster_url || media.episode_thumb_url) && (
             <img

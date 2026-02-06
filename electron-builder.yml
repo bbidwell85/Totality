@@ -31,6 +31,7 @@ mac:
   target:
     - dmg
   icon: resources/icon.icns
+  identity: "Brandon Bidwell (LN7B5DD54X)"
 
 linux:
   target:

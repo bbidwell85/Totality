@@ -64,7 +64,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
     <div
       className="fixed inset-0 z-[200] bg-background flex items-center justify-center"
       style={{
-        backgroundColor: '#1c1d24',
+        backgroundColor: 'hsl(var(--background))',
         opacity: fadeOut ? 0 : 1,
         transition: 'opacity 600ms ease-out',
       }}

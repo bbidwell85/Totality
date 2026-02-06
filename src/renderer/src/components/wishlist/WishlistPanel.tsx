@@ -171,7 +171,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
     <aside
       ref={panelRef}
       id="wishlist-panel"
-      className={`fixed top-[88px] bottom-4 right-4 w-80 bg-card rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-all duration-300 ease-out ${
+      className={`fixed top-[88px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
         isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
       }`}
       onKeyDown={handleKeyDown}

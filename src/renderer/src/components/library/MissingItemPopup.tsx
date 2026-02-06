@@ -61,7 +61,7 @@ export function MissingItemPopup({
       {/* Popup */}
       <div className="relative bg-card border border-border rounded-lg shadow-xl max-w-sm w-full overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border/30 bg-black/30 rounded-t-lg">
+        <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-lg">
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 bg-orange-600 text-white text-xs font-bold rounded">
               MISSING

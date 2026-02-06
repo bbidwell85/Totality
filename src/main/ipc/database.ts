@@ -429,5 +429,21 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  // ============================================================================
+  // GLOBAL SEARCH
+  // ============================================================================
+
+  /**
+   * Search across all media types for global search bar
+   */
+  ipcMain.handle('media:search', async (_event, query: string) => {
+    try {
+      return db.globalSearch(query)
+    } catch (error) {
+      console.error('Error in global search:', error)
+      return { movies: [], tvShows: [], episodes: [], artists: [], albums: [], tracks: [] }
+    }
+  })
+
   console.log('Database IPC handlers registered')
 }

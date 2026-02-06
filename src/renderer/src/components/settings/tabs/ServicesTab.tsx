@@ -359,7 +359,7 @@ export function ServicesTab() {
   }
 
   return (
-    <div className="p-6 space-y-3">
+    <div className="p-6 space-y-3 overflow-y-auto">
       {/* Header */}
       <div className="mb-4">
         <p className="text-xs text-muted-foreground">

@@ -41,7 +41,7 @@ export function QualityBadges({ item, whiteBg = false }: QualityBadgesProps) {
   if (badges.length === 0) return null
 
   const badgeClass = whiteBg
-    ? 'bg-white text-black border border-gray-200'
+    ? 'bg-foreground text-background border border-border'
     : ''
 
   return (

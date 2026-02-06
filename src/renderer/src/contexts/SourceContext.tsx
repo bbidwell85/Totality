@@ -53,6 +53,12 @@ interface SourceContextType {
   isScanning: boolean
   stats: SourceStats | null
 
+  // Library type availability (detected from enabled libraries)
+  hasMovies: boolean
+  hasTV: boolean
+  hasMusic: boolean
+  refreshLibraryTypes: () => Promise<void>
+
   // Connection status (real-time online/offline status per source)
   connectionStatus: Map<string, boolean>
 
@@ -124,6 +130,11 @@ export function SourceProvider({ children }: SourceProviderProps) {
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<Map<string, boolean>>(new Map())
   const [newItemCounts, setNewItemCounts] = useState<Map<string, number>>(new Map())
+
+  // Library type availability
+  const [hasMovies, setHasMovies] = useState(false)
+  const [hasTV, setHasTV] = useState(false)
+  const [hasMusic, setHasMusic] = useState(false)
 
   // Computed: active (enabled) sources
   const activeSources = sources.filter(s => s.is_enabled)
@@ -235,6 +246,40 @@ export function SourceProvider({ children }: SourceProviderProps) {
     }
   }
 
+  // Detect which library types are available from enabled sources
+  const detectLibraryTypesFromList = async (sourceList: MediaSourceResponse[]) => {
+    let movies = false, tv = false, music = false
+
+    try {
+      for (const source of sourceList) {
+        if (!source.is_enabled) continue
+
+        const libraries = await window.electronAPI.sourcesGetLibrariesWithStatus(source.source_id)
+        for (const lib of libraries) {
+          if (lib.isEnabled) {
+            if (lib.type === 'movie') movies = true
+            if (lib.type === 'show') tv = true
+            if (lib.type === 'music') music = true
+          }
+        }
+
+        // Early exit if we've found all types
+        if (movies && tv && music) break
+      }
+    } catch (err) {
+      console.warn('Failed to detect library types:', err)
+    }
+
+    setHasMovies(movies)
+    setHasTV(tv)
+    setHasMusic(music)
+  }
+
+  // Public function to refresh library types (e.g., after toggling a library)
+  const refreshLibraryTypes = useCallback(async () => {
+    await detectLibraryTypesFromList(sources)
+  }, [sources])
+
   // Refresh sources from backend
   const refreshSources = useCallback(async () => {
     setIsLoading(true)
@@ -244,6 +289,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
       const sourceList = await window.electronAPI.sourcesList()
       setSources(sourceList)
       await loadStats()
+      // Detect library types immediately after loading sources
+      await detectLibraryTypesFromList(sourceList)
     } catch (err: any) {
       setError(err.message || 'Failed to load sources')
       console.error('Failed to refresh sources:', err)
@@ -251,6 +298,14 @@ export function SourceProvider({ children }: SourceProviderProps) {
       setIsLoading(false)
     }
   }, [])
+
+  // Refresh source data when a scan completes (updates last_scan_at)
+  useEffect(() => {
+    const cleanup = window.electronAPI.onScanCompleted?.(() => {
+      refreshSources()
+    })
+    return () => cleanup?.()
+  }, [refreshSources])
 
   // Add a new source
   const addSource = useCallback(async (config: {
@@ -413,6 +468,10 @@ export function SourceProvider({ children }: SourceProviderProps) {
     scanProgress,
     isScanning,
     stats,
+    hasMovies,
+    hasTV,
+    hasMusic,
+    refreshLibraryTypes,
     connectionStatus,
     activeSourceId,
     setActiveSource,

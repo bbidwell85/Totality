@@ -710,7 +710,8 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('quality_threshold_bitrate_720p', '5000'),
   ('quality_threshold_bitrate_1080p', '10000'),
   ('quality_threshold_audio', '192'),
-  ('theme', 'light'),
+  ('theme', 'dark'),
+  ('theme_mode', 'dark'),
   ('tmdb_api_key', ''),
 
   -- Video bitrate thresholds (kbps) - MEDIUM and HIGH thresholds per tier

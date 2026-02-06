@@ -24,7 +24,7 @@ export function CompletenessIndicator({
   return (
     <div className={`absolute top-2 right-2 ${className}`}>
       <div
-        className="bg-white text-black text-xs font-bold px-2 py-1 rounded shadow-md border border-gray-200"
+        className="bg-foreground text-background text-xs font-bold px-2 py-1 rounded shadow-md border border-border"
         title={type === 'series'
           ? `${owned} of ${total} episodes owned`
           : `${owned} of ${total} movies in collection`

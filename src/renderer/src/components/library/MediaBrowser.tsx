@@ -11,7 +11,7 @@ import { QualityBadges } from './QualityBadges'
 import { WishlistPanel } from '../wishlist/WishlistPanel'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { ActivityPanel } from '../ui/ActivityPanel'
-import { Grid3x3, List, Search, X, Library, Layers, Music, Disc3, User, MoreVertical, RefreshCw, Film, Tv, Folder, CircleFadingArrowUp, Pencil, Settings, Star } from 'lucide-react'
+import { Grid3x3, List, Search, X, Library, Layers, Music, Disc3, User, MoreVertical, RefreshCw, Film, Tv, Folder, CircleFadingArrowUp, Pencil, Settings, Star, Home } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useNavigation } from '../../contexts/NavigationContext'
 import { useWishlist } from '../../contexts/WishlistContext'
@@ -50,11 +50,39 @@ import type {
 // Import utilities from shared utils file
 import { providerColors, formatSeasonLabel, getStatusBadge } from './mediaUtils'
 
-export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: MediaBrowserProps) {
+export function MediaBrowser({
+  onAddSource: _onAddSource,
+  onOpenSettings,
+  sidebarCollapsed = false,
+  onNavigateHome,
+  initialTab,
+  hideHeader = false,
+  showCompletenessPanel: externalShowCompletenessPanel,
+  showWishlistPanel: externalShowWishlistPanel,
+  onToggleCompleteness: externalToggleCompleteness,
+  onToggleWishlist: externalToggleWishlist,
+  libraryTab,
+  onLibraryTabChange,
+  onAutoRefreshChange
+}: MediaBrowserProps) {
   const { sources, activeSourceId, scanProgress, setActiveSource, markLibraryAsNew } = useSources()
   const { addToast } = useToast()
   const { count: wishlistCount } = useWishlist()
   const { pendingNavigation, clearNavigation } = useNavigation()
+
+  // Get theme accent color from document root (outside of any scoped dark class)
+  const [themeAccentColor, setThemeAccentColor] = useState('')
+  useEffect(() => {
+    const updateAccentColor = () => {
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
+      setThemeAccentColor(accent ? `hsl(${accent})` : '')
+    }
+    updateAccentColor()
+    // Watch for class changes on documentElement (theme switches)
+    const observer = new MutationObserver(updateAccentColor)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
 
   const [items, setItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -62,6 +90,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false) // For background incremental scan on app start
   const [error, setError] = useState<string | null>(null)
   const hasInitialLoadRef = useRef(false) // Track if initial load is complete
+  const hasAutoSwitchedRef = useRef(false) // Track if auto-switch has been done (to prevent loop)
   const [stats, setStats] = useState<LibraryStats | null>(null)
   const [view, setView] = useState<'movies' | 'tv' | 'music'>('movies')
 
@@ -116,8 +145,21 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
   const [musicCompletenessStats, setMusicCompletenessStats] = useState<MusicCompletenessStats | null>(null)
   const [artistCompleteness, setArtistCompleteness] = useState<Map<string, ArtistCompletenessData>>(new Map())
   const [allAlbumCompleteness, setAllAlbumCompleteness] = useState<Map<number, AlbumCompletenessData>>(new Map())
-  const [showCompletenessPanel, setShowCompletenessPanel] = useState(false)
-  const [showWishlistPanel, setShowWishlistPanel] = useState(false)
+  // Internal panel state (used when external state not provided)
+  const [internalShowCompletenessPanel, setInternalShowCompletenessPanel] = useState(false)
+  const [internalShowWishlistPanel, setInternalShowWishlistPanel] = useState(false)
+
+  // Use external state if provided, otherwise use internal
+  const showCompletenessPanel = externalShowCompletenessPanel ?? internalShowCompletenessPanel
+  const showWishlistPanel = externalShowWishlistPanel ?? internalShowWishlistPanel
+
+  const setShowCompletenessPanel = externalToggleCompleteness
+    ? () => externalToggleCompleteness()
+    : setInternalShowCompletenessPanel
+
+  const setShowWishlistPanel = externalToggleWishlist
+    ? () => externalToggleWishlist()
+    : setInternalShowWishlistPanel
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null)
   const [analysisType, setAnalysisType] = useState<'series' | 'collections' | 'music' | null>(null)
@@ -182,6 +224,28 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  // Handle initialTab prop from dashboard navigation
+  useEffect(() => {
+    if (initialTab) {
+      setView(initialTab)
+    }
+  }, [initialTab])
+
+  // Sync view with external libraryTab prop (one-way: prop → state)
+  // Only update when prop changes, not on every render
+  useEffect(() => {
+    if (libraryTab && libraryTab !== view) {
+      setView(libraryTab)
+    }
+  }, [libraryTab])
+  // Note: Removed auto-notify effect to break bidirectional sync loop
+  // Parent is notified only via explicit user tab clicks (see handleTabClick)
+
+  // Notify parent when auto-refresh state changes
+  useEffect(() => {
+    onAutoRefreshChange?.(isAutoRefreshing)
+  }, [isAutoRefreshing, onAutoRefreshChange])
 
   // Load libraries for active source - only include enabled libraries
   // This ensures unchecked libraries don't appear in the top menu bar
@@ -514,9 +578,10 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
     ? activeSourceLibraries.some(lib => lib.type === 'music')
     : (musicStats?.totalArtists ?? 0) > 0
 
-  // Auto-switch view if current view has no content
+  // Auto-switch view if current view has no content (only on initial load)
   useEffect(() => {
-    if (!loading) {
+    // Only auto-switch once to prevent loops
+    if (!loading && !hasAutoSwitchedRef.current) {
       if (view === 'movies' && !hasMovies) {
         if (hasTV) setView('tv')
         else if (hasMusic) setView('music')
@@ -526,6 +591,10 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
       } else if (view === 'music' && !hasMusic) {
         if (hasMovies) setView('movies')
         else if (hasTV) setView('tv')
+      }
+      // Mark as done after checking (even if no switch needed)
+      if (hasMovies || hasTV || hasMusic) {
+        hasAutoSwitchedRef.current = true
       }
     }
   }, [hasMovies, hasTV, hasMusic, view, loading])
@@ -1266,10 +1335,11 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
 
   return (
     <div className="h-screen flex flex-col">
-      {/* Fixed Control Bar - floating header with logo */}
+      {/* Fixed Control Bar - floating header with logo (hidden when global TopBar is used) */}
+      {!hideHeader && (
       <header
         id="top-bar"
-        className="fixed top-4 left-4 right-4 z-[100] bg-black rounded-2xl shadow-xl px-4 py-3"
+        className="dark fixed top-4 left-4 right-4 z-[100] bg-black rounded-2xl shadow-xl px-4 py-3"
         role="banner"
         aria-label="Main navigation"
       >
@@ -1586,12 +1656,30 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
           {!showEmptyState && (
           <div className="flex-shrink-0" role="tablist" aria-label="Library type">
             <div className="flex gap-1">
+                {/* Home Button */}
+                {onNavigateHome && (
+                  <button
+                    onClick={onNavigateHome}
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 bg-card text-muted-foreground hover:bg-muted"
+                    title="Return to Dashboard"
+                    aria-label="Dashboard"
+                  >
+                    <Home className="w-4 h-4" />
+                  </button>
+                )}
+
+                {/* Divider */}
+                {onNavigateHome && (
+                  <div className="w-px bg-border/50 mx-1" />
+                )}
+
                 {/* Movies Button - Always visible */}
                 <button
                   ref={moviesTabRef}
                   onClick={() => {
                     if (!hasMovies) return
                     setView('movies')
+                    onLibraryTabChange?.('movies')
                     setSelectedShow(null)
                     setSelectedSeason(null)
                     setSelectedArtist(null)
@@ -1601,7 +1689,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
                     view === 'movies'
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                      : 'bg-card text-muted-foreground hover:bg-muted'
                   } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50 ${isMoviesTabFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
                   role="tab"
                   aria-selected={view === 'movies'}
@@ -1618,6 +1706,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                   onClick={() => {
                     if (!hasTV) return
                     setView('tv')
+                    onLibraryTabChange?.('tv')
                     setSelectedShow(null)
                     setSelectedSeason(null)
                     setSelectedArtist(null)
@@ -1627,7 +1716,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
                     view === 'tv'
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                      : 'bg-card text-muted-foreground hover:bg-muted'
                   } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50 ${isTvTabFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
                   role="tab"
                   aria-selected={view === 'tv'}
@@ -1644,6 +1733,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                   onClick={() => {
                     if (!hasMusic) return
                     setView('music')
+                    onLibraryTabChange?.('music')
                     setSelectedShow(null)
                     setSelectedSeason(null)
                     setSelectedArtist(null)
@@ -1653,7 +1743,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
                     view === 'music'
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                      : 'bg-card text-muted-foreground hover:bg-muted'
                   } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50 ${isMusicTabFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
                   role="tab"
                   aria-selected={view === 'music'}
@@ -1687,14 +1777,14 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
               className={`p-2.5 rounded-md transition-colors flex items-center gap-1 flex-shrink-0 focus:outline-none ${
                 showCompletenessPanel
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  : 'bg-card text-muted-foreground hover:bg-muted'
               } ${isCompletenessButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
               aria-label={showCompletenessPanel ? 'Hide completeness panel' : 'Show completeness panel'}
               aria-expanded={showCompletenessPanel}
               aria-controls="completeness-panel"
             >
               <Library className="w-4 h-4" aria-hidden="true" />
-              {!tmdbApiKeySet && <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full" aria-label="API key not configured" />}
+              {!tmdbApiKeySet && <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: themeAccentColor }} aria-label="API key not configured" />}
             </button>
             <button
               ref={wishlistButtonRef}
@@ -1706,7 +1796,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
               className={`p-2.5 rounded-md transition-colors flex items-center gap-1.5 flex-shrink-0 focus:outline-none ${
                 showWishlistPanel
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                  : 'bg-card text-muted-foreground hover:bg-muted'
               } ${isWishlistButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
               aria-label={showWishlistPanel ? 'Hide wishlist panel' : 'Show wishlist panel'}
               aria-expanded={showWishlistPanel}
@@ -1714,7 +1804,10 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
             >
               <Star className="w-4 h-4" aria-hidden="true" />
               {wishlistCount > 0 && (
-                <span className={`text-xs font-medium ${showWishlistPanel ? 'text-primary-foreground' : 'text-amber-400'}`}>
+                <span
+                  className={`text-xs font-medium ${showWishlistPanel ? 'text-primary-foreground' : ''}`}
+                  style={showWishlistPanel ? undefined : { color: themeAccentColor }}
+                >
                   {wishlistCount}
                 </span>
               )}
@@ -1723,7 +1816,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
             <button
               ref={settingsButtonRef}
               onClick={() => onOpenSettings?.()}
-              className={`p-2.5 rounded-md transition-colors flex-shrink-0 bg-muted/50 text-muted-foreground hover:bg-muted focus:outline-none ${isSettingsButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
+              className={`p-2.5 rounded-md transition-colors flex-shrink-0 bg-card text-muted-foreground hover:bg-muted focus:outline-none ${isSettingsButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
               aria-label="Open settings"
             >
               <Settings className="w-4 h-4" aria-hidden="true" />
@@ -1731,11 +1824,16 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
           </div>
         </div>
       </header>
+      )}
 
       {/* Library Content Container - self-contained element */}
       <main
         id="library-content"
-        className={`fixed top-[88px] bottom-4 left-[288px] transition-all duration-300 ease-out ${showCompletenessPanel || showWishlistPanel ? 'right-[340px]' : 'right-4'} flex flex-col ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}
+        className={`fixed top-[88px] bottom-4 transition-[left,right,opacity] duration-300 ease-out flex flex-col ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}
+        style={{
+          left: sidebarCollapsed ? '96px' : '288px',
+          right: showCompletenessPanel || showWishlistPanel ? '340px' : '16px'
+        }}
         role="tabpanel"
         aria-label={`${view === 'movies' ? 'Movies' : view === 'tv' ? 'TV Shows' : 'Music'} library`}
       >
@@ -1763,7 +1861,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                           className={`px-2.5 py-1.5 rounded-md text-xs transition-colors ${
                             musicViewMode === mode
                               ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                              : 'bg-card text-muted-foreground hover:bg-muted'
                           }`}
                         >
                           {mode.charAt(0).toUpperCase() + mode.slice(1)}
@@ -1789,7 +1887,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                           className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-none ${
                             tierFilter === tier
                               ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                              : 'bg-card text-muted-foreground hover:bg-muted'
                           } ${isFilterFocused('tier', tier) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                         >
                           {tier === 'all' ? 'All' : tier}
@@ -1821,7 +1919,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                           className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-none ${
                             qualityFilter === quality
                               ? 'bg-primary text-primary-foreground'
-                              : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                              : 'bg-card text-muted-foreground hover:bg-muted'
                           } ${isFilterFocused('quality', quality) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                         >
                           {quality.charAt(0).toUpperCase() + quality.slice(1)}
@@ -1845,7 +1943,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                       max="7"
                       value={gridScale}
                       onChange={(e) => setGridScale(Number(e.target.value))}
-                      className="w-20 h-1 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                      className="w-20 h-1 bg-border/50 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md"
                     />
                   </div>
                 )}
@@ -1860,7 +1958,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                       className={`p-1.5 rounded-md transition-colors focus:outline-none ${
                         viewType === 'grid'
                           ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                          : 'bg-card text-muted-foreground hover:bg-muted'
                       } ${isFilterFocused('view', 'grid') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                     >
                       <Grid3x3 className="w-4 h-4" />
@@ -1871,7 +1969,7 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
                       className={`p-1.5 rounded-md transition-colors focus:outline-none ${
                         viewType === 'list'
                           ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                          : 'bg-card text-muted-foreground hover:bg-muted'
                       } ${isFilterFocused('view', 'list') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
                     >
                       <List className="w-4 h-4" />
@@ -1881,69 +1979,13 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
               </div>
             </div>
 
-            {/* Row 2: Alphabet Navigation - centered */}
-            <div className="flex justify-center" role="group" aria-label="Filter by letter">
-              <div className="flex gap-0.5 items-center">
-                <button
-                  ref={(el) => {
-                    if (el) alphabetFilterRefs.current.set('all', el)
-                    else alphabetFilterRefs.current.delete('all')
-                  }}
-                  onClick={() => setAlphabetFilter(null)}
-                  className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors focus:outline-none ${
-                    alphabetFilter === null
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                  } ${isFilterFocused('alpha', 'all') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
-                  title="Show all"
-                  aria-label="Show all items"
-                  aria-pressed={alphabetFilter === null}
-                >
-                  All
-                </button>
-                <button
-                  ref={(el) => {
-                    if (el) alphabetFilterRefs.current.set('#', el)
-                    else alphabetFilterRefs.current.delete('#')
-                  }}
-                  onClick={() => setAlphabetFilter('#')}
-                  className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors focus:outline-none ${
-                    alphabetFilter === '#'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                  } ${isFilterFocused('alpha', '#') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
-                  title="Numbers and special characters"
-                  aria-label="Filter by numbers and special characters"
-                  aria-pressed={alphabetFilter === '#'}
-                >
-                  #
-                </button>
-                {Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ').map((letter) => (
-                  <button
-                    key={letter}
-                    ref={(el) => {
-                      if (el) alphabetFilterRefs.current.set(letter, el)
-                      else alphabetFilterRefs.current.delete(letter)
-                    }}
-                    onClick={() => setAlphabetFilter(letter)}
-                    className={`w-7 h-7 flex items-center justify-center rounded-md text-xs font-medium transition-colors focus:outline-none ${
-                      alphabetFilter === letter
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
-                    } ${isFilterFocused('alpha', letter) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
-                    aria-label={`Filter by letter ${letter}`}
-                    aria-pressed={alphabetFilter === letter}
-                  >
-                    {letter}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Scrollable Content Area */}
-        <div className="flex-1 overflow-y-auto scrollbar-visible px-4 pb-4">
+        {/* Scrollable Content Area with Alphabet Filter */}
+        <div className="flex-1 relative min-h-0">
+          {/* Main scrollable content */}
+          <div className="absolute inset-0 overflow-y-auto scrollbar-visible px-4 pb-4 pr-8">
 
         {/* Content Display */}
         {showEmptyState ? (
@@ -2038,6 +2080,64 @@ export function MediaBrowser({ onAddSource: _onAddSource, onOpenSettings }: Medi
             }}
           />
         ))}
+          </div>
+
+          {/* Vertical Alphabet Filter - positioned left of scrollbar */}
+          <div className="absolute right-3 top-0 bottom-0 flex flex-col items-center justify-between py-2" role="group" aria-label="Filter by letter">
+            <button
+              ref={(el) => {
+                if (el) alphabetFilterRefs.current.set('all', el)
+                else alphabetFilterRefs.current.delete('all')
+              }}
+              onClick={() => setAlphabetFilter(null)}
+              className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-none ${
+                alphabetFilter === null
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Show all"
+              aria-label="Show all items"
+              aria-pressed={alphabetFilter === null}
+            >
+              All
+            </button>
+            <button
+              ref={(el) => {
+                if (el) alphabetFilterRefs.current.set('#', el)
+                else alphabetFilterRefs.current.delete('#')
+              }}
+              onClick={() => setAlphabetFilter('#')}
+              className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-none ${
+                alphabetFilter === '#'
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Numbers and special characters"
+              aria-label="Filter by numbers and special characters"
+              aria-pressed={alphabetFilter === '#'}
+            >
+              #
+            </button>
+            {Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ').map((letter) => (
+              <button
+                key={letter}
+                ref={(el) => {
+                  if (el) alphabetFilterRefs.current.set(letter, el)
+                  else alphabetFilterRefs.current.delete(letter)
+                }}
+                onClick={() => setAlphabetFilter(letter)}
+                className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-none ${
+                  alphabetFilter === letter
+                    ? 'text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                aria-label={`Filter by letter ${letter}`}
+                aria-pressed={alphabetFilter === letter}
+              >
+                {letter}
+              </button>
+            ))}
+          </div>
         </div>
       </main>
 
@@ -2370,7 +2470,7 @@ const CollectionCard = memo(({ collection, onClick, focusIndex }: { collection: 
           className={`flex-shrink-0 text-xs font-bold px-2 py-1 rounded shadow-md flex items-center gap-1 ${
             collection.completeness_percentage === 100
               ? 'bg-green-500 text-white'
-              : 'bg-white text-black border border-gray-200'
+              : 'bg-foreground text-background border border-border'
           }`}
           title={`${collection.owned_movies} of ${collection.total_movies} movies owned`}
         >
@@ -2436,24 +2536,25 @@ function CollectionListItem({ collection, onClick, focusIndex }: { collection: M
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h4 className="font-semibold text-sm truncate">{collection.collection_name}</h4>
-          {/* Collection completion badge */}
-          <div
-            className={`flex-shrink-0 text-xs font-bold px-2 py-1 rounded shadow-md flex items-center gap-1 ${
-              collection.completeness_percentage === 100
-                ? 'bg-green-500 text-white'
-                : 'bg-white text-black border border-gray-200'
-            }`}
-            title={`${collection.owned_movies} of ${collection.total_movies} movies owned`}
-          >
-            <Layers className="w-3 h-3" />
-            <span>{collection.owned_movies}/{collection.total_movies}</span>
-          </div>
-        </div>
+        <h4 className="font-semibold text-sm truncate">{collection.collection_name}</h4>
         <p className="text-xs text-muted-foreground mt-0.5">
           {collection.owned_movies} of {collection.total_movies} movies
         </p>
+      </div>
+
+      {/* Collection completion badge - aligned with upgrade icon position */}
+      <div className="flex-shrink-0 flex items-center justify-center">
+        <div
+          className={`text-xs font-bold px-2 py-1 rounded shadow-md flex items-center gap-1 ${
+            collection.completeness_percentage === 100
+              ? 'bg-green-500 text-white'
+              : 'bg-foreground text-background border border-border'
+          }`}
+          title={`${collection.owned_movies} of ${collection.total_movies} movies owned`}
+        >
+          <Layers className="w-3 h-3" />
+          <span>{collection.owned_movies}/{collection.total_movies}</span>
+        </div>
       </div>
     </div>
   )
@@ -2592,7 +2693,7 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
               className={`text-xs font-bold px-2 py-1 rounded shadow-md flex items-center gap-1 ${
                 collectionData.completeness_percentage === 100
                   ? 'bg-green-500 text-white'
-                  : 'bg-white text-black border border-gray-200'
+                  : 'bg-foreground text-background border border-border'
               }`}
               title={`Part of ${collectionData.collection_name} (${collectionData.owned_movies}/${collectionData.total_movies})`}
             >
@@ -2759,27 +2860,25 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
       </div>
 
       {/* Badges */}
-      <div className="flex-shrink-0 flex items-center gap-2">
-        {/* Collection Badge */}
-        {collectionData && (
+      <div className="flex-shrink-0 flex items-center justify-center">
+        {/* Show upgrade icon if needs upgrade, otherwise show collection badge */}
+        {needsUpgrade ? (
+          <div title="Quality upgrade recommended">
+            <CircleFadingArrowUp className="w-6 h-6 text-red-500" />
+          </div>
+        ) : collectionData ? (
           <div
             className={`text-xs font-bold px-2 py-1 rounded shadow-md flex items-center gap-1 ${
               collectionData.completeness_percentage === 100
                 ? 'bg-green-500 text-white'
-                : 'bg-white text-black border border-gray-200'
+                : 'bg-foreground text-background border border-border'
             }`}
             title={`Part of ${collectionData.collection_name} (${collectionData.owned_movies}/${collectionData.total_movies})`}
           >
             <Layers className="w-3 h-3" />
             <span>{collectionData.owned_movies}/{collectionData.total_movies}</span>
           </div>
-        )}
-        {/* Upgrade Badge */}
-        {needsUpgrade && (
-          <div title="Quality upgrade recommended">
-            <CircleFadingArrowUp className="w-6 h-6 text-red-500" />
-          </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -2973,7 +3072,7 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
               100%
             </div>
           ) : (
-            <div className="bg-white text-black text-xs font-bold px-2 py-1 rounded shadow-md border border-gray-200">
+            <div className="bg-foreground text-background text-xs font-bold px-2 py-1 rounded shadow-md border border-border">
               {Math.round(completenessData.completeness_percentage)}%
             </div>
           )}
@@ -3210,7 +3309,7 @@ function TVShowsView({
     // Grid view (default)
     return (
       <div
-        className="grid gap-6"
+        className="grid gap-8"
         style={{
           gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
         }}
@@ -3280,7 +3379,7 @@ function TVShowsView({
             <h3 className="text-2xl font-bold mb-1">{currentShow.title}</h3>
             {completenessData?.status && (
               <div className="mb-2">
-                <span className="inline-block px-2 py-0.5 text-xs font-medium bg-white text-black rounded">
+                <span className="inline-block px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
                   {getStatusBadge(completenessData.status)?.text || completenessData.status}
                 </span>
               </div>
@@ -3594,7 +3693,7 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
                 100%
               </div>
             ) : (
-              <div className="bg-white text-black text-xs font-bold px-2 py-1 rounded shadow-md border border-gray-200">
+              <div className="bg-foreground text-background text-xs font-bold px-2 py-1 rounded shadow-md border border-border">
                 {Math.round(completenessData.completeness_percentage)}%
               </div>
             )}
@@ -4320,7 +4419,7 @@ function MusicView({
             <button
               onClick={() => selectedAlbum.id && handleAnalyzeAlbum(selectedAlbum.id)}
               disabled={isAnalyzingAlbum}
-              className="mt-3 flex items-center gap-2 px-3 py-1.5 text-sm bg-white text-black hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
+              className="mt-3 flex items-center gap-2 px-3 py-1.5 text-sm bg-foreground text-background hover:bg-foreground/80 rounded-md transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isAnalyzingAlbum ? 'animate-spin' : ''}`} />
               {isAnalyzingAlbum ? 'Analyzing...' : 'Analyze for missing tracks'}
@@ -4424,10 +4523,10 @@ function MusicView({
           }
 
           const qualityTierConfig: Record<QualityTier & string, { label: string; class: string; title: string }> = {
-            'ultra': { label: 'Ultra', class: 'bg-white text-black', title: 'Hi-Res lossless: 24-bit or >48kHz sample rate' },
-            'high': { label: 'High', class: 'bg-white text-black', title: 'CD-quality lossless: FLAC/ALAC/WAV at 16-bit/44.1-48kHz' },
-            'medium': { label: 'Medium', class: 'bg-white text-black', title: 'Transparent lossy: MP3 ≥160kbps or AAC ≥128kbps' },
-            'low': { label: 'Low', class: 'bg-white text-black', title: 'Low bitrate lossy: below transparent threshold' },
+            'ultra': { label: 'Ultra', class: 'bg-foreground text-background', title: 'Hi-Res lossless: 24-bit or >48kHz sample rate' },
+            'high': { label: 'High', class: 'bg-foreground text-background', title: 'CD-quality lossless: FLAC/ALAC/WAV at 16-bit/44.1-48kHz' },
+            'medium': { label: 'Medium', class: 'bg-foreground text-background', title: 'Transparent lossy: MP3 ≥160kbps or AAC ≥128kbps' },
+            'low': { label: 'Low', class: 'bg-foreground text-background', title: 'Low bitrate lossy: below transparent threshold' },
           }
 
           const unifiedTracks: UnifiedTrack[] = [
@@ -5642,7 +5741,7 @@ const AlbumCard = memo(({ album, onClick, showArtist = true, showSourceBadge, on
         {/* Completeness badge - bottom right */}
         {hasCompleteness && (
           <div className="absolute bottom-2 right-2 z-10">
-            <div className="bg-white text-black text-xs font-bold px-1.5 py-0.5 rounded shadow-md">
+            <div className="bg-foreground text-background text-xs font-bold px-1.5 py-0.5 rounded shadow-md">
               {completeness!.owned_tracks}/{completeness!.total_tracks}
             </div>
           </div>
@@ -5794,7 +5893,7 @@ const ArtistListItem = memo(({ artist, completeness, onClick, showSourceBadge, o
         </p>
         {completeness && (
           <div className="mt-2 flex items-center gap-2">
-            <span className="px-2 py-0.5 text-xs font-medium bg-white text-black rounded">
+            <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
               {completeness.owned_albums}/{completeness.total_albums}
             </span>
           </div>
@@ -5860,13 +5959,13 @@ const AlbumListItem = memo(({ album, onClick, showArtist = true, showSourceBadge
         )}
         <div className="mt-2 flex items-center gap-2 flex-wrap">
           {isHiRes && (
-            <span className="px-2 py-0.5 text-xs font-medium bg-white text-black rounded">Hi-Res</span>
+            <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">Hi-Res</span>
           )}
           {isLossless && !isHiRes && (
-            <span className="px-2 py-0.5 text-xs font-medium bg-white text-black rounded">Lossless</span>
+            <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">Lossless</span>
           )}
           {completeness && (
-            <span className="px-2 py-0.5 text-xs font-medium bg-white text-black rounded">
+            <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
               {completeness.owned_tracks}/{completeness.total_tracks}
             </span>
           )}
@@ -5924,10 +6023,10 @@ const TrackListItem = memo(({ track, index, artistName, albumTitle, columnWidths
 
   const qualityTier = getQualityTier()
   const qualityTierConfig: Record<string, { label: string; color: string }> = {
-    ultra: { label: 'Ultra', color: 'bg-white text-black' },
-    high: { label: 'High', color: 'bg-white text-black' },
-    medium: { label: 'Mid', color: 'bg-white text-black' },
-    low: { label: 'Low', color: 'bg-white text-black' }
+    ultra: { label: 'Ultra', color: 'bg-foreground text-background' },
+    high: { label: 'High', color: 'bg-foreground text-background' },
+    medium: { label: 'Mid', color: 'bg-foreground text-background' },
+    low: { label: 'Low', color: 'bg-foreground text-background' }
   }
 
   const formatDuration = (ms?: number) => {

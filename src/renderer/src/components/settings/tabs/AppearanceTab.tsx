@@ -3,25 +3,30 @@
  *
  * Features:
  * - Theme selection with live preview
- * - 9 color themes to choose from
+ * - Dark / Light / System mode toggle
+ * - 9 base themes, each with dark and light variants
  */
 
-import { useState, useEffect } from 'react'
-import { RefreshCw, Palette } from 'lucide-react'
+import { Sun, Moon, Monitor } from 'lucide-react'
+import { useTheme, type BaseTheme, type ThemeMode } from '../../../contexts/ThemeContext'
 
-type ThemeOption = 'dark' | 'slate' | 'ember' | 'midnight' | 'oled' | 'velvet' | 'emerald' | 'cobalt' | 'carbon'
+interface ThemeColors {
+  background: string
+  card: string
+  accent: string
+  muted: string
+  text: string
+}
 
 interface ThemeConfig {
-  id: ThemeOption
+  id: BaseTheme
   label: string
   description: string
-  colors: {
-    background: string
-    card: string
-    accent: string
-    muted: string
-    text: string
-  }
+  lightLabel?: string
+  lightDescription?: string
+  darkOnly?: boolean
+  darkColors: ThemeColors
+  lightColors?: ThemeColors
 }
 
 const THEMES: ThemeConfig[] = [
@@ -29,7 +34,8 @@ const THEMES: ThemeConfig[] = [
     id: 'dark',
     label: 'Dark',
     description: 'Classic dark mode',
-    colors: {
+    darkOnly: true,
+    darkColors: {
       background: '#1c1d24',
       card: '#282a33',
       accent: '#60a5fa',
@@ -41,43 +47,71 @@ const THEMES: ThemeConfig[] = [
     id: 'slate',
     label: 'Slate',
     description: 'Cool blue-gray',
-    colors: {
+    lightLabel: 'Mist',
+    lightDescription: 'Soft blue-gray',
+    darkColors: {
       background: '#232d38',
       card: '#2a3441',
       accent: '#5a9bcf',
       muted: '#344050',
       text: '#ecf0f4',
     },
+    lightColors: {
+      background: '#d8e2ec',
+      card: '#eaf0f5',
+      accent: '#5a9bcf',
+      muted: '#cdd6e0',
+      text: '#1e2e3e',
+    },
   },
   {
     id: 'ember',
     label: 'Ember',
     description: 'Warm movie nights',
-    colors: {
+    lightLabel: 'Dawn',
+    lightDescription: 'Warm sunrise',
+    darkColors: {
       background: '#1f1a17',
       card: '#2a2420',
       accent: '#e8842a',
       muted: '#352f2a',
       text: '#f5f2ef',
     },
+    lightColors: {
+      background: '#ede5dc',
+      card: '#f5f0ea',
+      accent: '#e8842a',
+      muted: '#ddd5cc',
+      text: '#2e2218',
+    },
   },
   {
     id: 'midnight',
     label: 'Midnight',
     description: 'Cinema purple',
-    colors: {
+    lightLabel: 'Lavender',
+    lightDescription: 'Gentle purple',
+    darkColors: {
       background: '#1a1720',
       card: '#252030',
       accent: '#a372e0',
       muted: '#302a40',
       text: '#f3f1f6',
     },
+    lightColors: {
+      background: '#e2dced',
+      card: '#f0ecf5',
+      accent: '#a372e0',
+      muted: '#d5cee0',
+      text: '#261e34',
+    },
   },
   {
     id: 'oled',
     label: 'OLED',
     description: 'True black display',
-    colors: {
+    darkOnly: true,
+    darkColors: {
       background: '#000000',
       card: '#121212',
       accent: '#26b3c9',
@@ -89,54 +123,96 @@ const THEMES: ThemeConfig[] = [
     id: 'velvet',
     label: 'Velvet',
     description: 'Theater curtain',
-    colors: {
+    lightLabel: 'Blush',
+    lightDescription: 'Soft rose',
+    darkColors: {
       background: '#261418',
       card: '#352025',
       accent: '#d94f6a',
       muted: '#3d252a',
       text: '#f5f0f1',
     },
+    lightColors: {
+      background: '#eddddf',
+      card: '#f5edef',
+      accent: '#d94f6a',
+      muted: '#e0d0d3',
+      text: '#34202a',
+    },
   },
   {
     id: 'emerald',
     label: 'Emerald',
     description: 'Luxurious green',
-    colors: {
+    lightLabel: 'Sage',
+    lightDescription: 'Fresh green',
+    darkColors: {
       background: '#142019',
       card: '#1d2e24',
       accent: '#2eb872',
       muted: '#24352c',
       text: '#eff5f2',
     },
+    lightColors: {
+      background: '#dbede4',
+      card: '#ecf5f0',
+      accent: '#2eb872',
+      muted: '#cce0d5',
+      text: '#1a2e22',
+    },
   },
   {
     id: 'cobalt',
     label: 'Cobalt',
     description: 'Deep cinematic',
-    colors: {
+    lightLabel: 'Sky',
+    lightDescription: 'Clear blue',
+    darkColors: {
       background: '#141a26',
       card: '#1c2535',
       accent: '#3b7fdb',
       muted: '#232d40',
       text: '#eff2f5',
     },
+    lightColors: {
+      background: '#dce2ee',
+      card: '#ecf0f6',
+      accent: '#3b7fdb',
+      muted: '#ced5e2',
+      text: '#1e2838',
+    },
   },
   {
     id: 'carbon',
     label: 'Carbon',
     description: 'Neutral pro',
-    colors: {
+    lightLabel: 'Silver',
+    lightDescription: 'Clean neutral',
+    darkColors: {
       background: '#1a1a1a',
       card: '#242424',
       accent: '#b3b3b3',
       muted: '#2b2b2b',
       text: '#f0f0f0',
     },
+    lightColors: {
+      background: '#e6e6e6',
+      card: '#f2f2f2',
+      accent: '#b3b3b3',
+      muted: '#dadada',
+      text: '#1e1e1e',
+    },
   },
 ]
 
+const MODE_OPTIONS: { id: ThemeMode; label: string; icon: typeof Sun }[] = [
+  { id: 'dark', label: 'Dark', icon: Moon },
+  { id: 'light', label: 'Light', icon: Sun },
+  { id: 'system', label: 'System', icon: Monitor },
+]
+
 // Mini UI mockup component for theme preview
-function ThemePreview({ colors }: { colors: ThemeConfig['colors'] }) {
+function ThemePreview({ colors }: { colors: ThemeConfig['darkColors'] }) {
   return (
     <div
       className="w-full aspect-video rounded-xl overflow-hidden"
@@ -195,89 +271,63 @@ function ThemePreview({ colors }: { colors: ThemeConfig['colors'] }) {
 }
 
 export function AppearanceTab() {
-  const [theme, setTheme] = useState<ThemeOption>('dark')
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    loadSettings()
-  }, [])
-
-  const loadSettings = async () => {
-    setIsLoading(true)
-    try {
-      const allSettings = await window.electronAPI.getAllSettings()
-      const savedTheme = allSettings.theme as ThemeOption
-      if (['dark', 'slate', 'ember', 'midnight', 'oled', 'velvet', 'emerald', 'cobalt', 'carbon'].includes(savedTheme)) {
-        setTheme(savedTheme)
-      }
-    } catch (error) {
-      console.error('Failed to load theme:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleThemeChange = (newTheme: ThemeOption) => {
-    setTheme(newTheme)
-
-    // Apply theme immediately (optimistic UI)
-    document.documentElement.classList.remove('dark', 'slate', 'ember', 'midnight', 'oled', 'velvet', 'emerald', 'cobalt', 'carbon')
-    document.documentElement.classList.add(newTheme)
-
-    // Persist to database asynchronously (don't block UI)
-    window.electronAPI.setSetting('theme', newTheme).catch(error => {
-      console.error('Failed to save theme:', error)
-    })
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
+  const { theme, mode, setTheme, setMode, effectiveIsDark } = useTheme()
 
   return (
-    <div className="p-6 space-y-5">
-      {/* Theme Header */}
-      <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border/40">
-        <div className="flex items-center gap-3">
-          <Palette className="w-7 h-7 text-primary" />
-          <div>
-            <h3 className="text-sm font-medium text-foreground">Theme</h3>
-            <p className="text-xs text-muted-foreground">
-              Choose your preferred color scheme
-            </p>
+    <div className="p-6 space-y-5 overflow-y-auto">
+      {/* Mode Toggle */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground">Mode</h3>
+        <div className="bg-muted/30 rounded-lg border border-border/40 p-3">
+          <div className="flex gap-2">
+            {MODE_OPTIONS.map((opt) => {
+              const Icon = opt.icon
+              const isActive = mode === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => setMode(opt.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {opt.label}
+                </button>
+              )
+            })}
           </div>
         </div>
-        <span className="px-2 py-1 text-xs bg-primary/20 text-primary rounded-md">
-          {THEMES.find(t => t.id === theme)?.label}
-        </span>
       </div>
 
       {/* Theme Selection */}
       <div className="space-y-2">
-        <h3 className="text-sm font-medium text-foreground">Available Themes</h3>
+        <h3 className="text-sm font-medium text-foreground">Theme</h3>
         <div className="bg-muted/30 rounded-lg border border-border/40 p-4">
           <div className="grid grid-cols-3 gap-4">
-            {THEMES.map((themeConfig) => {
+            {THEMES.filter(t => effectiveIsDark || !t.darkOnly).map((themeConfig) => {
               const isActive = theme === themeConfig.id
+              const showLight = !effectiveIsDark && !themeConfig.darkOnly
+              const previewColors = showLight && themeConfig.lightColors ? themeConfig.lightColors : themeConfig.darkColors
+              const displayLabel = showLight && themeConfig.lightLabel ? themeConfig.lightLabel : themeConfig.label
+              const displayDesc = showLight && themeConfig.lightDescription ? themeConfig.lightDescription : themeConfig.description
               return (
                 <div key={themeConfig.id} className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between px-0.5">
-                    <span className="text-xs font-medium">{themeConfig.label}</span>
-                    <span className="text-[10px] text-muted-foreground">{themeConfig.description}</span>
+                    <span className="text-xs font-medium">{displayLabel}</span>
+                    <span className="text-[10px] text-muted-foreground">{displayDesc}</span>
                   </div>
                   <button
-                    onClick={() => handleThemeChange(themeConfig.id)}
+                    onClick={() => setTheme(themeConfig.id)}
                     className={`rounded-xl overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.4)] transition-all ${
                       isActive
                         ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
                         : 'hover:opacity-80'
                     }`}
                   >
-                    <ThemePreview colors={themeConfig.colors} />
+                    <ThemePreview colors={previewColors} />
                   </button>
                 </div>
               )

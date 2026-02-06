@@ -276,7 +276,7 @@ export function QualitySettingsTab() {
   }
 
   return (
-    <div className="p-6 space-y-3">
+    <div className="p-6 space-y-3 overflow-y-auto">
       {/* Header */}
       <div className="mb-4">
         <p className="text-xs text-muted-foreground">
@@ -294,7 +294,7 @@ export function QualitySettingsTab() {
       >
         <div className="space-y-4">
           {/* Resolution Tabs */}
-          <div className="flex gap-1 bg-black/50 p-1 rounded-lg" role="tablist">
+          <div className="flex gap-1 bg-muted p-1 rounded-lg" role="tablist">
             {RESOLUTION_TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -798,7 +798,7 @@ function HandbrakeGuide({
   return (
     <div className="space-y-4">
       {/* Resolution Tabs */}
-      <div className="flex gap-1 bg-black/50 p-1 rounded-lg" role="tablist">
+      <div className="flex gap-1 bg-muted p-1 rounded-lg" role="tablist">
         {RESOLUTION_TABS.map((tab) => (
           <button
             key={tab.id}

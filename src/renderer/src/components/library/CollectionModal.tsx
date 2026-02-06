@@ -141,7 +141,7 @@ export const CollectionModal = memo(function CollectionModal({
         {/* Modal */}
         <div ref={modalRef} className="relative bg-card border border-border rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-border/30 bg-black/30 rounded-t-lg flex-shrink-0">
+          <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-lg flex-shrink-0">
             <div>
               <h2 className="text-xl font-semibold">{collection.collection_name}</h2>
               <p className="text-sm text-muted-foreground mt-1">

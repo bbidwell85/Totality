@@ -244,6 +244,7 @@ export interface ArtistCompletenessData {
   missing_singles: string
   missing_eps: string
   completeness_percentage: number
+  thumb_url?: string
 }
 
 export interface MissingAlbum {
@@ -292,6 +293,21 @@ export interface AnalysisProgress {
 export interface MediaBrowserProps {
   onAddSource?: () => void
   onOpenSettings?: (initialTab?: string) => void
+  sidebarCollapsed?: boolean
+  onNavigateHome?: () => void
+  initialTab?: MediaViewType
+  // When true, don't render the header (it's rendered at app level)
+  hideHeader?: boolean
+  // External panel state control
+  showCompletenessPanel?: boolean
+  showWishlistPanel?: boolean
+  onToggleCompleteness?: () => void
+  onToggleWishlist?: () => void
+  // External view tab control
+  libraryTab?: MediaViewType
+  onLibraryTabChange?: (tab: MediaViewType) => void
+  // Notify parent of auto-refresh state
+  onAutoRefreshChange?: (isRefreshing: boolean) => void
 }
 
 export interface MissingItemPopupData {

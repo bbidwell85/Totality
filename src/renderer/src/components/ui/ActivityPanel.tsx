@@ -210,6 +210,21 @@ export function ActivityPanel() {
   // Calculate total pending tasks (queue + current)
   const pendingCount = queueState.queue.length + (queueState.currentTask ? 1 : 0)
 
+  // Get the active theme from the document root so the dropdown can override
+  // the top bar's forced dark scoping and follow the user's chosen theme
+  const getActiveTheme = () => {
+    const themes = [
+      'frost',
+      'slate-light', 'ember-light', 'midnight-light',
+      'velvet-light', 'emerald-light', 'cobalt-light', 'carbon-light',
+      'slate', 'ember', 'midnight', 'oled', 'velvet', 'emerald', 'cobalt', 'carbon', 'dark',
+    ]
+    for (const theme of themes) {
+      if (document.documentElement.classList.contains(theme)) return theme
+    }
+    return 'dark'
+  }
+
   // ============================================================================
   // Effects
   // ============================================================================
@@ -455,24 +470,22 @@ export function ActivityPanel() {
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className={`p-2.5 rounded-md transition-colors flex items-center gap-1.5 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black ${
+        className={`relative p-2 rounded-md transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black ${
           isOpen
             ? 'bg-primary text-primary-foreground'
-            : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+            : 'bg-card text-muted-foreground hover:bg-muted'
         }`}
         aria-label="Activity Panel"
         aria-expanded={isOpen}
       >
         {queueState.currentTask ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="w-5 h-5 animate-spin" />
         ) : (
-          <Activity className="w-4 h-4" />
+          <Activity className="w-5 h-5" />
         )}
         {pendingCount > 0 && (
-          <span
-            className="min-w-[1.25rem] h-5 px-1.5 text-xs font-medium rounded-full flex items-center justify-center bg-primary text-primary-foreground"
-          >
-            {pendingCount}
+          <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+            {pendingCount > 99 ? '99+' : pendingCount}
           </span>
         )}
       </button>
@@ -480,7 +493,7 @@ export function ActivityPanel() {
       {/* Activity Panel Dropdown */}
       <div
         ref={dropdownRef}
-        className={`absolute right-0 top-full mt-2 bg-card rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden ${
+        className={`${getActiveTheme()} absolute right-0 top-full mt-2 bg-card rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden ${
           isResizing ? 'select-none' : 'transition-all duration-300 ease-out'
         } ${
           isOpen ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0 pointer-events-none'

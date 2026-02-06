@@ -140,32 +140,31 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
     >
       <div
         ref={modalRef}
-        className="bg-card border border-border/30 rounded-2xl w-full max-w-4xl h-[680px] flex flex-col shadow-xl mx-4"
+        className="bg-card border border-border/30 rounded-2xl w-full max-w-4xl h-[680px] flex flex-col shadow-xl mx-4 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border/30 bg-black/30 rounded-t-2xl">
-          <h2 id={titleId} className="text-lg font-semibold">Settings</h2>
-          <button
-            ref={closeButtonRef}
-            onClick={onClose}
-            className="p-2 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Close settings"
-          >
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
-        </div>
-
         {/* Content area with tabs */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Tab navigation (left side) */}
           <div
             ref={tabListRef}
-            className="w-44 border-r border-border/30 p-2 flex flex-col gap-1 bg-black/20"
+            className="w-44 border-r border-border/30 p-2 flex flex-col gap-1 bg-sidebar-gradient rounded-tl-2xl"
             role="tablist"
             aria-label="Settings categories"
             aria-orientation="vertical"
           >
+            {/* Sidebar header with title and close button */}
+            <div className="flex items-center justify-between px-3 py-2.5 mb-1">
+              <h2 id={titleId} className="text-lg font-semibold">Settings</h2>
+              <button
+                ref={closeButtonRef}
+                onClick={onClose}
+                className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+                aria-label="Close settings"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
             {TABS.map((tab, index) => {
               const Icon = tab.icon
               const isActive = currentTab === tab.id
@@ -197,7 +196,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
             role="tabpanel"
             id={`tabpanel-${currentTab}`}
             aria-labelledby={`tab-${currentTab}`}
-            className="flex-1 min-h-0 overflow-y-auto"
+            className="flex-1 min-h-0 flex flex-col overflow-hidden"
           >
             {renderTabContent()}
           </div>
