@@ -18,6 +18,10 @@ import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 
+// Static imports for database services (prevents Vite bundling issues with dynamic require)
+import { getBetterSQLiteService } from './BetterSQLiteService'
+import { getDatabaseService as getSqlJsService } from '../services/DatabaseService'
+
 // The database backend to use (cached after first check)
 let useBetterSqlite: boolean | null = null
 let migrationPerformed = false
@@ -138,11 +142,9 @@ export async function getDatabaseServiceAsync(): Promise<DatabaseServiceInterfac
   }
 
   if (shouldUseBetterSqlite()) {
-    const { getBetterSQLiteService } = await import('./BetterSQLiteService')
     return getBetterSQLiteService()
   } else {
-    const { getDatabaseService } = await import('../services/DatabaseService')
-    return getDatabaseService()
+    return getSqlJsService()
   }
 }
 
@@ -153,13 +155,9 @@ export async function getDatabaseServiceAsync(): Promise<DatabaseServiceInterfac
  */
 export function getDatabaseServiceSync(): DatabaseServiceInterface {
   if (shouldUseBetterSqlite()) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { getBetterSQLiteService } = require('./BetterSQLiteService')
     return getBetterSQLiteService()
   } else {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { getDatabaseService } = require('../services/DatabaseService')
-    return getDatabaseService()
+    return getSqlJsService()
   }
 }
 

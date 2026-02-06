@@ -914,6 +914,13 @@ export class BetterSQLiteService {
   }
 
   /**
+   * Get media source by ID (alias for getMediaSource for compatibility)
+   */
+  getMediaSourceById(sourceId: string): MediaSource | null {
+    return this.getMediaSource(sourceId)
+  }
+
+  /**
    * Add or update media source
    */
   upsertMediaSource(source: MediaSource): void {
@@ -2378,6 +2385,67 @@ export class BetterSQLiteService {
     )
 
     return Number(result.lastInsertRowid)
+  }
+
+  /**
+   * Add multiple wishlist items in bulk
+   */
+  addWishlistItemsBulk(items: Partial<WishlistItem>[]): number {
+    if (!this.db) throw new Error('Database not initialized')
+    if (items.length === 0) return 0
+
+    let added = 0
+
+    const insertStmt = this.db.prepare(`
+      INSERT INTO wishlist_items (
+        media_type, title, subtitle, year, reason,
+        tmdb_id, imdb_id, musicbrainz_id, series_title,
+        season_number, episode_number, collection_name,
+        artist_name, album_title, poster_url, priority, notes,
+        status, current_quality_tier, current_quality_level,
+        current_resolution, current_video_codec, current_audio_codec,
+        media_item_id, added_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `)
+
+    const insertMany = this.db.transaction((items: Partial<WishlistItem>[]) => {
+      for (const item of items) {
+        // Skip if already exists
+        if (item.tmdb_id && this.wishlistItemExists(item.tmdb_id)) continue
+        if (item.musicbrainz_id && this.wishlistItemExists(undefined, item.musicbrainz_id)) continue
+
+        insertStmt.run(
+          item.media_type || 'movie',
+          item.title || '',
+          item.subtitle || null,
+          item.year || null,
+          item.reason || 'missing',
+          item.tmdb_id || null,
+          item.imdb_id || null,
+          item.musicbrainz_id || null,
+          item.series_title || null,
+          item.season_number || null,
+          item.episode_number || null,
+          item.collection_name || null,
+          item.artist_name || null,
+          item.album_title || null,
+          item.poster_url || null,
+          item.priority || 3,
+          item.notes || null,
+          item.status || 'active',
+          item.current_quality_tier || null,
+          item.current_quality_level || null,
+          item.current_resolution || null,
+          item.current_video_codec || null,
+          item.current_audio_codec || null,
+          item.media_item_id || null
+        )
+        added++
+      }
+    })
+
+    insertMany(items)
+    return added
   }
 
   /**
