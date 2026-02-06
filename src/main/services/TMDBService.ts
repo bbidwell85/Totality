@@ -22,6 +22,7 @@ export class TMDBService {
   private static readonly IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/'
   private static readonly CACHE_DURATION = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
   private static readonly MAX_CONCURRENT = 10 // Max concurrent requests
+  private static readonly REQUEST_TIMEOUT = 30000 // 30 second timeout for API requests
 
   private apiKey: string | null = null
   private cache: Map<string, { data: any; timestamp: number }> = new Map()
@@ -168,9 +169,23 @@ export class TMDBService {
       url.searchParams.append(key, value)
     })
 
-    // Make request
+    // Make request with timeout using AbortController
     console.log('[TMDB] Requesting:', url.toString().replace(apiKey, 'API_KEY'))
-    const response = await fetch(url.toString())
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), TMDBService.REQUEST_TIMEOUT)
+
+    let response: Response
+    try {
+      response = await fetch(url.toString(), { signal: controller.signal })
+    } catch (error: unknown) {
+      clearTimeout(timeoutId)
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('TMDB API request timed out')
+      }
+      throw error
+    } finally {
+      clearTimeout(timeoutId)
+    }
 
     if (!response.ok) {
       const error = await response.json()

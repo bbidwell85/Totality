@@ -26,6 +26,7 @@ export class PlexService {
 
   constructor() {
     this.api = axios.create({
+      timeout: 30000, // 30 second timeout for API requests
       headers: {
         'X-Plex-Client-Identifier': CLIENT_IDENTIFIER,
         'X-Plex-Product': PRODUCT_NAME,
