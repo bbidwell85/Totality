@@ -11,7 +11,7 @@ import { getErrorMessage } from '../../services/utils/errorUtils'
 
 import axios, { AxiosInstance } from 'axios'
 import * as fs from 'fs'
-import { getDatabaseService } from '../../services/DatabaseService'
+import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
 import { getMediaFileAnalyzer, FileAnalysisResult } from '../../services/MediaFileAnalyzer'
 import type {
@@ -533,7 +533,7 @@ export class KodiProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       await analyzer.loadThresholdsFromDatabase()
 
@@ -1360,7 +1360,7 @@ export class KodiProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
 
       // Track scanned IDs for cleanup
       const scannedArtistIds = new Set<string>()

@@ -17,7 +17,7 @@ import { getSourceManager } from './SourceManager'
 import { getSeriesCompletenessService } from './SeriesCompletenessService'
 import { getMovieCollectionService } from './MovieCollectionService'
 import { getMusicBrainzService } from './MusicBrainzService'
-import { getDatabaseService } from './DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getLiveMonitoringService } from './LiveMonitoringService'
 import { PlexProvider } from '../providers/plex/PlexProvider'
 import { JellyfinEmbyBase } from '../providers/jellyfin-emby/JellyfinEmbyBase'
@@ -458,7 +458,7 @@ export class TaskQueueService {
     }
 
     // Check if this is the first scan for this library
-    const db = getDatabaseService()
+    const db = getDatabase()
     const existingScanTime = db.getLibraryScanTime(task.sourceId, task.libraryId)
     const isFirstScan = !existingScanTime
 
@@ -484,11 +484,12 @@ export class TaskQueueService {
     }
 
     const manager = getSourceManager()
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // Get all enabled libraries for this source
-    const libraries = db.getSourceLibraries(task.sourceId)
-    const enabledLibraries = libraries.filter(lib => lib.isEnabled)
+    type LibraryInfo = { libraryId: string; libraryName: string; libraryType: string; isEnabled: boolean; lastScanAt: string | null; itemsScanned: number }
+    const libraries = db.getSourceLibraries(task.sourceId) as LibraryInfo[]
+    const enabledLibraries = libraries.filter((lib: LibraryInfo) => lib.isEnabled)
 
     let totalScanned = 0
     let totalAdded = 0

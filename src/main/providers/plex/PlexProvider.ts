@@ -7,7 +7,7 @@ import { getErrorMessage } from '../../services/utils/errorUtils'
  */
 
 import axios, { AxiosInstance } from 'axios'
-import { getDatabaseService } from '../../services/DatabaseService'
+import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
 import {
   normalizeVideoCodec,
@@ -403,7 +403,7 @@ export class PlexProvider implements MediaProvider {
 
     try {
       const items = await this.getPlexLibraryItems(libraryId, sinceTimestamp)
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       await analyzer.loadThresholdsFromDatabase()
 
@@ -570,8 +570,8 @@ export class PlexProvider implements MediaProvider {
           result.itemsRemoved = removedCount
 
           // Check for additions (items in Plex but not in DB)
-          const dbItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId })
-          const dbIds = new Set(dbItems.map(item => item.plex_id))
+          const dbItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId }) as Array<{ plex_id?: string }>
+          const dbIds = new Set(dbItems.map((item: typeof dbItems[0]) => item.plex_id))
           const missingIds: string[] = []
           for (const plexId of currentPlexIds) {
             if (!dbIds.has(plexId)) {
@@ -604,7 +604,7 @@ export class PlexProvider implements MediaProvider {
   }
 
   private async removeStaleItems(validIds: Set<string>, type: 'movie' | 'episode'): Promise<number> {
-    const db = getDatabaseService()
+    const db = getDatabase()
     const items = db.getMediaItems({ type, sourceId: this.sourceId })
 
     console.log(`[PlexProvider ${this.sourceId}] Reconciling ${type}s: ${items.length} in DB, ${validIds.size} in Plex`)
@@ -695,7 +695,7 @@ export class PlexProvider implements MediaProvider {
     analyzer: ReturnType<typeof getQualityAnalyzer>,
     _onProgress?: ProgressCallback
   ): Promise<number> {
-    const db = getDatabaseService()
+    const db = getDatabase()
     let addedCount = 0
 
     for (const ratingKey of missingIds) {
@@ -1427,7 +1427,7 @@ export class PlexProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
 
       // Track scanned IDs for cleanup
       const scannedArtistIds = new Set<string>()
@@ -1598,8 +1598,8 @@ export class PlexProvider implements MediaProvider {
           let artistId: number | undefined
 
           // Try to find existing artist
-          const existingArtists = db.getMusicArtists({ sourceId: this.sourceId })
-          const existingArtist = existingArtists.find(a =>
+          const existingArtists = db.getMusicArtists({ sourceId: this.sourceId }) as Array<{ id?: number; name: string }>
+          const existingArtist = existingArtists.find((a: typeof existingArtists[0]) =>
             a.name.toLowerCase() === artistName.toLowerCase()
           )
 

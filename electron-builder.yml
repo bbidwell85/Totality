@@ -10,6 +10,15 @@ files:
   - "!**/*.map"
   - "!**/*.d.ts"
 
+# Native module configuration for better-sqlite3
+asar: true
+asarUnpack:
+  - "node_modules/better-sqlite3/**/*"
+
+# Rebuild native modules for Electron
+npmRebuild: true
+buildDependenciesFromSource: false
+
 # Keep only English locale to reduce bundle size by ~30MB
 electronLanguages:
   - en-US

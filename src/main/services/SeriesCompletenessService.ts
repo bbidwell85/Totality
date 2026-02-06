@@ -1,4 +1,4 @@
-import { getDatabaseService } from './DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getTMDBService } from './TMDBService'
 import {
   CancellableOperation,
@@ -63,7 +63,7 @@ export class SeriesCompletenessService extends CancellableOperation {
     // Reset cancellation flag at start
     this.resetCancellation()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     const tmdb = getTMDBService()
 
     // Initialize TMDB service (loads API key from settings)
@@ -198,7 +198,7 @@ export class SeriesCompletenessService extends CancellableOperation {
    * @param cachedTmdbId Optional pre-fetched TMDB ID from deduplication phase (avoids redundant API calls)
    */
   async analyzeSeries(seriesTitle: string, sourceId?: string, libraryId?: string, cachedTmdbId?: string): Promise<SeriesCompleteness | null> {
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // Get all episodes for this series (optionally filtered by source/library)
     const episodes = db.getEpisodesForSeries(seriesTitle, sourceId, libraryId)
@@ -209,7 +209,7 @@ export class SeriesCompletenessService extends CancellableOperation {
     }
 
     // Extract episode info
-    const ownedEpisodes: EpisodeInfo[] = episodes.map((ep) => ({
+    const ownedEpisodes: EpisodeInfo[] = episodes.map((ep: { season_number?: number; episode_number?: number }) => ({
       seasonNumber: ep.season_number || 0,
       episodeNumber: ep.episode_number || 0,
     }))
@@ -271,7 +271,7 @@ export class SeriesCompletenessService extends CancellableOperation {
    * @param libraryId Optional library ID to filter by
    */
   private getSeriesFromMediaItems(sourceId?: string, libraryId?: string): Map<string, MediaItem[]> {
-    const db = getDatabaseService()
+    const db = getDatabase()
     const filters: { type: 'episode'; sourceId?: string; libraryId?: string } = { type: 'episode' }
     if (sourceId) filters.sourceId = sourceId
     if (libraryId) filters.libraryId = libraryId
@@ -514,7 +514,7 @@ export class SeriesCompletenessService extends CancellableOperation {
     sourceId?: string
   ): Promise<SeriesAnalysisResult> {
     const tmdb = getTMDBService()
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // Get today's date for filtering unaired episodes
     const today = new Date().toISOString().split('T')[0]

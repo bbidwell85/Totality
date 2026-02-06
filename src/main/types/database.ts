@@ -161,6 +161,9 @@ export interface MediaItem {
   episode_thumb_url?: string
   season_poster_url?: string
 
+  // User override flag (preserves user-selected metadata during rescans)
+  user_fixed_match?: boolean
+
   // Timestamps
   created_at: string
   updated_at: string
@@ -317,6 +320,9 @@ export interface MusicArtist {
   album_count?: number
   track_count?: number
 
+  // User override flag
+  user_fixed_match?: boolean
+
   created_at: string
   updated_at: string
 }
@@ -366,6 +372,10 @@ export interface MusicAlbum {
   // Timestamps
   release_date?: string
   added_at?: string
+
+  // User override flag
+  user_fixed_match?: boolean
+
   created_at: string
   updated_at: string
 }
@@ -394,6 +404,7 @@ export interface MusicTrack {
   file_path?: string
   file_size?: number
   container?: string
+  file_mtime?: number // File modification time (ms since epoch) for delta scanning
 
   // Audio quality
   audio_codec: string

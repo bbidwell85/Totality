@@ -7,9 +7,9 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// Mock DatabaseService before importing QualityAnalyzer
-vi.mock('../../src/main/services/DatabaseService', () => ({
-  getDatabaseService: vi.fn(() => ({
+// Mock database getter before importing QualityAnalyzer
+vi.mock('../../src/main/database/getDatabase', () => ({
+  getDatabase: vi.fn(() => ({
     getSettingsByPrefix: vi.fn(() => ({})),
     upsertQualityScore: vi.fn(),
   })),

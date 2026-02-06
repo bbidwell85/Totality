@@ -7,7 +7,7 @@ import { getErrorMessage, isAxiosError, isNodeError } from '../../services/utils
  */
 
 import axios, { AxiosInstance } from 'axios'
-import { getDatabaseService } from '../../services/DatabaseService'
+import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
 import {
   normalizeVideoCodec,
@@ -837,7 +837,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         }
       }
 
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       await analyzer.loadThresholdsFromDatabase()
 
@@ -1542,7 +1542,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
 
       // Track scanned IDs for cleanup
       const scannedArtistIds = new Set<string>()

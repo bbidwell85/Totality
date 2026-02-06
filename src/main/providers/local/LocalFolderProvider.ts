@@ -10,7 +10,7 @@ import * as fs from 'fs'
 import * as fsPromises from 'fs/promises'
 import * as path from 'path'
 import { app } from 'electron'
-import { getDatabaseService } from '../../services/DatabaseService'
+import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
 import { getMediaFileAnalyzer } from '../../services/MediaFileAnalyzer'
 import { getFileNameParser, ParsedMovieInfo, ParsedEpisodeInfo } from '../../services/FileNameParser'
@@ -366,9 +366,9 @@ export class LocalFolderProvider implements MediaProvider {
   }
 
   async getItemMetadata(itemId: string): Promise<MediaMetadata> {
-    const db = getDatabaseService()
-    const items = db.getMediaItems({ sourceId: this.sourceId })
-    const mediaItem = items.find(item => item.plex_id === itemId)
+    const db = getDatabase()
+    const items = db.getMediaItems({ sourceId: this.sourceId }) as MediaItem[]
+    const mediaItem = items.find((item: MediaItem) => item.plex_id === itemId)
 
     if (mediaItem) {
       return this.convertMediaItemToMetadata(mediaItem)
@@ -440,7 +440,7 @@ export class LocalFolderProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       const fileAnalyzer = getMediaFileAnalyzer()
       const parser = getFileNameParser()
@@ -452,6 +452,10 @@ export class LocalFolderProvider implements MediaProvider {
       const ffprobeEnabled = db.getSetting('ffprobe_enabled') !== 'false'
       const ffprobeAvailable = ffprobeEnabled && await fileAnalyzer.isAvailable()
       const tmdbConfigured = await this.isTMDBConfigured()
+
+      // Parallel FFprobe settings
+      const ffprobeParallelEnabled = db.getSetting('ffprobe_parallel_enabled') !== 'false'
+      const ffprobeBatchSize = parseInt(db.getSetting('ffprobe_batch_size') || '25', 10)
 
       const scannedFilePaths = new Set<string>()
       const scanType = libraryType === 'movies' ? 'movie' : 'episode'
@@ -486,63 +490,118 @@ export class LocalFolderProvider implements MediaProvider {
       // Cache for movie TMDB lookups - avoids redundant searches for same movie
       const movieTmdbCache = new Map<string, { tmdbId: number; title: string; year?: number; posterPath?: string; backdropPath?: string } | null>()
 
+      // Structure to hold pre-processed file info for batch FFprobe
+      interface FileToProcess {
+        filePath: string
+        relativePath: string
+        fileMtime: number
+        parsed: ParsedMovieInfo | ParsedEpisodeInfo
+        metadata: MediaMetadata
+      }
+
       try {
-        for (let i = 0; i < mediaFiles.length; i++) {
-          const { filePath, relativePath } = mediaFiles[i]
+        // Process in batches for parallel FFprobe analysis
+        const useParallelFFprobe = ffprobeAvailable && ffprobeParallelEnabled && ffprobeBatchSize > 1
+        console.log(`[LocalFolderProvider ${this.sourceId}] Using ${useParallelFFprobe ? 'parallel' : 'sequential'} FFprobe (batch size: ${ffprobeBatchSize})`)
 
-          onProgress?.({
-            current: i + 1,
-            total: totalFiles,
-            phase: 'processing',
-            currentItem: path.basename(filePath),
-            percentage: ((i + 1) / totalFiles) * 100,
-          })
+        for (let batchStart = 0; batchStart < mediaFiles.length; batchStart += ffprobeBatchSize) {
+          const batchEnd = Math.min(batchStart + ffprobeBatchSize, mediaFiles.length)
+          const batchFiles = mediaFiles.slice(batchStart, batchEnd)
 
-          try {
-            // Check if file is unchanged (skip expensive re-analysis)
-            const stat = await fsPromises.stat(filePath)
-            const fileMtime = stat.mtime.getTime()
-            const existingItem = db.getMediaItemByPath(filePath)
+          // Phase 2a: Pre-process batch (mtime check, parsing, TMDB lookup)
+          const filesToProcess: FileToProcess[] = []
+          const filesToAnalyze: string[] = []
 
-            if (existingItem?.file_mtime === fileMtime) {
-              // File unchanged, mark as present and skip processing
-              scannedFilePaths.add(filePath)
-              result.itemsScanned++
-              continue
+          for (let i = 0; i < batchFiles.length; i++) {
+            const globalIndex = batchStart + i
+            const { filePath, relativePath } = batchFiles[i]
+
+            onProgress?.({
+              current: globalIndex + 1,
+              total: totalFiles,
+              phase: 'processing',
+              currentItem: path.basename(filePath),
+              percentage: ((globalIndex + 1) / totalFiles) * 100,
+            })
+
+            try {
+              // Check if file is unchanged (skip expensive re-analysis)
+              const stat = await fsPromises.stat(filePath)
+              const fileMtime = stat.mtime.getTime()
+              const existingItem = db.getMediaItemByPath(filePath)
+
+              if (existingItem?.file_mtime === fileMtime) {
+                // File unchanged, mark as present and skip processing
+                scannedFilePaths.add(filePath)
+                result.itemsScanned++
+                continue
+              }
+
+              // Parse filename
+              const folderContext = path.dirname(relativePath)
+              const parsed = parser.parse(path.basename(filePath), folderContext)
+
+              if (!parsed || (scanType === 'movie' && parsed.type !== 'movie') ||
+                  (scanType === 'episode' && parsed.type !== 'episode')) {
+                continue
+              }
+
+              // Create base metadata (includes TMDB lookup)
+              let metadata: MediaMetadata
+
+              if (parsed.type === 'movie') {
+                const movieInfo = parsed as ParsedMovieInfo
+                metadata = await this.createMovieMetadata(filePath, movieInfo, tmdbConfigured, tmdb, movieTmdbCache)
+              } else {
+                const episodeInfo = parsed as ParsedEpisodeInfo
+                metadata = await this.createEpisodeMetadata(filePath, episodeInfo, tmdbConfigured, tmdb, seriesTmdbCache)
+              }
+
+              // Collect file for processing
+              filesToProcess.push({ filePath, relativePath, fileMtime, parsed: parsed as ParsedMovieInfo | ParsedEpisodeInfo, metadata })
+
+              // Collect file for FFprobe analysis if enabled
+              if (ffprobeAvailable) {
+                filesToAnalyze.push(filePath)
+              }
+            } catch (error: unknown) {
+              result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
             }
+          }
 
-            // Parse filename
-            const folderContext = path.dirname(relativePath)
-            const parsed = parser.parse(path.basename(filePath), folderContext)
+          // Phase 2b: Batch FFprobe analysis
+          let ffprobeResults = new Map<string, import('../../services/MediaFileAnalyzer').FileAnalysisResult>()
 
-            if (!parsed || (scanType === 'movie' && parsed.type !== 'movie') ||
-                (scanType === 'episode' && parsed.type !== 'episode')) {
-              continue
-            }
+          if (filesToAnalyze.length > 0) {
+            onProgress?.({
+              current: batchEnd,
+              total: totalFiles,
+              phase: 'analyzing',
+              currentItem: `Analyzing ${filesToAnalyze.length} files...`,
+              percentage: (batchEnd / totalFiles) * 100,
+            })
 
-            // Create base metadata
-            let metadata: MediaMetadata
-
-            if (parsed.type === 'movie') {
-              const movieInfo = parsed as ParsedMovieInfo
-              metadata = await this.createMovieMetadata(filePath, movieInfo, tmdbConfigured, tmdb, movieTmdbCache)
+            if (useParallelFFprobe) {
+              // Parallel analysis using worker pool
+              ffprobeResults = await fileAnalyzer.analyzeFilesParallel(filesToAnalyze)
             } else {
-              const episodeInfo = parsed as ParsedEpisodeInfo
-              metadata = await this.createEpisodeMetadata(filePath, episodeInfo, tmdbConfigured, tmdb, seriesTmdbCache)
+              // Sequential analysis (fallback)
+              for (const fp of filesToAnalyze) {
+                const analysis = await fileAnalyzer.analyzeFile(fp)
+                ffprobeResults.set(fp, analysis)
+              }
             }
+          }
 
-            // Analyze with FFprobe if available
-            if (ffprobeAvailable) {
-              onProgress?.({
-                current: i + 1,
-                total: totalFiles,
-                phase: 'analyzing',
-                currentItem: path.basename(filePath),
-                percentage: ((i + 1) / totalFiles) * 100,
-              })
+          // Phase 2c: Apply FFprobe results and save
+          for (const fileInfo of filesToProcess) {
+            const { filePath, fileMtime } = fileInfo
+            let { metadata } = fileInfo
 
-              const analysis = await fileAnalyzer.analyzeFile(filePath)
-              if (analysis.success) {
+            try {
+              // Apply FFprobe data if available
+              const analysis = ffprobeResults.get(filePath)
+              if (analysis?.success) {
                 metadata = this.enhanceWithFFprobeData(metadata, analysis)
 
                 // Filter out short videos for movies (featurettes, behind-the-scenes, etc.)
@@ -551,32 +610,32 @@ export class LocalFolderProvider implements MediaProvider {
                   continue
                 }
               }
+
+              // Convert to MediaItem and save
+              const mediaItem = this.convertMetadataToMediaItem(metadata)
+              if (mediaItem) {
+                mediaItem.source_id = this.sourceId
+                mediaItem.source_type = 'local' as any
+                mediaItem.library_id = libraryId
+                mediaItem.file_mtime = fileMtime
+
+                const id = await db.upsertMediaItem(mediaItem)
+                scannedFilePaths.add(filePath)
+
+                // Analyze quality
+                mediaItem.id = id
+                const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
+                await db.upsertQualityScore(qualityScore)
+
+                result.itemsScanned++
+              }
+            } catch (error: unknown) {
+              result.errors.push(`Failed to save ${path.basename(filePath)}: ${getErrorMessage(error)}`)
             }
-
-            // Convert to MediaItem and save
-            const mediaItem = this.convertMetadataToMediaItem(metadata)
-            if (mediaItem) {
-              mediaItem.source_id = this.sourceId
-              mediaItem.source_type = 'local' as any
-              mediaItem.library_id = libraryId
-              mediaItem.file_mtime = fileMtime
-
-              const id = await db.upsertMediaItem(mediaItem)
-              scannedFilePaths.add(filePath)
-
-              // Analyze quality
-              mediaItem.id = id
-              const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
-              await db.upsertQualityScore(qualityScore)
-
-              result.itemsScanned++
-            }
-          } catch (error: unknown) {
-            result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
           }
 
-          // Periodic checkpoint
-          if (result.itemsScanned % 25 === 0 && result.itemsScanned > 0) {
+          // Checkpoint after each batch
+          if (result.itemsScanned > 0) {
             await db.forceSave()
           }
         }
@@ -670,7 +729,7 @@ export class LocalFolderProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       const fileAnalyzer = getMediaFileAnalyzer()
       const parser = getFileNameParser()
@@ -865,7 +924,7 @@ export class LocalFolderProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const fileAnalyzer = getMediaFileAnalyzer()
       const parser = getFileNameParser()
 
@@ -973,8 +1032,8 @@ export class LocalFolderProvider implements MediaProvider {
             if (!artistId) {
               // Check if artist exists in database
               const existingArtist = db.getMusicArtistByName(artistName, this.sourceId)
-              if (existingArtist) {
-                artistId = existingArtist.id!
+              if (existingArtist && existingArtist.id) {
+                artistId = existingArtist.id
               } else {
                 artistId = await db.upsertMusicArtist({
                   source_id: this.sourceId,
@@ -987,7 +1046,7 @@ export class LocalFolderProvider implements MediaProvider {
                   updated_at: new Date().toISOString(),
                 })
               }
-              artistMap.set(artistName.toLowerCase(), artistId)
+              artistMap.set(artistName.toLowerCase(), artistId!)
             }
 
             // Get or create album
@@ -995,17 +1054,17 @@ export class LocalFolderProvider implements MediaProvider {
             let albumId = albumMap.get(albumKey)
 
             if (!albumId) {
-              // Check if album exists in database
-              const existingAlbum = db.getMusicAlbumByName(albumName, artistId)
-              if (existingAlbum) {
-                albumId = existingAlbum.id!
+              // Check if album exists in database (artistId is guaranteed to exist at this point)
+              const existingAlbum = db.getMusicAlbumByName(albumName, artistId!)
+              if (existingAlbum && existingAlbum.id) {
+                albumId = existingAlbum.id
               } else {
                 albumId = await db.upsertMusicAlbum({
                   source_id: this.sourceId,
                   source_type: 'local',
                   library_id: 'music',
                   provider_id: this.generateItemId(`album_${artistName}_${albumName}`),
-                  artist_id: artistId,
+                  artist_id: artistId!,
                   artist_name: artistName,
                   title: albumName,
                   sort_title: albumName,
@@ -1021,19 +1080,19 @@ export class LocalFolderProvider implements MediaProvider {
 
                 // Try to get album artwork
                 if (audioInfo.hasEmbeddedArtwork && ffprobeAvailable) {
-                  const artworkPath = await this.extractAlbumArtwork(filePath, albumId, fileAnalyzer)
+                  const artworkPath = await this.extractAlbumArtwork(filePath, albumId!, fileAnalyzer)
                   if (artworkPath) {
-                    await db.updateMusicAlbumArtwork(albumId, artworkPath)
+                    await db.updateMusicAlbumArtwork(albumId!, artworkPath)
                   }
                 } else {
                   const folderArtwork = await this.findFolderArtwork(path.dirname(filePath))
                   if (folderArtwork) {
                     const artworkUrl = `local-artwork://file?path=${encodeURIComponent(folderArtwork)}`
-                    await db.updateMusicAlbumArtwork(albumId, artworkUrl)
+                    await db.updateMusicAlbumArtwork(albumId!, artworkUrl)
                   }
                 }
               }
-              albumMap.set(albumKey, albumId)
+              albumMap.set(albumKey, albumId!)
             }
 
             // Create/update track
@@ -1184,7 +1243,7 @@ export class LocalFolderProvider implements MediaProvider {
 
   private async isTMDBConfigured(): Promise<boolean> {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const apiKey = await db.getSetting('tmdb_api_key')
       return !!apiKey && apiKey.length > 0
     } catch {
@@ -1197,7 +1256,7 @@ export class LocalFolderProvider implements MediaProvider {
    */
   private async isMusicBrainzNameCorrectionEnabled(): Promise<boolean> {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const setting = db.getSetting('musicbrainz_name_correction')
       // Default to true if not set
       return setting !== 'false'
@@ -1888,7 +1947,7 @@ export class LocalFolderProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const fileAnalyzer = getMediaFileAnalyzer()
       const parser = getFileNameParser()
 
@@ -1898,6 +1957,10 @@ export class LocalFolderProvider implements MediaProvider {
       const mbNameCorrectionEnabled = await this.isMusicBrainzNameCorrectionEnabled()
       const scannedFilePaths = new Set<string>()
       const mbArtistNameCache = new Map<string, string>() // parsed name -> canonical name
+
+      // Parallel FFprobe settings
+      const ffprobeParallelEnabled = db.getSetting('ffprobe_parallel_enabled') !== 'false'
+      const ffprobeBatchSize = parseInt(db.getSetting('ffprobe_batch_size') || '50', 10)
 
       if (mbNameCorrectionEnabled) {
         console.log(`[LocalFolderProvider ${this.sourceId}] MusicBrainz name correction enabled`)
@@ -1928,61 +1991,139 @@ export class LocalFolderProvider implements MediaProvider {
       const albumMap = new Map<string, number>() // "artist|album" -> album ID
       const albumArtworkMap = new Map<string, string | null>() // "artist|album" -> artwork path (null = checked, no artwork)
 
-      // Phase 2: Process each file
+      // Type for pre-processed audio file info
+      interface AudioFileToProcess {
+        filePath: string
+        relativePath: string
+        fileMtime: number
+        fileSize: number
+        artistName: string
+        albumName: string
+        trackTitle: string
+        trackNumber?: number
+        discNumber?: number
+        year?: number
+      }
+
+      // Phase 2: Process each file in batches
       db.startBatch()
+      const useParallelFFprobe = ffprobeAvailable && ffprobeParallelEnabled && ffprobeBatchSize > 1
+      console.log(`[LocalFolderProvider ${this.sourceId}] Using ${useParallelFFprobe ? 'parallel' : 'sequential'} FFprobe for music (batch size: ${ffprobeBatchSize})`)
 
       try {
-        for (let i = 0; i < audioFiles.length; i++) {
-          const { filePath, relativePath } = audioFiles[i]
+        for (let batchStart = 0; batchStart < audioFiles.length; batchStart += ffprobeBatchSize) {
+          const batchEnd = Math.min(batchStart + ffprobeBatchSize, audioFiles.length)
+          const batchFiles = audioFiles.slice(batchStart, batchEnd)
 
-          onProgress?.({
-            current: i + 1,
-            total: totalFiles,
-            phase: 'processing',
-            currentItem: path.basename(filePath),
-            percentage: ((i + 1) / totalFiles) * 100,
-          })
+          // Phase 2a: Pre-process batch (mtime check, parsing, name lookup)
+          const filesToProcess: AudioFileToProcess[] = []
+          const filesToAnalyze: string[] = []
 
-          try {
-            // Parse filename and folder structure
-            const folderContext = path.dirname(relativePath)
-            const parsed = parser.parseMusic(path.basename(filePath, path.extname(filePath)), folderContext)
+          for (let i = 0; i < batchFiles.length; i++) {
+            const globalIndex = batchStart + i
+            const { filePath, relativePath } = batchFiles[i]
 
-            let artistName = parsed.artist || 'Unknown Artist'
-            const albumName = parsed.album || 'Unknown Album'
-            const trackTitle = parsed.title || path.basename(filePath, path.extname(filePath))
+            onProgress?.({
+              current: globalIndex + 1,
+              total: totalFiles,
+              phase: 'processing',
+              currentItem: path.basename(filePath),
+              percentage: ((globalIndex + 1) / totalFiles) * 100,
+            })
 
-            // Lookup canonical artist name from MusicBrainz if enabled
-            if (mbNameCorrectionEnabled && artistName !== 'Unknown Artist') {
-              artistName = await this.lookupCanonicalArtistName(artistName, mbArtistNameCache)
-            }
+            try {
+              // Parse filename and folder structure
+              const folderContext = path.dirname(relativePath)
+              const parsed = parser.parseMusic(path.basename(filePath, path.extname(filePath)), folderContext)
 
-            // Get file stats
-            const stats = await fs.promises.stat(filePath)
+              let artistName = parsed.artist || 'Unknown Artist'
+              const albumName = parsed.album || 'Unknown Album'
+              const trackTitle = parsed.title || path.basename(filePath, path.extname(filePath))
 
-            // Analyze with FFprobe if available
-            let audioInfo: {
-              codec?: string
-              bitrate?: number
-              sampleRate?: number
-              bitDepth?: number
-              channels?: number
-              duration?: number
-              isLossless?: boolean
-              hasEmbeddedArtwork?: boolean
-            } = {}
+              // Lookup canonical artist name from MusicBrainz if enabled
+              if (mbNameCorrectionEnabled && artistName !== 'Unknown Artist') {
+                artistName = await this.lookupCanonicalArtistName(artistName, mbArtistNameCache)
+              }
 
-            if (ffprobeAvailable) {
-              onProgress?.({
-                current: i + 1,
-                total: totalFiles,
-                phase: 'analyzing',
-                currentItem: path.basename(filePath),
-                percentage: ((i + 1) / totalFiles) * 100,
+              // Get file stats
+              const stats = await fs.promises.stat(filePath)
+              const fileMtime = stats.mtime.getTime()
+
+              // Delta scanning: Check if track exists and is unchanged
+              const existingTrack = db.getMusicTrackByPath(filePath)
+              if (existingTrack?.file_mtime === fileMtime) {
+                // File unchanged, skip expensive FFprobe analysis
+                scannedFilePaths.add(filePath)
+                result.itemsScanned++
+                continue
+              }
+
+              // Collect file for processing
+              filesToProcess.push({
+                filePath,
+                relativePath,
+                fileMtime,
+                fileSize: stats.size,
+                artistName,
+                albumName,
+                trackTitle,
+                trackNumber: parsed.trackNumber,
+                discNumber: parsed.discNumber,
+                year: parsed.year,
               })
 
-              const analysis = await fileAnalyzer.analyzeFile(filePath)
-              if (analysis.success && analysis.audioTracks && analysis.audioTracks.length > 0) {
+              // Collect file for FFprobe analysis if enabled
+              if (ffprobeAvailable) {
+                filesToAnalyze.push(filePath)
+              }
+            } catch (error: unknown) {
+              result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
+            }
+          }
+
+          // Phase 2b: Batch FFprobe analysis
+          let ffprobeResults = new Map<string, import('../../services/MediaFileAnalyzer').FileAnalysisResult>()
+
+          if (filesToAnalyze.length > 0) {
+            onProgress?.({
+              current: batchEnd,
+              total: totalFiles,
+              phase: 'analyzing',
+              currentItem: `Analyzing ${filesToAnalyze.length} audio files...`,
+              percentage: (batchEnd / totalFiles) * 100,
+            })
+
+            if (useParallelFFprobe) {
+              // Parallel analysis using worker pool
+              ffprobeResults = await fileAnalyzer.analyzeFilesParallel(filesToAnalyze)
+            } else {
+              // Sequential analysis (fallback)
+              for (const fp of filesToAnalyze) {
+                const analysis = await fileAnalyzer.analyzeFile(fp)
+                ffprobeResults.set(fp, analysis)
+              }
+            }
+          }
+
+          // Phase 2c: Apply FFprobe results and save
+          for (const fileInfo of filesToProcess) {
+            const { filePath, fileMtime, artistName, albumName, trackTitle } = fileInfo
+
+            try {
+              // Extract audio info from FFprobe results
+              let audioInfo: {
+                codec?: string
+                bitrate?: number
+                sampleRate?: number
+                bitDepth?: number
+                channels?: number
+                duration?: number
+                isLossless?: boolean
+                hasEmbeddedArtwork?: boolean
+              } = {}
+
+              const analysis = ffprobeResults.get(filePath)
+              if (analysis?.success && analysis.audioTracks && analysis.audioTracks.length > 0) {
                 const primaryAudio = analysis.audioTracks[0]
                 audioInfo = {
                   codec: normalizeAudioCodec(primaryAudio.codec),
@@ -1995,7 +2136,6 @@ export class LocalFolderProvider implements MediaProvider {
                   hasEmbeddedArtwork: analysis.embeddedArtwork?.hasArtwork,
                 }
               }
-            }
 
             // Get or create artist
             let artistId = artistMap.get(artistName.toLowerCase())
@@ -2010,7 +2150,7 @@ export class LocalFolderProvider implements MediaProvider {
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               })
-              artistMap.set(artistName.toLowerCase(), artistId)
+              artistMap.set(artistName.toLowerCase(), artistId!)
             }
 
             // Get or create album
@@ -2023,11 +2163,11 @@ export class LocalFolderProvider implements MediaProvider {
                 source_type: 'local',
                 library_id: 'music',
                 provider_id: this.generateItemId(`album_${artistName}_${albumName}`),
-                artist_id: artistId,
+                artist_id: artistId!,
                 artist_name: artistName,
                 title: albumName,
                 sort_title: albumName,
-                year: parsed.year,
+                year: fileInfo.year,
                 album_type: 'album',
                 best_audio_codec: audioInfo.codec,
                 best_audio_bitrate: audioInfo.bitrate,
@@ -2036,7 +2176,7 @@ export class LocalFolderProvider implements MediaProvider {
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               })
-              albumMap.set(albumKey, albumId)
+              albumMap.set(albumKey, albumId!)
             }
 
             // Extract album artwork if not already done for this album
@@ -2050,7 +2190,7 @@ export class LocalFolderProvider implements MediaProvider {
               // Try embedded artwork first (most reliable for the specific release)
               if (audioInfo.hasEmbeddedArtwork && ffprobeAvailable) {
                 try {
-                  artworkPath = await this.extractAlbumArtwork(filePath, albumId, fileAnalyzer)
+                  artworkPath = await this.extractAlbumArtwork(filePath, albumId!, fileAnalyzer)
                   if (artworkPath) {
                     console.log(`[LocalFolderProvider] Extracted embedded artwork for "${albumName}": ${artworkPath}`)
                   } else {
@@ -2092,11 +2232,12 @@ export class LocalFolderProvider implements MediaProvider {
               album_name: albumName,
               artist_name: artistName,
               title: trackTitle,
-              track_number: parsed.trackNumber,
-              disc_number: parsed.discNumber,
+              track_number: fileInfo.trackNumber,
+              disc_number: fileInfo.discNumber,
               duration: audioInfo.duration,
               file_path: filePath,
-              file_size: stats.size,
+              file_size: fileInfo.fileSize,
+              file_mtime: fileMtime,
               container: path.extname(filePath).slice(1).toLowerCase(),
               audio_codec: audioInfo.codec || 'Unknown',
               audio_bitrate: audioInfo.bitrate,
@@ -2112,12 +2253,13 @@ export class LocalFolderProvider implements MediaProvider {
             scannedFilePaths.add(filePath)
             result.itemsScanned++
 
-          } catch (error: unknown) {
-            result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
+            } catch (error: unknown) {
+              result.errors.push(`Failed to save ${path.basename(filePath)}: ${getErrorMessage(error)}`)
+            }
           }
 
-          // Periodic checkpoint
-          if (result.itemsScanned % 50 === 0 && result.itemsScanned > 0) {
+          // Checkpoint after each batch
+          if (result.itemsScanned > 0) {
             await db.forceSave()
           }
         }
@@ -2206,7 +2348,7 @@ export class LocalFolderProvider implements MediaProvider {
   }
 
   private async updateAlbumStats(
-    _db: ReturnType<typeof getDatabaseService>,
+    _db: ReturnType<typeof getDatabase>,
     _albumMap: Map<string, number>
   ): Promise<void> {
     // This would update album stats like track_count, total_duration, etc.
@@ -2293,7 +2435,7 @@ export class LocalFolderProvider implements MediaProvider {
   }
 
   private async updateArtistStats(
-    db: ReturnType<typeof getDatabaseService>,
+    db: ReturnType<typeof getDatabase>,
     artistMap: Map<string, number>
   ): Promise<void> {
     // Update album_count and track_count for each artist

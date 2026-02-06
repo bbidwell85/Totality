@@ -482,6 +482,17 @@ export class DatabaseService {
         }
       }
 
+      // Add file_mtime column to music_tracks for delta scanning optimization
+      try {
+        this.db.run('ALTER TABLE music_tracks ADD COLUMN file_mtime INTEGER')
+        console.log('[Database] Added file_mtime column to music_tracks')
+      } catch (error: unknown) {
+        // Ignore "duplicate column" errors - column already exists
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
+        }
+      }
+
       // Run multi-source migration if needed
       let currentMigrationVersion = this.db.exec(`SELECT value FROM settings WHERE key = 'migration_version'`)
       let currentVersion = parseInt(currentMigrationVersion[0]?.values[0]?.[0] as string || '0', 10)

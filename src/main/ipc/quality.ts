@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
-import { getDatabaseService } from '../services/DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 
 /**
  * Register all quality analysis IPC handlers
@@ -54,7 +54,7 @@ export function registerQualityHandlers() {
 
   ipcMain.handle('quality:getRecommendedFormat', async (_event, mediaItemId: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const mediaItem = db.getMediaItemById(mediaItemId)
 
       if (!mediaItem) {

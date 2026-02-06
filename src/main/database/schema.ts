@@ -328,6 +328,7 @@ CREATE TABLE IF NOT EXISTS music_tracks (
   file_path TEXT,
   file_size INTEGER,
   container TEXT, -- 'flac', 'mp3', 'aac', 'm4a', etc.
+  file_mtime INTEGER, -- File modification time (ms since epoch) for delta scanning
 
   -- Audio quality
   audio_codec TEXT NOT NULL,

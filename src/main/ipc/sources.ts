@@ -8,7 +8,7 @@ import { ipcMain, dialog } from 'electron'
 import fs from 'fs/promises'
 import path from 'path'
 import { getSourceManager } from '../services/SourceManager'
-import { getDatabaseService } from '../services/DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getPlexService } from '../services/PlexService'
 import { getKodiLocalDiscoveryService } from '../services/KodiLocalDiscoveryService'
 import { getKodiMySQLConnectionService, type KodiMySQLConfig } from '../services/KodiMySQLConnectionService'
@@ -268,14 +268,21 @@ export function registerSourceHandlers(): void {
    */
   ipcMain.handle('sources:getLibrariesWithStatus', async (_event, sourceId: string) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const manager = getSourceManager()
 
       // Get libraries from the provider
       const libraries = await manager.getLibraries(sourceId)
 
       // Get stored library settings from database
-      const storedLibraries = db.getSourceLibraries(sourceId)
+      const storedLibraries = db.getSourceLibraries(sourceId) as Array<{
+        libraryId: string
+        libraryName: string
+        libraryType: string
+        isEnabled: boolean
+        lastScanAt: string | null
+        itemsScanned: number
+      }>
       const storedMap = new Map(storedLibraries.map(l => [l.libraryId, l]))
 
       // Merge: libraries from provider + enabled status from DB
@@ -299,7 +306,7 @@ export function registerSourceHandlers(): void {
    */
   ipcMain.handle('sources:toggleLibrary', async (event, sourceId: string, libraryId: string, enabled: boolean) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       await db.toggleLibrary(sourceId, libraryId, enabled)
 
       // Notify renderer that library settings changed
@@ -323,7 +330,7 @@ export function registerSourceHandlers(): void {
     enabled: boolean
   }>) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       await db.setLibrariesEnabled(sourceId, libraries)
       return { success: true }
     } catch (error: unknown) {
@@ -337,7 +344,7 @@ export function registerSourceHandlers(): void {
    */
   ipcMain.handle('sources:getEnabledLibraryIds', async (_event, sourceId: string) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getEnabledLibraryIds(sourceId)
     } catch (error: unknown) {
       console.error('Error getting enabled library IDs:', error)

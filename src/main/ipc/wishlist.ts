@@ -1,6 +1,6 @@
 import { ipcMain, shell, dialog, BrowserWindow } from 'electron'
 import { promises as fs } from 'fs'
-import { getDatabaseService } from '../services/DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getStoreSearchService } from '../services/StoreSearchService'
 import type { WishlistItem, WishlistFilters } from '../types/database'
 import type { StoreRegion } from '../services/StoreSearchService'
@@ -56,7 +56,7 @@ function sanitizeWishlistItem(item: Partial<WishlistItem>): Partial<WishlistItem
  * Register all wishlist-related IPC handlers
  */
 export function registerWishlistHandlers() {
-  const db = getDatabaseService()
+  const db = getDatabase()
   const storeService = getStoreSearchService()
 
   // ============================================================================

@@ -5,7 +5,7 @@
  * Handles source CRUD operations, provider lifecycle, and aggregated scanning.
  */
 
-import { getDatabaseService } from './DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getPlexService } from './PlexService'
 import { getLiveMonitoringService } from './LiveMonitoringService'
 import { getTaskQueueService } from './TaskQueueService'
@@ -92,7 +92,7 @@ export class SourceManager {
   }
 
   private async loadSources(): Promise<void> {
-    const db = getDatabaseService()
+    const db = getDatabase()
     const sources = db.getMediaSources()
 
     for (const source of sources) {
@@ -169,7 +169,7 @@ export class SourceManager {
   async addSource(config: SourceConfig): Promise<MediaSource> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     const sourceId = config.sourceId || this.generateSourceId(config.sourceType)
 
     // Create the provider instance
@@ -208,7 +208,7 @@ export class SourceManager {
   async updateSource(sourceId: string, updates: Partial<SourceConfig>): Promise<void> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     const existing = db.getMediaSourceById(sourceId)
 
     if (!existing) {
@@ -249,7 +249,7 @@ export class SourceManager {
   async removeSource(sourceId: string): Promise<void> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // 1. Stop live monitoring for this source
     getLiveMonitoringService().removeSource(sourceId)
@@ -289,7 +289,7 @@ export class SourceManager {
   async getSources(type?: ProviderType): Promise<MediaSource[]> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     return db.getMediaSources(type)
   }
 
@@ -299,7 +299,7 @@ export class SourceManager {
   async getSource(sourceId: string): Promise<MediaSource | null> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     return db.getMediaSourceById(sourceId)
   }
 
@@ -309,7 +309,7 @@ export class SourceManager {
   async getEnabledSources(): Promise<MediaSource[]> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     return db.getEnabledMediaSources()
   }
 
@@ -319,7 +319,7 @@ export class SourceManager {
   async toggleSource(sourceId: string, enabled: boolean): Promise<void> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     await db.toggleMediaSource(sourceId, enabled)
   }
 
@@ -370,7 +370,7 @@ export class SourceManager {
       }
     }
 
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // For Jellyfin/Emby: authenticate with username/password if no accessToken
     if (provider.providerType === 'jellyfin' || provider.providerType === 'emby') {
@@ -545,7 +545,7 @@ export class SourceManager {
     // Update connection config and display name with selected server
     const server = provider.getSelectedServer()
     if (server) {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const source = db.getMediaSourceById(sourceId)
       if (source) {
         const config = JSON.parse(source.connection_config)
@@ -636,7 +636,7 @@ export class SourceManager {
 
       // Update library scan timestamp if successful
       if (result.success && library) {
-        const db = getDatabaseService()
+        const db = getDatabase()
         await db.updateLibraryScanTime(
           sourceId,
           libraryId,
@@ -693,7 +693,7 @@ export class SourceManager {
         try {
           // Get libraries for this source
           const libraries = await provider.getLibraries()
-          const db = getDatabaseService()
+          const db = getDatabase()
 
           for (const library of libraries) {
             // Check for cancellation before each library
@@ -765,7 +765,7 @@ export class SourceManager {
   ): Promise<ScanResult> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     const lastScanTime = db.getLibraryScanTime(sourceId, libraryId)
 
     // If never scanned, do full scan
@@ -841,7 +841,7 @@ export class SourceManager {
   ): Promise<Map<string, ScanResult>> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     const enabledSources = db.getEnabledMediaSources()
     const results = new Map<string, ScanResult>()
 
@@ -929,7 +929,7 @@ export class SourceManager {
     const libraries = await provider.getLibraries()
 
     // Enrich libraries with scan timestamps from database
-    const db = getDatabaseService()
+    const db = getDatabase()
     const scanTimes = db.getLibraryScanTimes(sourceId)
 
     return libraries.map(lib => ({
@@ -960,7 +960,7 @@ export class SourceManager {
   }> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     return db.getAggregatedSourceStats()
   }
 
@@ -985,7 +985,7 @@ export class SourceManager {
   async reloadProvider(sourceId: string): Promise<void> {
     await this.initialize()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     const source = db.getMediaSourceById(sourceId)
 
     if (!source) {

@@ -19,7 +19,7 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ])
-import { getDatabaseService } from './services/DatabaseService'
+import { getDatabaseServiceAsync, getDatabaseServiceSync, getDatabaseBackend } from './database/DatabaseFactory'
 import { getSourceManager } from './services/SourceManager'
 import { registerDatabaseHandlers } from './ipc/database'
 import { registerQualityHandlers } from './ipc/quality'
@@ -40,16 +40,18 @@ import { getLoggingService } from './services/LoggingService'
 declare const __dirname: string
 
 // Crash handlers - save database before exit on unexpected errors
+// Note: With better-sqlite3, forceSave() is a no-op since data is auto-persisted
+// These handlers are kept for SQL.js compatibility during transition
 process.on('uncaughtException', async (error) => {
   console.error('[CRASH] Uncaught exception:', error)
   try {
-    const db = getDatabaseService()
+    const db = getDatabaseServiceSync()
     if (db.isInitialized) {
       await db.forceSave()
-      console.log('[CRASH] Database saved before exit')
+      console.log('[CRASH] Database checkpoint completed before exit')
     }
   } catch (e) {
-    console.error('[CRASH] Failed to save database:', e)
+    console.error('[CRASH] Failed to checkpoint database:', e)
   }
   process.exit(1)
 })
@@ -57,13 +59,13 @@ process.on('uncaughtException', async (error) => {
 process.on('unhandledRejection', async (reason, promise) => {
   console.error('[CRASH] Unhandled rejection at:', promise, 'reason:', reason)
   try {
-    const db = getDatabaseService()
+    const db = getDatabaseServiceSync()
     if (db.isInitialized) {
       await db.forceSave()
-      console.log('[CRASH] Database saved after unhandled rejection')
+      console.log('[CRASH] Database checkpoint completed after unhandled rejection')
     }
   } catch (e) {
-    console.error('[CRASH] Failed to save database:', e)
+    console.error('[CRASH] Failed to checkpoint database:', e)
   }
   // Don't exit on unhandled rejection - log and continue
 })
@@ -136,7 +138,7 @@ function createWindow() {
 app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') {
     // Close database before quitting
-    const db = getDatabaseService()
+    const db = getDatabaseServiceSync()
     await db.close()
     app.quit()
     win = null
@@ -148,7 +150,7 @@ app.on('before-quit', async (event) => {
   event.preventDefault()
 
   // Close database
-  const db = getDatabaseService()
+  const db = getDatabaseServiceSync()
   await db.close()
 
   app.exit()
@@ -226,10 +228,10 @@ app.whenReady().then(async () => {
     })
     console.log('Local artwork protocol registered')
 
-    // Initialize database
-    const db = getDatabaseService()
+    // Initialize database (auto-migrates from SQL.js to better-sqlite3 if needed)
+    const db = await getDatabaseServiceAsync()
     await db.initialize()
-    console.log('Database initialized successfully')
+    console.log(`Database initialized successfully (backend: ${getDatabaseBackend()})`)
 
     // Initialize source manager (loads providers from database)
     const sourceManager = getSourceManager()

@@ -24,8 +24,8 @@ vi.mock('fs/promises', () => ({
 const mockMediaSources: any[] = []
 const mockProviders = new Map<string, any>()
 
-vi.mock('../../src/main/services/DatabaseService', () => ({
-  getDatabaseService: vi.fn(() => ({
+vi.mock('../../src/main/database/getDatabase', () => ({
+  getDatabase: vi.fn(() => ({
     getMediaSources: vi.fn(() => mockMediaSources),
     getMediaSourceById: vi.fn((id: string) => mockMediaSources.find(s => s.source_id === id) || null),
     getEnabledMediaSources: vi.fn(() => mockMediaSources.filter(s => s.is_enabled)),

@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { getDatabaseService } from '../services/DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
 import { getTMDBService } from '../services/TMDBService'
 import { invalidateNfsMappingsCache } from '../providers/kodi/KodiDatabaseSchema'
@@ -15,7 +15,7 @@ import type {
  * Register all database-related IPC handlers
  */
 export function registerDatabaseHandlers() {
-  const db = getDatabaseService()
+  const db = getDatabase()
 
   // ============================================================================
   // MEDIA ITEMS
@@ -23,9 +23,9 @@ export function registerDatabaseHandlers() {
 
   ipcMain.handle('db:getMediaItems', async (_event, filters?: MediaItemFilters) => {
     try {
-      const items = db.getMediaItems(filters)
+      const items = db.getMediaItems(filters) as MediaItem[]
       // Debug logging for movies without year data
-      const moviesWithoutYear = items.filter(i => i.type === 'movie' && !i.year)
+      const moviesWithoutYear = items.filter((i: MediaItem) => i.type === 'movie' && !i.year)
       if (moviesWithoutYear.length > 0) {
         console.log(`[IPC] Warning: ${moviesWithoutYear.length} movies without year data`)
         // Log first few for debugging

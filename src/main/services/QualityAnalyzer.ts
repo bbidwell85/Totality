@@ -1,4 +1,4 @@
-import { getDatabaseService } from './DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import type { MediaItem, QualityScore, MusicAlbum, MusicTrack, MusicQualityScore, MusicQualityTier, AudioTrack } from '../types/database'
 
 /**
@@ -94,7 +94,7 @@ export class QualityAnalyzer {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
 
       // Batch load all quality settings in a single query
       const qualitySettings = db.getSettingsByPrefix('quality_')
@@ -557,7 +557,7 @@ export class QualityAnalyzer {
   async analyzeAllMediaItems(
     onProgress?: (current: number, total: number) => void
   ): Promise<number> {
-    const db = getDatabaseService()
+    const db = getDatabase()
     const mediaItems = db.getMediaItems()
 
     let analyzed = 0
@@ -592,7 +592,7 @@ export class QualityAnalyzer {
       high: number
     }
   } {
-    const db = getDatabaseService()
+    const db = getDatabase()
     const scores = db.getQualityScores()
 
     const distribution = {

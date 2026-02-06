@@ -15,7 +15,7 @@ import { BrowserWindow } from 'electron'
 import * as chokidar from 'chokidar'
 import * as path from 'path'
 import * as fs from 'fs'
-import { getDatabaseService } from './DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getSourceManager } from './SourceManager'
 import { safeSend } from '../ipc/utils/safeSend'
 import {
@@ -85,7 +85,7 @@ export class LiveMonitoringService {
    * Initialize the monitoring service
    */
   async initialize(): Promise<void> {
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // Load config from database settings
     const enabled = db.getSetting('monitoring_enabled')
@@ -141,7 +141,7 @@ export class LiveMonitoringService {
     this.config = { ...this.config, ...config }
 
     // Persist to database
-    const db = getDatabaseService()
+    const db = getDatabase()
     if (config.enabled !== undefined) {
       await db.setSetting('monitoring_enabled', config.enabled.toString())
     }
@@ -194,7 +194,7 @@ export class LiveMonitoringService {
     this.isActive = true
 
     // Get all enabled sources
-    const db = getDatabaseService()
+    const db = getDatabase()
     const sources = db.getEnabledMediaSources()
 
     for (const source of sources) {
@@ -341,7 +341,7 @@ export class LiveMonitoringService {
       }
 
       // Get source display name for debug output
-      const db = getDatabaseService()
+      const db = getDatabase()
       const source = db.getMediaSourceById(sourceId)
       const sourceName = source?.display_name || config.name || sourceId
 
@@ -460,7 +460,7 @@ export class LiveMonitoringService {
     }
 
     // Get source name for debug output
-    const db = getDatabaseService()
+    const db = getDatabase()
     const source = db.getMediaSourceById(sourceId)
     const sourceName = source?.display_name || sourceId
 
@@ -525,7 +525,7 @@ export class LiveMonitoringService {
    */
   private async checkSourceWithTargetedFiles(sourceId: string, filePaths: string[]): Promise<SourceChangeEvent[]> {
     const sourceManager = getSourceManager()
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // Get source info
     const source = db.getMediaSourceById(sourceId)
@@ -535,8 +535,9 @@ export class LiveMonitoringService {
     }
 
     // Get libraries for this source
-    const libraries = db.getSourceLibraries(sourceId)
-    const enabledLibraries = libraries.filter(lib => lib.isEnabled)
+    type LibraryInfo = { libraryId: string; libraryName: string; libraryType: string; isEnabled: boolean; lastScanAt: string | null; itemsScanned: number }
+    const libraries = db.getSourceLibraries(sourceId) as LibraryInfo[]
+    const enabledLibraries = libraries.filter((lib: LibraryInfo) => lib.isEnabled)
 
     const events: SourceChangeEvent[] = []
 
@@ -708,7 +709,7 @@ export class LiveMonitoringService {
       if (!this.isActive) return
 
       // Get source name for debug output
-      const db = getDatabaseService()
+      const db = getDatabase()
       const source = db.getMediaSourceById(sourceId)
       const sourceName = source?.display_name || sourceId
 
@@ -750,7 +751,7 @@ export class LiveMonitoringService {
    */
   private async checkSource(sourceId: string): Promise<SourceChangeEvent[]> {
     const sourceManager = getSourceManager()
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // Get source info
     const source = db.getMediaSourceById(sourceId)
@@ -760,8 +761,9 @@ export class LiveMonitoringService {
     }
 
     // Get libraries for this source
-    const libraries = db.getSourceLibraries(sourceId)
-    const enabledLibraries = libraries.filter(lib => lib.isEnabled)
+    type LibraryInfo = { libraryId: string; libraryName: string; libraryType: string; isEnabled: boolean; lastScanAt: string | null; itemsScanned: number }
+    const libraries = db.getSourceLibraries(sourceId) as LibraryInfo[]
+    const enabledLibraries = libraries.filter((lib: LibraryInfo) => lib.isEnabled)
 
     const events: SourceChangeEvent[] = []
 
@@ -783,9 +785,9 @@ export class LiveMonitoringService {
             sortBy: 'updated_at',
             sortOrder: 'desc',
             limit: result.itemsAdded + result.itemsUpdated,
-          })
+          }) as Array<{ id?: number; title: string; type: string; year?: number; poster_url?: string; series_title?: string }>
 
-          const changedItems: ChangedItem[] = recentItems.map(item => ({
+          const changedItems: ChangedItem[] = recentItems.map((item: typeof recentItems[0]) => ({
             id: item.id?.toString() || '',
             title: item.title,
             type: item.type as 'movie' | 'episode',

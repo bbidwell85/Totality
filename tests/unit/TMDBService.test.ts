@@ -17,8 +17,8 @@ const mockGetSetting = vi.fn((key: string) => {
   return null
 })
 
-vi.mock('../../src/main/services/DatabaseService', () => ({
-  getDatabaseService: vi.fn(() => ({
+vi.mock('../../src/main/database/getDatabase', () => ({
+  getDatabase: vi.fn(() => ({
     getSetting: mockGetSetting,
   })),
 }))

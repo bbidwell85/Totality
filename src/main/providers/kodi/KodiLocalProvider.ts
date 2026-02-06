@@ -17,7 +17,7 @@ import { getErrorMessage } from '../../services/utils/errorUtils'
 
 import initSqlJs, { Database } from 'sql.js'
 import * as fs from 'fs'
-import { getDatabaseService } from '../../services/DatabaseService'
+import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
 import { getKodiLocalDiscoveryService } from '../../services/KodiLocalDiscoveryService'
 import { getMediaFileAnalyzer, FileAnalysisResult } from '../../services/MediaFileAnalyzer'
@@ -905,7 +905,7 @@ export class KodiLocalProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       await analyzer.loadThresholdsFromDatabase()
 
@@ -1083,7 +1083,7 @@ export class KodiLocalProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       await analyzer.loadThresholdsFromDatabase()
 
@@ -1354,7 +1354,7 @@ export class KodiLocalProvider implements MediaProvider {
   async importCollections(
     onProgress?: (progress: { current: number; total: number; currentItem: string }) => void
   ): Promise<{ imported: number; skipped: number }> {
-    const db = getDatabaseService()
+    const db = getDatabase()
     const collections = await this.getCollections()
     const moviesByCollection = await this.getMoviesGroupedByCollection()
 
@@ -1893,7 +1893,7 @@ export class KodiLocalProvider implements MediaProvider {
         return result
       }
 
-      const db = getDatabaseService()
+      const db = getDatabase()
 
       // Check if FFprobe is available for enhanced audio analysis
       const ffprobeEnabled = this.useFFprobeAnalysis && await this.isFFprobeAvailable()

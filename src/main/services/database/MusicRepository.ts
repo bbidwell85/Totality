@@ -490,10 +490,10 @@ export class MusicRepository {
       INSERT INTO music_tracks (
         source_id, source_type, provider_id, album_id, artist_id,
         album_name, artist_name, title, track_number, disc_number, duration,
-        file_path, file_size, container, audio_codec, audio_bitrate,
+        file_path, file_size, container, file_mtime, audio_codec, audio_bitrate,
         sample_rate, bit_depth, channels, is_lossless, is_hi_res,
         musicbrainz_id, genres, added_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, provider_id) DO UPDATE SET
         source_type = excluded.source_type,
         album_id = excluded.album_id,
@@ -507,6 +507,7 @@ export class MusicRepository {
         file_path = excluded.file_path,
         file_size = excluded.file_size,
         container = excluded.container,
+        file_mtime = excluded.file_mtime,
         audio_codec = excluded.audio_codec,
         audio_bitrate = excluded.audio_bitrate,
         sample_rate = excluded.sample_rate,
@@ -534,6 +535,7 @@ export class MusicRepository {
       track.file_path || null,
       track.file_size || null,
       track.container || null,
+      track.file_mtime || null,
       track.audio_codec,
       track.audio_bitrate || null,
       track.sample_rate || null,

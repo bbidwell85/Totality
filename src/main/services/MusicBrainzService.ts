@@ -15,7 +15,7 @@ import { getErrorMessage, isNodeError } from './utils/errorUtils'
  */
 
 import axios, { AxiosInstance } from 'axios'
-import { getDatabaseService } from './DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { RateLimiters, SimpleDelayRateLimiter } from './utils/RateLimiter'
 import {
   CancellableOperation,
@@ -783,7 +783,7 @@ export class MusicBrainzService extends CancellableOperation {
     // Reset cancellation flag at start
     this.resetCancellation()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // Enable Cover Art Archive as fallback for albums without artwork
     // The updateAlbumArtworkFromCoverArt() method already checks if album has
@@ -870,11 +870,11 @@ export class MusicBrainzService extends CancellableOperation {
       })
 
       try {
-        const artistAlbums = db.getMusicAlbums({ artistId: artist.id, sourceId })
-        const ownedTitles = artistAlbums.map(a => a.title)
+        const artistAlbums = db.getMusicAlbums({ artistId: artist.id, sourceId }) as Array<{ title: string; musicbrainz_id?: string }>
+        const ownedTitles = artistAlbums.map((a: typeof artistAlbums[0]) => a.title)
         const ownedMbIds = artistAlbums
-          .filter(a => a.musicbrainz_id)
-          .map(a => a.musicbrainz_id!)
+          .filter((a: typeof artistAlbums[0]) => a.musicbrainz_id)
+          .map((a: typeof artistAlbums[0]) => a.musicbrainz_id!)
 
         const completeness = await this.analyzeArtistCompleteness(
           artist.name,
@@ -938,8 +938,8 @@ export class MusicBrainzService extends CancellableOperation {
       })
 
       try {
-        const tracks = db.getMusicTracks({ albumId: album.id, sourceId })
-        const ownedTrackTitles = tracks.map(t => t.title)
+        const tracks = db.getMusicTracks({ albumId: album.id, sourceId }) as Array<{ title: string }>
+        const ownedTrackTitles = tracks.map((t: typeof tracks[0]) => t.title)
 
         const completeness = await this.analyzeAlbumTrackCompleteness(
           album.id!,
@@ -998,7 +998,7 @@ export class MusicBrainzService extends CancellableOperation {
    * @param releaseGroupId MusicBrainz release group ID
    */
   private async updateAlbumArtworkFromCoverArt(album: MusicAlbum, releaseGroupId: string): Promise<void> {
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // Skip if album already has artwork (e.g., extracted from embedded metadata during scan)
     if (album.thumb_url || album.art_url) {

@@ -5,7 +5,7 @@
  */
 
 import { ipcMain } from 'electron'
-import { getDatabaseService } from '../services/DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
 import { getMusicBrainzService } from '../services/MusicBrainzService'
 import { getSourceManager } from '../services/SourceManager'
@@ -14,7 +14,7 @@ import { LocalFolderProvider } from '../providers/local/LocalFolderProvider'
 import { JellyfinEmbyBase } from '../providers/jellyfin-emby/JellyfinEmbyBase'
 import { KodiProvider } from '../providers/kodi/KodiProvider'
 import { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
-import type { MusicFilters } from '../types/database'
+import type { MusicFilters, MusicTrack } from '../types/database'
 import { safeSend, getWindowFromEvent } from './utils/safeSend'
 import { createProgressUpdater } from './utils/progressUpdater'
 
@@ -97,7 +97,7 @@ export function registerMusicHandlers(): void {
       console.log(`[music:scanLibrary] Scan result:`, JSON.stringify(result, null, 2))
 
       // Analyze quality for all albums
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       const albums = db.getMusicAlbums({ sourceId })
       console.log(`[music:scanLibrary] Found ${albums.length} albums in database for sourceId=${sourceId}`)
@@ -136,7 +136,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getArtists', async (_event, filters?: MusicFilters) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getMusicArtists(filters)
     } catch (error: unknown) {
       console.error('[music:getArtists] Error:', error)
@@ -149,7 +149,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getArtistById', async (_event, id: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getMusicArtistById(id)
     } catch (error: unknown) {
       console.error('[music:getArtistById] Error:', error)
@@ -162,7 +162,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getAlbums', async (_event, filters?: MusicFilters) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getMusicAlbums(filters)
     } catch (error: unknown) {
       console.error('[music:getAlbums] Error:', error)
@@ -175,7 +175,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getAlbumsByArtist', async (_event, artistId: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getMusicAlbums({ artistId })
     } catch (error: unknown) {
       console.error('[music:getAlbumsByArtist] Error:', error)
@@ -188,7 +188,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getAlbumById', async (_event, id: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getMusicAlbumById(id)
     } catch (error: unknown) {
       console.error('[music:getAlbumById] Error:', error)
@@ -201,7 +201,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getTracks', async (_event, filters?: MusicFilters) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getMusicTracks(filters)
     } catch (error: unknown) {
       console.error('[music:getTracks] Error:', error)
@@ -214,7 +214,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getTracksByAlbum', async (_event, albumId: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getMusicTracks({ albumId })
     } catch (error: unknown) {
       console.error('[music:getTracksByAlbum] Error:', error)
@@ -227,7 +227,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getStats', async (_event, sourceId?: string) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getMusicStats(sourceId)
     } catch (error: unknown) {
       console.error('[music:getStats] Error:', error)
@@ -244,7 +244,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getAlbumQuality', async (_event, albumId: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getMusicQualityScore(albumId)
     } catch (error: unknown) {
       console.error('[music:getAlbumQuality] Error:', error)
@@ -257,7 +257,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getAlbumsNeedingUpgrade', async (_event, limit?: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getAlbumsNeedingUpgrade(limit)
     } catch (error: unknown) {
       console.error('[music:getAlbumsNeedingUpgrade] Error:', error)
@@ -270,7 +270,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:analyzeAllQuality', async (event, sourceId?: string) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       const win = getWindowFromEvent(event)
       const { onProgress, flush } = createProgressUpdater(win, 'music:qualityProgress', 'music')
@@ -367,7 +367,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:analyzeArtistCompleteness', async (_event, artistId: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const mbService = getMusicBrainzService()
 
       const artist = db.getMusicArtistById(artistId)
@@ -405,8 +405,8 @@ export function registerMusicHandlers(): void {
       for (const album of albums) {
         if (!album.id) continue
         try {
-          const tracks = db.getMusicTracks({ albumId: album.id })
-          const trackTitles = tracks.map(t => t.title)
+          const tracks = db.getMusicTracks({ albumId: album.id }) as MusicTrack[]
+          const trackTitles = tracks.map((t: MusicTrack) => t.title)
 
           const albumCompleteness = await mbService.analyzeAlbumTrackCompleteness(
             album.id,
@@ -437,7 +437,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getArtistCompleteness', async (_event, artistName: string) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getArtistCompleteness(artistName)
     } catch (error: unknown) {
       console.error('[music:getArtistCompleteness] Error:', error)
@@ -450,7 +450,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getAllArtistCompleteness', async () => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getAllArtistCompleteness()
     } catch (error: unknown) {
       console.error('[music:getAllArtistCompleteness] Error:', error)
@@ -463,7 +463,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:analyzeAlbumTrackCompleteness', async (_event, albumId: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const mbService = getMusicBrainzService()
 
       const album = db.getMusicAlbumById(albumId)
@@ -473,8 +473,8 @@ export function registerMusicHandlers(): void {
 
       console.log(`[music:analyzeAlbumTrackCompleteness] Analyzing: ${album.artist_name} - ${album.title} (id=${albumId}, mbid=${album.musicbrainz_id || 'none'})`)
 
-      const tracks = db.getMusicTracks({ albumId })
-      const ownedTrackTitles = tracks.map(t => t.title)
+      const tracks = db.getMusicTracks({ albumId }) as MusicTrack[]
+      const ownedTrackTitles = tracks.map((t: MusicTrack) => t.title)
       console.log(`[music:analyzeAlbumTrackCompleteness] Owned tracks: ${ownedTrackTitles.length}`)
 
       const completeness = await mbService.analyzeAlbumTrackCompleteness(
@@ -504,7 +504,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getAlbumCompleteness', async (_event, albumId: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getAlbumCompleteness(albumId)
     } catch (error: unknown) {
       console.error('[music:getAlbumCompleteness] Error:', error)
@@ -517,7 +517,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getAllAlbumCompleteness', async () => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getAllAlbumCompleteness()
     } catch (error: unknown) {
       console.error('[music:getAllAlbumCompleteness] Error:', error)
@@ -530,7 +530,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getIncompleteAlbums', async () => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getIncompleteAlbums()
     } catch (error: unknown) {
       console.error('[music:getIncompleteAlbums] Error:', error)
@@ -588,7 +588,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:fixArtistMatch', async (event, artistId: number, musicbrainzId: string) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const mbService = getMusicBrainzService()
       const win = getWindowFromEvent(event)
 
@@ -659,7 +659,7 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:fixAlbumMatch', async (event, albumId: number, musicbrainzReleaseGroupId: string) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const mbService = getMusicBrainzService()
       const win = getWindowFromEvent(event)
 
@@ -673,8 +673,8 @@ export function registerMusicHandlers(): void {
       await db.updateAlbumMatch(albumId, musicbrainzReleaseGroupId)
 
       // Get tracks for re-analysis
-      const tracks = db.getMusicTracks({ albumId })
-      const ownedTrackTitles = tracks.map(t => t.title)
+      const tracks = db.getMusicTracks({ albumId }) as MusicTrack[]
+      const ownedTrackTitles = tracks.map((t: MusicTrack) => t.title)
 
       // Re-analyze track completeness with the new MusicBrainz ID
       const completeness = await mbService.analyzeAlbumTrackCompleteness(

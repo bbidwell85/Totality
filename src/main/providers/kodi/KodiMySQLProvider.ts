@@ -16,7 +16,7 @@ import { getErrorMessage } from '../../services/utils/errorUtils'
  * - Valid credentials with read access to Kodi databases
  */
 
-import { getDatabaseService } from '../../services/DatabaseService'
+import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
 import {
   getKodiMySQLConnectionService,
@@ -548,7 +548,7 @@ export class KodiMySQLProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       await analyzer.loadThresholdsFromDatabase()
 
@@ -983,7 +983,7 @@ export class KodiMySQLProvider implements MediaProvider {
     }
 
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
 
       const scannedArtistIds = new Set<string>()
       const scannedAlbumIds = new Set<string>()

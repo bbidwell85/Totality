@@ -14,7 +14,7 @@
  * - art: Artwork URLs (posters, fanart, etc.)
  */
 
-import { getDatabaseService } from '../../services/DatabaseService'
+import { getDatabase } from '../../database/getDatabase'
 
 // ============================================================================
 // NFS MOUNT MAPPINGS
@@ -30,7 +30,7 @@ let cachedNfsMappings: Record<string, string> | null = null
 function getNfsMountMappings(): Record<string, string> {
   if (cachedNfsMappings === null) {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const mappingsJson = db.getSetting('nfs_mount_mappings')
       cachedNfsMappings = mappingsJson ? JSON.parse(mappingsJson) : {}
     } catch {

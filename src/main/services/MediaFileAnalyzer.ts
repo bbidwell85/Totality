@@ -778,7 +778,7 @@ export class MediaFileAnalyzer {
   }
 
   /**
-   * Analyze multiple files with progress callback
+   * Analyze multiple files with progress callback (sequential)
    */
   async analyzeFiles(
     filePaths: string[],
@@ -796,6 +796,53 @@ export class MediaFileAnalyzer {
     }
 
     return results
+  }
+
+  /**
+   * Analyze multiple files in parallel using worker threads
+   * Falls back to sequential analysis if workers fail to initialize
+   */
+  async analyzeFilesParallel(
+    filePaths: string[],
+    onProgress?: (current: number, total: number, currentFile: string) => void
+  ): Promise<Map<string, FileAnalysisResult>> {
+    // Check if FFprobe is available
+    if (!await this.isAvailable()) {
+      const results = new Map<string, FileAnalysisResult>()
+      for (const filePath of filePaths) {
+        results.set(filePath, {
+          success: false,
+          error: 'FFprobe is not installed',
+          filePath,
+          audioTracks: [],
+          subtitleTracks: [],
+        })
+      }
+      return results
+    }
+
+    try {
+      // Dynamically import worker pool to avoid circular dependencies
+      const { getFFprobeWorkerPool } = await import('./FFprobeWorkerPool')
+      const pool = getFFprobeWorkerPool()
+
+      // Initialize pool with FFprobe path if needed
+      await pool.initialize(this.ffprobePath!)
+
+      console.log(`[MediaFileAnalyzer] Analyzing ${filePaths.length} files in parallel`)
+      return await pool.analyzeFiles(filePaths, onProgress)
+    } catch (error) {
+      console.warn(`[MediaFileAnalyzer] Worker pool failed, falling back to sequential: ${getErrorMessage(error)}`)
+      // Fallback to sequential analysis
+      return this.analyzeFiles(filePaths, onProgress)
+    }
+  }
+
+  /**
+   * Get the current FFprobe path (for worker initialization)
+   */
+  getFFprobePath(): string | null {
+    return this.ffprobePath
   }
 
   // ============================================================================

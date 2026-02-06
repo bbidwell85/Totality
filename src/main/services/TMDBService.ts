@@ -9,7 +9,7 @@ import {
   TMDBTVSearchResult,
   TMDBConfiguration
 } from '../types/tmdb'
-import { getDatabaseService } from './DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { RateLimiters, SlidingWindowRateLimiter } from './utils/RateLimiter'
 
 /**
@@ -34,7 +34,7 @@ export class TMDBService {
    * Initialize service with API key from settings
    */
   async initialize(): Promise<void> {
-    const db = getDatabaseService()
+    const db = getDatabase()
     const setting = db.getSetting('tmdb_api_key')
     this.apiKey = setting || null
 

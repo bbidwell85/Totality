@@ -1,4 +1,4 @@
-import { getDatabaseService } from './DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getTMDBService } from './TMDBService'
 import {
   CancellableOperation,
@@ -43,7 +43,7 @@ export class MovieCollectionService extends CancellableOperation {
     movies: MediaItem[],
     onProgress?: (progress: TMDBLookupProgress) => void
   ): Promise<{ updated: number; failed: number }> {
-    const db = getDatabaseService()
+    const db = getDatabase()
     const tmdb = getTMDBService()
 
     // Filter to movies without TMDB IDs
@@ -176,18 +176,18 @@ export class MovieCollectionService extends CancellableOperation {
   private async getMoviesDeduplicatedByTmdbId(
     onProgress?: (progress: CollectionAnalysisProgress) => void
   ): Promise<MediaItem[]> {
-    const db = getDatabaseService()
+    const db = getDatabase()
 
     // Get all movies from all sources
     const allMovies = db.getMediaItems({ type: 'movie' }) as MediaItem[]
     console.log(`[MovieCollectionService] Cross-provider deduplication: ${allMovies.length} total movies`)
 
     // For any source that's local, we need TMDB IDs first
-    const sources = db.getMediaSources()
+    const sources = db.getMediaSources() as Array<{ id: number; source_type: string }>
     const localSourceIds = new Set(
       sources
-        .filter(s => s.source_type === 'kodi-local' || s.source_type === 'local')
-        .map(s => String(s.id))
+        .filter((s: typeof sources[0]) => s.source_type === 'kodi-local' || s.source_type === 'local')
+        .map((s: typeof sources[0]) => String(s.id))
     )
 
     // Check if any movies from local sources need TMDB ID lookups
@@ -254,7 +254,7 @@ export class MovieCollectionService extends CancellableOperation {
     // Reset cancellation flag at start
     this.resetCancellation()
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     const tmdb = getTMDBService()
 
     // Check if TMDB API key is configured
@@ -623,7 +623,7 @@ export class MovieCollectionService extends CancellableOperation {
    * Get all movie collections
    */
   getCollections(): MovieCollection[] {
-    const db = getDatabaseService()
+    const db = getDatabase()
     return db.getMovieCollections()
   }
 
@@ -631,7 +631,7 @@ export class MovieCollectionService extends CancellableOperation {
    * Get incomplete collections only
    */
   getIncompleteCollections(): MovieCollection[] {
-    const db = getDatabaseService()
+    const db = getDatabase()
     return db.getIncompleteMovieCollections()
   }
 
@@ -639,7 +639,7 @@ export class MovieCollectionService extends CancellableOperation {
    * Delete a collection
    */
   async deleteCollection(id: number): Promise<boolean> {
-    const db = getDatabaseService()
+    const db = getDatabase()
     return await db.deleteMovieCollection(id)
   }
 
@@ -647,7 +647,7 @@ export class MovieCollectionService extends CancellableOperation {
    * Get collection stats
    */
   getStats(): { total: number; complete: number; incomplete: number; totalMissing: number; avgCompleteness: number } {
-    const db = getDatabaseService()
+    const db = getDatabase()
     return db.getMovieCollectionStats()
   }
 }

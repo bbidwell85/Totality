@@ -25,10 +25,32 @@ export default defineConfig({
               fileName: () => 'index.cjs'
             },
             rollupOptions: {
-              external: ['electron', 'sql.js', 'node-cron', 'axios', 'chokidar', 'fsevents', 'fs', 'path', 'fs/promises', 'node:path', 'node:url', 'node:fs/promises'],
+              external: ['electron', 'sql.js', 'better-sqlite3', 'node-cron', 'axios', 'chokidar', 'fsevents', 'fs', 'path', 'fs/promises', 'node:path', 'node:url', 'node:fs/promises', 'worker_threads'],
               output: {
                 format: 'cjs',
                 entryFileNames: 'index.cjs'
+              }
+            }
+          }
+        }
+      },
+      {
+        // FFprobe worker thread
+        entry: path.resolve(__dirname, 'src/main/workers/ffprobe-worker.ts'),
+        vite: {
+          build: {
+            outDir: path.resolve(__dirname, 'dist-electron/main'),
+            minify: 'esbuild',
+            lib: {
+              entry: path.resolve(__dirname, 'src/main/workers/ffprobe-worker.ts'),
+              formats: ['cjs'],
+              fileName: () => 'ffprobe-worker.cjs'
+            },
+            rollupOptions: {
+              external: ['worker_threads', 'child_process', 'fs', 'path'],
+              output: {
+                format: 'cjs',
+                entryFileNames: 'ffprobe-worker.cjs'
               }
             }
           }

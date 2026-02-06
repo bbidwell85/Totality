@@ -1,6 +1,6 @@
 import { getErrorMessage, isAxiosError } from './utils/errorUtils'
 import axios, { AxiosInstance } from 'axios'
-import { getDatabaseService } from './DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from './QualityAnalyzer'
 import { AudioCodecRanker } from './AudioCodecRanker'
 import type {
@@ -56,7 +56,7 @@ export class PlexService {
    */
   private async loadAuthToken(): Promise<void> {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const token = await db.getSetting('plex_token')
       if (token) {
         this.authToken = token
@@ -71,7 +71,7 @@ export class PlexService {
    */
   private async saveAuthToken(token: string): Promise<void> {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       await db.setSetting('plex_token', token)
       this.authToken = token
     } catch (error) {
@@ -245,7 +245,7 @@ export class PlexService {
     this.selectedServer = server
 
     // Save selected server to database
-    const db = getDatabaseService()
+    const db = getDatabase()
     await db.setSetting('plex_server_id', server.machineIdentifier)
     await db.setSetting('plex_server_url', server.uri)
 
@@ -485,7 +485,7 @@ export class PlexService {
     onProgress?: (progress: ScanProgress) => void
   ): Promise<number> {
     const items = await this.getLibraryItems(libraryKey)
-    const db = getDatabaseService()
+    const db = getDatabase()
     const analyzer = getQualityAnalyzer()
     await analyzer.loadThresholdsFromDatabase()
 
@@ -919,7 +919,7 @@ export class PlexService {
     this.authToken = null
     this.selectedServer = null
 
-    const db = getDatabaseService()
+    const db = getDatabase()
     await db.setSetting('plex_token', '')
     await db.setSetting('plex_server_id', '')
     await db.setSetting('plex_server_url', '')

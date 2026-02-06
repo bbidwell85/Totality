@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { getSeriesCompletenessService } from '../services/SeriesCompletenessService'
-import { getDatabaseService } from '../services/DatabaseService'
+import { getDatabase } from '../database/getDatabase'
 import { getTMDBService } from '../services/TMDBService'
 import { getWindowFromEvent } from './utils/safeSend'
 import { createProgressUpdater } from './utils/progressUpdater'
@@ -74,7 +74,7 @@ export function registerSeriesHandlers() {
    */
   ipcMain.handle('series:getAll', async () => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getSeriesCompleteness()
     } catch (error) {
       console.error('Error getting series completeness:', error)
@@ -87,7 +87,7 @@ export function registerSeriesHandlers() {
    */
   ipcMain.handle('series:getIncomplete', async () => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getIncompleteSeries()
     } catch (error) {
       console.error('Error getting incomplete series:', error)
@@ -100,7 +100,7 @@ export function registerSeriesHandlers() {
    */
   ipcMain.handle('series:getStats', async () => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getSeriesCompletenessStats()
     } catch (error) {
       console.error('Error getting series stats:', error)
@@ -113,7 +113,7 @@ export function registerSeriesHandlers() {
    */
   ipcMain.handle('series:getEpisodes', async (_event, seriesTitle: string) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return db.getEpisodesForSeries(seriesTitle)
     } catch (error) {
       console.error(`Error getting episodes for "${seriesTitle}":`, error)
@@ -126,7 +126,7 @@ export function registerSeriesHandlers() {
    */
   ipcMain.handle('series:delete', async (_event, id: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       return await db.deleteSeriesCompleteness(id)
     } catch (error) {
       console.error(`Error deleting series completeness ${id}:`, error)
@@ -204,7 +204,7 @@ export function registerSeriesHandlers() {
    */
   ipcMain.handle('series:fixMatch', async (_event, seriesTitle: string, sourceId: string, tmdbId: number) => {
     try {
-      const db = getDatabaseService()
+      const db = getDatabase()
       const tmdb = getTMDBService()
       const service = getSeriesCompletenessService()
 
