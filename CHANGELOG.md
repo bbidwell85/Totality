@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.6](https://github.com/bbidwell85/totality/compare/v0.1.5...v0.1.6) (2026-02-06)
+
+
+### Features
+
+* UI improvements for theming, dashboard, and search ([a384630](https://github.com/bbidwell85/totality/commit/a38463018c5d988762c20f61fa3bc683e076b4e5))
+
 ### [0.1.5](https://github.com/bbidwell85/totality/compare/v0.1.1...v0.1.5) (2026-02-03)
 
 
