@@ -60,7 +60,9 @@ import {
   normalizeResolution,
   normalizeHdrFormat,
   normalizeAudioChannels,
+  hasObjectAudio,
 } from '../../services/MediaNormalizer'
+import { estimateAudioBitrate } from '../utils/ProviderUtils'
 import type { Pool } from 'mysql2/promise'
 
 // Type for audio stream query result
@@ -671,67 +673,8 @@ export class KodiMySQLProvider implements MediaProvider {
   // AUDIO STREAM HELPERS
   // ============================================================================
 
-  private detectObjectAudio(codec: string | null, title?: string): boolean {
-    const codecLower = (codec || '').toLowerCase()
-    const titleLower = (title || '').toLowerCase()
-
-    if (codecLower.includes('atmos') || titleLower.includes('atmos')) return true
-    if (codecLower.includes('truehd') && titleLower.includes('atmos')) return true
-    if (codecLower.includes('dts:x') || codecLower.includes('dtsx') ||
-        titleLower.includes('dts:x') || titleLower.includes('dts-x') || titleLower.includes('dtsx')) {
-      return true
-    }
-    if ((codecLower.includes('dtshd_ma') || codecLower.includes('dts-hd ma')) &&
-        (titleLower.includes(':x') || titleLower.includes('-x'))) {
-      return true
-    }
-
-    return false
-  }
-
-  private estimateAudioBitrate(codec: string | null, channels: number | null): number {
-    const codecLower = (codec || '').toLowerCase()
-    const ch = channels || 2
-
-    if (codecLower.includes('truehd') || codecLower.includes('atmos')) {
-      return ch >= 8 ? 6000 : ch >= 6 ? 4000 : 2500
-    }
-    if (codecLower.includes('dtshd_ma') || codecLower.includes('dts-hd ma')) {
-      return ch >= 8 ? 5000 : ch >= 6 ? 3500 : 2000
-    }
-    if (codecLower.includes('dtshd') || codecLower.includes('dts-hd')) {
-      return ch >= 6 ? 2500 : 1500
-    }
-    if (codecLower.includes('flac') || codecLower.includes('pcm') || codecLower.includes('lpcm')) {
-      return ch >= 6 ? 3000 : 1500
-    }
-    if (codecLower.includes('dts:x') || codecLower.includes('dtsx')) {
-      return ch >= 8 ? 4000 : 3000
-    }
-    if (codecLower.includes('dts')) {
-      return ch >= 6 ? 1509 : 768
-    }
-    if (codecLower.includes('eac3') || codecLower.includes('ec3') || codecLower.includes('e-ac-3')) {
-      return ch >= 8 ? 1024 : ch >= 6 ? 640 : 384
-    }
-    if (codecLower.includes('ac3') || codecLower.includes('ac-3')) {
-      return ch >= 6 ? 640 : 384
-    }
-    if (codecLower.includes('aac')) {
-      return ch >= 6 ? 384 : 256
-    }
-    if (codecLower.includes('mp3')) {
-      return 320
-    }
-    if (codecLower.includes('opus')) {
-      return ch >= 6 ? 256 : 128
-    }
-    if (codecLower.includes('vorbis')) {
-      return 256
-    }
-
-    return ch >= 6 ? 640 : 256
-  }
+  // NOTE: detectObjectAudio and estimateAudioBitrate are now imported from
+  // MediaNormalizer/ProviderUtils. The duplicate private methods were removed.
 
   private convertAudioStreams(
     streams: KodiAudioStream[] | undefined,
@@ -740,8 +683,8 @@ export class KodiMySQLProvider implements MediaProvider {
     if (!streams || streams.length === 0) return []
 
     return streams.map((stream, index) => {
-      const hasObjectAudio = this.detectObjectAudio(stream.codec, title)
-      const bitrate = this.estimateAudioBitrate(stream.codec, stream.channels)
+      const hasObjAudio = hasObjectAudio(stream.codec, null, title, null)
+      const bitrate = estimateAudioBitrate(stream.codec, stream.channels)
 
       return {
         codec: normalizeAudioCodec(stream.codec) || 'Unknown',
@@ -749,7 +692,7 @@ export class KodiMySQLProvider implements MediaProvider {
         language: stream.language || undefined,
         isDefault: index === 0,
         bitrate,
-        hasObjectAudio,
+        hasObjectAudio: hasObjAudio,
       }
     })
   }

@@ -21,7 +21,7 @@ import {
   normalizeContainer,
   hasObjectAudio,
 } from '../../services/MediaNormalizer'
-import { AudioCodecRanker } from '../../services/AudioCodecRanker'
+import { selectBestAudioTrack } from '../utils/ProviderUtils'
 import type {
   MediaProvider,
   ProviderCredentials,
@@ -964,18 +964,8 @@ export class PlexProvider implements MediaProvider {
       ),
     }))
 
-    // Find best audio track using AudioCodecRanker
-    const bestAudioTrack = audioTracks.reduce((best, current) => {
-      const bestTier = AudioCodecRanker.getTier(best.codec, best.hasObjectAudio || false)
-      const currentTier = AudioCodecRanker.getTier(current.codec, current.hasObjectAudio || false)
-
-      if (currentTier > bestTier) return current
-      if (bestTier > currentTier) return best
-      if (current.channels > best.channels) return current
-      if (best.channels > current.channels) return best
-      if (current.bitrate > best.bitrate) return current
-      return best
-    }, audioTracks[0])
+    // Find best audio track using shared utility
+    const bestAudioTrack = selectBestAudioTrack(audioTracks) || audioTracks[0]
 
     const audioStream = audioStreams[bestAudioTrack.index] || audioStreams[0]
 

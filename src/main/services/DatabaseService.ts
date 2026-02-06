@@ -1418,7 +1418,18 @@ export class DatabaseService {
       params.push(filters.libraryId)
     }
 
-    sql += ' ORDER BY m.title ASC'
+    // Dynamic sorting with validated column names (prevent SQL injection)
+    const sortColumnMap: Record<string, string> = {
+      'title': 'm.title',
+      'year': 'm.year',
+      'updated_at': 'm.updated_at',
+      'created_at': 'm.created_at',
+      'tier_score': 'q.tier_score',
+      'overall_score': 'q.overall_score'
+    }
+    const sortColumn = sortColumnMap[filters?.sortBy || 'title'] || 'm.title'
+    const sortOrder = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
+    sql += ` ORDER BY ${sortColumn} ${sortOrder}`
 
     if (filters?.limit) {
       sql += ' LIMIT ?'
@@ -1434,6 +1445,75 @@ export class DatabaseService {
     if (!result.length) return []
 
     return this.rowsToObjects<MediaItem>(result[0])
+  }
+
+  /**
+   * Count media items matching filters (for pagination)
+   * Uses same filter logic as getMediaItems but returns count only
+   */
+  countMediaItems(filters?: MediaItemFilters & { includeDisabledLibraries?: boolean }): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    let sql = `
+      SELECT COUNT(*) as count
+      FROM media_items m
+      LEFT JOIN quality_scores q ON m.id = q.media_item_id
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE 1=1
+    `
+
+    const params: (string | number)[] = []
+
+    // Filter out items from disabled libraries (unless explicitly requested)
+    if (!filters?.includeDisabledLibraries) {
+      sql += ' AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)'
+    }
+
+    if (filters?.type) {
+      sql += ' AND m.type = ?'
+      params.push(filters.type)
+    }
+
+    if (filters?.minQualityScore !== undefined) {
+      sql += ' AND q.overall_score >= ?'
+      params.push(filters.minQualityScore)
+    }
+
+    if (filters?.maxQualityScore !== undefined) {
+      sql += ' AND q.overall_score <= ?'
+      params.push(filters.maxQualityScore)
+    }
+
+    if (filters?.needsUpgrade !== undefined) {
+      sql += ' AND q.needs_upgrade = ?'
+      params.push(filters.needsUpgrade ? 1 : 0)
+    }
+
+    if (filters?.searchQuery) {
+      sql += ' AND (m.title LIKE ? OR m.series_title LIKE ?)'
+      const searchTerm = `%${filters.searchQuery}%`
+      params.push(searchTerm, searchTerm)
+    }
+
+    if (filters?.sourceId) {
+      sql += ' AND m.source_id = ?'
+      params.push(filters.sourceId)
+    }
+
+    if (filters?.sourceType) {
+      sql += ' AND m.source_type = ?'
+      params.push(filters.sourceType)
+    }
+
+    if (filters?.libraryId) {
+      sql += ' AND m.library_id = ?'
+      params.push(filters.libraryId)
+    }
+
+    const result = this.db.exec(sql, params)
+    if (!result.length || !result[0].values.length) return 0
+
+    return result[0].values[0][0] as number
   }
 
   /**

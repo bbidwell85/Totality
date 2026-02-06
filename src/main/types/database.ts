@@ -282,7 +282,7 @@ export interface MediaItemFilters {
   sourceType?: ProviderType
   libraryId?: string
   // Sorting
-  sortBy?: 'title' | 'year' | 'updated_at' | 'created_at'
+  sortBy?: 'title' | 'year' | 'updated_at' | 'created_at' | 'tier_score' | 'overall_score'
   sortOrder?: 'asc' | 'desc'
 }
 

@@ -71,7 +71,12 @@ import {
   normalizeResolution,
   normalizeHdrFormat,
   normalizeAudioChannels,
+  hasObjectAudio,
 } from '../../services/MediaNormalizer'
+import {
+  estimateAudioBitrate,
+  calculateAudioBitrateFromFile,
+} from '../utils/ProviderUtils'
 import type { AudioStreamInfo } from '../base/MediaProvider'
 
 // Type for audio stream query result
@@ -698,118 +703,9 @@ export class KodiLocalProvider implements MediaProvider {
     return streamsByFile
   }
 
-  /**
-   * Detect if audio codec indicates object-based audio (Dolby Atmos, DTS:X)
-   */
-  private detectObjectAudio(codec: string | null, title?: string): boolean {
-    const codecLower = (codec || '').toLowerCase()
-    const titleLower = (title || '').toLowerCase()
-
-    // Dolby Atmos detection
-    if (codecLower.includes('atmos') || titleLower.includes('atmos')) {
-      return true
-    }
-    if (codecLower.includes('truehd') && titleLower.includes('atmos')) {
-      return true
-    }
-
-    // DTS:X detection
-    if (codecLower.includes('dts:x') || codecLower.includes('dtsx') ||
-        titleLower.includes('dts:x') || titleLower.includes('dts-x') || titleLower.includes('dtsx')) {
-      return true
-    }
-
-    // DTS-HD MA with object audio indicator
-    if ((codecLower.includes('dtshd_ma') || codecLower.includes('dts-hd ma')) &&
-        (titleLower.includes(':x') || titleLower.includes('-x'))) {
-      return true
-    }
-
-    return false
-  }
-
-  /**
-   * Calculate audio bitrate from total file bitrate minus video bitrate
-   */
-  private calculateAudioBitrateFromFile(
-    totalBitrate: number,
-    videoBitrate: number,
-    numAudioTracks: number
-  ): number {
-    if (totalBitrate <= 0 || videoBitrate <= 0 || numAudioTracks <= 0) {
-      return 0
-    }
-    const audioBitrate = (totalBitrate - videoBitrate) * 0.95
-    if (audioBitrate <= 0) {
-      return 0
-    }
-    return Math.round(audioBitrate / numAudioTracks)
-  }
-
-  /**
-   * Estimate audio bitrate based on codec and channel count
-   * Returns estimated bitrate in kbps
-   * These are typical bitrates for each codec/channel combination
-   */
-  private estimateAudioBitrate(codec: string | null, channels: number | null): number {
-    const codecLower = (codec || '').toLowerCase()
-    const ch = channels || 2
-
-    // Lossless codecs - estimate based on typical file analysis
-    if (codecLower.includes('truehd') || codecLower.includes('atmos')) {
-      // TrueHD/Atmos: typically 4000-8000 kbps for 7.1
-      return ch >= 8 ? 6000 : ch >= 6 ? 4000 : 2500
-    }
-    if (codecLower.includes('dtshd_ma') || codecLower.includes('dts-hd ma') || codecLower.includes('dts-hd.ma')) {
-      // DTS-HD MA: typically 3000-6000 kbps for 7.1
-      return ch >= 8 ? 5000 : ch >= 6 ? 3500 : 2000
-    }
-    if (codecLower.includes('dtshd') || codecLower.includes('dts-hd')) {
-      // DTS-HD (High Resolution): typically 1500-3000 kbps
-      return ch >= 6 ? 2500 : 1500
-    }
-    if (codecLower.includes('flac') || codecLower.includes('pcm') || codecLower.includes('lpcm')) {
-      // FLAC/PCM: typically 1000-2000 kbps for stereo, more for surround
-      return ch >= 6 ? 3000 : 1500
-    }
-
-    // Lossy codecs
-    if (codecLower.includes('dts:x') || codecLower.includes('dtsx')) {
-      // DTS:X: typically 3000-4000 kbps
-      return ch >= 8 ? 4000 : 3000
-    }
-    if (codecLower.includes('dts')) {
-      // Standard DTS: typically 768-1509 kbps
-      return ch >= 6 ? 1509 : 768
-    }
-    if (codecLower.includes('eac3') || codecLower.includes('ec3') || codecLower.includes('e-ac-3')) {
-      // E-AC-3 (Dolby Digital Plus): typically 384-1024 kbps
-      return ch >= 8 ? 1024 : ch >= 6 ? 640 : 384
-    }
-    if (codecLower.includes('ac3') || codecLower.includes('ac-3')) {
-      // AC-3 (Dolby Digital): typically 384-640 kbps
-      return ch >= 6 ? 640 : 384
-    }
-    if (codecLower.includes('aac')) {
-      // AAC: typically 128-320 kbps
-      return ch >= 6 ? 384 : 256
-    }
-    if (codecLower.includes('mp3')) {
-      // MP3: typically 128-320 kbps
-      return 320
-    }
-    if (codecLower.includes('opus')) {
-      // Opus: typically 64-256 kbps
-      return ch >= 6 ? 256 : 128
-    }
-    if (codecLower.includes('vorbis')) {
-      // Vorbis: typically 128-320 kbps
-      return 256
-    }
-
-    // Default fallback
-    return ch >= 6 ? 640 : 256
-  }
+  // NOTE: detectObjectAudio, estimateAudioBitrate, and calculateAudioBitrateFromFile
+  // are now imported from MediaNormalizer/ProviderUtils.
+  // The duplicate private methods were removed.
 
   /**
    * Convert Kodi audio streams to AudioStreamInfo array
@@ -826,15 +722,15 @@ export class KodiLocalProvider implements MediaProvider {
     // Try to calculate audio bitrate from file if we have the data
     const numTracks = streams.length
     const calculatedBitrate = (totalBitrate && videoBitrate)
-      ? this.calculateAudioBitrateFromFile(totalBitrate, videoBitrate, numTracks)
+      ? calculateAudioBitrateFromFile(totalBitrate, videoBitrate, numTracks)
       : 0
 
     return streams.map((stream, index) => {
-      const hasObjectAudio = this.detectObjectAudio(stream.codec, title)
+      const hasObjAudio = hasObjectAudio(stream.codec, null, title, null)
       // Use calculated bitrate if reasonable, otherwise estimate
       let bitrate = calculatedBitrate
       if (bitrate <= 0 || bitrate > 20000) {
-        bitrate = this.estimateAudioBitrate(stream.codec, stream.channels)
+        bitrate = estimateAudioBitrate(stream.codec, stream.channels)
       }
 
       return {
@@ -843,7 +739,7 @@ export class KodiLocalProvider implements MediaProvider {
         language: stream.language || undefined,
         isDefault: index === 0,
         bitrate,
-        hasObjectAudio,
+        hasObjectAudio: hasObjAudio,
       }
     })
   }

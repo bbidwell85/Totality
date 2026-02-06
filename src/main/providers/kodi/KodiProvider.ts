@@ -32,6 +32,16 @@ import {
   isHiRes,
   calculateAlbumStats,
 } from '../base/MusicScannerUtils'
+import {
+  normalizeResolution,
+  normalizeHdrFormat,
+  hasObjectAudio,
+} from '../../services/MediaNormalizer'
+import {
+  estimateAudioBitrate,
+  calculateAudioBitrateFromFile,
+  isEstimatedBitrate,
+} from '../utils/ProviderUtils'
 
 // Kodi JSON-RPC types
 interface KodiRpcResponse<T> {
@@ -655,109 +665,9 @@ export class KodiProvider implements MediaProvider {
   // CONVERSION HELPERS
   // ============================================================================
 
-  /**
-   * Detect if audio codec indicates object-based audio (Dolby Atmos, DTS:X)
-   * Kodi doesn't provide explicit object audio detection, so we infer from codec name
-   */
-  private detectObjectAudio(codec: string | undefined, title?: string): boolean {
-    const codecLower = (codec || '').toLowerCase()
-    const titleLower = (title || '').toLowerCase()
-
-    // Dolby Atmos detection
-    // Atmos is typically carried in TrueHD or E-AC-3 containers
-    if (codecLower.includes('atmos') || titleLower.includes('atmos')) {
-      return true
-    }
-    // TrueHD with 7.1 or more channels is often Atmos
-    if (codecLower.includes('truehd') && titleLower.includes('atmos')) {
-      return true
-    }
-
-    // DTS:X detection
-    if (codecLower.includes('dts:x') || codecLower.includes('dtsx') ||
-        titleLower.includes('dts:x') || titleLower.includes('dts-x') || titleLower.includes('dtsx')) {
-      return true
-    }
-
-    // DTS-HD MA with object audio indicator
-    if ((codecLower.includes('dtshd_ma') || codecLower.includes('dts-hd ma')) &&
-        (titleLower.includes(':x') || titleLower.includes('-x'))) {
-      return true
-    }
-
-    return false
-  }
-
-  /**
-   * Estimate audio bitrate based on codec and channel count
-   * Returns estimated bitrate in kbps
-   * Used as fallback when we can't calculate from file size
-   */
-  private estimateAudioBitrate(codec: string | undefined, channels: number | undefined): number {
-    const codecLower = (codec || '').toLowerCase()
-    const ch = channels || 2
-
-    // Lossless codecs - these have much higher bitrates
-    if (codecLower.includes('truehd') || codecLower.includes('atmos')) {
-      // TrueHD Atmos typically 4-8 Mbps for 7.1, 2-4 Mbps for 5.1
-      return ch >= 8 ? 6000 : ch >= 6 ? 4000 : 2500
-    }
-    if (codecLower.includes('dtshd_ma') || codecLower.includes('dts-hd ma')) {
-      // DTS-HD MA typically 3-6 Mbps
-      return ch >= 8 ? 5000 : ch >= 6 ? 3500 : 2000
-    }
-    if (codecLower.includes('dtshd') || codecLower.includes('dts-hd')) {
-      return ch >= 6 ? 2500 : 1500
-    }
-    if (codecLower.includes('flac') || codecLower.includes('pcm')) {
-      return ch >= 6 ? 3000 : 1500
-    }
-
-    // Lossy codecs
-    if (codecLower.includes('dts')) {
-      return ch >= 6 ? 1509 : 768
-    }
-    if (codecLower.includes('eac3') || codecLower.includes('e-ac-3') || codecLower.includes('ec3')) {
-      return ch >= 8 ? 1024 : ch >= 6 ? 640 : 384
-    }
-    if (codecLower.includes('ac3') || codecLower.includes('ac-3')) {
-      return ch >= 6 ? 640 : 384
-    }
-    if (codecLower.includes('aac')) {
-      return ch >= 6 ? 384 : 256
-    }
-
-    return ch >= 6 ? 640 : 256
-  }
-
-  /**
-   * Calculate audio bitrate from total file bitrate minus video bitrate
-   * This is more accurate than estimation for lossless codecs
-   * @param totalBitrate Total file bitrate in kbps
-   * @param videoBitrate Video bitrate in kbps
-   * @param numAudioTracks Number of audio tracks
-   * @returns Audio bitrate per track in kbps
-   */
-  private calculateAudioBitrateFromFile(
-    totalBitrate: number,
-    videoBitrate: number,
-    numAudioTracks: number
-  ): number {
-    if (totalBitrate <= 0 || videoBitrate <= 0 || numAudioTracks <= 0) {
-      return 0
-    }
-
-    // Remaining bitrate after video is for audio + subtitles + overhead
-    // Assume ~5% overhead for container/subtitles
-    const audioBitrate = (totalBitrate - videoBitrate) * 0.95
-
-    if (audioBitrate <= 0) {
-      return 0
-    }
-
-    // Divide among audio tracks (primary track usually gets more, but approximate evenly)
-    return Math.round(audioBitrate / numAudioTracks)
-  }
+  // NOTE: detectObjectAudio, estimateAudioBitrate, calculateAudioBitrateFromFile, and
+  // isEstimatedBitrate are now imported from MediaNormalizer/ProviderUtils.
+  // The duplicate private methods were removed.
 
   /**
    * Get file details from Kodi including file size
@@ -834,16 +744,16 @@ export class KodiProvider implements MediaProvider {
     // Calculate audio bitrate from file if possible, otherwise estimate
     const numAudioTracks = audioStreams.length || 1
     const calculatedAudioBitrate = totalBitrate > 0
-      ? this.calculateAudioBitrateFromFile(totalBitrate, videoBitrate, numAudioTracks)
+      ? calculateAudioBitrateFromFile(totalBitrate, videoBitrate, numAudioTracks)
       : 0
 
     const audioTracks: AudioStreamInfo[] = audioStreams.map((audio, index) => {
-      const hasObjectAudio = this.detectObjectAudio(audio.codec, movie.title)
+      const hasObjAudio = hasObjectAudio(audio.codec, null, movie.title, null)
       // Use calculated bitrate if available and reasonable, otherwise estimate
       let bitrate = calculatedAudioBitrate
       if (bitrate <= 0 || bitrate > 20000) {
         // Fallback to estimation if calculated value is unreasonable
-        bitrate = this.estimateAudioBitrate(audio.codec, audio.channels)
+        bitrate = estimateAudioBitrate(audio.codec, audio.channels)
       }
 
       return {
@@ -852,7 +762,7 @@ export class KodiProvider implements MediaProvider {
         language: audio.language || undefined,
         isDefault: index === 0,
         bitrate,
-        hasObjectAudio,
+        hasObjectAudio: hasObjAudio,
       }
     })
 
@@ -881,7 +791,7 @@ export class KodiProvider implements MediaProvider {
       filePath: movie.file,
       fileSize: fileSize || undefined,
       duration: durationSeconds > 0 ? durationSeconds * 1000 : undefined,
-      resolution: this.normalizeResolution(video?.width || 0, video?.height || 0),
+      resolution: normalizeResolution(video?.width || 0, video?.height || 0),
       width: video?.width,
       height: video?.height,
       videoCodec: video?.codec,
@@ -890,7 +800,7 @@ export class KodiProvider implements MediaProvider {
       colorBitDepth: undefined, // Kodi doesn't provide - will be filled by ffprobe
       colorSpace: undefined, // Kodi doesn't provide - will be filled by ffprobe
       videoProfile: undefined, // Kodi doesn't provide - will be filled by ffprobe
-      hdrFormat: this.detectHdrFormat(video?.hdrtype),
+      hdrFormat: normalizeHdrFormat(video?.hdrtype, null, null, null, null),
       audioCodec: bestAudio?.codec,
       audioChannels: bestAudio?.channels,
       audioBitrate: bestAudio?.bitrate,
@@ -924,14 +834,14 @@ export class KodiProvider implements MediaProvider {
     // Convert all audio streams with object audio detection and calculated bitrate
     const numAudioTracks = audioStreams.length || 1
     const calculatedAudioBitrate = totalBitrate > 0
-      ? this.calculateAudioBitrateFromFile(totalBitrate, videoBitrate, numAudioTracks)
+      ? calculateAudioBitrateFromFile(totalBitrate, videoBitrate, numAudioTracks)
       : 0
 
     const audioTracks: AudioStreamInfo[] = audioStreams.map((audio, index) => {
-      const hasObjectAudio = this.detectObjectAudio(audio.codec, episode.title)
+      const hasObjAudio = hasObjectAudio(audio.codec, null, episode.title, null)
       let bitrate = calculatedAudioBitrate
       if (bitrate <= 0 || bitrate > 20000) {
-        bitrate = this.estimateAudioBitrate(audio.codec, audio.channels)
+        bitrate = estimateAudioBitrate(audio.codec, audio.channels)
       }
 
       return {
@@ -940,7 +850,7 @@ export class KodiProvider implements MediaProvider {
         language: audio.language || undefined,
         isDefault: index === 0,
         bitrate,
-        hasObjectAudio,
+        hasObjectAudio: hasObjAudio,
       }
     })
 
@@ -973,7 +883,7 @@ export class KodiProvider implements MediaProvider {
       filePath: episode.file,
       fileSize: fileSize || undefined,
       duration: durationSeconds > 0 ? durationSeconds * 1000 : undefined,
-      resolution: this.normalizeResolution(video?.width || 0, video?.height || 0),
+      resolution: normalizeResolution(video?.width || 0, video?.height || 0),
       width: video?.width,
       height: video?.height,
       videoCodec: video?.codec,
@@ -982,7 +892,7 @@ export class KodiProvider implements MediaProvider {
       colorBitDepth: undefined, // Kodi doesn't provide - will be filled by ffprobe
       colorSpace: undefined, // Kodi doesn't provide - will be filled by ffprobe
       videoProfile: undefined, // Kodi doesn't provide - will be filled by ffprobe
-      hdrFormat: this.detectHdrFormat(video?.hdrtype),
+      hdrFormat: normalizeHdrFormat(video?.hdrtype, null, null, null, null),
       audioCodec: bestAudio?.codec,
       audioChannels: bestAudio?.channels,
       audioBitrate: bestAudio?.bitrate,
@@ -1059,34 +969,8 @@ export class KodiProvider implements MediaProvider {
     }
   }
 
-  private normalizeResolution(width: number, height: number): string {
-    if (height >= 2160 || width >= 3840) return '4K'
-    if (height >= 1080 || width >= 1920) return '1080p'
-    if (height >= 720 || width >= 1280) return '720p'
-    if (height >= 480 || width >= 720) return '480p'
-    return 'SD'
-  }
-
-  private detectHdrFormat(hdrtype?: string): string {
-    if (!hdrtype) return 'None'
-
-    const hdrLower = hdrtype.toLowerCase()
-
-    if (hdrLower.includes('dolby vision') || hdrLower.includes('dovi')) {
-      return 'Dolby Vision'
-    }
-    if (hdrLower.includes('hdr10+')) {
-      return 'HDR10+'
-    }
-    if (hdrLower.includes('hdr')) {
-      return 'HDR10'
-    }
-    if (hdrLower.includes('hlg')) {
-      return 'HLG'
-    }
-
-    return 'None'
-  }
+  // NOTE: normalizeResolution and detectHdrFormat are now imported from MediaNormalizer.
+  // The duplicate private methods were removed.
 
   // ============================================================================
   // FFPROBE ENHANCEMENT
@@ -1100,20 +984,13 @@ export class KodiProvider implements MediaProvider {
     // Kodi typically doesn't provide: frame rate, color bit depth, color space, audio sample rate
     const hasFrameRate = metadata.videoFrameRate && metadata.videoFrameRate > 0
     const hasColorBitDepth = metadata.colorBitDepth && metadata.colorBitDepth > 0
-    const hasAudioBitrate = metadata.audioBitrate && metadata.audioBitrate > 0 && !this.isEstimatedBitrate(metadata.audioBitrate)
+    const hasAudioBitrate = metadata.audioBitrate && metadata.audioBitrate > 0 && !isEstimatedBitrate(metadata.audioBitrate)
 
     // If any key indicator is missing, we should try ffprobe
     return !hasFrameRate || !hasColorBitDepth || !hasAudioBitrate
   }
 
-  /**
-   * Check if the bitrate appears to be estimated (typical estimated values)
-   */
-  private isEstimatedBitrate(bitrate: number): boolean {
-    // Our estimated bitrates fall into these ranges
-    const estimatedValues = [256, 384, 640, 768, 1024, 1500, 1509, 2500, 3000, 3500, 4500]
-    return estimatedValues.includes(bitrate)
-  }
+  // NOTE: isEstimatedBitrate is now imported from ProviderUtils.
 
   /**
    * Check if a file path is locally accessible
@@ -1243,7 +1120,7 @@ export class KodiProvider implements MediaProvider {
           enhanced.audioChannels = bestTrack.channels
         }
         // Always prefer ffprobe audio bitrate over estimated
-        if (bestTrack.bitrate && (!enhanced.audioBitrate || this.isEstimatedBitrate(enhanced.audioBitrate))) {
+        if (bestTrack.bitrate && (!enhanced.audioBitrate || isEstimatedBitrate(enhanced.audioBitrate))) {
           enhanced.audioBitrate = bestTrack.bitrate
         }
         if (bestTrack.sampleRate) {

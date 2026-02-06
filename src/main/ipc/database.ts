@@ -40,6 +40,15 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  ipcMain.handle('db:countMediaItems', async (_event, filters?: MediaItemFilters) => {
+    try {
+      return db.countMediaItems(filters)
+    } catch (error) {
+      console.error('Error counting media items:', error)
+      throw error
+    }
+  })
+
   ipcMain.handle('db:getMediaItemById', async (_event, id: number) => {
     try {
       return db.getMediaItemById(id)

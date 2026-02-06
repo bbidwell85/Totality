@@ -21,7 +21,7 @@ import {
   normalizeContainer,
   hasObjectAudio,
 } from '../../services/MediaNormalizer'
-import { AudioCodecRanker } from '../../services/AudioCodecRanker'
+import { selectBestAudioTrack } from '../utils/ProviderUtils'
 import type {
   MediaProvider,
   ProviderType,
@@ -1097,18 +1097,8 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       }
     })
 
-    // Find best audio track using AudioCodecRanker
-    const bestAudioTrack = audioTracks.reduce((best, current) => {
-      const bestTier = AudioCodecRanker.getTier(best.codec, best.hasObjectAudio || false)
-      const currentTier = AudioCodecRanker.getTier(current.codec, current.hasObjectAudio || false)
-
-      if (currentTier > bestTier) return current
-      if (bestTier > currentTier) return best
-      if (current.channels > best.channels) return current
-      if (best.channels > current.channels) return best
-      if (current.bitrate > best.bitrate) return current
-      return best
-    }, audioTracks[0])
+    // Find best audio track using shared utility
+    const bestAudioTrack = selectBestAudioTrack(audioTracks) || audioTracks[0]
 
     const audioStream = audioStreams[bestAudioTrack.index] || audioStreams[0]
 
@@ -1230,47 +1220,8 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
     }
   }
 
-  protected normalizeResolution(width: number, height: number): string {
-    if (height >= 2160 || width >= 3840) return '4K'
-    if (height >= 1080 || width >= 1920) return '1080p'
-    if (height >= 720 || width >= 1280) return '720p'
-    if (height >= 480 || width >= 720) return '480p'
-    return 'SD'
-  }
-
-  protected detectHdrFormat(videoRange?: string, colorSpace?: string): string {
-    if (!videoRange && !colorSpace) return 'None'
-
-    const rangeLower = (videoRange || '').toLowerCase()
-    const spaceLower = (colorSpace || '').toLowerCase()
-
-    if (rangeLower.includes('dolby vision') || rangeLower.includes('dovi')) {
-      return 'Dolby Vision'
-    }
-    if (rangeLower.includes('hdr10+')) {
-      return 'HDR10+'
-    }
-    if (rangeLower.includes('hdr') || spaceLower.includes('bt2020')) {
-      return 'HDR10'
-    }
-    if (rangeLower.includes('hlg')) {
-      return 'HLG'
-    }
-
-    return 'None'
-  }
-
-  protected detectObjectAudio(codec?: string, channelLayout?: string): boolean {
-    const codecLower = (codec || '').toLowerCase()
-    const layoutLower = (channelLayout || '').toLowerCase()
-
-    if (codecLower.includes('atmos')) return true
-    if (codecLower === 'truehd' && layoutLower.includes('7.1')) return true
-    if (layoutLower.includes('atmos')) return true
-    if (codecLower.includes('dts:x') || codecLower.includes('dtsx')) return true
-
-    return false
-  }
+  // NOTE: normalizeResolution, detectHdrFormat, and detectObjectAudio are now
+  // imported from MediaNormalizer. The duplicate protected methods were removed.
 
   /**
    * Get audio bitrates from a file using FFprobe as a backup
