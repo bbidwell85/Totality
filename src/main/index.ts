@@ -39,16 +39,21 @@ import { getLoggingService } from './services/LoggingService'
 // __dirname is provided by CommonJS/Node
 declare const __dirname: string
 
-// Crash handlers - save database before exit on unexpected errors
-// Note: With better-sqlite3, forceSave() is a no-op since data is auto-persisted
-// These handlers are kept for SQL.js compatibility during transition
+// Crash handlers - ensure database integrity on unexpected errors
+// With better-sqlite3 (WAL mode): data is auto-persisted, forceSave() just checkpoints WAL
+// With SQL.js: forceSave() writes in-memory database to disk
 process.on('uncaughtException', async (error) => {
   console.error('[CRASH] Uncaught exception:', error)
   try {
     const db = getDatabaseServiceSync()
     if (db.isInitialized) {
-      await db.forceSave()
-      console.log('[CRASH] Database checkpoint completed before exit')
+      const backend = getDatabaseBackend()
+      if (backend === 'sql.js') {
+        await db.forceSave()
+        console.log('[CRASH] SQL.js database saved before exit')
+      } else {
+        console.log('[CRASH] better-sqlite3 data already persisted (WAL mode)')
+      }
     }
   } catch (e) {
     console.error('[CRASH] Failed to checkpoint database:', e)
@@ -61,8 +66,12 @@ process.on('unhandledRejection', async (reason, promise) => {
   try {
     const db = getDatabaseServiceSync()
     if (db.isInitialized) {
-      await db.forceSave()
-      console.log('[CRASH] Database checkpoint completed after unhandled rejection')
+      const backend = getDatabaseBackend()
+      if (backend === 'sql.js') {
+        await db.forceSave()
+        console.log('[CRASH] SQL.js database saved after unhandled rejection')
+      }
+      // better-sqlite3: no action needed, WAL mode auto-persists
     }
   } catch (e) {
     console.error('[CRASH] Failed to checkpoint database:', e)

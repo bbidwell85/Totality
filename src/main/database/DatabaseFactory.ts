@@ -34,52 +34,42 @@ interface DatabaseServiceInterface {
 
 /**
  * Check if better-sqlite3 backend should be used
+ * In production: always use better-sqlite3 (migrate if needed)
+ * In tests: use SQL.js when USE_SQLJS env var is set
  */
 function shouldUseBetterSqlite(): boolean {
   if (useBetterSqlite !== null) {
     return useBetterSqlite
   }
 
-  // Environment variable overrides
+  // Environment variable override for tests
   if (process.env.USE_SQLJS === 'true') {
     useBetterSqlite = false
-    console.log('[DatabaseFactory] Using SQL.js (forced by env var)')
+    console.log('[DatabaseFactory] Using SQL.js (test mode)')
     return false
   }
 
-  if (process.env.USE_BETTER_SQLITE3 === 'true') {
-    useBetterSqlite = true
-    console.log('[DatabaseFactory] Using better-sqlite3 (forced by env var)')
-    return true
-  }
+  // Production always uses better-sqlite3
+  // Migration happens automatically in getDatabaseServiceAsync()
+  useBetterSqlite = true
 
   try {
     const userDataPath = app.getPath('userData')
-    const sqlJsDbPath = path.join(userDataPath, 'totality.db')
     const betterSqliteDbPath = path.join(userDataPath, 'totality-v2.db')
+    const sqlJsDbPath = path.join(userDataPath, 'totality.db')
 
-    const sqlJsExists = fs.existsSync(sqlJsDbPath)
-    const betterSqliteExists = fs.existsSync(betterSqliteDbPath)
-
-    if (betterSqliteExists) {
-      // Already using better-sqlite3
-      useBetterSqlite = true
+    if (fs.existsSync(betterSqliteDbPath)) {
       console.log('[DatabaseFactory] Using better-sqlite3 (database exists)')
-    } else if (!sqlJsExists) {
-      // Fresh install - use better-sqlite3
-      useBetterSqlite = true
-      console.log('[DatabaseFactory] Using better-sqlite3 (fresh install)')
+    } else if (fs.existsSync(sqlJsDbPath)) {
+      console.log('[DatabaseFactory] Using better-sqlite3 (will migrate from SQL.js)')
     } else {
-      // SQL.js exists, need migration - but use SQL.js for now until migration is triggered
-      useBetterSqlite = false
-      console.log('[DatabaseFactory] SQL.js database found, migration available')
+      console.log('[DatabaseFactory] Using better-sqlite3 (fresh install)')
     }
-  } catch (error) {
-    console.warn('[DatabaseFactory] Error checking database backend:', error)
-    useBetterSqlite = false
+  } catch {
+    console.log('[DatabaseFactory] Using better-sqlite3 (default)')
   }
 
-  return useBetterSqlite
+  return true
 }
 
 /**
@@ -135,12 +125,16 @@ export async function performMigrationIfNeeded(): Promise<{ migrated: boolean; e
 
 /**
  * Get the database service instance (async version)
- * Automatically handles migration if needed
+ * Automatically handles migration from SQL.js to better-sqlite3 if needed
  */
 export async function getDatabaseServiceAsync(): Promise<DatabaseServiceInterface> {
-  // Try migration if available
-  if (isMigrationAvailable()) {
-    await performMigrationIfNeeded()
+  // In production, always migrate if there's an old SQL.js database
+  if (!process.env.USE_SQLJS && isMigrationAvailable()) {
+    const result = await performMigrationIfNeeded()
+    if (result.error) {
+      console.error('[DatabaseFactory] Migration failed, falling back to SQL.js:', result.error)
+      useBetterSqlite = false
+    }
   }
 
   if (shouldUseBetterSqlite()) {
