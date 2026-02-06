@@ -1,3 +1,4 @@
+import { getErrorMessage } from './utils/errorUtils'
 import initSqlJs, { Database } from 'sql.js'
 import fs from 'fs/promises'
 import path from 'path'
@@ -159,10 +160,10 @@ export class DatabaseService {
             try {
               this.db.run(statement)
               console.log(`Added column: ${statement}`)
-            } catch (error: any) {
+            } catch (error: unknown) {
               // Ignore "duplicate column" errors - column already exists
-              if (!error.message?.includes('duplicate column name')) {
-                console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+              if (!getErrorMessage(error)?.includes('duplicate column name')) {
+                console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
               }
             }
           }
@@ -362,10 +363,10 @@ export class DatabaseService {
         try {
           this.db.run(statement)
           console.log(`Added column: ${statement}`)
-        } catch (error: any) {
+        } catch (error: unknown) {
           // Ignore "duplicate column" errors - column already exists
-          if (!error.message?.includes('duplicate column name')) {
-            console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+          if (!getErrorMessage(error)?.includes('duplicate column name')) {
+            console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
           }
         }
       }
@@ -388,10 +389,10 @@ export class DatabaseService {
         try {
           this.db.run(statement)
           console.log(`[Database] Added enhanced quality column: ${statement}`)
-        } catch (error: any) {
+        } catch (error: unknown) {
           // Ignore "duplicate column" errors - column already exists
-          if (!error.message?.includes('duplicate column name')) {
-            console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+          if (!getErrorMessage(error)?.includes('duplicate column name')) {
+            console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
           }
         }
       }
@@ -408,10 +409,10 @@ export class DatabaseService {
         try {
           this.db.run(statement)
           console.log(`[Database] Added series_completeness column: ${statement}`)
-        } catch (error: any) {
+        } catch (error: unknown) {
           // Ignore "duplicate column" errors - column already exists
-          if (!error.message?.includes('duplicate column name')) {
-            console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+          if (!getErrorMessage(error)?.includes('duplicate column name')) {
+            console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
           }
         }
       }
@@ -420,10 +421,10 @@ export class DatabaseService {
       try {
         this.db.run('ALTER TABLE media_items ADD COLUMN series_tmdb_id TEXT')
         console.log('[Database] Added series_tmdb_id column to media_items')
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore "duplicate column" errors - column already exists
-        if (!error.message?.includes('duplicate column name')) {
-          console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
         }
       }
 
@@ -431,10 +432,10 @@ export class DatabaseService {
       try {
         this.db.run('ALTER TABLE media_items ADD COLUMN user_fixed_match INTEGER DEFAULT 0')
         console.log('[Database] Added user_fixed_match column to media_items')
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore "duplicate column" errors - column already exists
-        if (!error.message?.includes('duplicate column name')) {
-          console.log(`ALTER TABLE error (may be expected): ${error.message}`)
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
         }
       }
 
@@ -442,10 +443,10 @@ export class DatabaseService {
       try {
         this.db.run('ALTER TABLE music_artists ADD COLUMN user_fixed_match INTEGER DEFAULT 0')
         console.log('[Database] Added user_fixed_match column to music_artists')
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore "duplicate column" errors - column already exists
-        if (!error.message?.includes('duplicate column name')) {
-          console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
         }
       }
 
@@ -453,10 +454,10 @@ export class DatabaseService {
       try {
         this.db.run('ALTER TABLE music_albums ADD COLUMN user_fixed_match INTEGER DEFAULT 0')
         console.log('[Database] Added user_fixed_match column to music_albums')
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore "duplicate column" errors - column already exists
-        if (!error.message?.includes('duplicate column name')) {
-          console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
         }
       }
 
@@ -464,20 +465,20 @@ export class DatabaseService {
       try {
         this.db.run('ALTER TABLE media_items ADD COLUMN audio_tracks TEXT')
         console.log('[Database] Added audio_tracks column to media_items')
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore "duplicate column" errors - column already exists
-        if (!error.message?.includes('duplicate column name')) {
-          console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
         }
       }
 
       // Add file_mtime column to media_items for skip-unchanged-files optimization
       try {
         this.db.run('ALTER TABLE media_items ADD COLUMN file_mtime INTEGER')
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore "duplicate column" errors - column already exists
-        if (!error.message?.includes('duplicate column name')) {
-          console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
         }
       }
 
@@ -507,10 +508,10 @@ export class DatabaseService {
       try {
         this.db.run('ALTER TABLE library_scans ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1')
         console.log('[Database] Added is_enabled column to library_scans')
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore "duplicate column" errors - column already exists
-        if (!error.message?.includes('duplicate column name')) {
-          console.log(`[Database] ALTER TABLE error (may be expected): ${error.message}`)
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
         }
       }
 
@@ -1167,16 +1168,16 @@ export class DatabaseService {
             const sql = `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`
             this.db.run(sql, values)
             imported++
-          } catch (error: any) {
-            errors.push(`${table}: ${error.message}`)
+          } catch (error: unknown) {
+            errors.push(`${table}: ${getErrorMessage(error)}`)
           }
         }
       }
 
       await this.endBatch()
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.batchMode = false
-      errors.push(`Import failed: ${error.message}`)
+      errors.push(`Import failed: ${getErrorMessage(error)}`)
     }
 
     return { imported, errors }

@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../services/utils/errorUtils'
 /**
  * PlexProvider
  *
@@ -147,11 +148,11 @@ export class PlexProvider implements MediaProvider {
         success: false,
         error: 'Invalid or missing token',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Plex authentication failed:', error)
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error) || 'Authentication failed',
       }
     }
   }
@@ -289,10 +290,10 @@ export class PlexProvider implements MediaProvider {
         serverVersion: response.data?.MediaContainer?.version || this.selectedServer.version,
         latencyMs,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || 'Connection failed',
+        error: getErrorMessage(error) || 'Connection failed',
       }
     }
   }
@@ -533,8 +534,8 @@ export class PlexProvider implements MediaProvider {
                   percentage: (scanned / totalItems) * 100,
                 })
               }
-            } catch (error: any) {
-              result.errors.push(`Failed to process ${item.title}: ${error.message}`)
+            } catch (error: unknown) {
+              result.errors.push(`Failed to process ${item.title}: ${getErrorMessage(error)}`)
             }
           }
 
@@ -595,8 +596,8 @@ export class PlexProvider implements MediaProvider {
       result.durationMs = Date.now() - startTime
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }
@@ -1573,8 +1574,8 @@ export class PlexProvider implements MediaProvider {
               percentage: (processed / totalArtists) * 50, // First 50% for artists
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process artist ${plexArtist.title}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process artist ${plexArtist.title}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -1648,8 +1649,8 @@ export class PlexProvider implements MediaProvider {
               percentage: 50 + (compilationProcessed / Math.max(totalCompilations, 1)) * 50, // Last 50%
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process album ${plexAlbum.title}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process album ${plexAlbum.title}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -1662,8 +1663,8 @@ export class PlexProvider implements MediaProvider {
       console.log(`[PlexProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks (including ${totalCompilations} compilation albums)`)
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }

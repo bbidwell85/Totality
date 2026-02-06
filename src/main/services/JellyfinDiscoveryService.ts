@@ -1,3 +1,4 @@
+import { getErrorMessage } from './utils/errorUtils'
 /**
  * JellyfinDiscoveryService
  *
@@ -129,10 +130,10 @@ export class JellyfinDiscoveryService {
         serverId: response.data.Id,
         version: response.data.Version,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || 'Failed to connect',
+        error: getErrorMessage(error) || 'Failed to connect',
       }
     }
   }

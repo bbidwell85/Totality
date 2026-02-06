@@ -17,6 +17,7 @@ import type { ProviderType } from '../providers/base/MediaProvider'
 import type { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
 import { KodiMySQLProvider } from '../providers/kodi/KodiMySQLProvider'
 import { safeSend, getWindowFromEvent } from './utils/safeSend'
+import { getErrorMessage } from './utils'
 import { createProgressUpdater } from './utils/progressUpdater'
 
 /**
@@ -40,7 +41,7 @@ export function registerSourceHandlers(): void {
   }) => {
     try {
       return await manager.addSource(config)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error adding source:', error)
       throw error
     }
@@ -56,7 +57,7 @@ export function registerSourceHandlers(): void {
   }) => {
     try {
       await manager.updateSource(sourceId, updates)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating source:', error)
       throw error
     }
@@ -68,7 +69,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:remove', async (_event, sourceId: string) => {
     try {
       await manager.removeSource(sourceId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error removing source:', error)
       throw error
     }
@@ -80,7 +81,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:list', async (_event, type?: ProviderType) => {
     try {
       return await manager.getSources(type)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error listing sources:', error)
       throw error
     }
@@ -92,7 +93,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:get', async (_event, sourceId: string) => {
     try {
       return await manager.getSource(sourceId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting source:', error)
       throw error
     }
@@ -104,7 +105,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:getEnabled', async () => {
     try {
       return await manager.getEnabledSources()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting enabled sources:', error)
       throw error
     }
@@ -116,7 +117,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:toggle', async (_event, sourceId: string, enabled: boolean) => {
     try {
       await manager.toggleSource(sourceId, enabled)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error toggling source:', error)
       throw error
     }
@@ -132,7 +133,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:testConnection', async (_event, sourceId: string) => {
     try {
       return await manager.testConnection(sourceId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error testing connection:', error)
       throw error
     }
@@ -148,7 +149,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('plex:startAuth', async () => {
     try {
       return await manager.plexStartAuth()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error starting Plex auth:', error)
       throw error
     }
@@ -160,7 +161,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('plex:checkAuth', async (_event, pinId: number) => {
     try {
       return await manager.plexCompleteAuth(pinId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking Plex auth:', error)
       throw error
     }
@@ -172,7 +173,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('plex:authenticateAndDiscover', async (_event, token: string, displayName: string) => {
     try {
       return await manager.plexAuthenticateAndDiscover(token, displayName)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error authenticating Plex:', error)
       throw error
     }
@@ -207,7 +208,7 @@ export function registerSourceHandlers(): void {
       const plex = getPlexService()
       const success = await plex.selectServer(resolvedServerId)
       return { success }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error selecting Plex server:', error)
       throw error
     }
@@ -238,7 +239,7 @@ export function registerSourceHandlers(): void {
       console.log('[plex:getServers] No sources found, using legacy PlexService')
       const plex = getPlexService()
       return await plex.getServers()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting Plex servers:', error)
       throw error
     }
@@ -254,7 +255,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:getLibraries', async (_event, sourceId: string) => {
     try {
       return await manager.getLibraries(sourceId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting libraries:', error)
       throw error
     }
@@ -285,7 +286,7 @@ export function registerSourceHandlers(): void {
           itemsScanned: stored?.itemsScanned || 0,
         }
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting libraries with status:', error)
       throw error
     }
@@ -304,7 +305,7 @@ export function registerSourceHandlers(): void {
       safeSend(win, 'library:updated', { type: 'libraryToggle', sourceId, libraryId, enabled })
 
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error toggling library:', error)
       throw error
     }
@@ -323,7 +324,7 @@ export function registerSourceHandlers(): void {
       const db = getDatabaseService()
       await db.setLibrariesEnabled(sourceId, libraries)
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error setting libraries enabled:', error)
       throw error
     }
@@ -336,7 +337,7 @@ export function registerSourceHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getEnabledLibraryIds(sourceId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting enabled library IDs:', error)
       throw error
     }
@@ -350,9 +351,9 @@ export function registerSourceHandlers(): void {
       console.log('[IPC] Stopping scan...')
       manager.stopScan()
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error stopping scan:', error)
-      return { success: false, error: error.message }
+      return { success: false, error: getErrorMessage(error) }
     }
   })
 
@@ -381,7 +382,7 @@ export function registerSourceHandlers(): void {
       flush()
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error scanning library:', error)
       throw error
     }
@@ -407,7 +408,7 @@ export function registerSourceHandlers(): void {
         key,
         ...value,
       }))
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error scanning all sources:', error)
       throw error
     }
@@ -451,7 +452,7 @@ export function registerSourceHandlers(): void {
       flush()
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error scanning single item:', error)
       throw error
     }
@@ -475,7 +476,7 @@ export function registerSourceHandlers(): void {
       flush()
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error in incremental library scan:', error)
       throw error
     }
@@ -505,7 +506,7 @@ export function registerSourceHandlers(): void {
         key,
         ...value,
       }))
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error in incremental scan all:', error)
       throw error
     }
@@ -521,7 +522,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:getStats', async () => {
     try {
       return await manager.getAggregatedStats()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting stats:', error)
       throw error
     }
@@ -533,7 +534,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:getSupportedProviders', async () => {
     try {
       return manager.getSupportedProviders()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting supported providers:', error)
       throw error
     }
@@ -551,7 +552,7 @@ export function registerSourceHandlers(): void {
     try {
       const discovery = getKodiLocalDiscoveryService()
       return await discovery.detectLocalInstallation()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error detecting local Kodi:', error)
       return null
     }
@@ -564,7 +565,7 @@ export function registerSourceHandlers(): void {
     try {
       const discovery = getKodiLocalDiscoveryService()
       return await discovery.isKodiRunning()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking if Kodi is running:', error)
       return false
     }
@@ -598,7 +599,7 @@ export function registerSourceHandlers(): void {
       flush()
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error importing Kodi collections:', error)
       throw error
     }
@@ -620,7 +621,7 @@ export function registerSourceHandlers(): void {
 
       const kodiProvider = provider as any
       return await kodiProvider.getCollections()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting Kodi collections:', error)
       throw error
     }
@@ -654,11 +655,11 @@ export function registerSourceHandlers(): void {
         connectionTimeout: config.connectionTimeout || 10000,
       }
       return await connectionService.testConnection(mysqlConfig)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error testing MySQL connection:', error)
       return {
         success: false,
-        error: error.message || 'Connection test failed',
+        error: getErrorMessage(error) || 'Connection test failed',
       }
     }
   })
@@ -683,7 +684,7 @@ export function registerSourceHandlers(): void {
         databasePrefix: config.databasePrefix || 'kodi_',
       }
       return await connectionService.detectDatabases(mysqlConfig)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error detecting MySQL databases:', error)
       return {
         videoDatabase: null,
@@ -748,11 +749,11 @@ export function registerSourceHandlers(): void {
         serverName: authResult.serverName,
         serverVersion: authResult.serverVersion,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error authenticating Kodi MySQL:', error)
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error) || 'Authentication failed',
       }
     }
   })
@@ -768,7 +769,7 @@ export function registerSourceHandlers(): void {
     try {
       const analyzer = getMediaFileAnalyzer()
       return await analyzer.isAvailable()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking FFprobe availability:', error)
       return false
     }
@@ -781,7 +782,7 @@ export function registerSourceHandlers(): void {
     try {
       const analyzer = getMediaFileAnalyzer()
       return await analyzer.getVersion()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error getting FFprobe version:', error)
       return null
     }
@@ -794,11 +795,11 @@ export function registerSourceHandlers(): void {
     try {
       const analyzer = getMediaFileAnalyzer()
       return await analyzer.analyzeFile(filePath)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error analyzing file:', error)
       return {
         success: false,
-        error: error.message || 'Failed to analyze file',
+        error: getErrorMessage(error) || 'Failed to analyze file',
         filePath,
         audioTracks: [],
         subtitleTracks: [],
@@ -823,7 +824,7 @@ export function registerSourceHandlers(): void {
       const kodiProvider = provider as KodiLocalProvider
       kodiProvider.setFFprobeAnalysis(enabled)
       return { success: true, enabled }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error setting FFprobe analysis:', error)
       throw error
     }
@@ -845,7 +846,7 @@ export function registerSourceHandlers(): void {
 
       const kodiProvider = provider as KodiLocalProvider
       return kodiProvider.isFFprobeAnalysisEnabled()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking FFprobe status:', error)
       return false
     }
@@ -871,9 +872,9 @@ export function registerSourceHandlers(): void {
         version,
         reason: isAvailable ? null : 'FFprobe not found on system. Install FFmpeg to enable file analysis.',
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking FFprobe for source:', error)
-      return { available: false, reason: error.message }
+      return { available: false, reason: getErrorMessage(error) }
     }
   })
 
@@ -884,7 +885,7 @@ export function registerSourceHandlers(): void {
     try {
       const analyzer = getMediaFileAnalyzer()
       return analyzer.canInstall()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking FFprobe install capability:', error)
       return false
     }
@@ -904,11 +905,11 @@ export function registerSourceHandlers(): void {
       })
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error installing FFprobe:', error)
       return {
         success: false,
-        error: error.message || 'Installation failed',
+        error: getErrorMessage(error) || 'Installation failed',
       }
     }
   })
@@ -921,9 +922,9 @@ export function registerSourceHandlers(): void {
       const analyzer = getMediaFileAnalyzer()
       const success = await analyzer.uninstallFFprobe()
       return { success }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error uninstalling FFprobe:', error)
-      return { success: false, error: error.message }
+      return { success: false, error: getErrorMessage(error) }
     }
   })
 
@@ -934,13 +935,13 @@ export function registerSourceHandlers(): void {
     try {
       const analyzer = getMediaFileAnalyzer()
       return await analyzer.checkForUpdate()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking for FFprobe update:', error)
       return {
         currentVersion: null,
         latestVersion: null,
         updateAvailable: false,
-        error: error.message,
+        error: getErrorMessage(error),
       }
     }
   })
@@ -952,7 +953,7 @@ export function registerSourceHandlers(): void {
     try {
       const analyzer = getMediaFileAnalyzer()
       return await analyzer.isBundledVersion()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking FFprobe bundle status:', error)
       return false
     }
@@ -986,9 +987,9 @@ export function registerSourceHandlers(): void {
         cancelled: false,
         folderPath: result.filePaths[0],
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error opening folder dialog:', error)
-      return { cancelled: true, error: error.message }
+      return { cancelled: true, error: getErrorMessage(error) }
     }
   })
 
@@ -1046,9 +1047,9 @@ export function registerSourceHandlers(): void {
       })
 
       return { subfolders }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error detecting subfolders:', error)
-      return { subfolders: [], error: error.message }
+      return { subfolders: [], error: getErrorMessage(error) }
     }
   })
 
@@ -1081,7 +1082,7 @@ export function registerSourceHandlers(): void {
       })
 
       return source
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error adding local folder source with libraries:', error)
       throw error
     }
@@ -1106,7 +1107,7 @@ export function registerSourceHandlers(): void {
         },
         isEnabled: true,
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error adding local folder source:', error)
       throw error
     }

@@ -3,6 +3,7 @@ import { getDatabaseService } from '../services/DatabaseService'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
 import { getTMDBService } from '../services/TMDBService'
 import { invalidateNfsMappingsCache } from '../providers/kodi/KodiDatabaseSchema'
+import { getErrorMessage, isNodeError } from './utils'
 import fs from 'fs/promises'
 import type {
   MediaItem,
@@ -181,15 +182,17 @@ export function registerDatabaseHandlers() {
         fileCount,
         message: `Found ${entries.length} items (${folderCount} folders, ${fileCount} files)`
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Provide user-friendly error messages
-      let errorMessage = error.message || `Unable to access: ${localPath}`
-      if (error.code === 'ENOENT') {
-        errorMessage = `Path does not exist: ${localPath}`
-      } else if (error.code === 'EACCES') {
-        errorMessage = `Permission denied: ${localPath}`
-      } else if (error.code === 'ENOTDIR') {
-        errorMessage = `Not a directory: ${localPath}`
+      let errorMessage = getErrorMessage(error) || `Unable to access: ${localPath}`
+      if (isNodeError(error)) {
+        if (error.code === 'ENOENT') {
+          errorMessage = `Path does not exist: ${localPath}`
+        } else if (error.code === 'EACCES') {
+          errorMessage = `Permission denied: ${localPath}`
+        } else if (error.code === 'ENOTDIR') {
+          errorMessage = `Not a directory: ${localPath}`
+        }
       }
       return { success: false, error: errorMessage }
     }
@@ -327,7 +330,7 @@ export function registerDatabaseHandlers() {
       await fs.writeFile(result.filePath, JSON.stringify(data, null, 2), 'utf-8')
 
       return { success: true, path: result.filePath }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error exporting database:', error)
       throw error
     }
@@ -365,7 +368,7 @@ export function registerDatabaseHandlers() {
       await fs.writeFile(result.filePath, csv, 'utf-8')
 
       return { success: true, path: result.filePath }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error exporting CSV:', error)
       throw error
     }
@@ -410,7 +413,7 @@ export function registerDatabaseHandlers() {
         imported: importResult.imported,
         errors: importResult.errors,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error importing database:', error)
       throw error
     }
@@ -423,7 +426,7 @@ export function registerDatabaseHandlers() {
     try {
       await db.resetDatabase()
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error resetting database:', error)
       throw error
     }

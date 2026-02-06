@@ -121,7 +121,7 @@ export function registerMusicHandlers(): void {
       }
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:scanLibrary] Error:', error)
       throw error
     }
@@ -138,7 +138,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getMusicArtists(filters)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getArtists] Error:', error)
       throw error
     }
@@ -151,7 +151,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getMusicArtistById(id)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getArtistById] Error:', error)
       throw error
     }
@@ -164,7 +164,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getMusicAlbums(filters)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getAlbums] Error:', error)
       throw error
     }
@@ -177,7 +177,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getMusicAlbums({ artistId })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getAlbumsByArtist] Error:', error)
       throw error
     }
@@ -190,7 +190,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getMusicAlbumById(id)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getAlbumById] Error:', error)
       throw error
     }
@@ -203,7 +203,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getMusicTracks(filters)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getTracks] Error:', error)
       throw error
     }
@@ -216,7 +216,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getMusicTracks({ albumId })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getTracksByAlbum] Error:', error)
       throw error
     }
@@ -229,7 +229,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getMusicStats(sourceId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getStats] Error:', error)
       throw error
     }
@@ -246,7 +246,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getMusicQualityScore(albumId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getAlbumQuality] Error:', error)
       throw error
     }
@@ -259,7 +259,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getAlbumsNeedingUpgrade(limit)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getAlbumsNeedingUpgrade] Error:', error)
       throw error
     }
@@ -298,7 +298,7 @@ export function registerMusicHandlers(): void {
       flush()
 
       return { success: true, analyzed: albums.length }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:analyzeAllQuality] Error:', error)
       throw error
     }
@@ -329,7 +329,7 @@ export function registerMusicHandlers(): void {
       flush()
 
       return { success: true, ...result }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:analyzeAll] Error:', error)
       throw error
     }
@@ -343,7 +343,7 @@ export function registerMusicHandlers(): void {
       const mbService = getMusicBrainzService()
       mbService.cancel()
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:cancelAnalysis] Error:', error)
       throw error
     }
@@ -356,7 +356,7 @@ export function registerMusicHandlers(): void {
     try {
       const mbService = getMusicBrainzService()
       return await mbService.searchArtist(name)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:searchMusicBrainzArtist] Error:', error)
       throw error
     }
@@ -426,7 +426,7 @@ export function registerMusicHandlers(): void {
       }
 
       return completeness
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:analyzeArtistCompleteness] Error:', error)
       throw error
     }
@@ -439,7 +439,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getArtistCompleteness(artistName)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getArtistCompleteness] Error:', error)
       throw error
     }
@@ -452,7 +452,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getAllArtistCompleteness()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getAllArtistCompleteness] Error:', error)
       throw error
     }
@@ -493,7 +493,7 @@ export function registerMusicHandlers(): void {
       }
 
       return completeness
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:analyzeAlbumTrackCompleteness] Error:', error)
       throw error
     }
@@ -506,7 +506,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getAlbumCompleteness(albumId)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getAlbumCompleteness] Error:', error)
       throw error
     }
@@ -519,7 +519,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getAllAlbumCompleteness()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getAllAlbumCompleteness] Error:', error)
       throw error
     }
@@ -532,7 +532,7 @@ export function registerMusicHandlers(): void {
     try {
       const db = getDatabaseService()
       return db.getIncompleteAlbums()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:getIncompleteAlbums] Error:', error)
       throw error
     }
@@ -572,7 +572,7 @@ export function registerMusicHandlers(): void {
       }
 
       return { success: true }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:cancelScan] Error:', error)
       throw error
     }
@@ -634,7 +634,7 @@ export function registerMusicHandlers(): void {
         success: true,
         completeness,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:fixArtistMatch] Error:', error)
       throw error
     }
@@ -647,7 +647,7 @@ export function registerMusicHandlers(): void {
     try {
       const mbService = getMusicBrainzService()
       return await mbService.searchRelease(artistName, albumTitle)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:searchMusicBrainzRelease] Error:', error)
       throw error
     }
@@ -696,7 +696,7 @@ export function registerMusicHandlers(): void {
         success: true,
         completeness,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[music:fixAlbumMatch] Error:', error)
       throw error
     }

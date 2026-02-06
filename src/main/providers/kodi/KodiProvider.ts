@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../services/utils/errorUtils'
 /**
  * KodiProvider
  *
@@ -246,10 +247,10 @@ export class KodiProvider implements MediaProvider {
       }
 
       return { success: false, error: testResult.error }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error) || 'Authentication failed',
       }
     }
   }
@@ -289,10 +290,10 @@ export class KodiProvider implements MediaProvider {
         serverVersion: versionString,
         latencyMs,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || 'Connection failed',
+        error: getErrorMessage(error) || 'Connection failed',
       }
     }
   }
@@ -608,8 +609,8 @@ export class KodiProvider implements MediaProvider {
                 percentage: ((i + 1) / totalItems) * 100,
               })
             }
-          } catch (error: any) {
-            result.errors.push(`Failed to process ${metadata.title}: ${error.message}`)
+          } catch (error: unknown) {
+            result.errors.push(`Failed to process ${metadata.title}: ${getErrorMessage(error)}`)
           }
 
           // Periodic checkpoint
@@ -643,8 +644,8 @@ export class KodiProvider implements MediaProvider {
       result.durationMs = Date.now() - startTime
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }
@@ -1159,8 +1160,8 @@ export class KodiProvider implements MediaProvider {
       }
 
       return this.mergeFFprobeData(metadata, analysis)
-    } catch (error: any) {
-      console.warn(`[KodiProvider] FFprobe enhancement failed for "${metadata.title}": ${error.message}`)
+    } catch (error: unknown) {
+      console.warn(`[KodiProvider] FFprobe enhancement failed for "${metadata.title}": ${getErrorMessage(error)}`)
       return metadata
     }
   }
@@ -1273,7 +1274,7 @@ export class KodiProvider implements MediaProvider {
       })
 
       return result.artists || []
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[KodiProvider] Failed to get music artists:', error)
       throw new Error('Failed to fetch music artists')
     }
@@ -1298,7 +1299,7 @@ export class KodiProvider implements MediaProvider {
       const result = await this.rpcCall<{ albums: KodiMusicAlbum[] }>('AudioLibrary.GetAlbums', params)
 
       return result.albums || []
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[KodiProvider] Failed to get music albums:', error)
       throw new Error('Failed to fetch music albums')
     }
@@ -1324,7 +1325,7 @@ export class KodiProvider implements MediaProvider {
       const result = await this.rpcCall<{ songs: KodiMusicSong[] }>('AudioLibrary.GetSongs', params)
 
       return result.songs || []
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[KodiProvider] Failed to get music songs:', error)
       throw new Error('Failed to fetch music songs')
     }
@@ -1587,8 +1588,8 @@ export class KodiProvider implements MediaProvider {
               percentage: (processed / totalArtists) * 50, // First 50% for artists
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process artist ${kodiArtist.artist}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process artist ${kodiArtist.artist}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -1626,8 +1627,8 @@ export class KodiProvider implements MediaProvider {
               percentage: 50 + (compilationProcessed / Math.max(totalCompilations, 1)) * 50,
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process album ${kodiAlbum.title}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process album ${kodiAlbum.title}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -1637,9 +1638,9 @@ export class KodiProvider implements MediaProvider {
       console.log(`[KodiProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks scanned in ${result.durationMs}ms`)
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[KodiProvider ${this.sourceId}] Music scan failed:`, error)
-      result.errors.push(error.message)
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }

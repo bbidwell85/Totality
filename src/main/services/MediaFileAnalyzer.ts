@@ -1,3 +1,4 @@
+import { getErrorMessage } from './utils/errorUtils'
 /**
  * MediaFileAnalyzer Service
  *
@@ -498,7 +499,7 @@ export class MediaFileAnalyzer {
         success: true,
         path: finalPath,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[MediaFileAnalyzer] FFprobe installation failed:', error)
 
       // Cleanup on error
@@ -510,7 +511,7 @@ export class MediaFileAnalyzer {
 
       return {
         success: false,
-        error: error.message || 'Installation failed',
+        error: getErrorMessage(error) || 'Installation failed',
       }
     }
   }
@@ -715,7 +716,7 @@ export class MediaFileAnalyzer {
 
       console.log('[MediaFileAnalyzer] FFprobe uninstalled')
       return true
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[MediaFileAnalyzer] Failed to uninstall FFprobe:', error)
       return false
     }
@@ -765,10 +766,10 @@ export class MediaFileAnalyzer {
       // MKV files without bitrate metadata will use codec-based estimates instead.
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || 'Failed to analyze file',
+        error: getErrorMessage(error) || 'Failed to analyze file',
         filePath,
         audioTracks: [],
         subtitleTracks: [],
@@ -917,7 +918,7 @@ export class MediaFileAnalyzer {
       })
 
       proc.on('error', (error) => {
-        reject(new Error(`Failed to run FFprobe: ${error.message}`))
+        reject(new Error(`Failed to run FFprobe: ${getErrorMessage(error)}`))
       })
     })
   }

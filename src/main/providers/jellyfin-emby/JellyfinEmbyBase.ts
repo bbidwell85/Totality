@@ -1,3 +1,4 @@
+import { getErrorMessage, isAxiosError, isNodeError } from '../../services/utils/errorUtils'
 /**
  * JellyfinEmbyBase
  *
@@ -341,11 +342,11 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       }
 
       return { success: false, error: 'Invalid credentials' }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`${this.providerType} authentication failed:`, error)
       return {
         success: false,
-        error: error.response?.data?.message || error.message || 'Authentication failed',
+        error: (isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.message : undefined) || getErrorMessage(error) || 'Authentication failed',
       }
     }
   }
@@ -403,9 +404,9 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         secret: response.data.Secret,
         code: response.data.Code,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to initiate Quick Connect:', error)
-      throw new Error(error.response?.data?.message || 'Failed to initiate Quick Connect')
+      throw new Error((isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.message : undefined) || 'Failed to initiate Quick Connect')
     }
   }
 
@@ -434,10 +435,10 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       return {
         authenticated: response.data.Authenticated === true,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         authenticated: false,
-        error: error.response?.data?.message || error.message,
+        error: (isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.message : undefined) || getErrorMessage(error),
       }
     }
   }
@@ -474,11 +475,11 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       }
 
       return { success: false, error: 'No access token received' }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Quick Connect authentication failed:', error)
       return {
         success: false,
-        error: error.response?.data?.message || error.message || 'Quick Connect failed',
+        error: (isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.message : undefined) || getErrorMessage(error) || 'Quick Connect failed',
       }
     }
   }
@@ -506,9 +507,9 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         serverVersion: response.data.Version,
         latencyMs,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Provide more helpful error messages
-      const status = error.response?.status
+      const status = (isAxiosError(error) ? error.response?.status : undefined)
       if (status === 401) {
         return {
           success: false,
@@ -519,17 +520,17 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
           success: false,
           error: 'Access denied (403): You do not have permission to access this server',
         }
-      } else if (error.code === 'ECONNREFUSED') {
+      } else if (isNodeError(error) && error.code === 'ECONNREFUSED') {
         return {
           success: false,
           error: 'Connection refused: The server is not running or not accepting connections',
         }
-      } else if (error.code === 'ETIMEDOUT' || error.code === 'ESOCKETTIMEDOUT') {
+      } else if (isNodeError(error) && (error.code === 'ETIMEDOUT' || error.code === 'ESOCKETTIMEDOUT')) {
         return {
           success: false,
           error: 'Connection timed out: The server took too long to respond',
         }
-      } else if (error.code === 'ENOTFOUND') {
+      } else if (isNodeError(error) && error.code === 'ENOTFOUND') {
         return {
           success: false,
           error: 'Server not found: The hostname could not be resolved',
@@ -538,7 +539,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
 
       return {
         success: false,
-        error: error.message || 'Connection failed',
+        error: getErrorMessage(error) || 'Connection failed',
       }
     }
   }
@@ -611,24 +612,24 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
           type: this.mapLibraryType(lib.CollectionType),
           itemCount: lib.ItemCount,
         }))
-    } catch (error: any) {
-      console.error(`[${this.providerType}] Failed to get libraries:`, error.response?.status, error.response?.data || error.message)
+    } catch (error: unknown) {
+      console.error(`[${this.providerType}] Failed to get libraries:`, (isAxiosError(error) ? error.response?.status : undefined), (isAxiosError(error) ? error.response?.data : undefined) || getErrorMessage(error))
 
       // Provide more helpful error messages
-      const status = error.response?.status
+      const status = (isAxiosError(error) ? error.response?.status : undefined)
       if (status === 401) {
         throw new Error('Authentication failed (401): Access token is invalid or expired. Please re-authenticate this source.')
       } else if (status === 403) {
         throw new Error('Access denied (403): You do not have permission to access this server.')
-      } else if (error.code === 'ECONNREFUSED') {
+      } else if (isNodeError(error) && error.code === 'ECONNREFUSED') {
         throw new Error('Connection refused: The server is not running or not accepting connections.')
-      } else if (error.code === 'ETIMEDOUT' || error.code === 'ESOCKETTIMEDOUT') {
+      } else if (isNodeError(error) && (error.code === 'ETIMEDOUT' || error.code === 'ESOCKETTIMEDOUT')) {
         throw new Error('Connection timed out: The server took too long to respond.')
-      } else if (error.code === 'ENOTFOUND') {
+      } else if (isNodeError(error) && error.code === 'ENOTFOUND') {
         throw new Error('Server not found: The hostname could not be resolved.')
       }
 
-      throw new Error(`Failed to fetch libraries: ${error.response?.data?.Message || error.message}`)
+      throw new Error(`Failed to fetch libraries: ${(isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.Message : undefined) || getErrorMessage(error)}`)
     }
   }
 
@@ -669,7 +670,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       )
 
       return response.data.Items.map(item => this.convertToMediaMetadata(item))
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to get library items:', error)
       throw new Error('Failed to fetch library items')
     }
@@ -692,7 +693,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       )
 
       return this.convertToMediaMetadata(response.data)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to get item metadata:', error)
       throw error
     }
@@ -881,8 +882,8 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
                 percentage: ((i + 1) / totalItems) * 100,
               })
             }
-          } catch (error: any) {
-            result.errors.push(`Failed to process ${item.Name}: ${error.message}`)
+          } catch (error: unknown) {
+            result.errors.push(`Failed to process ${item.Name}: ${getErrorMessage(error)}`)
           }
 
           // Periodic checkpoint
@@ -916,8 +917,8 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       result.durationMs = Date.now() - startTime
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }
@@ -1358,7 +1359,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
 
       console.log(`[${this.providerType}] getMusicArtists: Found ${allArtists.length} album artists`)
       return allArtists
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[${this.providerType}] Failed to get music artists:`, error)
       throw new Error('Failed to fetch music artists')
     }
@@ -1414,7 +1415,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       }
 
       return allAlbums
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[${this.providerType}] Failed to get music albums:`, error)
       throw new Error('Failed to fetch music albums')
     }
@@ -1442,7 +1443,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       )
 
       return response.data.Items || []
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[${this.providerType}] Failed to get music tracks:`, error)
       throw new Error('Failed to fetch music tracks')
     }
@@ -1706,8 +1707,8 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
               percentage: (processed / totalArtists) * 50, // First 50% for artists
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process artist ${jellyfinArtist.Name}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process artist ${jellyfinArtist.Name}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -1745,8 +1746,8 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
               percentage: 50 + (compilationProcessed / Math.max(totalCompilations, 1)) * 50,
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process album ${jellyfinAlbum.Name}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process album ${jellyfinAlbum.Name}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -1756,9 +1757,9 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       console.log(`[${this.providerType}Provider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks scanned in ${result.durationMs}ms`)
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[${this.providerType}Provider ${this.sourceId}] Music scan failed:`, error)
-      result.errors.push(error.message)
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }

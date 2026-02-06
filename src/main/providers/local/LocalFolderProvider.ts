@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../services/utils/errorUtils'
 /**
  * LocalFolderProvider
  *
@@ -163,10 +164,10 @@ export class LocalFolderProvider implements MediaProvider {
         success: true,
         serverName: this.displayName,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error) || 'Authentication failed',
       }
     }
   }
@@ -231,10 +232,10 @@ export class LocalFolderProvider implements MediaProvider {
         serverVersion: 'Local Folder',
         latencyMs: Date.now() - startTime,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || 'Connection test failed',
+        error: getErrorMessage(error) || 'Connection test failed',
       }
     }
   }
@@ -570,8 +571,8 @@ export class LocalFolderProvider implements MediaProvider {
 
               result.itemsScanned++
             }
-          } catch (error: any) {
-            result.errors.push(`Failed to process ${path.basename(filePath)}: ${error.message}`)
+          } catch (error: unknown) {
+            result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
           }
 
           // Periodic checkpoint
@@ -630,8 +631,8 @@ export class LocalFolderProvider implements MediaProvider {
       result.durationMs = Date.now() - startTime
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }
@@ -807,8 +808,8 @@ export class LocalFolderProvider implements MediaProvider {
                 console.log(`[LocalFolderProvider ${this.sourceId}] Updated: ${metadata.title}`)
               }
             }
-          } catch (error: any) {
-            result.errors.push(`Failed to process ${path.basename(filePath)}: ${error.message}`)
+          } catch (error: unknown) {
+            result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
           }
         }
       } finally {
@@ -838,8 +839,8 @@ export class LocalFolderProvider implements MediaProvider {
       console.log(`[LocalFolderProvider ${this.sourceId}] Targeted scan complete: ${result.itemsAdded} added, ${result.itemsUpdated} updated, ${result.itemsRemoved} removed`)
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }
@@ -1071,8 +1072,8 @@ export class LocalFolderProvider implements MediaProvider {
               result.itemsUpdated++
               console.log(`[LocalFolderProvider ${this.sourceId}] Updated track: ${trackTitle}`)
             }
-          } catch (error: any) {
-            result.errors.push(`Failed to process ${path.basename(filePath)}: ${error.message}`)
+          } catch (error: unknown) {
+            result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
           }
         }
       } finally {
@@ -1092,8 +1093,8 @@ export class LocalFolderProvider implements MediaProvider {
       console.log(`[LocalFolderProvider ${this.sourceId}] Targeted music scan complete: ${result.itemsAdded} added, ${result.itemsUpdated} updated, ${result.itemsRemoved} removed`)
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }
@@ -2111,8 +2112,8 @@ export class LocalFolderProvider implements MediaProvider {
             scannedFilePaths.add(filePath)
             result.itemsScanned++
 
-          } catch (error: any) {
-            result.errors.push(`Failed to process ${path.basename(filePath)}: ${error.message}`)
+          } catch (error: unknown) {
+            result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
           }
 
           // Periodic checkpoint
@@ -2139,8 +2140,8 @@ export class LocalFolderProvider implements MediaProvider {
       console.log(`[LocalFolderProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks, ${artistMap.size} artists, ${albumMap.size} albums`)
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }

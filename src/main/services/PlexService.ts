@@ -1,3 +1,4 @@
+import { getErrorMessage, isAxiosError } from './utils/errorUtils'
 import axios, { AxiosInstance } from 'axios'
 import { getDatabaseService } from './DatabaseService'
 import { getQualityAnalyzer } from './QualityAnalyzer'
@@ -430,9 +431,9 @@ export class PlexService {
       }
 
       return collections
-    } catch (error: any) {
-      console.error('[PlexService] Failed to get library collections:', error.message)
-      if (error.response) {
+    } catch (error: unknown) {
+      console.error('[PlexService] Failed to get library collections:', getErrorMessage(error))
+      if (isAxiosError(error) && error.response) {
         console.error('[PlexService] Response status:', error.response.status)
         console.error('[PlexService] Response data:', JSON.stringify(error.response.data))
       }

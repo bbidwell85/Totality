@@ -1,3 +1,4 @@
+import { getErrorMessage } from './utils/errorUtils'
 /**
  * KodiMySQLConnectionService
  *
@@ -171,7 +172,7 @@ class KodiMySQLConnectionService {
         musicDatabaseVersion: detected.musicVersion || undefined,
         latencyMs: Date.now() - startTime,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (connection) {
         try {
           await connection.end()
@@ -181,7 +182,7 @@ class KodiMySQLConnectionService {
       }
 
       // Sanitize error message (don't expose passwords)
-      let errorMessage = error.message || 'Connection failed'
+      let errorMessage = getErrorMessage(error) || 'Connection failed'
       if (errorMessage.includes('Access denied')) {
         errorMessage = 'Access denied - check username and password'
       } else if (errorMessage.includes('ECONNREFUSED')) {

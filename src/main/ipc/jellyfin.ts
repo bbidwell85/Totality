@@ -9,6 +9,7 @@ import { getJellyfinDiscoveryService } from '../services/JellyfinDiscoveryServic
 import { getEmbyDiscoveryService } from '../services/EmbyDiscoveryService'
 import { getSourceManager } from '../services/SourceManager'
 import { JellyfinProvider } from '../providers/jellyfin-emby/JellyfinProvider'
+import { getErrorMessage } from './utils'
 
 export function registerJellyfinHandlers(): void {
   const jellyfinDiscovery = getJellyfinDiscoveryService()
@@ -27,7 +28,7 @@ export function registerJellyfinHandlers(): void {
       console.log('[IPC] Starting Jellyfin server discovery...')
       const servers = await jellyfinDiscovery.discoverServers()
       return servers
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error discovering Jellyfin servers:', error)
       throw error
     }
@@ -39,7 +40,7 @@ export function registerJellyfinHandlers(): void {
   ipcMain.handle('jellyfin:testServerUrl', async (_event, url: string) => {
     try {
       return await jellyfinDiscovery.testServerUrl(url)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error testing server URL:', error)
       throw error
     }
@@ -57,7 +58,7 @@ export function registerJellyfinHandlers(): void {
       console.log('[IPC] Starting Emby server discovery...')
       const servers = await embyDiscovery.discoverServers()
       return servers
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error discovering Emby servers:', error)
       throw error
     }
@@ -69,7 +70,7 @@ export function registerJellyfinHandlers(): void {
   ipcMain.handle('emby:testServerUrl', async (_event, url: string) => {
     try {
       return await embyDiscovery.testServerUrl(url)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error testing Emby server URL:', error)
       throw error
     }
@@ -116,11 +117,11 @@ export function registerJellyfinHandlers(): void {
         source,
         serverName: testResult.serverName,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error authenticating with Jellyfin API key:', error)
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error) || 'Authentication failed',
       }
     }
   })
@@ -168,11 +169,11 @@ export function registerJellyfinHandlers(): void {
         source,
         serverName: testResult.serverName,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error authenticating with Emby API key:', error)
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error) || 'Authentication failed',
       }
     }
   })
@@ -195,7 +196,7 @@ export function registerJellyfinHandlers(): void {
       })
 
       return await tempProvider.isQuickConnectEnabled()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking Quick Connect:', error)
       return false
     }
@@ -214,7 +215,7 @@ export function registerJellyfinHandlers(): void {
       })
 
       return await tempProvider.initiateQuickConnect()
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error initiating Quick Connect:', error)
       throw error
     }
@@ -233,9 +234,9 @@ export function registerJellyfinHandlers(): void {
       })
 
       return await tempProvider.checkQuickConnectStatus(secret)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking Quick Connect status:', error)
-      return { authenticated: false, error: error.message }
+      return { authenticated: false, error: getErrorMessage(error) }
     }
   })
 
@@ -289,11 +290,11 @@ export function registerJellyfinHandlers(): void {
         source,
         userName: authResult.userName,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error authenticating with credentials:', error)
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error) || 'Authentication failed',
       }
     }
   })
@@ -337,7 +338,7 @@ export function registerJellyfinHandlers(): void {
         source,
         userName: authResult.userName,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error completing Quick Connect:', error)
       throw error
     }

@@ -1,3 +1,4 @@
+import { getErrorMessage } from './utils/errorUtils'
 /**
  * TaskQueueService - Manages background task queue for scans and analysis
  *
@@ -365,9 +366,9 @@ export class TaskQueueService {
         task.status = 'completed'
         this.addTaskHistoryEntry(task, 'task-complete', this.formatCompletionMessage(task))
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       task.status = 'failed'
-      task.error = error.message || 'Unknown error'
+      task.error = getErrorMessage(error) || 'Unknown error'
       this.addTaskHistoryEntry(task, 'task-failed', `Failed: ${task.label} - ${task.error}`)
       console.error(`[TaskQueue] Task failed: ${task.label}`, error)
     }

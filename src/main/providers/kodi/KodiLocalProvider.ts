@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../services/utils/errorUtils'
 /**
  * KodiLocalProvider
  *
@@ -162,8 +163,8 @@ export class KodiLocalProvider implements MediaProvider {
       const dbBuffer = fs.readFileSync(this.databasePath)
       this.db = new this.sqlJs!.Database(dbBuffer)
       console.log(`[KodiLocalProvider] Database opened: ${this.databasePath}`)
-    } catch (error: any) {
-      throw new Error(`Failed to open database: ${error.message}`)
+    } catch (error: unknown) {
+      throw new Error(`Failed to open database: ${getErrorMessage(error)}`)
     }
   }
 
@@ -255,10 +256,10 @@ export class KodiLocalProvider implements MediaProvider {
         success: true,
         serverName: `Kodi Local (v${this.databaseVersion})`,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error) || 'Authentication failed',
       }
     }
   }
@@ -579,11 +580,11 @@ export class KodiLocalProvider implements MediaProvider {
         serverVersion: `MyVideos${this.databaseVersion}`,
         latencyMs: Date.now() - startTime,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.closeDatabase()
       return {
         success: false,
-        error: error.message || 'Connection test failed',
+        error: getErrorMessage(error) || 'Connection test failed',
       }
     }
   }
@@ -625,7 +626,7 @@ export class KodiLocalProvider implements MediaProvider {
           type: 'show',
           itemCount: episodes,
         })
-      } catch (error: any) {
+      } catch (error: unknown) {
         this.closeDatabase()
         console.error('[KodiLocalProvider] Error getting video libraries:', error)
       }
@@ -648,9 +649,9 @@ export class KodiLocalProvider implements MediaProvider {
           itemCount: songs,
         })
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.closeMusicDatabase()
-      console.log('[KodiLocalProvider] Music library not available:', error.message)
+      console.log('[KodiLocalProvider] Music library not available:', getErrorMessage(error))
     }
 
     return libraries
@@ -1113,8 +1114,8 @@ export class KodiLocalProvider implements MediaProvider {
                 percentage: ((i + 1) / totalItems) * 100,
               })
             }
-          } catch (error: any) {
-            result.errors.push(`Failed to process ${metadata.title}: ${error.message}`)
+          } catch (error: unknown) {
+            result.errors.push(`Failed to process ${metadata.title}: ${getErrorMessage(error)}`)
           }
 
           // Periodic checkpoint
@@ -1148,8 +1149,8 @@ export class KodiLocalProvider implements MediaProvider {
       result.durationMs = Date.now() - startTime
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }
@@ -1292,8 +1293,8 @@ export class KodiLocalProvider implements MediaProvider {
               result.itemsUpdated++
               console.log(`[KodiLocalProvider ${this.sourceId}] Updated: ${metadata.title}`)
             }
-          } catch (error: any) {
-            result.errors.push(`Failed to process ${inputFilePath}: ${error.message}`)
+          } catch (error: unknown) {
+            result.errors.push(`Failed to process ${inputFilePath}: ${getErrorMessage(error)}`)
           }
         }
       } finally {
@@ -1306,8 +1307,8 @@ export class KodiLocalProvider implements MediaProvider {
       console.log(`[KodiLocalProvider ${this.sourceId}] Targeted scan complete: ${result.itemsScanned} items updated in ${result.durationMs}ms`)
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }
@@ -1762,8 +1763,8 @@ export class KodiLocalProvider implements MediaProvider {
           this.musicDatabasePath = videoDbDir + (videoDbDir.includes('\\') ? '\\' : '/') + musicDbFiles[0]
           console.log(`[KodiLocalProvider] Found music database: ${this.musicDatabasePath}`)
         }
-      } catch (error: any) {
-        console.log(`[KodiLocalProvider] Could not search for music database: ${error.message}`)
+      } catch (error: unknown) {
+        console.log(`[KodiLocalProvider] Could not search for music database: ${getErrorMessage(error)}`)
         return false
       }
     }
@@ -1785,8 +1786,8 @@ export class KodiLocalProvider implements MediaProvider {
       this.musicDb = new this.sqlJs!.Database(dbBuffer)
       console.log(`[KodiLocalProvider] Music database opened: ${this.musicDatabasePath}`)
       return true
-    } catch (error: any) {
-      console.error(`[KodiLocalProvider] Failed to open music database: ${error.message}`)
+    } catch (error: unknown) {
+      console.error(`[KodiLocalProvider] Failed to open music database: ${getErrorMessage(error)}`)
       return false
     }
   }
@@ -1821,8 +1822,8 @@ export class KodiLocalProvider implements MediaProvider {
       stmt.free()
 
       return results
-    } catch (error: any) {
-      console.error('[KodiLocalProvider] Music query error:', error.message)
+    } catch (error: unknown) {
+      console.error('[KodiLocalProvider] Music query error:', getErrorMessage(error))
       throw error
     }
   }
@@ -1960,9 +1961,9 @@ export class KodiLocalProvider implements MediaProvider {
       }
 
       return track
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Log but don't fail - continue with guessed data
-      console.warn(`[KodiLocalProvider] FFprobe failed for music track "${track.title}": ${error.message}`)
+      console.warn(`[KodiLocalProvider] FFprobe failed for music track "${track.title}": ${getErrorMessage(error)}`)
       return track
     }
   }
@@ -2124,8 +2125,8 @@ export class KodiLocalProvider implements MediaProvider {
               percentage: (processed / totalArtists) * 50, // First 50% for artists
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process artist ${kodiArtist.strArtist}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process artist ${kodiArtist.strArtist}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -2171,8 +2172,8 @@ export class KodiLocalProvider implements MediaProvider {
               percentage: 50 + (compilationProcessed / Math.max(totalCompilations, 1)) * 50,
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process album ${kodiAlbum.strAlbum}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process album ${kodiAlbum.strAlbum}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -2184,10 +2185,10 @@ export class KodiLocalProvider implements MediaProvider {
       console.log(`[KodiLocalProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks scanned in ${result.durationMs}ms`)
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.closeMusicDatabase()
       console.error(`[KodiLocalProvider ${this.sourceId}] Music scan failed:`, error)
-      result.errors.push(error.message)
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }

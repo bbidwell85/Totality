@@ -6,6 +6,7 @@
 
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { getLoggingService } from '../services/LoggingService'
+import { getErrorMessage } from './utils'
 
 export function registerLoggingHandlers(): void {
   ipcMain.handle('logs:getAll', async (_event, limit?: number) => {
@@ -50,8 +51,8 @@ export function registerLoggingHandlers(): void {
         await getLoggingService().exportLogsAsText(result.filePath)
       }
       return { success: true, filePath: result.filePath }
-    } catch (error: any) {
-      return { success: false, error: error.message }
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) }
     }
   })
 }

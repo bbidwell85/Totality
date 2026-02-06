@@ -1,3 +1,4 @@
+import { getErrorMessage, isNodeError } from './utils/errorUtils'
 /**
  * MusicBrainzService
  *
@@ -182,12 +183,13 @@ export class MusicBrainzService extends CancellableOperation {
       try {
         await this.rateLimit()
         return await requestFn()
-      } catch (error: any) {
-        lastError = error
-        const isConnectionError = error.code === 'ECONNRESET' ||
-          error.code === 'ETIMEDOUT' ||
-          error.code === 'ECONNREFUSED' ||
-          error.message?.includes('socket')
+      } catch (error: unknown) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+        const errorCode = isNodeError(error) ? error.code : undefined
+        const isConnectionError = errorCode === 'ECONNRESET' ||
+          errorCode === 'ETIMEDOUT' ||
+          errorCode === 'ECONNREFUSED' ||
+          getErrorMessage(error)?.includes('socket')
 
         if (isConnectionError && attempt < this.MAX_RETRIES) {
           const delay = this.RETRY_DELAY_MS * attempt

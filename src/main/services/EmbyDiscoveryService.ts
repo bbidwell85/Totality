@@ -1,3 +1,4 @@
+import { getErrorMessage } from './utils/errorUtils'
 /**
  * EmbyDiscoveryService
  *
@@ -130,7 +131,7 @@ export class EmbyDiscoveryService {
         serverId: response.data.Id,
         version: response.data.Version,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Fallback: try without /emby prefix (some Emby setups)
       try {
         const axios = (await import('axios')).default
@@ -148,7 +149,7 @@ export class EmbyDiscoveryService {
       } catch {
         return {
           success: false,
-          error: error.message || 'Failed to connect',
+          error: getErrorMessage(error) || 'Failed to connect',
         }
       }
     }

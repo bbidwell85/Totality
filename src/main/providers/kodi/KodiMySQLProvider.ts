@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../../services/utils/errorUtils'
 /**
  * KodiMySQLProvider
  *
@@ -322,10 +323,10 @@ export class KodiMySQLProvider implements MediaProvider {
         serverName: `Kodi MySQL (${testResult.serverVersion})`,
         serverVersion: `${this.videoDatabaseName}`,
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: getErrorMessage(error) || 'Authentication failed',
       }
     }
   }
@@ -428,7 +429,7 @@ export class KodiMySQLProvider implements MediaProvider {
           itemCount: episodes,
         })
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[KodiMySQLProvider] Error getting video libraries:', error)
     }
 
@@ -446,8 +447,8 @@ export class KodiMySQLProvider implements MediaProvider {
             itemCount: songs,
           })
         }
-      } catch (error: any) {
-        console.log('[KodiMySQLProvider] Music library not available:', error.message)
+      } catch (error: unknown) {
+        console.log('[KodiMySQLProvider] Music library not available:', getErrorMessage(error))
       }
     }
 
@@ -597,8 +598,8 @@ export class KodiMySQLProvider implements MediaProvider {
                 percentage: ((i + 1) / totalItems) * 100,
               })
             }
-          } catch (error: any) {
-            result.errors.push(`Failed to process ${metadata.title}: ${error.message}`)
+          } catch (error: unknown) {
+            result.errors.push(`Failed to process ${metadata.title}: ${getErrorMessage(error)}`)
           }
 
           // Periodic checkpoint
@@ -632,8 +633,8 @@ export class KodiMySQLProvider implements MediaProvider {
       result.durationMs = Date.now() - startTime
 
       return result
-    } catch (error: any) {
-      result.errors.push(error.message)
+    } catch (error: unknown) {
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }
@@ -1131,8 +1132,8 @@ export class KodiMySQLProvider implements MediaProvider {
               percentage: (processed / totalArtists) * 50,
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process artist ${kodiArtist.strArtist}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process artist ${kodiArtist.strArtist}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -1168,8 +1169,8 @@ export class KodiMySQLProvider implements MediaProvider {
               percentage: 50 + (compilationProcessed / Math.max(totalCompilations, 1)) * 50,
             })
           }
-        } catch (error: any) {
-          result.errors.push(`Failed to process album ${kodiAlbum.strAlbum}: ${error.message}`)
+        } catch (error: unknown) {
+          result.errors.push(`Failed to process album ${kodiAlbum.strAlbum}: ${getErrorMessage(error)}`)
         }
       }
 
@@ -1179,9 +1180,9 @@ export class KodiMySQLProvider implements MediaProvider {
       console.log(`[KodiMySQLProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks in ${result.durationMs}ms`)
 
       return result
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(`[KodiMySQLProvider ${this.sourceId}] Music scan failed:`, error)
-      result.errors.push(error.message)
+      result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
       return result
     }

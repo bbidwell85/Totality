@@ -1,3 +1,4 @@
+import { getErrorMessage } from './utils/errorUtils'
 /**
  * KodiLocalDiscoveryService
  *
@@ -221,8 +222,8 @@ export class KodiLocalDiscoveryService {
         musicDatabaseVersion: musicDbInfo?.version || null,
         kodiRunning,
       }
-    } catch (error: any) {
-      console.error('[KodiLocalDiscovery] Error detecting installation:', error.message)
+    } catch (error: unknown) {
+      console.error('[KodiLocalDiscovery] Error detecting installation:', getErrorMessage(error))
       return null
     }
   }

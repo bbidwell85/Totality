@@ -8,6 +8,7 @@
  */
 
 import { ipcMain, IpcMainInvokeEvent } from 'electron'
+import { getErrorMessage, isNodeError } from '../../services/utils/errorUtils'
 
 /**
  * Options for creating an IPC handler
@@ -19,15 +20,8 @@ export interface HandlerOptions {
   onError?: (channel: string, error: unknown) => void
 }
 
-/**
- * Get a consistent error message from any error type
- */
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message
-  }
-  return String(error)
-}
+// Re-export error utilities for consumers
+export { getErrorMessage, isNodeError }
 
 /**
  * Create a type-safe IPC handler with consistent error handling

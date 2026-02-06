@@ -1,1 +1,1 @@
-export { createIpcHandler, createIpcHandlerWithEvent, createSyncHandler, registerHandlers, getErrorMessage, type HandlerOptions } from './createHandler'
+export { createIpcHandler, createIpcHandlerWithEvent, createSyncHandler, registerHandlers, getErrorMessage, isNodeError, type HandlerOptions } from './createHandler'

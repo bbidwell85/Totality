@@ -1,3 +1,4 @@
+import { getErrorMessage } from './utils/errorUtils'
 /**
  * LiveMonitoringService - Background service for detecting media library changes
  *
@@ -393,7 +394,7 @@ export class LiveMonitoringService {
 
       watcher.on('error', (error) => {
         console.error(`[LiveMonitoring] Watcher error for ${sourceName}:`, error)
-        this.emitDebugEvent('error', `[${sourceName}] Watcher error: ${error.message || error}`)
+        this.emitDebugEvent('error', `[${sourceName}] Watcher error: ${getErrorMessage(error) || error}`)
         try {
           this.handleWatcherError(sourceId, sourceType, watchPath!)
         } catch (handlerError) {
