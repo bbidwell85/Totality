@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.7](https://github.com/bbidwell85/totality/compare/v0.1.6...v0.1.7) (2026-02-06)
+
+
+### Features
+
+* add Zod validation to critical IPC handlers ([c2fe618](https://github.com/bbidwell85/totality/commit/c2fe6180ae2f5eac247e18985bdf4d43d92530a6))
+* implement strategic performance improvements ([97ed583](https://github.com/bbidwell85/totality/commit/97ed58368ad061568ce7bd2c056573e877e6c90d))
+
+
+### Bug Fixes
+
+* add request timeouts to TMDB and Plex API calls ([d6a885a](https://github.com/bbidwell85/totality/commit/d6a885a5fd43dc659ee8fecae1cdb0b541210572))
+* replace error: any with error: unknown across codebase ([bf03213](https://github.com/bbidwell85/totality/commit/bf032135192550f2069d8ba9c39599430247aa79))
+* resolve all ESLint warnings with proper TypeScript types ([051f07f](https://github.com/bbidwell85/totality/commit/051f07f206512a683d54863bfca3cdd4bea5a342))
+* resolve database service compatibility issues ([611133f](https://github.com/bbidwell85/totality/commit/611133f196e89677c1984f0d6073594278668101))
+* resolve memory leaks in LiveMonitoringService ([8561586](https://github.com/bbidwell85/totality/commit/85615862ec45e8bb5f6e6f02863e21003da58568))
+* **security:** prevent path traversal and restrict shell.openExternal URLs ([f003fb5](https://github.com/bbidwell85/totality/commit/f003fb572c894bc900a551f188335b0de182bf37))
+
 ### [0.1.6](https://github.com/bbidwell85/totality/compare/v0.1.5...v0.1.6) (2026-02-06)
 
 
