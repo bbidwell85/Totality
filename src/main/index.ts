@@ -168,6 +168,8 @@ app.whenReady().then(async () => {
 
     // Register local-artwork protocol handler for serving local album artwork
     const userDataPath = app.getPath('userData')
+    const artworkBasePath = path.join(userDataPath, 'artwork')
+
     protocol.handle('local-artwork', (request) => {
       const url = new URL(request.url)
 
@@ -192,11 +194,30 @@ app.whenReady().then(async () => {
 
       // Standard app-cached artwork
       // URL format: local-artwork://albums/123.jpg
-      const urlPath = request.url.replace('local-artwork://', '')
-      const filePath = path.join(userDataPath, 'artwork', urlPath)
+      // SECURITY: Prevent path traversal attacks by validating the resolved path
+      const urlPath = url.pathname.replace(/^\/+/, '') // Remove leading slashes
+      const normalizedPath = path.normalize(urlPath)
+
+      // Block any path traversal attempts (../ sequences)
+      if (normalizedPath.startsWith('..') || path.isAbsolute(normalizedPath)) {
+        console.warn('[Security] Blocked path traversal attempt:', urlPath)
+        return new Response('Forbidden', { status: 403 })
+      }
+
+      const filePath = path.resolve(artworkBasePath, normalizedPath)
+
+      // Ensure resolved path is within the artwork directory
+      if (!filePath.startsWith(artworkBasePath + path.sep) && filePath !== artworkBasePath) {
+        console.warn('[Security] Blocked path escape attempt:', urlPath)
+        return new Response('Forbidden', { status: 403 })
+      }
 
       // Check if file exists
       if (fs.existsSync(filePath)) {
+        // Handle Windows paths for file:// URL
+        if (process.platform === 'win32') {
+          return net.fetch(`file:///${filePath.replace(/\\/g, '/')}`)
+        }
         return net.fetch(`file://${filePath}`)
       }
 

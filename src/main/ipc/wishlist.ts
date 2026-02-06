@@ -204,10 +204,26 @@ export function registerWishlistHandlers() {
 
   /**
    * Open a store link in the default browser
+   * SECURITY: Only allows https:// and http:// URLs to prevent malicious schemes
    */
   ipcMain.handle('wishlist:openStoreLink', async (_event, url: string) => {
     try {
-      await shell.openExternal(url)
+      // Validate URL format and scheme
+      let parsedUrl: URL
+      try {
+        parsedUrl = new URL(url)
+      } catch {
+        throw new Error('Invalid URL format')
+      }
+
+      // Only allow safe URL schemes
+      const allowedSchemes = ['https:', 'http:']
+      if (!allowedSchemes.includes(parsedUrl.protocol)) {
+        console.warn('[Security] Blocked unsafe URL scheme:', parsedUrl.protocol)
+        throw new Error(`URL scheme not allowed: ${parsedUrl.protocol}`)
+      }
+
+      await shell.openExternal(parsedUrl.toString())
       return { success: true }
     } catch (error) {
       console.error('Error opening store link:', error)
