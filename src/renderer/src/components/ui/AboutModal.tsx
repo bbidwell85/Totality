@@ -68,7 +68,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150]">
       <div ref={modalRef} className="bg-card border border-border rounded-lg w-full max-w-lg mx-4 shadow-xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border/30 bg-black/30 rounded-t-lg">
+        <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-lg">
           <h2 className="text-lg font-semibold">About Totality</h2>
           <button
             onClick={onClose}
@@ -158,7 +158,7 @@ function AboutTab() {
       {/* Links */}
       <div className="flex justify-center gap-4 text-sm">
         <a
-          href="https://github.com/totality-app/totality"
+          href="https://github.com/bbidwell85/totality"
           target="_blank"
           rel="noopener noreferrer"
           className="text-accent hover:underline"
@@ -167,7 +167,7 @@ function AboutTab() {
         </a>
         <span className="text-muted-foreground/30">•</span>
         <a
-          href="https://github.com/totality-app/totality/issues"
+          href="https://github.com/bbidwell85/totality/issues"
           target="_blank"
           rel="noopener noreferrer"
           className="text-accent hover:underline"
