@@ -215,9 +215,11 @@ export class LiveMonitoringService {
     }
     this.pollingTimers.clear()
 
-    // Close all file watchers
+    // Close all file watchers (fire-and-forget, but log errors)
     for (const [sourceId, watcher] of this.fileWatchers) {
-      watcher.close()
+      watcher.close().catch((err) => {
+        console.error(`[LiveMonitoring] Error closing watcher for ${sourceId}:`, err)
+      })
       console.log(`[LiveMonitoring] Stopped watching ${sourceId}`)
     }
     this.fileWatchers.clear()
@@ -228,6 +230,7 @@ export class LiveMonitoringService {
     }
     this.fileChangeDebounce.clear()
     this.pendingFileChanges.clear()
+    this.lastCheckTimes.clear()
 
     this.isActive = false
     this.sendStatusUpdate()
@@ -257,8 +260,11 @@ export class LiveMonitoringService {
     }
     this.fileChangeDebounce.clear()
 
+    // Clear pending file changes to avoid processing stale data on resume
+    this.pendingFileChanges.clear()
+
     // Keep file watchers running but they won't trigger scans while paused
-    // We'll clear pending changes when we resume to avoid a flood of scans
+    // New changes will accumulate in pendingFileChanges but get cleared on resume
 
     this.isPausedByTaskQueue = true
     this.isActive = false
@@ -356,27 +362,43 @@ export class LiveMonitoringService {
       })
 
       watcher.on('add', (filePath) => {
-        if (this.isMediaFile(filePath)) {
-          this.handleFileChange(sourceId, 'add', filePath)
+        try {
+          if (this.isMediaFile(filePath)) {
+            this.handleFileChange(sourceId, 'add', filePath)
+          }
+        } catch (error) {
+          console.error(`[LiveMonitoring] Error handling file add for ${sourceName}:`, error)
         }
       })
 
       watcher.on('change', (filePath) => {
-        if (this.isMediaFile(filePath)) {
-          this.handleFileChange(sourceId, 'change', filePath)
+        try {
+          if (this.isMediaFile(filePath)) {
+            this.handleFileChange(sourceId, 'change', filePath)
+          }
+        } catch (error) {
+          console.error(`[LiveMonitoring] Error handling file change for ${sourceName}:`, error)
         }
       })
 
       watcher.on('unlink', (filePath) => {
-        if (this.isMediaFile(filePath)) {
-          this.handleFileChange(sourceId, 'unlink', filePath)
+        try {
+          if (this.isMediaFile(filePath)) {
+            this.handleFileChange(sourceId, 'unlink', filePath)
+          }
+        } catch (error) {
+          console.error(`[LiveMonitoring] Error handling file unlink for ${sourceName}:`, error)
         }
       })
 
       watcher.on('error', (error) => {
         console.error(`[LiveMonitoring] Watcher error for ${sourceName}:`, error)
         this.emitDebugEvent('error', `[${sourceName}] Watcher error: ${error.message || error}`)
-        this.handleWatcherError(sourceId, sourceType, watchPath!)
+        try {
+          this.handleWatcherError(sourceId, sourceType, watchPath!)
+        } catch (handlerError) {
+          console.error(`[LiveMonitoring] Error in watcher error handler for ${sourceName}:`, handlerError)
+        }
       })
 
       watcher.on('ready', () => {
@@ -402,12 +424,22 @@ export class LiveMonitoringService {
    * Handle watcher error by falling back to polling
    */
   private handleWatcherError(sourceId: string, sourceType: ProviderType, _watchPath: string): void {
-    // Close the failed watcher
+    // Close the failed watcher (fire-and-forget with error logging)
     const watcher = this.fileWatchers.get(sourceId)
     if (watcher) {
-      watcher.close()
-      this.fileWatchers.delete(sourceId)
+      this.fileWatchers.delete(sourceId) // Remove from map first to prevent double-close
+      watcher.close().catch((err) => {
+        console.error(`[LiveMonitoring] Error closing failed watcher for ${sourceId}:`, err)
+      })
     }
+
+    // Clear any pending debounce timer for this source
+    const debounceTimer = this.fileChangeDebounce.get(sourceId)
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      this.fileChangeDebounce.delete(sourceId)
+    }
+    this.pendingFileChanges.delete(sourceId)
 
     console.log(`[LiveMonitoring] Watcher failed for ${sourceId}, falling back to polling`)
 
@@ -457,29 +489,33 @@ export class LiveMonitoringService {
     const changes = this.pendingFileChanges.get(sourceId)
     if (!changes || changes.size === 0) return
 
-    // Clear pending changes
+    // Clear pending changes immediately to prevent re-processing
     const changedFiles = Array.from(changes)
     this.pendingFileChanges.delete(sourceId)
     this.fileChangeDebounce.delete(sourceId)
 
-    // Check if manual scan is in progress
-    if (this.shouldPause()) {
-      console.log(`[LiveMonitoring] Manual scan in progress, discarding ${changedFiles.length} file changes for ${sourceId}`)
-      return
+    try {
+      // Check if manual scan is in progress
+      if (this.shouldPause()) {
+        console.log(`[LiveMonitoring] Manual scan in progress, discarding ${changedFiles.length} file changes for ${sourceId}`)
+        return
+      }
+
+      // Safety check: if too many files changed at once, it's probably from scan interference
+      // Normal user operations would be adding/removing a few files at a time
+      const MAX_REASONABLE_CHANGES = 50
+      if (changedFiles.length > MAX_REASONABLE_CHANGES) {
+        console.log(`[LiveMonitoring] Too many file changes (${changedFiles.length}), likely scan interference - skipping`)
+        return
+      }
+
+      console.log(`[LiveMonitoring] Processing ${changedFiles.length} file changes for ${sourceId}`)
+
+      // Use targeted file scanning (much faster than full scan)
+      await this.checkSourceWithTargetedFiles(sourceId, changedFiles)
+    } catch (error) {
+      console.error(`[LiveMonitoring] Error processing file changes for ${sourceId}:`, error)
     }
-
-    // Safety check: if too many files changed at once, it's probably from scan interference
-    // Normal user operations would be adding/removing a few files at a time
-    const MAX_REASONABLE_CHANGES = 50
-    if (changedFiles.length > MAX_REASONABLE_CHANGES) {
-      console.log(`[LiveMonitoring] Too many file changes (${changedFiles.length}), likely scan interference - skipping`)
-      return
-    }
-
-    console.log(`[LiveMonitoring] Processing ${changedFiles.length} file changes for ${sourceId}`)
-
-    // Use targeted file scanning (much faster than full scan)
-    await this.checkSourceWithTargetedFiles(sourceId, changedFiles)
   }
 
   /**
@@ -659,32 +695,35 @@ export class LiveMonitoringService {
    * Poll a source for changes
    */
   private async pollSource(sourceId: string, sourceType: ProviderType): Promise<void> {
-    // Check if we should pause
-    if (this.shouldPause()) {
-      console.log(`[LiveMonitoring] Manual scan in progress, skipping poll for ${sourceId}`)
-      this.scheduleNextPoll(sourceId, sourceType)
-      return
-    }
-
-    if (!this.isActive) return
-
-    // Get source name for debug output
-    const db = getDatabaseService()
-    const source = db.getMediaSourceById(sourceId)
-    const sourceName = source?.display_name || sourceId
-
-    console.log(`[LiveMonitoring] Polling ${sourceName}...`)
-    this.emitDebugEvent('poll', `Polling: ${sourceName}`)
-    this.lastCheckTimes.set(sourceId, new Date())
-
     try {
+      // Check if we should pause
+      if (this.shouldPause()) {
+        console.log(`[LiveMonitoring] Manual scan in progress, skipping poll for ${sourceId}`)
+        this.scheduleNextPoll(sourceId, sourceType)
+        return
+      }
+
+      if (!this.isActive) return
+
+      // Get source name for debug output
+      const db = getDatabaseService()
+      const source = db.getMediaSourceById(sourceId)
+      const sourceName = source?.display_name || sourceId
+
+      console.log(`[LiveMonitoring] Polling ${sourceName}...`)
+      this.emitDebugEvent('poll', `Polling: ${sourceName}`)
+      this.lastCheckTimes.set(sourceId, new Date())
+
       await this.checkSource(sourceId)
     } catch (error) {
       console.error(`[LiveMonitoring] Error polling ${sourceId}:`, error)
+      this.emitDebugEvent('error', `Polling error: ${sourceId}`)
+    } finally {
+      // Always schedule next poll, even if this one failed
+      if (this.isActive) {
+        this.scheduleNextPoll(sourceId, sourceType)
+      }
     }
-
-    // Schedule next poll
-    this.scheduleNextPoll(sourceId, sourceType)
   }
 
   /**
@@ -692,6 +731,12 @@ export class LiveMonitoringService {
    */
   private scheduleNextPoll(sourceId: string, sourceType: ProviderType): void {
     if (!this.isActive) return
+
+    // Clear any existing timer to prevent accumulation
+    const existingTimer = this.pollingTimers.get(sourceId)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
 
     const interval = this.config.pollingIntervals[sourceType] || DEFAULT_MONITORING_CONFIG.pollingIntervals[sourceType]
     const timer = setTimeout(() => this.pollSource(sourceId, sourceType), interval)
@@ -895,28 +940,33 @@ export class LiveMonitoringService {
    * Remove a source from monitoring (when source is removed)
    */
   removeSource(sourceId: string): void {
-    // Stop polling
+    console.log(`[LiveMonitoring] Removing source ${sourceId} from monitoring`)
+
+    // Stop polling timer
     const timer = this.pollingTimers.get(sourceId)
     if (timer) {
       clearTimeout(timer)
       this.pollingTimers.delete(sourceId)
     }
 
-    // Stop file watcher
+    // Stop file watcher (fire-and-forget with error logging)
     const watcher = this.fileWatchers.get(sourceId)
     if (watcher) {
-      watcher.close()
-      this.fileWatchers.delete(sourceId)
+      this.fileWatchers.delete(sourceId) // Remove from map first to prevent double-close
+      watcher.close().catch((err) => {
+        console.error(`[LiveMonitoring] Error closing watcher for removed source ${sourceId}:`, err)
+      })
     }
 
-    // Clear pending changes
-    this.pendingFileChanges.delete(sourceId)
+    // Clear debounce timer
     const debounce = this.fileChangeDebounce.get(sourceId)
     if (debounce) {
       clearTimeout(debounce)
       this.fileChangeDebounce.delete(sourceId)
     }
 
+    // Clear pending changes and check times
+    this.pendingFileChanges.delete(sourceId)
     this.lastCheckTimes.delete(sourceId)
   }
 }
