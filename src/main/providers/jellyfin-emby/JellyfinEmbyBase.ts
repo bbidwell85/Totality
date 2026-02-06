@@ -1,4 +1,5 @@
 import { getErrorMessage, isAxiosError, isNodeError } from '../../services/utils/errorUtils'
+import { retryWithBackoff } from '../../services/utils/retryWithBackoff'
 /**
  * JellyfinEmbyBase
  *
@@ -46,6 +47,12 @@ import {
 } from '../base/MusicScannerUtils'
 import { getMediaFileAnalyzer } from '../../services/MediaFileAnalyzer'
 import * as fs from 'fs'
+
+// Helper type for Jellyfin/Emby error responses
+interface JellyfinErrorResponse {
+  message?: string
+  Message?: string
+}
 
 // Jellyfin/Emby API response types
 export interface JellyfinAuthResponse {
@@ -283,6 +290,28 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
     return url
   }
 
+  /**
+   * Make an API request with retry logic and exponential backoff
+   * Use this for critical API calls that should be resilient to transient failures
+   */
+  protected async requestWithRetry<T>(
+    requestFn: () => Promise<T>,
+    context?: string
+  ): Promise<T> {
+    return retryWithBackoff(
+      requestFn,
+      {
+        maxRetries: 3,
+        initialDelay: 1000,
+        maxDelay: 15000,
+        retryableStatuses: [429, 500, 502, 503, 504],
+        onRetry: (attempt, error, delay) => {
+          console.warn(`[${this.providerType}] ${context || 'Request'} - Retry ${attempt}/3 after ${delay}ms: ${error.message}`)
+        }
+      }
+    )
+  }
+
   // ============================================================================
   // AUTHENTICATION
   // ============================================================================
@@ -346,7 +375,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       console.error(`${this.providerType} authentication failed:`, error)
       return {
         success: false,
-        error: (isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.message : undefined) || getErrorMessage(error) || 'Authentication failed',
+        error: (isAxiosError(error) ? (error.response?.data as JellyfinErrorResponse)?.message : undefined) || getErrorMessage(error) || 'Authentication failed',
       }
     }
   }
@@ -406,7 +435,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       }
     } catch (error: unknown) {
       console.error('Failed to initiate Quick Connect:', error)
-      throw new Error((isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.message : undefined) || 'Failed to initiate Quick Connect')
+      throw new Error((isAxiosError(error) ? (error.response?.data as JellyfinErrorResponse)?.message : undefined) || 'Failed to initiate Quick Connect')
     }
   }
 
@@ -438,7 +467,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
     } catch (error: unknown) {
       return {
         authenticated: false,
-        error: (isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.message : undefined) || getErrorMessage(error),
+        error: (isAxiosError(error) ? (error.response?.data as JellyfinErrorResponse)?.message : undefined) || getErrorMessage(error),
       }
     }
   }
@@ -479,7 +508,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       console.error('Quick Connect authentication failed:', error)
       return {
         success: false,
-        error: (isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.message : undefined) || getErrorMessage(error) || 'Quick Connect failed',
+        error: (isAxiosError(error) ? (error.response?.data as JellyfinErrorResponse)?.message : undefined) || getErrorMessage(error) || 'Quick Connect failed',
       }
     }
   }
@@ -588,8 +617,10 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
           }
 
           console.log(`[${this.providerType}] No video libraries found in views, trying VirtualFolders`)
-        } catch (viewsError: any) {
-          console.warn(`[${this.providerType}] Failed to get user views:`, viewsError.response?.status, viewsError.response?.data || viewsError.message)
+        } catch (viewsError: unknown) {
+          const status = isAxiosError(viewsError) ? viewsError.response?.status : undefined
+          const data = isAxiosError(viewsError) ? viewsError.response?.data : undefined
+          console.warn(`[${this.providerType}] Failed to get user views:`, status, data || getErrorMessage(viewsError))
         }
       }
 
@@ -600,7 +631,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         { headers: this.getAuthHeaders() }
       )
 
-      const folders = Array.isArray(response.data) ? response.data : (response.data as any).Items || []
+      const folders = Array.isArray(response.data) ? response.data : (response.data as { Items?: JellyfinLibrary[] }).Items || []
       console.log(`[${this.providerType}] Got ${folders.length} virtual folders`)
 
       const mediaTypes = ['movies', 'tvshows', 'homevideos', 'musicvideos', 'music']
@@ -629,7 +660,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         throw new Error('Server not found: The hostname could not be resolved.')
       }
 
-      throw new Error(`Failed to fetch libraries: ${(isAxiosError(error) ? ((isAxiosError(error) ? error.response?.data : undefined) as any)?.Message : undefined) || getErrorMessage(error)}`)
+      throw new Error(`Failed to fetch libraries: ${(isAxiosError(error) ? (error.response?.data as JellyfinErrorResponse)?.Message : undefined) || getErrorMessage(error)}`)
     }
   }
 

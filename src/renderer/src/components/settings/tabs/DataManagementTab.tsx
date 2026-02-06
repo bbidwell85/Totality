@@ -92,8 +92,8 @@ export function DataManagementTab() {
       } else if (result.success) {
         setMessage({ type: 'success', text: `Database exported to: ${result.path}` })
       }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to export database' })
+    } catch (error: unknown) {
+      setMessage({ type: 'error', text: (error as Error).message || 'Failed to export database' })
     } finally {
       setIsExporting(false)
     }
@@ -117,8 +117,8 @@ export function DataManagementTab() {
         setMessage({ type: 'success', text: `Working document exported to: ${result.path}` })
         setShowCSVExportModal(false)
       }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to export CSV' })
+    } catch (error: unknown) {
+      setMessage({ type: 'error', text: (error as Error).message || 'Failed to export CSV' })
     } finally {
       setIsExportingCSV(false)
     }
@@ -140,8 +140,8 @@ export function DataManagementTab() {
           text: `Imported ${result.imported} records successfully${errorText}. Please restart the app.`
         })
       }
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to import database' })
+    } catch (error: unknown) {
+      setMessage({ type: 'error', text: (error as Error).message || 'Failed to import database' })
     } finally {
       setIsImporting(false)
     }
@@ -154,8 +154,8 @@ export function DataManagementTab() {
       await window.electronAPI.dbReset()
       setMessage({ type: 'success', text: 'Database reset successfully. Please restart the app.' })
       setShowResetConfirm(false)
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to reset database' })
+    } catch (error: unknown) {
+      setMessage({ type: 'error', text: (error as Error).message || 'Failed to reset database' })
     } finally {
       setIsResetting(false)
     }

@@ -7,6 +7,22 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 
+// Types for mocks
+interface MockMediaSource {
+  source_id: string
+  source_type: string
+  display_name: string
+  is_enabled: boolean
+  connection_config: Record<string, unknown>
+  created_at?: string
+}
+
+interface MockProviderConfig {
+  sourceId: string
+  displayName: string
+  connectionConfig?: Record<string, unknown>
+}
+
 // Mock dependencies
 vi.mock('fs/promises', () => ({
   default: {
@@ -21,15 +37,15 @@ vi.mock('fs/promises', () => ({
   },
 }))
 
-const mockMediaSources: any[] = []
-const mockProviders = new Map<string, any>()
+const mockMediaSources: MockMediaSource[] = []
+const mockProviders = new Map<string, ReturnType<typeof createMockProvider>>()
 
 vi.mock('../../src/main/database/getDatabase', () => ({
   getDatabase: vi.fn(() => ({
     getMediaSources: vi.fn(() => mockMediaSources),
     getMediaSourceById: vi.fn((id: string) => mockMediaSources.find(s => s.source_id === id) || null),
     getEnabledMediaSources: vi.fn(() => mockMediaSources.filter(s => s.is_enabled)),
-    upsertMediaSource: vi.fn((source: any) => {
+    upsertMediaSource: vi.fn((source: MockMediaSource) => {
       const existingIndex = mockMediaSources.findIndex(s => s.source_id === source.source_id)
       if (existingIndex >= 0) {
         mockMediaSources[existingIndex] = { ...mockMediaSources[existingIndex], ...source }
@@ -68,7 +84,7 @@ vi.mock('../../src/main/services/TaskQueueService', () => ({
 }))
 
 // Mock provider creation
-const createMockProvider = (type: string, config: any) => ({
+const createMockProvider = (type: string, config: MockProviderConfig) => ({
   sourceId: config.sourceId,
   sourceType: type,
   displayName: config.displayName,
@@ -80,7 +96,7 @@ const createMockProvider = (type: string, config: any) => ({
 })
 
 vi.mock('../../src/main/providers/ProviderFactory', () => ({
-  createProvider: vi.fn((type: string, config: any) => {
+  createProvider: vi.fn((type: string, config: MockProviderConfig) => {
     const provider = createMockProvider(type, config)
     mockProviders.set(config.sourceId, provider)
     return provider

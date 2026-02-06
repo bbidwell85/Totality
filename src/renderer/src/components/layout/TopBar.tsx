@@ -186,7 +186,7 @@ export function TopBar({
         e.preventDefault()
         if (searchResultIndex >= 0 && searchResultIndex < flattenedResults.length) {
           const result = flattenedResults[searchResultIndex]
-          handleResultClick(result.type, result.id, result as any)
+          handleResultClick(result.type, result.id, result as { series_title?: string; album_id?: number; title?: string })
         }
         break
       case 'Escape':

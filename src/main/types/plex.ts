@@ -29,6 +29,7 @@ export interface PlexLibrary {
   directory: boolean
   contentChangedAt: number
   hidden: number
+  count?: number  // Number of items in the library (optional)
 }
 
 export interface PlexMediaItem {
@@ -36,7 +37,7 @@ export interface PlexMediaItem {
   key: string
   guid: string
   studio?: string
-  type: 'movie' | 'episode'
+  type: 'movie' | 'episode' | 'show'
   title: string
   contentRating?: string
   summary?: string
@@ -361,4 +362,51 @@ export interface PlexMusicStream {
   profile?: string
   displayTitle?: string
   selected?: boolean
+}
+
+// ============================================================================
+// PLEX API RESOURCE TYPES (for server discovery)
+// ============================================================================
+
+/**
+ * Connection info for a Plex resource
+ */
+export interface PlexResourceConnection {
+  protocol: 'http' | 'https'
+  address: string
+  port: number
+  uri: string
+  local: boolean
+  relay?: boolean
+  IPv6?: boolean
+}
+
+/**
+ * Plex resource from the /resources API endpoint
+ */
+export interface PlexResource {
+  name: string
+  product: string
+  productVersion: string
+  platform: string
+  platformVersion: string
+  device: string
+  clientIdentifier: string
+  createdAt: string
+  lastSeenAt: string
+  provides: string // 'server', 'client', 'controller', etc.
+  ownerId?: number
+  sourceTitle?: string
+  publicAddress?: string
+  accessToken?: string
+  owned: boolean | number // Can be boolean or 1/0
+  home: boolean
+  synced: boolean
+  relay: boolean
+  presence: boolean
+  httpsRequired: boolean
+  publicAddressMatches: boolean
+  dnsRebindingProtection: boolean
+  natLoopbackSupported: boolean
+  connections?: PlexResourceConnection[]
 }

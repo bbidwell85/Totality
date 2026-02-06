@@ -81,8 +81,8 @@ export function PlexAuthFlow({ onSuccess, onBack }: PlexAuthFlowProps) {
         }
       }, POLL_INTERVAL_MS)
 
-    } catch (err: any) {
-      setError(err.message || 'Failed to start authentication')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to start authentication')
       setStep('start')
     }
   }
@@ -114,8 +114,8 @@ export function PlexAuthFlow({ onSuccess, onBack }: PlexAuthFlowProps) {
       } else {
         setError('Failed to connect to server')
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to select server')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to select server')
     }
   }
 

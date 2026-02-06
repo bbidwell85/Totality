@@ -245,7 +245,7 @@ export class FileNameParser {
     // 3. Handle numeric titles like "1917" - don't mistake title for year
 
     // First, look for year in parentheses or brackets
-    const parenYearMatch = cleanName.match(/[\(\[](19\d{2}|20\d{2})[\)\]]/)
+    const parenYearMatch = cleanName.match(/[([](19\d{2}|20\d{2})[\])]/)
     // Find ALL years in the string
     const allYears = Array.from(cleanName.matchAll(/\b(19\d{2}|20\d{2})\b/g))
 
@@ -269,7 +269,7 @@ export class FileNameParser {
         // Check if this "year" is actually a numeric title (like "1917")
         // If extracting it would leave an empty title, it's probably the title
         const titleBefore = cleanName.slice(0, idx).trim()
-        if (titleBefore.length === 0 || titleBefore.match(/^[\(\[\s]*$/)) {
+        if (titleBefore.length === 0 || titleBefore.match(/^[([\s]*$/)) {
           // The "year" appears to be the title itself - don't extract it as year
           // Title will be extracted later from the full string
         } else {
@@ -364,7 +364,7 @@ export class FileNameParser {
         }
 
         // Clean the name for further parsing
-        let cleanName = name
+        const cleanName = name
           .replace(/\./g, ' ')
           .replace(/_/g, ' ')
           .replace(/\s+/g, ' ')
@@ -383,11 +383,11 @@ export class FileNameParser {
 
         // Extract year from series title and remove it
         // Prefer year in parentheses: "Archer (2009)" -> title="Archer", year=2009
-        const parenYearMatch = result.seriesTitle.match(/[\(\[](19\d{2}|20\d{2})[\)\]]/)
+        const parenYearMatch = result.seriesTitle.match(/[([](19\d{2}|20\d{2})[\])]/) // Match (2019) or [2019]
         if (parenYearMatch) {
           result.year = parseInt(parenYearMatch[1], 10)
           // Remove the year (with parentheses) from title
-          result.seriesTitle = result.seriesTitle.replace(/\s*[\(\[](19\d{2}|20\d{2})[\)\]]\s*/, ' ').trim()
+          result.seriesTitle = result.seriesTitle.replace(/\s*[([](19\d{2}|20\d{2})[\])]\s*/, ' ').trim()
         } else {
           // Check for bare year at end of title
           const bareYearMatch = result.seriesTitle.match(/\s+(19\d{2}|20\d{2})$/)
@@ -459,14 +459,14 @@ export class FileNameParser {
       .trim()
 
     // Try to extract track number from start (e.g., "01 - Song Title" or "01. Song Title")
-    const trackMatch = cleanName.match(/^(\d{1,3})[\s.\-]+(.+)/)
+    const trackMatch = cleanName.match(/^(\d{1,3})[\s.-]+(.+)/)
     if (trackMatch) {
       result.trackNumber = parseInt(trackMatch[1], 10)
       cleanName = trackMatch[2].trim()
     }
 
     // Try to extract disc number (e.g., "1-01" or "CD1-01")
-    const discTrackMatch = cleanName.match(/^(?:CD|Disc\s*)?(\d{1,2})[-.](\d{1,3})[\s.\-]+(.+)/i)
+    const discTrackMatch = cleanName.match(/^(?:CD|Disc\s*)?(\d{1,2})[-.](\d{1,3})[\s.-]+(.+)/i)
     if (discTrackMatch) {
       result.discNumber = parseInt(discTrackMatch[1], 10)
       result.trackNumber = parseInt(discTrackMatch[2], 10)
@@ -618,8 +618,8 @@ export class FileNameParser {
   private cleanTitle(title: string): string {
     return title
       // Remove leading/trailing separators (including parentheses/brackets)
-      .replace(/^[\s.\-_\(\)\[\]]+/, '')
-      .replace(/[\s.\-_\(\)\[\]]+$/, '')
+      .replace(/^[\s.\-_()[\]]+/, '')
+      .replace(/[\s.\-_()[\]]+$/, '')
       // Replace multiple spaces with single space
       .replace(/\s+/g, ' ')
       // Title case (optional, might want to preserve original case)

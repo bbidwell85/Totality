@@ -198,9 +198,9 @@ export class DatabaseService {
           console.log('Pre-migration: Adding source_id column to media_items...')
           try {
             this.db.run(`ALTER TABLE media_items ADD COLUMN source_id TEXT NOT NULL DEFAULT 'legacy'`)
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate column')) {
-              console.log('Could not add source_id column:', e.message)
+          } catch (e: unknown) {
+            if (!getErrorMessage(e).includes('duplicate column')) {
+              console.log('Could not add source_id column:', getErrorMessage(e))
             }
           }
         }
@@ -208,9 +208,9 @@ export class DatabaseService {
           console.log('Pre-migration: Adding source_type column to media_items...')
           try {
             this.db.run(`ALTER TABLE media_items ADD COLUMN source_type TEXT NOT NULL DEFAULT 'plex'`)
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate column')) {
-              console.log('Could not add source_type column:', e.message)
+          } catch (e: unknown) {
+            if (!getErrorMessage(e).includes('duplicate column')) {
+              console.log('Could not add source_type column:', getErrorMessage(e))
             }
           }
         }
@@ -219,9 +219,9 @@ export class DatabaseService {
           console.log('Pre-migration: Adding library_id column to media_items...')
           try {
             this.db.run(`ALTER TABLE media_items ADD COLUMN library_id TEXT`)
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate column')) {
-              console.log('Could not add library_id column:', e.message)
+          } catch (e: unknown) {
+            if (!getErrorMessage(e).includes('duplicate column')) {
+              console.log('Could not add library_id column:', getErrorMessage(e))
             }
           }
         }
@@ -239,9 +239,9 @@ export class DatabaseService {
             console.log(`Pre-migration: Adding library_id column to ${tableName}...`)
             try {
               this.db.run(`ALTER TABLE ${tableName} ADD COLUMN library_id TEXT`)
-            } catch (e: any) {
-              if (!e.message?.includes('duplicate column')) {
-                console.log(`Could not add library_id column to ${tableName}:`, e.message)
+            } catch (e: unknown) {
+              if (!getErrorMessage(e).includes('duplicate column')) {
+                console.log(`Could not add library_id column to ${tableName}:`, getErrorMessage(e))
               }
             }
           }
@@ -258,9 +258,9 @@ export class DatabaseService {
           console.log('Pre-migration: Adding source_id column to series_completeness...')
           try {
             this.db.run(`ALTER TABLE series_completeness ADD COLUMN source_id TEXT`)
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate column')) {
-              console.log('Could not add source_id column:', e.message)
+          } catch (e: unknown) {
+            if (!getErrorMessage(e).includes('duplicate column')) {
+              console.log('Could not add source_id column:', getErrorMessage(e))
             }
           }
         }
@@ -268,9 +268,9 @@ export class DatabaseService {
           console.log('Pre-migration: Adding library_id column to series_completeness...')
           try {
             this.db.run(`ALTER TABLE series_completeness ADD COLUMN library_id TEXT`)
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate column')) {
-              console.log('Could not add library_id column:', e.message)
+          } catch (e: unknown) {
+            if (!getErrorMessage(e).includes('duplicate column')) {
+              console.log('Could not add library_id column:', getErrorMessage(e))
             }
           }
         }
@@ -286,9 +286,9 @@ export class DatabaseService {
           console.log('Pre-migration: Adding source_id column to movie_collections...')
           try {
             this.db.run(`ALTER TABLE movie_collections ADD COLUMN source_id TEXT`)
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate column')) {
-              console.log('Could not add source_id column:', e.message)
+          } catch (e: unknown) {
+            if (!getErrorMessage(e).includes('duplicate column')) {
+              console.log('Could not add source_id column:', getErrorMessage(e))
             }
           }
         }
@@ -296,9 +296,9 @@ export class DatabaseService {
           console.log('Pre-migration: Adding library_id column to movie_collections...')
           try {
             this.db.run(`ALTER TABLE movie_collections ADD COLUMN library_id TEXT`)
-          } catch (e: any) {
-            if (!e.message?.includes('duplicate column')) {
-              console.log('Could not add library_id column:', e.message)
+          } catch (e: unknown) {
+            if (!getErrorMessage(e).includes('duplicate column')) {
+              console.log('Could not add library_id column:', getErrorMessage(e))
             }
           }
         }
@@ -325,9 +325,9 @@ export class DatabaseService {
             try {
               this.db.run(statement)
               console.log(`Added wishlist column: ${statement}`)
-            } catch (e: any) {
-              if (!e.message?.includes('duplicate column')) {
-                console.log(`Could not add wishlist column:`, e.message)
+            } catch (e: unknown) {
+              if (!getErrorMessage(e).includes('duplicate column')) {
+                console.log(`Could not add wishlist column:`, getErrorMessage(e))
               }
             }
           }
@@ -343,9 +343,9 @@ export class DatabaseService {
         try {
           this.db.run(statement)
           console.log(`Added wishlist column: ${statement}`)
-        } catch (e: any) {
-          if (!e.message?.includes('duplicate column')) {
-            console.log(`Could not add wishlist column:`, e.message)
+        } catch (e: unknown) {
+          if (!getErrorMessage(e).includes('duplicate column')) {
+            console.log(`Could not add wishlist column:`, getErrorMessage(e))
           }
         }
       }
@@ -550,8 +550,8 @@ export class DatabaseService {
             )
           `)
           console.log('Removed duplicate wishlist items')
-        } catch (e: any) {
-          console.log('Could not remove duplicates:', e.message)
+        } catch (e: unknown) {
+          console.log('Could not remove duplicates:', getErrorMessage(e))
         }
 
         // Create unique indexes to prevent future duplicates
@@ -574,8 +574,8 @@ export class DatabaseService {
           try {
             this.db.run(indexSql)
             console.log('Created wishlist unique index')
-          } catch (e: any) {
-            console.log('Could not create wishlist unique index:', e.message)
+          } catch (e: unknown) {
+            console.log('Could not create wishlist unique index:', getErrorMessage(e))
           }
         }
       }
@@ -4099,11 +4099,11 @@ export class DatabaseService {
     const searchQuery = `%${query.toLowerCase()}%`
 
     // Helper to convert SQL.js result to array
-    const toArray = <T>(result: any[]): T[] => {
+    const toArray = <T>(result: { columns: string[]; values: (number | string | Uint8Array | null)[][] }[]): T[] => {
       if (!result || result.length === 0) return []
       const { columns, values } = result[0]
-      return values.map((row: any[]) => {
-        const obj: Record<string, any> = {}
+      return values.map((row) => {
+        const obj: Record<string, number | string | Uint8Array | null> = {}
         columns.forEach((col: string, i: number) => {
           obj[col] = row[i]
         })

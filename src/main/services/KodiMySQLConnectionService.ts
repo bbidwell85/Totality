@@ -15,7 +15,7 @@ let mysqlAvailable = false
 
 // Try to load mysql2 - it's optional
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   mysql = require('mysql2/promise')
   mysqlAvailable = true
 } catch {
@@ -156,7 +156,7 @@ class KodiMySQLConnectionService {
 
       // Get server version
       const [versionRows] = await connection.query('SELECT VERSION() as version')
-      const serverVersion = (versionRows as any[])[0]?.version || 'Unknown'
+      const serverVersion = (versionRows as Array<{ version?: string }>)[0]?.version || 'Unknown'
 
       // Detect databases
       const detected = await this.detectDatabasesWithConnection(connection, config.databasePrefix)
@@ -211,13 +211,13 @@ class KodiMySQLConnectionService {
     const [videoRows] = await connection.query(
       `SHOW DATABASES LIKE '${dbPrefix}video%'`
     )
-    const videoDatabases = (videoRows as any[]).map(row => Object.values(row)[0] as string)
+    const videoDatabases = (videoRows as Array<Record<string, string>>).map(row => Object.values(row)[0])
 
     // Query for music databases
     const [musicRows] = await connection.query(
       `SHOW DATABASES LIKE '${dbPrefix}music%'`
     )
-    const musicDatabases = (musicRows as any[]).map(row => Object.values(row)[0] as string)
+    const musicDatabases = (musicRows as Array<Record<string, string>>).map(row => Object.values(row)[0])
 
     // Find highest version for each type
     const videoDb = this.findHighestVersion(videoDatabases, `${dbPrefix}video`)
@@ -252,7 +252,7 @@ class KodiMySQLConnectionService {
     pool: Pool,
     database: string,
     sql: string,
-    params?: any[]
+    params?: unknown[]
   ): Promise<T[]> {
     const connection = await pool.getConnection()
 

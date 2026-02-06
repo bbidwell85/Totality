@@ -111,6 +111,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch }: MediaDe
 
   useEffect(() => {
     loadMediaDetails()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaId])
 
   const loadMediaDetails = async () => {
@@ -145,13 +146,22 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch }: MediaDe
       }
       setThresholds(loadedThresholds)
 
-      const item = await window.electronAPI.getMediaItemById(mediaId) as any
+      const item = await window.electronAPI.getMediaItemById(mediaId) as MediaWithQuality | null
       if (!item) {
         setError('Media item not found')
         return
       }
 
-      const qualityScore: any = await window.electronAPI.getQualityScoreByMediaId(mediaId)
+      const qualityScore = await window.electronAPI.getQualityScoreByMediaId(mediaId) as {
+        quality_tier?: 'SD' | '720p' | '1080p' | '4K'
+        tier_quality?: 'LOW' | 'MEDIUM' | 'HIGH'
+        tier_score?: number
+        bitrate_tier_score?: number
+        audio_tier_score?: number
+        overall_score?: number
+        needs_upgrade?: boolean
+        issues?: string
+      } | null
 
       const mediaWithQuality: MediaWithQuality = {
         ...item,

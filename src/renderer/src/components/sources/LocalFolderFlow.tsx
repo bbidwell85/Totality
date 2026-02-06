@@ -95,8 +95,8 @@ export function LocalFolderFlow({ onSuccess, onBack }: LocalFolderFlowProps) {
           await detectSubfolders(result.folderPath)
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to select folder')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to select folder')
     }
   }
 
@@ -128,8 +128,8 @@ export function LocalFolderFlow({ onSuccess, onBack }: LocalFolderFlowProps) {
       }))
 
       setLibraries(detected)
-    } catch (err: any) {
-      setError(err.message || 'Failed to detect subfolders')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to detect subfolders')
     } finally {
       setIsDetecting(false)
     }
@@ -214,8 +214,8 @@ export function LocalFolderFlow({ onSuccess, onBack }: LocalFolderFlowProps) {
       }
 
       onSuccess()
-    } catch (err: any) {
-      setError(err.message || 'Failed to add source')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to add source')
     } finally {
       setIsAdding(false)
     }

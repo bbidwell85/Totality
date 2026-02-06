@@ -609,7 +609,7 @@ export class QualityAnalyzer {
       }
     }
 
-    scores.forEach((score: any) => {
+    scores.forEach((score: QualityScore) => {
       const tier = (score.quality_tier || 'SD') as QualityTier
       const quality = (score.tier_quality || 'MEDIUM').toLowerCase() as 'low' | 'medium' | 'high'
 

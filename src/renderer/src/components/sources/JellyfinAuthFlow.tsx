@@ -53,6 +53,7 @@ export function JellyfinAuthFlow({ onSuccess, onBack, isEmby = false }: Jellyfin
   useEffect(() => {
     // Auto-discover on mount for both Jellyfin and Emby
     handleDiscover()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEmby])
 
   const handleDiscover = async () => {
@@ -69,7 +70,7 @@ export function JellyfinAuthFlow({ onSuccess, onBack, isEmby = false }: Jellyfin
       } else if (servers.length > 0) {
         setStep('server-select')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Discovery failed:', err)
     } finally {
       setIsDiscovering(false)
@@ -94,8 +95,8 @@ export function JellyfinAuthFlow({ onSuccess, onBack, isEmby = false }: Jellyfin
       } else {
         setError(result.error || 'Could not connect to server')
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to connect')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to connect')
     } finally {
       setIsTestingUrl(false)
     }
@@ -139,8 +140,8 @@ export function JellyfinAuthFlow({ onSuccess, onBack, isEmby = false }: Jellyfin
       setLibraries(libs)
       setSelectedLibraries(new Set(libs.map(lib => lib.id)))
       setStep('libraries')
-    } catch (err: any) {
-      setError(err.message || 'Failed to connect')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to connect')
     } finally {
       setIsConnecting(false)
     }

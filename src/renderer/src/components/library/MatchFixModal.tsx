@@ -124,9 +124,9 @@ export function MatchFixModal({
 
       console.log('[MatchFixModal] Got results:', results.length, results)
       setSearchResults(results)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[MatchFixModal] Search error:', err)
-      setError(err.message || 'Search failed')
+      setError((err as Error).message || 'Search failed')
     } finally {
       setIsSearching(false)
     }
@@ -177,8 +177,8 @@ export function MatchFixModal({
 
       onMatchFixed?.()
       onClose()
-    } catch (err: any) {
-      setError(err.message || 'Failed to fix match')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to fix match')
     } finally {
       setIsFixing(false)
     }

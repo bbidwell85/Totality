@@ -1,5 +1,6 @@
 import { getErrorMessage, isAxiosError } from './utils/errorUtils'
-import axios, { AxiosInstance } from 'axios'
+import { retryWithBackoff } from './utils/retryWithBackoff'
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
 import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from './QualityAnalyzer'
 import { AudioCodecRanker } from './AudioCodecRanker'
@@ -18,6 +19,16 @@ const PLEX_API_URL = 'https://plex.tv/api/v2'
 const PLEX_TV_URL = 'https://plex.tv'
 const CLIENT_IDENTIFIER = 'totality'
 const PRODUCT_NAME = 'Totality'
+
+// Shared type for Plex MediaContainer responses
+interface PlexMediaContainerResponse {
+  MediaContainer?: {
+    Directory?: PlexLibrary[]
+    Metadata?: PlexMediaItem[]
+    size?: number
+    totalSize?: number
+  }
+}
 
 export class PlexService {
   private authToken: string | null = null
@@ -81,6 +92,35 @@ export class PlexService {
   }
 
   /**
+   * Make an API request with retry logic and exponential backoff
+   */
+  private async requestWithRetry<T>(
+    method: 'get' | 'post',
+    url: string,
+    config?: AxiosRequestConfig,
+    data?: unknown,
+    context?: string
+  ): Promise<T> {
+    return retryWithBackoff(
+      async () => {
+        const response = method === 'post'
+          ? await this.api.post(url, data, config)
+          : await this.api.get(url, config)
+        return response.data as T
+      },
+      {
+        maxRetries: 3,
+        initialDelay: 1000,
+        maxDelay: 15000,
+        retryableStatuses: [429, 500, 502, 503, 504],
+        onRetry: (attempt, error, delay) => {
+          console.warn(`[PlexService] ${context || url} - Retry ${attempt}/3 after ${delay}ms: ${error.message}`)
+        }
+      }
+    )
+  }
+
+  /**
    * Step 1: Request a PIN for authentication
    */
   async requestAuthPin(): Promise<PlexAuthPin> {
@@ -104,12 +144,17 @@ export class PlexService {
   }
 
   /**
-   * Step 3: Poll for auth token
+   * Step 3: Poll for auth token (with retry for resilience)
    */
   async checkAuthPin(pinId: number): Promise<string | null> {
     try {
-      const response = await this.api.get(`${PLEX_API_URL}/pins/${pinId}`)
-      const pin = response.data as PlexAuthPin
+      const pin = await this.requestWithRetry<PlexAuthPin>(
+        'get',
+        `${PLEX_API_URL}/pins/${pinId}`,
+        undefined,
+        undefined,
+        'checkAuthPin'
+      )
 
       if (pin.authToken) {
         await this.saveAuthToken(pin.authToken)
@@ -196,12 +241,31 @@ export class PlexService {
       const resources = Array.isArray(response.data) ? response.data : []
 
       // Filter for server resources only
-      const servers = resources.filter((r: any) => r.provides === 'server')
+      const servers = resources.filter((r: { provides?: string }) => r.provides === 'server')
 
-      return servers.map((server: any) => {
+      interface PlexServerConnection {
+        local?: boolean
+        protocol?: string
+        port?: string
+        address?: string
+        uri?: string
+      }
+
+      interface PlexServerResource {
+        name: string
+        publicAddress?: string
+        address?: string
+        clientIdentifier: string
+        productVersion?: string
+        owned?: boolean | number
+        accessToken?: string
+        connections?: PlexServerConnection[]
+      }
+
+      return servers.map((server: PlexServerResource) => {
         // Prefer local HTTP connections to avoid SSL certificate issues
         // Otherwise use the first available connection
-        const localHttp = server.connections?.find((c: any) => c.local && c.protocol === 'http')
+        const localHttp = server.connections?.find((c: PlexServerConnection) => c.local && c.protocol === 'http')
         const preferredConnection = localHttp || server.connections?.[0]
 
         if (!preferredConnection) {
@@ -210,19 +274,19 @@ export class PlexService {
 
         return {
           name: server.name,
-          host: server.publicAddress || server.address,
-          port: parseInt(preferredConnection?.port, 10) || 32400,
+          host: server.publicAddress || server.address || 'localhost',
+          port: parseInt(preferredConnection?.port ?? '32400', 10) || 32400,
           machineIdentifier: server.clientIdentifier,
-          version: server.productVersion,
-          scheme: preferredConnection?.protocol || 'https',
-          address: preferredConnection?.address || server.publicAddress,
-          uri: preferredConnection?.uri || `${preferredConnection?.protocol}://${preferredConnection?.address}:${preferredConnection?.port}`,
+          version: server.productVersion || 'unknown',
+          scheme: (preferredConnection?.protocol === 'http' ? 'http' : 'https') as 'http' | 'https',
+          address: preferredConnection?.address || server.publicAddress || 'localhost',
+          uri: preferredConnection?.uri || `${preferredConnection?.protocol || 'https'}://${preferredConnection?.address || server.publicAddress || 'localhost'}:${preferredConnection?.port || '32400'}`,
           localAddresses: server.connections
-            ?.filter((c: any) => c.local)
-            .map((c: any) => c.address)
+            ?.filter((c: PlexServerConnection) => c.local)
+            .map((c: PlexServerConnection) => c.address)
             .join(',') || '',
           owned: server.owned === true || server.owned === 1,
-          accessToken: server.accessToken,
+          accessToken: server.accessToken || '',
         }
       })
     } catch (error) {
@@ -270,8 +334,8 @@ export class PlexService {
         },
       })
 
-      const directories = (response.data as any)?.MediaContainer?.Directory || []
-      return directories.map((dir: any) => ({
+      const directories = (response.data as PlexMediaContainerResponse)?.MediaContainer?.Directory || []
+      return directories.map((dir) => ({
         key: dir.key,
         title: dir.title,
         type: dir.type,
@@ -311,7 +375,7 @@ export class PlexService {
         },
       })
 
-      return (response.data as any)?.MediaContainer?.Metadata || []
+      return (response.data as PlexMediaContainerResponse)?.MediaContainer?.Metadata || []
     } catch (error) {
       console.error('Failed to get library items:', error)
       throw new Error('Failed to fetch library items')
@@ -334,7 +398,7 @@ export class PlexService {
         },
       })
 
-      const metadata = (response.data as any)?.MediaContainer?.Metadata?.[0]
+      const metadata = (response.data as PlexMediaContainerResponse)?.MediaContainer?.Metadata?.[0]
       return metadata || null
     } catch (error) {
       console.error('Failed to get item metadata:', error)
@@ -358,7 +422,7 @@ export class PlexService {
         },
       })
 
-      return (response.data as any)?.MediaContainer?.Metadata || []
+      return (response.data as PlexMediaContainerResponse)?.MediaContainer?.Metadata || []
     } catch (error) {
       console.error('Failed to get episodes:', error)
       return []
@@ -381,7 +445,7 @@ export class PlexService {
         },
       })
 
-      const metadata = (response.data as any)?.MediaContainer?.Metadata?.[0]
+      const metadata = (response.data as PlexMediaContainerResponse)?.MediaContainer?.Metadata?.[0]
       return metadata || null
     } catch (error) {
       console.error('Failed to get season metadata:', error)
@@ -416,7 +480,14 @@ export class PlexService {
         }
       )
 
-      const mediaContainer = (response.data as any)?.MediaContainer
+      interface PlexCollectionsMediaContainerResponse {
+        MediaContainer?: {
+          size?: number
+          totalSize?: number
+          Metadata?: PlexCollection[]
+        }
+      }
+      const mediaContainer = (response.data as PlexCollectionsMediaContainerResponse)?.MediaContainer
       console.log(`[PlexService] Response MediaContainer:`, JSON.stringify({
         size: mediaContainer?.size,
         totalSize: mediaContainer?.totalSize,
@@ -462,7 +533,7 @@ export class PlexService {
         }
       )
 
-      return (response.data as any)?.MediaContainer?.Metadata || []
+      return (response.data as PlexMediaContainerResponse)?.MediaContainer?.Metadata || []
     } catch (error) {
       console.error('Failed to get collection children:', error)
       throw new Error('Failed to fetch collection items')
@@ -509,10 +580,10 @@ export class PlexService {
     for (const item of items) {
       // Determine library type from first item
       if (libraryType === null) {
-        libraryType = (item as any).type === 'show' ? 'show' : 'movie'
+        libraryType = item.type === 'show' ? 'show' : 'movie'
       }
 
-      if ((item as any).type === 'show') {
+      if (item.type === 'show') {
         // For TV shows, get show metadata to extract show-level TMDB ID
         const showMetadata = await this.getItemMetadata(item.ratingKey)
         let showTmdbId: string | undefined
@@ -535,9 +606,9 @@ export class PlexService {
         const episodes = await this.getAllEpisodes(item.ratingKey)
         // Attach show TMDB ID to each episode for later use
         for (const ep of episodes) {
-          (ep as any)._showTmdbId = showTmdbId
+          (ep as PlexMediaItem & { _showTmdbId?: string })._showTmdbId = showTmdbId
         }
-        itemsToProcess.push(...episodes)
+        itemsToProcess.push(...(episodes as Array<PlexMediaItem & { _showTmdbId?: string }>))
       } else {
         // For movies, concerts, etc., add directly
         itemsToProcess.push(item)
@@ -595,7 +666,7 @@ export class PlexService {
             }
 
             // Convert to MediaItem (pass show TMDB ID for episodes)
-            const showTmdbId = (item as any)._showTmdbId
+            const showTmdbId = item._showTmdbId
             const mediaItem = this.convertToMediaItem(detailed, showTmdbId)
             if (mediaItem) {
               const id = await db.upsertMediaItem(mediaItem)
@@ -836,7 +907,7 @@ export class PlexService {
       plex_id: item.ratingKey,
       title: item.title,
       year: item.year,
-      type: item.type,
+      type: item.type as 'movie' | 'episode', // Shows are expanded to episodes before reaching here
       series_title: item.grandparentTitle,
       season_number: item.parentIndex,
       episode_number: item.index,

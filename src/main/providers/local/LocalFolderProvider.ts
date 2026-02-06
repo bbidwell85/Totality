@@ -12,7 +12,7 @@ import * as path from 'path'
 import { app } from 'electron'
 import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
-import { getMediaFileAnalyzer } from '../../services/MediaFileAnalyzer'
+import { getMediaFileAnalyzer, type FileAnalysisResult, type AnalyzedAudioStream } from '../../services/MediaFileAnalyzer'
 import { getFileNameParser, ParsedMovieInfo, ParsedEpisodeInfo } from '../../services/FileNameParser'
 import { getTMDBService } from '../../services/TMDBService'
 import { getMusicBrainzService } from '../../services/MusicBrainzService'
@@ -615,7 +615,7 @@ export class LocalFolderProvider implements MediaProvider {
               const mediaItem = this.convertMetadataToMediaItem(metadata)
               if (mediaItem) {
                 mediaItem.source_id = this.sourceId
-                mediaItem.source_type = 'local' as any
+                mediaItem.source_type = 'local'
                 mediaItem.library_id = libraryId
                 mediaItem.file_mtime = fileMtime
 
@@ -847,7 +847,7 @@ export class LocalFolderProvider implements MediaProvider {
             const mediaItem = this.convertMetadataToMediaItem(metadata)
             if (mediaItem) {
               mediaItem.source_id = this.sourceId
-              mediaItem.source_type = 'local' as any
+              mediaItem.source_type = 'local'
               mediaItem.library_id = libraryId
               mediaItem.file_mtime = fileMtime
 
@@ -1522,7 +1522,7 @@ export class LocalFolderProvider implements MediaProvider {
 
         // Check cache first to avoid redundant series lookups
         let cachedSeries = seriesTmdbCache?.get(seriesKey)
-        let needsLookup = cachedSeries === undefined
+        const needsLookup = cachedSeries === undefined
 
         if (needsLookup) {
           // First lookup for this series - search for it
@@ -1612,7 +1612,7 @@ export class LocalFolderProvider implements MediaProvider {
     return metadata
   }
 
-  private enhanceWithFFprobeData(metadata: MediaMetadata, analysis: any): MediaMetadata {
+  private enhanceWithFFprobeData(metadata: MediaMetadata, analysis: FileAnalysisResult): MediaMetadata {
     const enhanced = { ...metadata }
 
     if (analysis.video) {
@@ -1641,7 +1641,7 @@ export class LocalFolderProvider implements MediaProvider {
     }
 
     if (analysis.audioTracks && analysis.audioTracks.length > 0) {
-      enhanced.audioTracks = analysis.audioTracks.map((track: any) => ({
+      enhanced.audioTracks = analysis.audioTracks.map((track: AnalyzedAudioStream) => ({
         codec: normalizeAudioCodec(track.codec),
         channels: track.channels,
         bitrate: track.bitrate,
@@ -2439,7 +2439,7 @@ export class LocalFolderProvider implements MediaProvider {
     artistMap: Map<string, number>
   ): Promise<void> {
     // Update album_count and track_count for each artist
-    for (const [_artistName, artistId] of artistMap) {
+    for (const [, artistId] of artistMap) {
       // Count albums for this artist
       const albums = db.getMusicAlbums({ artistId })
       const albumCount = albums.length

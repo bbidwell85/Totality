@@ -54,6 +54,7 @@ export const WishlistItemCard = memo(function WishlistItemCard({
   // Load store links on mount
   useEffect(() => {
     loadStoreLinks()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item])
 
   const loadStoreLinks = async () => {

@@ -89,8 +89,8 @@ export function KodiMySQLFlow({ onSuccess, onBack }: KodiMySQLFlowProps) {
       if (!result.success) {
         setError(result.error || 'Connection failed')
       }
-    } catch (err: any) {
-      setError(err.message || 'Connection test failed')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Connection test failed')
     } finally {
       setIsTesting(false)
     }
@@ -129,8 +129,8 @@ export function KodiMySQLFlow({ onSuccess, onBack }: KodiMySQLFlowProps) {
       setLibraries(libs)
       setSelectedLibraries(new Set(libs.map(lib => lib.id)))
       setStep('libraries')
-    } catch (err: any) {
-      setError(err.message || 'Connection failed')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Connection failed')
     } finally {
       setIsConnecting(false)
     }

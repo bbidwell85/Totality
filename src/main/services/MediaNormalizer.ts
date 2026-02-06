@@ -402,7 +402,7 @@ export function normalizeBitrate(
 ): number {
   if (bitrate === null || bitrate === undefined) return 0
 
-  let value = typeof bitrate === 'string' ? parseFloat(bitrate) : bitrate
+  const value = typeof bitrate === 'string' ? parseFloat(bitrate) : bitrate
   if (isNaN(value) || value <= 0) return 0
 
   if (sourceUnit === 'bps') {

@@ -157,10 +157,10 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
         if (!result.success && result.error) {
           setConnectionError(result.error)
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to load libraries:', err)
         setConnectionStatus('error')
-        setConnectionError(err.message || 'Failed to connect to server')
+        setConnectionError(err instanceof Error ? err.message : 'Failed to connect to server')
       } finally {
         setIsLoadingLibraries(false)
       }
@@ -251,9 +251,9 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
         const canInstall = await window.electronAPI.ffprobeCanInstall()
         setFfprobeCanInstall(canInstall)
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load FFprobe status:', err)
-      setFfprobeError(err.message || 'Failed to check FFprobe status')
+      setFfprobeError(err instanceof Error ? err.message : 'Failed to check FFprobe status')
     } finally {
       setFfprobeLoading(false)
     }
@@ -284,9 +284,9 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
         setFfprobeError(result.error || 'Installation failed')
         setFfprobeInstallProgress(null)
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to install FFprobe:', err)
-      setFfprobeError(err.message || 'Installation failed')
+      setFfprobeError(err instanceof Error ? err.message : 'Installation failed')
       setFfprobeInstallProgress(null)
     } finally {
       unsubscribe()
@@ -308,7 +308,7 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
       const newValue = !ffprobeEnabled
       await window.electronAPI.ffprobeSetEnabled(source.source_id, newValue)
       setFfprobeEnabled(newValue)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to toggle FFprobe:', err)
     }
   }

@@ -396,7 +396,7 @@ export class TaskQueueService {
    * Execute a task based on its type
    */
   private async executeTask(task: QueuedTask): Promise<void> {
-    const progressCallback = (progress: any) => {
+    const progressCallback = (progress: { current?: number; total?: number; percentage?: number; phase?: string; currentItem?: string }) => {
       if (this.cancelRequested) {
         throw new Error('Task cancelled')
       }
@@ -452,7 +452,7 @@ export class TaskQueueService {
     }
   }
 
-  private async executeLibraryScan(task: QueuedTask, onProgress: (p: any) => void): Promise<void> {
+  private async executeLibraryScan(task: QueuedTask, onProgress: (p: { current?: number; total?: number; percentage?: number; phase?: string; currentItem?: string }) => void): Promise<void> {
     if (!task.sourceId || !task.libraryId) {
       throw new Error('Library scan requires sourceId and libraryId')
     }
@@ -478,7 +478,7 @@ export class TaskQueueService {
     }
   }
 
-  private async executeSourceScan(task: QueuedTask, onProgress: (p: any) => void): Promise<void> {
+  private async executeSourceScan(task: QueuedTask, onProgress: (p: { current?: number; total?: number; percentage?: number; phase?: string; currentItem?: string }) => void): Promise<void> {
     if (!task.sourceId) {
       throw new Error('Source scan requires sourceId')
     }
@@ -533,7 +533,7 @@ export class TaskQueueService {
     }
   }
 
-  private async executeSeriesCompleteness(task: QueuedTask, onProgress: (p: any) => void): Promise<void> {
+  private async executeSeriesCompleteness(task: QueuedTask, onProgress: (p: { current?: number; total?: number; percentage?: number; phase?: string; currentItem?: string }) => void): Promise<void> {
     const service = getSeriesCompletenessService()
     const result = await service.analyzeAllSeries(onProgress, task.sourceId, task.libraryId)
 
@@ -546,7 +546,7 @@ export class TaskQueueService {
     }
   }
 
-  private async executeCollectionCompleteness(task: QueuedTask, onProgress: (p: any) => void): Promise<void> {
+  private async executeCollectionCompleteness(task: QueuedTask, onProgress: (p: { current?: number; total?: number; percentage?: number; phase?: string; currentItem?: string }) => void): Promise<void> {
     const service = getMovieCollectionService()
     const result = await service.analyzeAllCollections(onProgress, task.sourceId, task.libraryId)
 
@@ -559,7 +559,7 @@ export class TaskQueueService {
     }
   }
 
-  private async executeMusicCompleteness(task: QueuedTask, onProgress: (p: any) => void): Promise<void> {
+  private async executeMusicCompleteness(task: QueuedTask, onProgress: (p: { current?: number; total?: number; percentage?: number; phase?: string; currentItem?: string }) => void): Promise<void> {
     const mbService = getMusicBrainzService()
     const result = await mbService.analyzeAllMusic(onProgress, task.sourceId)
 
@@ -572,7 +572,7 @@ export class TaskQueueService {
     }
   }
 
-  private async executeMusicScan(task: QueuedTask, onProgress: (p: any) => void): Promise<void> {
+  private async executeMusicScan(task: QueuedTask, onProgress: (p: { current?: number; total?: number; percentage?: number; phase?: string; currentItem?: string }) => void): Promise<void> {
     if (!task.sourceId || !task.libraryId) {
       throw new Error('Music scan requires sourceId and libraryId')
     }

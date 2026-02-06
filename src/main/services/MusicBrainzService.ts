@@ -1,4 +1,5 @@
 import { getErrorMessage, isNodeError } from './utils/errorUtils'
+import { retryWithBackoff } from './utils/retryWithBackoff'
 /**
  * MusicBrainzService
  *
@@ -171,37 +172,58 @@ export class MusicBrainzService extends CancellableOperation {
   }
 
   /**
-   * Make a request with retry logic for connection errors
+   * Check if an error is a retryable connection error
+   */
+  private isRetryableConnectionError(error: unknown): boolean {
+    const errorCode = isNodeError(error) ? error.code : undefined
+    const errorMessage = getErrorMessage(error) || ''
+
+    return (
+      errorCode === 'ECONNRESET' ||
+      errorCode === 'ETIMEDOUT' ||
+      errorCode === 'ECONNREFUSED' ||
+      errorCode === 'ENOTFOUND' ||
+      errorMessage.includes('socket') ||
+      errorMessage.includes('network') ||
+      errorMessage.includes('503') ||
+      errorMessage.includes('429')
+    )
+  }
+
+  /**
+   * Make a request with retry logic using exponential backoff
    */
   private async requestWithRetry<T>(
     requestFn: () => Promise<T>,
     context: string
   ): Promise<T> {
-    let lastError: Error | null = null
-
-    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
-      try {
+    return retryWithBackoff(
+      async () => {
         await this.rateLimit()
-        return await requestFn()
-      } catch (error: unknown) {
-        lastError = error instanceof Error ? error : new Error(String(error))
-        const errorCode = isNodeError(error) ? error.code : undefined
-        const isConnectionError = errorCode === 'ECONNRESET' ||
-          errorCode === 'ETIMEDOUT' ||
-          errorCode === 'ECONNREFUSED' ||
-          getErrorMessage(error)?.includes('socket')
-
-        if (isConnectionError && attempt < this.MAX_RETRIES) {
-          const delay = this.RETRY_DELAY_MS * attempt
-          console.warn(`[MusicBrainzService] ${context} - Connection error (attempt ${attempt}/${this.MAX_RETRIES}), retrying in ${delay}ms...`)
-          await new Promise(resolve => setTimeout(resolve, delay))
-        } else {
-          throw error
+        try {
+          return await requestFn()
+        } catch (error: unknown) {
+          // Re-throw retryable errors so retry logic can handle them
+          if (this.isRetryableConnectionError(error)) {
+            throw error
+          }
+          // For non-retryable errors, wrap with a marker so retry stops
+          const wrappedError = new Error(getErrorMessage(error)) as Error & { nonRetryable: boolean }
+          wrappedError.nonRetryable = true
+          throw wrappedError
+        }
+      },
+      {
+        maxRetries: this.MAX_RETRIES,
+        initialDelay: this.RETRY_DELAY_MS,
+        maxDelay: 30000,
+        backoffFactor: 2,
+        retryableStatuses: [429, 500, 502, 503, 504],
+        onRetry: (attempt, error, delay) => {
+          console.warn(`[MusicBrainzService] ${context} - Retry ${attempt}/${this.MAX_RETRIES} after ${delay}ms: ${error.message}`)
         }
       }
-    }
-
-    throw lastError
+    )
   }
 
   /**
@@ -384,7 +406,8 @@ export class MusicBrainzService extends CancellableOperation {
             inc: 'media+recordings',  // Include tracks in the same request
           },
         })
-        return (response.data as any)?.releases || []
+        interface MBReleasesResponse { releases?: MBRelease[] }
+        return (response.data as MBReleasesResponse)?.releases || []
       }, `getReleases(${releaseGroupId})`)
 
       // If no official releases, try without status filter
@@ -399,7 +422,8 @@ export class MusicBrainzService extends CancellableOperation {
               inc: 'media+recordings',  // Include tracks in the same request
             },
           })
-          return (response.data as any)?.releases || []
+          interface MBReleasesResponse { releases?: MBRelease[] }
+          return (response.data as MBReleasesResponse)?.releases || []
         }, `getReleasesAll(${releaseGroupId})`)
       }
 
@@ -409,7 +433,21 @@ export class MusicBrainzService extends CancellableOperation {
       }
 
       // Find the first release with media/tracks
-      let release = releases.find((r: any) => r.media && r.media.length > 0) || releases[0]
+      interface MBReleaseWithMedia {
+        id: string
+        title: string
+        media?: Array<{
+          position?: number
+          tracks?: Array<{
+            id: string
+            title: string
+            position?: number
+            number?: number
+            length?: number
+          }>
+        }>
+      }
+      const release = (releases as MBReleaseWithMedia[]).find((r) => r.media && r.media.length > 0) || releases[0] as MBReleaseWithMedia
       console.log(`[MusicBrainzService] Using release: ${release.title} (${release.id})`)
       const releaseId = release.id
 
@@ -434,7 +472,7 @@ export class MusicBrainzService extends CancellableOperation {
           tracks.push({
             musicbrainz_id: track.id,
             title: track.title,
-            track_number: track.position || track.number,
+            track_number: track.position ?? track.number ?? 0,
             disc_number: discNumber,
             duration_ms: track.length,
           })
@@ -490,10 +528,17 @@ export class MusicBrainzService extends CancellableOperation {
             limit: 5,
           },
         })
-        return (response.data as any)?.['release-groups'] || []
+        interface MBReleaseGroupsResponse { 'release-groups'?: Array<{
+          id: string
+          title: string
+          'first-release-date'?: string
+          score?: number
+          'artist-credit'?: Array<{ name?: string; artist?: { country?: string } }>
+        }> }
+        return (response.data as MBReleaseGroupsResponse)?.['release-groups'] || []
       }, `searchRelease(${artistName} - ${albumTitle})`)
 
-      return releaseGroups.map((rg: any) => ({
+      return releaseGroups.map((rg) => ({
         id: rg.id,  // MusicBrainz release group ID
         title: rg.title,
         artist_credit: rg['artist-credit']?.[0]?.name || artistName,

@@ -1,5 +1,6 @@
 import { getDatabase } from '../database/getDatabase'
 import { getTMDBService } from './TMDBService'
+import type { TMDBSeasonDetails } from '../types/tmdb'
 import {
   CancellableOperation,
   wasRecentlyAnalyzed,
@@ -577,7 +578,7 @@ export class SeriesCompletenessService extends CancellableOperation {
     // Instead of N+1 calls (1 show + N seasons), we now make just 1-2 calls
     // (TMDB limits append_to_response to 20 items, so >20 seasons need multiple calls)
     const MAX_SEASONS_PER_CALL = 20
-    const seasonDataMap = new Map<number, any>()
+    const seasonDataMap = new Map<number, TMDBSeasonDetails>()
 
     for (let i = 0; i < seasonNumbers.length; i += MAX_SEASONS_PER_CALL) {
       const batchSeasons = seasonNumbers.slice(i, i + MAX_SEASONS_PER_CALL)

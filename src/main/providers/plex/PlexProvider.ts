@@ -35,7 +35,17 @@ import type {
   ProgressCallback,
   SourceConfig,
 } from '../base/MediaProvider'
-import type { PlexAuthPin, PlexUser, PlexServer, PlexMediaItem, PlexMusicArtist, PlexMusicAlbum, PlexMusicTrack } from '../../types/plex'
+import type {
+  PlexAuthPin,
+  PlexUser,
+  PlexServer,
+  PlexLibrary,
+  PlexMediaItem,
+  PlexMusicArtist,
+  PlexMusicAlbum,
+  PlexMusicTrack,
+  PlexResource,
+} from '../../types/plex'
 import type { MediaItem, AudioTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
 
 const PLEX_API_URL = 'https://plex.tv/api/v2'
@@ -186,18 +196,18 @@ export class PlexProvider implements MediaProvider {
         },
       })
 
-      const resources = Array.isArray(response.data) ? response.data : []
-      const servers = resources.filter((r: any) => r.provides === 'server')
+      const resources: PlexResource[] = Array.isArray(response.data) ? response.data : []
+      const servers = resources.filter((r) => r.provides === 'server')
 
-      return servers.map((server: any) => {
-        const localHttp = server.connections?.find((c: any) => c.local && c.protocol === 'http')
+      return servers.map((server) => {
+        const localHttp = server.connections?.find((c) => c.local && c.protocol === 'http')
         const preferredConnection = localHttp || server.connections?.[0]
 
         return {
           id: server.clientIdentifier,
           name: server.name,
-          address: preferredConnection?.address || server.publicAddress,
-          port: parseInt(preferredConnection?.port, 10) || 32400,
+          address: preferredConnection?.address || server.publicAddress || '',
+          port: preferredConnection?.port || 32400,
           version: server.productVersion,
           isLocal: preferredConnection?.local || false,
           isOwned: server.owned === true || server.owned === 1,
@@ -226,33 +236,33 @@ export class PlexProvider implements MediaProvider {
         },
       })
 
-      const resources = Array.isArray(response.data) ? response.data : []
+      const resources: PlexResource[] = Array.isArray(response.data) ? response.data : []
       const server = resources.find(
-        (r: any) => r.provides === 'server' && r.clientIdentifier === serverId
+        (r) => r.provides === 'server' && r.clientIdentifier === serverId
       )
 
       if (!server) {
         throw new Error('Server not found')
       }
 
-      const localHttp = server.connections?.find((c: any) => c.local && c.protocol === 'http')
+      const localHttp = server.connections?.find((c) => c.local && c.protocol === 'http')
       const preferredConnection = localHttp || server.connections?.[0]
 
       this.selectedServer = {
         name: server.name,
-        host: server.publicAddress || server.address,
-        port: parseInt(preferredConnection?.port, 10) || 32400,
+        host: server.publicAddress || '',
+        port: preferredConnection?.port || 32400,
         machineIdentifier: server.clientIdentifier,
         version: server.productVersion,
         scheme: preferredConnection?.protocol || 'https',
-        address: preferredConnection?.address || server.publicAddress,
+        address: preferredConnection?.address || server.publicAddress || '',
         uri: preferredConnection?.uri || `${preferredConnection?.protocol}://${preferredConnection?.address}:${preferredConnection?.port}`,
         localAddresses: server.connections
-          ?.filter((c: any) => c.local)
-          .map((c: any) => c.address)
+          ?.filter((c) => c.local)
+          .map((c) => c.address)
           .join(',') || '',
         owned: server.owned === true || server.owned === 1,
-        accessToken: server.accessToken,
+        accessToken: server.accessToken || '',
       }
 
       return true
@@ -314,8 +324,9 @@ export class PlexProvider implements MediaProvider {
         },
       })
 
-      const directories = (response.data as any)?.MediaContainer?.Directory || []
-      return directories.map((dir: any) => ({
+      const responseData = response.data as { MediaContainer?: { Directory?: PlexLibrary[] } }
+      const directories = responseData?.MediaContainer?.Directory || []
+      return directories.map((dir: PlexLibrary) => ({
         id: dir.key,
         name: dir.title,
         type: dir.type === 'show' ? 'show' : dir.type === 'movie' ? 'movie' : dir.type === 'artist' ? 'music' : 'unknown',
@@ -343,7 +354,8 @@ export class PlexProvider implements MediaProvider {
         }
       )
 
-      const items = (response.data as any)?.MediaContainer?.Metadata || []
+      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
+      const items = responseData?.MediaContainer?.Metadata || []
       return items.map((item: PlexMediaItem) => this.convertToMediaMetadata(item))
     } catch (error) {
       console.error('Failed to get library items:', error)
@@ -366,7 +378,8 @@ export class PlexProvider implements MediaProvider {
         }
       )
 
-      const metadata = (response.data as any)?.MediaContainer?.Metadata?.[0]
+      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
+      const metadata = responseData?.MediaContainer?.Metadata?.[0]
       if (!metadata) {
         throw new Error('Item not found')
       }
@@ -420,10 +433,10 @@ export class PlexProvider implements MediaProvider {
       const itemsToProcess: Array<PlexMediaItem & { _showTmdbId?: string }> = []
       for (const item of items) {
         if (libraryType === null) {
-          libraryType = (item as any).type === 'show' ? 'show' : 'movie'
+          libraryType = item.type === 'show' ? 'show' : 'movie'
         }
 
-        if ((item as any).type === 'show') {
+        if (item.type === 'show') {
           // Get show metadata for TMDB ID
           const showMetadata = await this.getPlexItemMetadata(item.ratingKey)
           let showTmdbId: string | undefined
@@ -444,7 +457,7 @@ export class PlexProvider implements MediaProvider {
           // Get all episodes
           const episodes = await this.getAllEpisodes(item.ratingKey)
           for (const ep of episodes) {
-            (ep as any)._showTmdbId = showTmdbId
+            (ep as PlexMediaItem & { _showTmdbId?: string })._showTmdbId = showTmdbId
           }
           itemsToProcess.push(...episodes)
         } else {
@@ -504,7 +517,7 @@ export class PlexProvider implements MediaProvider {
                 }
               }
 
-              const showTmdbId = (item as any)._showTmdbId
+              const showTmdbId = (item as PlexMediaItem & { _showTmdbId?: string })._showTmdbId
               const mediaItem = this.convertToMediaItem(detailed, showTmdbId)
 
               if (mediaItem) {
@@ -638,8 +651,9 @@ export class PlexProvider implements MediaProvider {
         },
       })
 
-      const directories = (response.data as any)?.MediaContainer?.Directory || []
-      const library = directories.find((dir: any) => dir.key === libraryKey)
+      const responseData = response.data as { MediaContainer?: { Directory?: PlexMediaItem[] } }
+      const directories = responseData?.MediaContainer?.Directory || []
+      const library = directories.find((dir: PlexMediaItem) => dir.key === libraryKey)
 
       if (library) {
         return library.type === 'show' ? 'show' : library.type === 'movie' ? 'movie' : null
@@ -666,7 +680,8 @@ export class PlexProvider implements MediaProvider {
       },
     })
 
-    const items = (response.data as any)?.MediaContainer?.Metadata || []
+    const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
+    const items = responseData?.MediaContainer?.Metadata || []
     const ids = new Set<string>()
 
     for (const item of items) {
@@ -760,7 +775,8 @@ export class PlexProvider implements MediaProvider {
       },
     })
 
-    const items = (response.data as any)?.MediaContainer?.Metadata || []
+    const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
+    const items = responseData?.MediaContainer?.Metadata || []
     if (sinceTimestamp) {
       console.log(`[PlexProvider ${this.sourceId}] Incremental scan found ${items.length} new/updated items`)
     }
@@ -782,7 +798,8 @@ export class PlexProvider implements MediaProvider {
         }
       )
 
-      return (response.data as any)?.MediaContainer?.Metadata?.[0] || null
+      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
+      return responseData?.MediaContainer?.Metadata?.[0] || null
     } catch (error) {
       console.error('Failed to get item metadata:', error)
       return null
@@ -804,7 +821,8 @@ export class PlexProvider implements MediaProvider {
         }
       )
 
-      return (response.data as any)?.MediaContainer?.Metadata || []
+      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
+      return responseData?.MediaContainer?.Metadata || []
     } catch (error) {
       console.error('Failed to get episodes:', error)
       return []
@@ -826,7 +844,8 @@ export class PlexProvider implements MediaProvider {
         }
       )
 
-      return (response.data as any)?.MediaContainer?.Metadata?.[0] || null
+      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
+      return responseData?.MediaContainer?.Metadata?.[0] || null
     } catch (error) {
       return null
     }
@@ -1095,9 +1114,10 @@ export class PlexProvider implements MediaProvider {
     )
 
     console.log(`[PlexProvider] Response status: ${response.status}`)
-    console.log(`[PlexProvider] MediaContainer size: ${(response.data as any)?.MediaContainer?.size || 0}`)
+    const responseData = response.data as { MediaContainer?: { size?: number; Metadata?: PlexMusicArtist[] } }
+    console.log(`[PlexProvider] MediaContainer size: ${responseData?.MediaContainer?.size || 0}`)
 
-    const artists = (response.data as any)?.MediaContainer?.Metadata || []
+    const artists = responseData?.MediaContainer?.Metadata || []
     console.log(`[PlexProvider] Found ${artists.length} artists in library ${libraryKey}`)
 
     // Log first artist for debugging
@@ -1136,7 +1156,8 @@ export class PlexProvider implements MediaProvider {
       },
     })
 
-    const albums = (response.data as any)?.MediaContainer?.Metadata || []
+    const responseData = response.data as { MediaContainer?: { Metadata?: PlexMusicAlbum[] } }
+    const albums = responseData?.MediaContainer?.Metadata || []
     console.log(`[PlexProvider] Found ${albums.length} albums`)
 
     // Log first album for debugging
@@ -1169,7 +1190,8 @@ export class PlexProvider implements MediaProvider {
       }
     )
 
-    const tracks = (response.data as any)?.MediaContainer?.Metadata || []
+    const responseData = response.data as { MediaContainer?: { Metadata?: PlexMusicTrack[] } }
+    const tracks = responseData?.MediaContainer?.Metadata || []
     console.log(`[PlexProvider] Found ${tracks.length} tracks`)
 
     // Log first track to check if Media data is present
@@ -1193,7 +1215,8 @@ export class PlexProvider implements MediaProvider {
                 },
               }
             )
-            const detailedTrack = (detailResponse.data as any)?.MediaContainer?.Metadata?.[0]
+            const detailData = detailResponse.data as { MediaContainer?: { Metadata?: PlexMusicTrack[] } }
+            const detailedTrack = detailData?.MediaContainer?.Metadata?.[0]
             if (detailedTrack) {
               detailedTracks.push(detailedTrack)
             }
@@ -1228,7 +1251,8 @@ export class PlexProvider implements MediaProvider {
         }
       )
 
-      return (response.data as any)?.MediaContainer?.Metadata?.[0] || null
+      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMusicArtist[] } }
+      return responseData?.MediaContainer?.Metadata?.[0] || null
     } catch (error) {
       console.error('Failed to get artist metadata:', error)
       return null
@@ -1253,7 +1277,8 @@ export class PlexProvider implements MediaProvider {
         }
       )
 
-      return (response.data as any)?.MediaContainer?.Metadata?.[0] || null
+      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMusicAlbum[] } }
+      return responseData?.MediaContainer?.Metadata?.[0] || null
     } catch (error) {
       console.error('Failed to get album metadata:', error)
       return null
@@ -1592,7 +1617,7 @@ export class PlexProvider implements MediaProvider {
         try {
           // Determine artist for the album
           // For compilations, use the album's parentTitle or "Various Artists"
-          const artistName = (plexAlbum as any).parentTitle || 'Various Artists'
+          const artistName = plexAlbum.parentTitle || 'Various Artists'
 
           // Check if we have this artist already, otherwise create
           let artistId: number | undefined

@@ -533,7 +533,7 @@ export class MediaFileAnalyzer {
 
         const protocol = requestUrl.startsWith('https') ? https : http
 
-        protocol.get(requestUrl, (response: any) => {
+        protocol.get(requestUrl, (response: http.IncomingMessage) => {
           // Handle redirects
           if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307) {
             response.destroy() // Clean up the redirect response

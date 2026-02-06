@@ -68,6 +68,7 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
     isLoading,
     scanProgress,
     refreshSources,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     scanSource: _scanSource,
     stopScan,
     activeSourceId,
@@ -85,8 +86,12 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
   const [allSourceLibraries, setAllSourceLibraries] = useState<Map<string, Array<MediaLibraryResponse & { isEnabled: boolean }>>>(new Map())
   const [loadingLibraries, setLoadingLibraries] = useState<Set<string>>(new Set())
   const [managingSourceId, setManagingSourceId] = useState<string | null>(null)
+  // These state values are read but setters reserved for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [scanningLibrary, _setScanningLibrary] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [scanningLibraryType, _setScanningLibraryType] = useState<string | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [scanPhase, _setScanPhase] = useState<'scanning' | 'analyzing' | null>(null)
   const [analysisProgress, setAnalysisProgress] = useState<{ current: number; total: number; percentage: number; currentItem?: string } | null>(null)
   const [musicScanProgress, setMusicScanProgress] = useState<Map<string, { current: number; total: number; percentage: number; currentItem?: string; phase?: string }>>(new Map())
@@ -222,7 +227,7 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
         // Store all libraries for managing
         setAllSourceLibraries(prev => new Map(prev).set(sourceId, libsWithStatus))
         // Filter to only show enabled ones in the normal view
-        const enabledLibs = libsWithStatus.filter((lib: any) => lib.isEnabled)
+        const enabledLibs = libsWithStatus.filter((lib) => lib.isEnabled)
         setSourceLibraries(prev => new Map(prev).set(sourceId, enabledLibs))
       } catch (err) {
         console.error('Failed to load libraries:', err)

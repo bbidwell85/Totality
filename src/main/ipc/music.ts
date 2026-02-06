@@ -41,16 +41,15 @@ export function registerMusicHandlers(): void {
       const win = getWindowFromEvent(_event)
       const { onProgress, flush } = createProgressUpdater(win, 'music:scanProgress', 'music')
 
-      const progressCallback = (progress: any) => {
+      const progressCallback = (progress: { current: number; total: number; currentItem?: string; percentage?: number }) => {
         onProgress(progress, { sourceId, libraryId })
       }
 
       let result
-      let library
 
       // Get library info first (for timestamp recording)
       const libraries = await provider.getLibraries()
-      library = libraries.find(lib => lib.id === libraryId)
+      const library = libraries.find(lib => lib.id === libraryId)
 
       if (provider.providerType === 'plex') {
         // Plex provider

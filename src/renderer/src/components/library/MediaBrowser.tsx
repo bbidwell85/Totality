@@ -115,6 +115,7 @@ export function MediaBrowser({
   const [tierFilter, setTierFilter] = useState<'all' | 'SD' | '720p' | '1080p' | '4K'>('all')
   const [qualityFilter, setQualityFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all')
   const [searchInput, setSearchInput] = useState('')
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [searchQuery, _setSearchQuery] = useState('')
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [searchResultIndex, setSearchResultIndex] = useState(-1)
@@ -193,6 +194,7 @@ export function MediaBrowser({
 
   // Active source libraries (to determine which library types exist)
   const [activeSourceLibraries, setActiveSourceLibraries] = useState<Array<{ type: string }>>([])
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_librariesLoading, setLibrariesLoading] = useState(false)
 
   // Global keyboard shortcuts
@@ -217,6 +219,7 @@ export function MediaBrowser({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Handle initialTab prop from dashboard navigation
@@ -232,6 +235,7 @@ export function MediaBrowser({
     if (libraryTab && libraryTab !== view) {
       setView(libraryTab)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libraryTab])
   // Note: Removed auto-notify effect to break bidirectional sync loop
   // Parent is notified only via explicit user tab clicks (see handleTabClick)
@@ -298,6 +302,7 @@ export function MediaBrowser({
       }
       pendingUpdateRef.current = null
     }, 500) // 500ms debounce for live updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSourceId, loadActiveSourceLibraries, scanProgress.size])
 
   // Register toolbar elements for keyboard navigation
@@ -539,6 +544,7 @@ export function MediaBrowser({
       cleanupSettingsChanged?.()
       cleanupScanCompleted?.()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleLibraryUpdate, addToast, setActiveSource, markLibraryAsNew])
 
   // Reload media and stats when active source changes
@@ -547,6 +553,7 @@ export function MediaBrowser({
     loadStats(activeSourceId || undefined)
     loadMusicData()
     loadCompletenessData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSourceId])
 
   // Debounce filter changes (faster than search since they're button clicks)
@@ -610,7 +617,7 @@ export function MediaBrowser({
         filters.sourceId = activeSourceId
       }
 
-      const mediaItems: any[] = await window.electronAPI.getMediaItems(filters)
+      const mediaItems = await window.electronAPI.getMediaItems(filters) as MediaItem[]
       setItems(mediaItems)
       hasInitialLoadRef.current = true
     } catch (err) {

@@ -33,7 +33,7 @@ import type {
   SourceConfig,
   ProviderType,
 } from '../base/MediaProvider'
-import type { MediaItem, AudioTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
+import type { MediaItem, AudioTrack, MusicArtist, MusicAlbum, MusicTrack, AlbumType } from '../../types/database'
 import {
   QUERY_MOVIES_WITH_DETAILS,
   QUERY_EPISODES_WITH_DETAILS,
@@ -118,13 +118,12 @@ export class KodiLocalProvider implements MediaProvider {
 
     // Load from connection config if provided
     if (config.connectionConfig) {
-      const connConfig = config.connectionConfig as any
-      this.databasePath = connConfig.databasePath || ''
-      this.databaseVersion = connConfig.databaseVersion || 0
-      this.musicDatabasePath = connConfig.musicDatabasePath || ''
+      this.databasePath = config.connectionConfig.databasePath || ''
+      this.databaseVersion = config.connectionConfig.databaseVersion || 0
+      this.musicDatabasePath = config.connectionConfig.musicDatabasePath || ''
       // Default to true if not explicitly set (reserved for future use)
-      this._includeVideo = connConfig.includeVideo !== false
-      this._includeMusic = connConfig.includeMusic !== false
+      this._includeVideo = config.connectionConfig.includeVideo !== false
+      this._includeMusic = config.connectionConfig.includeMusic !== false
     }
     // Suppress unused warnings - these are placeholders for future configurability
     void this._includeVideo
@@ -187,7 +186,7 @@ export class KodiLocalProvider implements MediaProvider {
   /**
    * Execute a query and return results as array of objects
    */
-  private query<T>(sql: string, params: any[] = []): T[] {
+  private query<T>(sql: string, params: (string | number | null)[] = []): T[] {
     if (!this.db) {
       throw new Error('Database not opened')
     }
@@ -215,8 +214,8 @@ export class KodiLocalProvider implements MediaProvider {
   async authenticate(credentials: ProviderCredentials): Promise<AuthResult> {
     try {
       // For local provider, credentials contain the database path
-      const dbPath = (credentials as any).databasePath
-      const dbVersion = (credentials as any).databaseVersion
+      const dbPath = credentials.databasePath
+      const dbVersion = credentials.databaseVersion
 
       if (!dbPath) {
         // Try auto-detection
@@ -976,9 +975,9 @@ export class KodiLocalProvider implements MediaProvider {
                   // Log FFprobe failures (file not found, network path issues, etc.)
                   console.warn(`[KodiLocalProvider] FFprobe failed for "${metadata.title}": ${ffprobeResult.error}`)
                 }
-              } catch (ffprobeError: any) {
+              } catch (ffprobeError: unknown) {
                 // Log but continue - FFprobe failure shouldn't stop the scan
-                console.warn(`[KodiLocalProvider] FFprobe exception for ${metadata.title}: ${ffprobeError.message}`)
+                console.warn(`[KodiLocalProvider] FFprobe exception for ${metadata.title}: ${(ffprobeError as Error).message}`)
               }
             } else if (i === 0) {
               console.log(`[KodiLocalProvider] FFprobe skipped - enabled: ${ffprobeEnabled}, filePath: "${metadata.filePath || 'EMPTY'}"`)
@@ -987,7 +986,7 @@ export class KodiLocalProvider implements MediaProvider {
             const mediaItem = this.convertMetadataToMediaItem(metadata)
             if (mediaItem) {
               mediaItem.source_id = this.sourceId
-              mediaItem.source_type = 'kodi-local' as any
+              mediaItem.source_type = 'kodi-local'
               mediaItem.library_id = libraryId
 
               const id = await db.upsertMediaItem(mediaItem)
@@ -1166,8 +1165,8 @@ export class KodiLocalProvider implements MediaProvider {
                 if (ffprobeResult.success) {
                   metadata = this.enhanceMetadataWithFFprobe(metadata, ffprobeResult)
                 }
-              } catch (ffprobeError: any) {
-                console.warn(`[KodiLocalProvider ${this.sourceId}] FFprobe exception for ${metadata.title}: ${ffprobeError.message}`)
+              } catch (ffprobeError: unknown) {
+                console.warn(`[KodiLocalProvider ${this.sourceId}] FFprobe exception for ${metadata.title}: ${(ffprobeError as Error).message}`)
               }
             }
 
@@ -1175,7 +1174,7 @@ export class KodiLocalProvider implements MediaProvider {
             const mediaItem = this.convertMetadataToMediaItem(metadata)
             if (mediaItem) {
               mediaItem.source_id = this.sourceId
-              mediaItem.source_type = 'kodi-local' as any
+              mediaItem.source_type = 'kodi-local'
               mediaItem.library_id = libraryId
 
               const id = await db.upsertMediaItem(mediaItem)
@@ -1702,7 +1701,7 @@ export class KodiLocalProvider implements MediaProvider {
   /**
    * Execute a query on the music database
    */
-  private queryMusicDb<T>(sql: string, params: any[] = []): T[] {
+  private queryMusicDb<T>(sql: string, params: (string | number | null)[] = []): T[] {
     if (!this.musicDb) {
       throw new Error('Music database not opened')
     }
@@ -1730,7 +1729,7 @@ export class KodiLocalProvider implements MediaProvider {
   private convertToMusicArtist(item: KodiMusicArtistResult): MusicArtist {
     return {
       source_id: this.sourceId,
-      source_type: 'kodi-local' as any,
+      source_type: 'kodi-local',
       library_id: 'music',
       provider_id: String(item.idArtist),
       name: item.strArtist,
@@ -1748,9 +1747,20 @@ export class KodiLocalProvider implements MediaProvider {
    * Convert Kodi album result to MusicAlbum type
    */
   private convertToMusicAlbum(item: KodiMusicAlbumResult, artistId?: number): MusicAlbum {
+    // Map Kodi album types to our AlbumType
+    const kodiType = (item.strType || '').toLowerCase()
+    let albumType: AlbumType | undefined = undefined
+    if (kodiType === 'album') albumType = 'album'
+    else if (kodiType === 'ep') albumType = 'ep'
+    else if (kodiType === 'single') albumType = 'single'
+    else if (kodiType === 'compilation') albumType = 'compilation'
+    else if (kodiType === 'live') albumType = 'live'
+    else if (kodiType === 'soundtrack') albumType = 'soundtrack'
+    else if (kodiType) albumType = 'unknown'
+
     return {
       source_id: this.sourceId,
-      source_type: 'kodi-local' as any,
+      source_type: 'kodi-local',
       library_id: 'music',
       provider_id: String(item.idAlbum),
       artist_id: artistId,
@@ -1761,7 +1771,7 @@ export class KodiLocalProvider implements MediaProvider {
       musicbrainz_release_group_id: item.strReleaseGroupMBID || undefined,
       genres: item.strGenres || undefined,
       studio: item.strLabel || undefined,
-      album_type: item.strType as any || undefined,
+      album_type: albumType,
       thumb_url: convertKodiImageUrl(item.thumbUrl),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1779,7 +1789,7 @@ export class KodiLocalProvider implements MediaProvider {
 
     return {
       source_id: this.sourceId,
-      source_type: 'kodi-local' as any,
+      source_type: 'kodi-local',
       library_id: 'music',
       provider_id: String(item.idSong),
       album_id: albumId,

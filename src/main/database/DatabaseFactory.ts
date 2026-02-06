@@ -153,11 +153,11 @@ export async function getDatabaseServiceAsync(): Promise<DatabaseServiceInterfac
  */
 export function getDatabaseServiceSync(): DatabaseServiceInterface {
   if (shouldUseBetterSqlite()) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getBetterSQLiteService } = require('./BetterSQLiteService')
     return getBetterSQLiteService()
   } else {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getDatabaseService } = require('../services/DatabaseService')
     return getDatabaseService()
   }

@@ -256,10 +256,10 @@ export function ServicesTab() {
     try {
       const result = await window.electronAPI.testNfsMapping(nfsPath, localPath)
       setTestResults((prev) => ({ ...prev, [nfsPath]: result }))
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTestResults((prev) => ({
         ...prev,
-        [nfsPath]: { success: false, error: err.message || 'Test failed' },
+        [nfsPath]: { success: false, error: (err as Error).message || 'Test failed' },
       }))
     } finally {
       setTestingMappings((prev) => {
@@ -290,8 +290,8 @@ export function ServicesTab() {
       setUpdateAvailable(false)
       setLatestVersion(null)
       await loadSettings()
-    } catch (err: any) {
-      setFfprobeError(err.message || 'Failed to install FFprobe')
+    } catch (err: unknown) {
+      setFfprobeError((err as Error).message || 'Failed to install FFprobe')
     } finally {
       setIsInstalling(false)
       setInstallProgress(null)
@@ -307,8 +307,8 @@ export function ServicesTab() {
       setUpdateAvailable(false)
       setLatestVersion(null)
       await loadSettings()
-    } catch (err: any) {
-      setFfprobeError(err.message || 'Failed to uninstall FFprobe')
+    } catch (err: unknown) {
+      setFfprobeError((err as Error).message || 'Failed to uninstall FFprobe')
     } finally {
       setIsUninstalling(false)
     }
@@ -328,8 +328,8 @@ export function ServicesTab() {
           setFfprobeVersion(result.currentVersion)
         }
       }
-    } catch (err: any) {
-      setFfprobeError(err.message || 'Failed to check for updates')
+    } catch (err: unknown) {
+      setFfprobeError((err as Error).message || 'Failed to check for updates')
     } finally {
       setCheckingUpdate(false)
     }

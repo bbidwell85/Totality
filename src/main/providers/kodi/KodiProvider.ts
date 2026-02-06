@@ -1237,6 +1237,16 @@ export class KodiProvider implements MediaProvider {
     const thumbUrl = item.thumbnail ? this.convertKodiImageUrl(item.thumbnail) : undefined
     const artistName = item.displayartist || item.artist?.[0] || 'Unknown Artist'
 
+    // Map Kodi album types to our AlbumType
+    const kodiType = (item.type || '').toLowerCase()
+    let albumType: 'album' | 'ep' | 'single' | 'compilation' | 'live' | 'soundtrack' | 'unknown' = 'album'
+    if (kodiType === 'ep') albumType = 'ep'
+    else if (kodiType === 'single') albumType = 'single'
+    else if (kodiType === 'compilation') albumType = 'compilation'
+    else if (kodiType === 'live') albumType = 'live'
+    else if (kodiType === 'soundtrack') albumType = 'soundtrack'
+    else if (kodiType && kodiType !== 'album') albumType = 'unknown'
+
     return {
       source_id: this.sourceId,
       source_type: 'kodi',
@@ -1249,7 +1259,7 @@ export class KodiProvider implements MediaProvider {
       musicbrainz_id: item.musicbrainzalbumid,
       musicbrainz_release_group_id: item.musicbrainzreleasegroupid,
       genres: item.genre ? JSON.stringify(item.genre) : undefined,
-      album_type: item.type as any, // Kodi uses 'album', 'ep', 'single'
+      album_type: albumType,
       thumb_url: thumbUrl,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

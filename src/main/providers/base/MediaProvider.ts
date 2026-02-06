@@ -34,6 +34,14 @@ export interface ProviderCredentials {
   databasePrefix?: string
   ssl?: boolean
   connectionTimeout?: number
+  videoDatabaseVersion?: number
+
+  // Kodi Local: Local database access
+  databasePath?: string
+  databaseVersion?: number
+  musicDatabasePath?: string
+  includeVideo?: boolean
+  includeMusic?: boolean
 
   // Local folder
   folderPath?: string

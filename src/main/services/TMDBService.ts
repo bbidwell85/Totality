@@ -11,6 +11,7 @@ import {
 } from '../types/tmdb'
 import { getDatabase } from '../database/getDatabase'
 import { RateLimiters, SlidingWindowRateLimiter } from './utils/RateLimiter'
+import { retryWithBackoff, getRateLimitRetryAfter } from './utils/retryWithBackoff'
 
 /**
  * TMDB API v3 Service with rate limiting and caching
@@ -25,7 +26,7 @@ export class TMDBService {
   private static readonly REQUEST_TIMEOUT = 30000 // 30 second timeout for API requests
 
   private apiKey: string | null = null
-  private cache: Map<string, { data: any; timestamp: number }> = new Map()
+  private cache: Map<string, { data: unknown; timestamp: number }> = new Map()
   private rateLimiter: SlidingWindowRateLimiter = RateLimiters.createTMDBLimiter()
   private activeRequests = 0
   private requestQueue: Array<{ execute: () => Promise<void>; resolve: () => void }> = []
@@ -134,7 +135,7 @@ export class TMDBService {
   /**
    * Cache management: Store in cache
    */
-  private setCache(key: string, data: any): void {
+  private setCache(key: string, data: unknown): void {
     this.cache.set(key, {
       data,
       timestamp: Date.now()
@@ -142,7 +143,7 @@ export class TMDBService {
   }
 
   /**
-   * Make API request with rate limiting and caching
+   * Make API request with rate limiting, caching, and retry with exponential backoff
    */
   private async request<T>(
     endpoint: string,
@@ -169,37 +170,63 @@ export class TMDBService {
       url.searchParams.append(key, value)
     })
 
-    // Make request with timeout using AbortController
-    console.log('[TMDB] Requesting:', url.toString().replace(apiKey, 'API_KEY'))
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), TMDBService.REQUEST_TIMEOUT)
+    const urlForLogging = url.toString().replace(apiKey, 'API_KEY')
 
-    let response: Response
-    try {
-      response = await fetch(url.toString(), { signal: controller.signal })
-    } catch (error: unknown) {
-      clearTimeout(timeoutId)
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('TMDB API request timed out')
+    // Make request with retry logic and timeout
+    const data = await retryWithBackoff<T>(
+      async () => {
+        console.log('[TMDB] Requesting:', urlForLogging)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), TMDBService.REQUEST_TIMEOUT)
+
+        let response: Response
+        try {
+          response = await fetch(url.toString(), { signal: controller.signal })
+        } catch (error: unknown) {
+          clearTimeout(timeoutId)
+          if (error instanceof Error && error.name === 'AbortError') {
+            throw new Error('TMDB API request timed out')
+          }
+          throw error
+        } finally {
+          clearTimeout(timeoutId)
+        }
+
+        // Handle rate limiting with Retry-After header
+        const rateLimitDelay = getRateLimitRetryAfter(response)
+        if (rateLimitDelay !== null) {
+          console.warn(`[TMDB] Rate limited, retry after ${rateLimitDelay}ms`)
+          const error = new Error(`TMDB rate limited (429)`) as Error & { status: number }
+          error.status = 429
+          throw error
+        }
+
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({}))
+          console.error('[TMDB] Error response:', errorBody)
+          const error = new Error(`TMDB API Error: ${errorBody.status_message || response.statusText}`) as Error & { status: number }
+          error.status = response.status
+          throw error
+        }
+
+        const result = await response.json()
+        console.log('[TMDB] Response for', endpoint, '- total_results:', (result as { total_results?: number }).total_results)
+        return result as T
+      },
+      {
+        maxRetries: 3,
+        initialDelay: 1000,
+        maxDelay: 10000,
+        onRetry: (attempt, error, delay) => {
+          console.warn(`[TMDB] Retry ${attempt}/3 for ${urlForLogging} after ${delay}ms: ${error.message}`)
+        }
       }
-      throw error
-    } finally {
-      clearTimeout(timeoutId)
-    }
-
-    if (!response.ok) {
-      const error = await response.json()
-      console.error('[TMDB] Error response:', error)
-      throw new Error(`TMDB API Error: ${error.status_message || response.statusText}`)
-    }
-
-    const data = await response.json()
-    console.log('[TMDB] Response for', endpoint, '- total_results:', (data as any).total_results)
+    )
 
     // Cache the response
     this.setCache(cacheKey, data)
 
-    return data as T
+    return data
   }
 
   /**

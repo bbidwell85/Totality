@@ -84,14 +84,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Source Events
   onSourcesScanProgress: (callback: (progress: unknown) => void) => {
-    const handler = (_event: any, progress: unknown) => callback(progress)
+    const handler = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress)
     ipcRenderer.on('sources:scanProgress', handler)
     return () => ipcRenderer.removeListener('sources:scanProgress', handler)
   },
 
   // Library Update Events - fired when media items are updated during scans/analysis
   onLibraryUpdated: (callback: (data: { type: 'media' | 'music'; count?: number }) => void) => {
-    const handler = (_event: any, data: any) => callback(data)
+    const handler = (_event: Electron.IpcRendererEvent, data: { type: 'media' | 'music'; count?: number }) => callback(data)
     ipcRenderer.on('library:updated', handler)
     return () => ipcRenderer.removeListener('library:updated', handler)
   },
@@ -120,7 +120,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   kodiImportCollections: (sourceId: string) => ipcRenderer.invoke('kodi:importCollections', sourceId),
   kodiGetCollections: (sourceId: string) => ipcRenderer.invoke('kodi:getCollections', sourceId),
   onKodiCollectionProgress: (callback: (progress: { current: number; total: number; currentItem: string }) => void) => {
-    const handler = (_event: any, progress: any) => callback(progress)
+    const handler = (_event: Electron.IpcRendererEvent, progress: { current: number; total: number; currentItem: string }) => callback(progress)
     ipcRenderer.on('kodi:collectionProgress', handler)
     return () => ipcRenderer.removeListener('kodi:collectionProgress', handler)
   },
@@ -197,7 +197,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Listen for FFprobe install progress
   onFFprobeInstallProgress: (callback: (progress: { stage: string; percent: number }) => void) => {
-    const handler = (_event: any, progress: any) => callback(progress)
+    const handler = (_event: Electron.IpcRendererEvent, progress: { stage: string; percent: number }) => callback(progress)
     ipcRenderer.on('ffprobe:installProgress', handler)
     return () => ipcRenderer.removeListener('ffprobe:installProgress', handler)
   },
@@ -306,7 +306,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Settings Change Events
   onSettingsChanged: (callback: (data: { key: string; hasValue: boolean }) => void) => {
-    const handler = (_event: any, data: { key: string; hasValue: boolean }) => callback(data)
+    const handler = (_event: Electron.IpcRendererEvent, data: { key: string; hasValue: boolean }) => callback(data)
     ipcRenderer.on('settings:changed', handler)
     return () => ipcRenderer.removeListener('settings:changed', handler)
   },
@@ -337,7 +337,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('series:getEpisodeStill', tmdbId, seasonNumber, episodeNumber),
   seriesCancelAnalysis: () => ipcRenderer.invoke('series:cancelAnalysis'),
   onSeriesProgress: (callback: (progress: unknown) => void) => {
-    const handler = (_event: any, progress: unknown) => callback(progress)
+    const handler = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress)
     ipcRenderer.on('series:progress', handler)
     return () => ipcRenderer.removeListener('series:progress', handler)
   },
@@ -360,7 +360,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   collectionsDelete: (id: number) => ipcRenderer.invoke('collections:delete', id),
   collectionsCancelAnalysis: () => ipcRenderer.invoke('collections:cancelAnalysis'),
   onCollectionsProgress: (callback: (progress: unknown) => void) => {
-    const handler = (_event: any, progress: unknown) => callback(progress)
+    const handler = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress)
     ipcRenderer.on('collections:progress', handler)
     return () => ipcRenderer.removeListener('collections:progress', handler)
   },
@@ -373,7 +373,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   musicScanLibrary: (sourceId: string, libraryId: string) =>
     ipcRenderer.invoke('music:scanLibrary', sourceId, libraryId),
   onMusicScanProgress: (callback: (progress: unknown) => void) => {
-    const handler = (_event: any, progress: unknown) => callback(progress)
+    const handler = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress)
     ipcRenderer.on('music:scanProgress', handler)
     return () => ipcRenderer.removeListener('music:scanProgress', handler)
   },
@@ -393,7 +393,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   musicGetAlbumsNeedingUpgrade: (limit?: number) => ipcRenderer.invoke('music:getAlbumsNeedingUpgrade', limit),
   musicAnalyzeAllQuality: (sourceId?: string) => ipcRenderer.invoke('music:analyzeAllQuality', sourceId),
   onMusicQualityProgress: (callback: (progress: unknown) => void) => {
-    const handler = (_event: any, progress: unknown) => callback(progress)
+    const handler = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress)
     ipcRenderer.on('music:qualityProgress', handler)
     return () => ipcRenderer.removeListener('music:qualityProgress', handler)
   },
@@ -402,7 +402,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   musicAnalyzeAll: (sourceId?: string) => ipcRenderer.invoke('music:analyzeAll', sourceId),
   musicCancelAnalysis: () => ipcRenderer.invoke('music:cancelAnalysis'),
   onMusicAnalysisProgress: (callback: (progress: unknown) => void) => {
-    const handler = (_event: any, progress: unknown) => callback(progress)
+    const handler = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress)
     ipcRenderer.on('music:analysisProgress', handler)
     return () => ipcRenderer.removeListener('music:analysisProgress', handler)
   },
@@ -464,7 +464,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Notifications (legacy simple notification)
   onNotification: (callback: (message: string) => void) => {
-    const handler = (_event: any, message: string) => callback(message)
+    const handler = (_event: Electron.IpcRendererEvent, message: string) => callback(message)
     ipcRenderer.on('notification', handler)
     return () => ipcRenderer.removeListener('notification', handler)
   },
@@ -488,22 +488,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Monitoring Events
   onMonitoringStatusChanged: (callback: (status: { isActive: boolean; lastCheck?: string }) => void) => {
-    const handler = (_event: any, status: any) => callback(status)
+    const handler = (_event: Electron.IpcRendererEvent, status: { isActive: boolean; lastCheck?: string }) => callback(status)
     ipcRenderer.on('monitoring:statusChanged', handler)
     return () => ipcRenderer.removeListener('monitoring:statusChanged', handler)
   },
   onMonitoringSourceChecked: (callback: (data: { sourceId: string; hasChanges: boolean }) => void) => {
-    const handler = (_event: any, data: any) => callback(data)
+    const handler = (_event: Electron.IpcRendererEvent, data: { sourceId: string; hasChanges: boolean }) => callback(data)
     ipcRenderer.on('monitoring:sourceChecked', handler)
     return () => ipcRenderer.removeListener('monitoring:sourceChecked', handler)
   },
   onMonitoringStatus: (callback: (status: { isActive: boolean }) => void) => {
-    const handler = (_event: any, status: any) => callback(status)
+    const handler = (_event: Electron.IpcRendererEvent, status: { isActive: boolean }) => callback(status)
     ipcRenderer.on('monitoring:status', handler)
     return () => ipcRenderer.removeListener('monitoring:status', handler)
   },
   onMonitoringEvent: (callback: (event: { type: string; message: string }) => void) => {
-    const handler = (_event: any, data: any) => callback(data)
+    const handler = (_event: Electron.IpcRendererEvent, data: { type: string; message: string }) => callback(data)
     ipcRenderer.on('monitoring:event', handler)
     return () => ipcRenderer.removeListener('monitoring:event', handler)
   },
@@ -540,12 +540,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Task Queue Events
   onTaskQueueUpdated: (callback: (state: unknown) => void) => {
-    const handler = (_event: any, state: unknown) => callback(state)
+    const handler = (_event: Electron.IpcRendererEvent, state: unknown) => callback(state)
     ipcRenderer.on('taskQueue:updated', handler)
     return () => ipcRenderer.removeListener('taskQueue:updated', handler)
   },
   onTaskQueueTaskComplete: (callback: (task: unknown) => void) => {
-    const handler = (_event: any, task: unknown) => callback(task)
+    const handler = (_event: Electron.IpcRendererEvent, task: unknown) => callback(task)
     ipcRenderer.on('taskQueue:taskComplete', handler)
     return () => ipcRenderer.removeListener('taskQueue:taskComplete', handler)
   },
@@ -558,19 +558,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     itemsScanned: number
     isFirstScan: boolean
   }) => void) => {
-    const handler = (_event: any, data: any) => callback(data)
+    const handler = (_event: Electron.IpcRendererEvent, data: {
+      sourceId?: string
+      libraryId?: string
+      libraryName: string
+      itemsAdded: number
+      itemsUpdated: number
+      itemsScanned: number
+      isFirstScan: boolean
+    }) => callback(data)
     ipcRenderer.on('scan:completed', handler)
     return () => ipcRenderer.removeListener('scan:completed', handler)
   },
   onTaskQueueHistoryUpdated: (callback: (history: { taskHistory: unknown[]; monitoringHistory: unknown[] }) => void) => {
-    const handler = (_event: any, history: any) => callback(history)
+    const handler = (_event: Electron.IpcRendererEvent, history: { taskHistory: unknown[]; monitoringHistory: unknown[] }) => callback(history)
     ipcRenderer.on('taskQueue:historyUpdated', handler)
     return () => ipcRenderer.removeListener('taskQueue:historyUpdated', handler)
   },
 
   // General
   onMessage: (callback: (message: string) => void) => {
-    const handler = (_event: any, message: string) => callback(message)
+    const handler = (_event: Electron.IpcRendererEvent, message: string) => callback(message)
     ipcRenderer.on('main-process-message', handler)
     return () => ipcRenderer.removeListener('main-process-message', handler)
   },
@@ -583,8 +591,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportLogs: () => ipcRenderer.invoke('logs:export'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('logs:setVerbose', enabled),
   isVerboseLogging: () => ipcRenderer.invoke('logs:isVerbose'),
-  onNewLog: (callback: (entry: any) => void) => {
-    const handler = (_event: any, entry: any) => callback(entry)
+  onNewLog: (callback: (entry: { id: string; timestamp: string; level: 'verbose' | 'debug' | 'info' | 'warn' | 'error'; source: string; message: string; details?: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, entry: { id: string; timestamp: string; level: 'verbose' | 'debug' | 'info' | 'warn' | 'error'; source: string; message: string; details?: string }) => callback(entry)
     ipcRenderer.on('logs:new', handler)
     return () => ipcRenderer.removeListener('logs:new', handler)
   },
@@ -1643,7 +1651,7 @@ export interface ElectronAPI {
   // ============================================================================
   // LOGGING
   // ============================================================================
-  getLogs: (limit?: number) => Promise<any[]>
+  getLogs: (limit?: number) => Promise<Array<{ id: string; timestamp: string; level: 'verbose' | 'debug' | 'info' | 'warn' | 'error'; source: string; message: string; details?: string }>>
   clearLogs: () => Promise<void>
   exportLogs: () => Promise<{
     success: boolean
@@ -1653,7 +1661,7 @@ export interface ElectronAPI {
   }>
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>
   isVerboseLogging: () => Promise<boolean>
-  onNewLog?: (callback: (entry: any) => void) => () => void
+  onNewLog?: (callback: (entry: { id: string; timestamp: string; level: 'verbose' | 'debug' | 'info' | 'warn' | 'error'; source: string; message: string; details?: string }) => void) => () => void
 }
 
 declare global {

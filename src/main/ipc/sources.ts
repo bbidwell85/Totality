@@ -599,8 +599,8 @@ export function registerSourceHandlers(): void {
       const { onProgress, flush } = createProgressUpdater(win, 'kodi:collectionProgress', 'media')
 
       // Import collections
-      const kodiProvider = provider as any // Cast to access importCollections
-      const result = await kodiProvider.importCollections((progress: any) => {
+      const kodiProvider = provider as KodiLocalProvider
+      const result = await kodiProvider.importCollections((progress: { current: number; total: number; currentItem: string }) => {
         onProgress(progress)
       })
 
@@ -628,7 +628,7 @@ export function registerSourceHandlers(): void {
         throw new Error('This operation is only supported for Kodi local sources')
       }
 
-      const kodiProvider = provider as any
+      const kodiProvider = provider as KodiLocalProvider
       return await kodiProvider.getCollections()
     } catch (error: unknown) {
       console.error('Error getting Kodi collections:', error)

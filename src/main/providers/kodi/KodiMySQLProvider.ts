@@ -35,7 +35,7 @@ import type {
   ProviderType,
   AudioStreamInfo,
 } from '../base/MediaProvider'
-import type { MediaItem, AudioTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
+import type { MediaItem, AudioTrack, MusicArtist, MusicAlbum, MusicTrack, AlbumType } from '../../types/database'
 import {
   KodiMovieWithDetails,
   KodiEpisodeWithDetails,
@@ -250,7 +250,7 @@ export class KodiMySQLProvider implements MediaProvider {
 
     // Load from connection config if provided
     if (config.connectionConfig) {
-      const cc = config.connectionConfig as any
+      const cc = config.connectionConfig
       this.mysqlConfig = {
         host: cc.host || '',
         port: cc.port || 3306,
@@ -278,16 +278,14 @@ export class KodiMySQLProvider implements MediaProvider {
 
   async authenticate(credentials: ProviderCredentials): Promise<AuthResult> {
     try {
-      const creds = credentials as any
-
       this.mysqlConfig = {
-        host: creds.host,
-        port: creds.port || 3306,
-        username: creds.username,
-        password: creds.password,
-        databasePrefix: creds.databasePrefix || 'kodi_',
-        ssl: creds.ssl,
-        connectionTimeout: creds.connectionTimeout || 10000,
+        host: credentials.host || '',
+        port: credentials.port || 3306,
+        username: credentials.username || '',
+        password: credentials.password || '',
+        databasePrefix: credentials.databasePrefix || 'kodi_',
+        ssl: credentials.ssl,
+        connectionTimeout: credentials.connectionTimeout || 10000,
       }
 
       // Test connection and detect databases
@@ -302,8 +300,8 @@ export class KodiMySQLProvider implements MediaProvider {
       }
 
       // Use detected database names or provided ones
-      this.videoDatabaseName = creds.videoDatabaseName || testResult.videoDatabaseName || ''
-      this.musicDatabaseName = creds.musicDatabaseName || testResult.musicDatabaseName || ''
+      this.videoDatabaseName = credentials.videoDatabaseName || testResult.videoDatabaseName || ''
+      this.musicDatabaseName = credentials.musicDatabaseName || testResult.musicDatabaseName || ''
       this.databaseVersion = testResult.videoDatabaseVersion || 0
 
       if (!this.videoDatabaseName) {
@@ -376,7 +374,7 @@ export class KodiMySQLProvider implements MediaProvider {
   // QUERY HELPERS
   // ============================================================================
 
-  private async query<T>(database: string, sql: string, params?: any[]): Promise<T[]> {
+  private async query<T>(database: string, sql: string, params?: (string | number | null | boolean)[]): Promise<T[]> {
     if (!this.pool || !this.mysqlConfig) {
       throw new Error('Not connected to MySQL')
     }
@@ -385,14 +383,14 @@ export class KodiMySQLProvider implements MediaProvider {
     return connectionService.query<T>(this.pool, database, sql, params)
   }
 
-  private async queryVideo<T>(sql: string, params?: any[]): Promise<T[]> {
+  private async queryVideo<T>(sql: string, params?: (string | number | null | boolean)[]): Promise<T[]> {
     if (!this.videoDatabaseName) {
       throw new Error('Video database not configured')
     }
     return this.query<T>(this.videoDatabaseName, sql, params)
   }
 
-  private async queryMusic<T>(sql: string, params?: any[]): Promise<T[]> {
+  private async queryMusic<T>(sql: string, params?: (string | number | null | boolean)[]): Promise<T[]> {
     if (!this.musicDatabaseName) {
       throw new Error('Music database not configured')
     }
@@ -577,7 +575,7 @@ export class KodiMySQLProvider implements MediaProvider {
             const mediaItem = this.convertMetadataToMediaItem(metadata)
             if (mediaItem) {
               mediaItem.source_id = this.sourceId
-              mediaItem.source_type = 'kodi-mysql' as any
+              mediaItem.source_type = 'kodi-mysql'
               mediaItem.library_id = libraryId
 
               const id = await db.upsertMediaItem(mediaItem)
@@ -895,7 +893,7 @@ export class KodiMySQLProvider implements MediaProvider {
   private convertToMusicArtist(item: KodiMusicArtistResult): MusicArtist {
     return {
       source_id: this.sourceId,
-      source_type: 'kodi-mysql' as any,
+      source_type: 'kodi-mysql',
       library_id: 'music',
       provider_id: String(item.idArtist),
       name: item.strArtist,
@@ -910,9 +908,20 @@ export class KodiMySQLProvider implements MediaProvider {
   }
 
   private convertToMusicAlbum(item: KodiMusicAlbumResult, artistId?: number): MusicAlbum {
+    // Map Kodi album types to our AlbumType
+    const kodiType = (item.strType || '').toLowerCase()
+    let albumType: AlbumType | undefined = undefined
+    if (kodiType === 'album') albumType = 'album'
+    else if (kodiType === 'ep') albumType = 'ep'
+    else if (kodiType === 'single') albumType = 'single'
+    else if (kodiType === 'compilation') albumType = 'compilation'
+    else if (kodiType === 'live') albumType = 'live'
+    else if (kodiType === 'soundtrack') albumType = 'soundtrack'
+    else if (kodiType) albumType = 'unknown'
+
     return {
       source_id: this.sourceId,
-      source_type: 'kodi-mysql' as any,
+      source_type: 'kodi-mysql',
       library_id: 'music',
       provider_id: String(item.idAlbum),
       artist_id: artistId,
@@ -923,7 +932,7 @@ export class KodiMySQLProvider implements MediaProvider {
       musicbrainz_release_group_id: item.strReleaseGroupMBID || undefined,
       genres: item.strGenres || undefined,
       studio: item.strLabel || undefined,
-      album_type: item.strType as any || undefined,
+      album_type: albumType,
       thumb_url: item.thumbUrl || undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -938,7 +947,7 @@ export class KodiMySQLProvider implements MediaProvider {
 
     return {
       source_id: this.sourceId,
-      source_type: 'kodi-mysql' as any,
+      source_type: 'kodi-mysql',
       library_id: 'music',
       provider_id: String(item.idSong),
       album_id: albumId,
@@ -1140,7 +1149,7 @@ export class KodiMySQLProvider implements MediaProvider {
   // CONNECTION CONFIG GETTERS
   // ============================================================================
 
-  getConnectionConfig(): any {
+  getConnectionConfig(): ProviderCredentials {
     return {
       ...this.mysqlConfig,
       videoDatabaseName: this.videoDatabaseName,

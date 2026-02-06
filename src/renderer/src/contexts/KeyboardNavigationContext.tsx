@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useEffect, useCallback, useRef, useState } from 'react'
 
 // All navigable regions in the app
@@ -58,6 +59,7 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
 
   // Modal state
   const [modalStack, setModalStack] = useState<string[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_previousFocus, setPreviousFocus] = useState<FocusState | null>(null)
   const focusRestoreStack = useRef<FocusState[]>([])
 
@@ -490,6 +492,7 @@ export function KeyboardNavigationProvider({ children }: { children: React.React
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('mousedown', handleMouseDown)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusedId, currentRegion, findElementByDirection, getRegionElements, navigateToNextRegion, navigateToPreviousRegion, jumpToRegion, isModalOpen])
 
   return (

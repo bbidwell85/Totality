@@ -235,7 +235,7 @@ export function Dashboard({
   const parseMissingAlbums = useCallback((artist: ArtistCompletenessData): MissingAlbumItem[] => {
     const albums: MissingAlbumItem[] = []
     const isValidAlbum = (a: unknown): a is { title: string; musicbrainz_id?: string; year?: number } =>
-      a !== null && typeof a === 'object' && typeof (a as any).title === 'string'
+      a !== null && typeof a === 'object' && typeof (a as { title?: string }).title === 'string'
 
     try {
       if (artist.missing_albums) {

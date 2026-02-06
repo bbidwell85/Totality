@@ -256,7 +256,7 @@ export class LiveMonitoringService {
     this.emitDebugEvent('info', 'Monitoring paused for scan')
 
     // Clear all polling timers
-    for (const [_sourceId, timer] of this.pollingTimers) {
+    for (const [, timer] of this.pollingTimers) {
       clearTimeout(timer)
     }
     this.pollingTimers.clear()
@@ -589,7 +589,7 @@ export class LiveMonitoringService {
                   changedItems.push({
                     id: track.id?.toString() || '',
                     title: track.title,
-                    type: 'track' as any,
+                    type: 'track',
                     artistName: track.artist_name || undefined,
                     posterUrl,
                   })

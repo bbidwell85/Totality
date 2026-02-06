@@ -18,6 +18,7 @@ import { OnboardingWizard } from './components/onboarding'
 import { SplashScreen } from './components/layout/SplashScreen'
 import { ToastContainer } from './components/ui/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { SectionErrorBoundary } from './components/ui/SectionErrorBoundary'
 import type { MediaViewType, SeriesStats, CollectionStats, MusicCompletenessStats, AnalysisProgress } from './components/library/types'
 
 type AppView = 'dashboard' | 'library'
@@ -333,14 +334,16 @@ function AppContent() {
         />
 
         {currentView === 'dashboard' ? (
-          <Dashboard
-            onNavigateToLibrary={handleNavigateToLibrary}
-            onAddSource={() => setShowAddSourceModal(true)}
-            sidebarCollapsed={sidebarCollapsed}
-            hasMovies={hasMovies}
-            hasTV={hasTV}
-            hasMusic={hasMusic}
-          />
+          <SectionErrorBoundary section="Dashboard">
+            <Dashboard
+              onNavigateToLibrary={handleNavigateToLibrary}
+              onAddSource={() => setShowAddSourceModal(true)}
+              sidebarCollapsed={sidebarCollapsed}
+              hasMovies={hasMovies}
+              hasTV={hasTV}
+              hasMusic={hasMusic}
+            />
+          </SectionErrorBoundary>
         ) : (
           <main
             className="fixed top-[88px] bottom-0 transition-[left,right] duration-300 ease-out"
@@ -349,19 +352,21 @@ function AppContent() {
               right: '16px'
             }}
           >
-            <MediaBrowser
-              onAddSource={() => setShowAddSourceModal(true)}
-              sidebarCollapsed={sidebarCollapsed}
-              onOpenSettings={handleOpenSettings}
-              hideHeader={true}
-              showCompletenessPanel={showCompletenessPanel}
-              showWishlistPanel={showWishlistPanel}
-              onToggleCompleteness={handleToggleCompleteness}
-              onToggleWishlist={handleToggleWishlist}
-              libraryTab={libraryTab}
-              onLibraryTabChange={setLibraryTab}
-              onAutoRefreshChange={setIsAutoRefreshing}
-            />
+            <SectionErrorBoundary section="Media Library">
+              <MediaBrowser
+                onAddSource={() => setShowAddSourceModal(true)}
+                sidebarCollapsed={sidebarCollapsed}
+                onOpenSettings={handleOpenSettings}
+                hideHeader={true}
+                showCompletenessPanel={showCompletenessPanel}
+                showWishlistPanel={showWishlistPanel}
+                onToggleCompleteness={handleToggleCompleteness}
+                onToggleWishlist={handleToggleWishlist}
+                libraryTab={libraryTab}
+                onLibraryTabChange={setLibraryTab}
+                onAutoRefreshChange={setIsAutoRefreshing}
+              />
+            </SectionErrorBoundary>
           </main>
         )}
         {showAddSourceModal && (
@@ -377,34 +382,38 @@ function AppContent() {
             setShowSettingsModal(false)
             setSettingsInitialTab(undefined)
           }}
-          initialTab={settingsInitialTab as any}
+          initialTab={settingsInitialTab as 'quality' | 'services' | 'appearance' | 'monitoring' | 'data' | 'troubleshoot' | undefined}
         />
         {/* Panels - rendered at App level for Dashboard view */}
         {currentView === 'dashboard' && (
           <>
-            <CompletenessPanel
-              isOpen={showCompletenessPanel}
-              onClose={() => setShowCompletenessPanel(false)}
-              seriesStats={seriesStats}
-              collectionStats={collectionStats}
-              musicStats={musicCompletenessStats}
-              onAnalyzeSeries={handleAnalyzeSeries}
-              onAnalyzeCollections={handleAnalyzeCollections}
-              onAnalyzeMusic={handleAnalyzeMusic}
-              onCancel={handleCancelAnalysis}
-              isAnalyzing={isAnalyzing}
-              analysisProgress={analysisProgress}
-              analysisType={analysisType}
-              onDataRefresh={handleCompletenessDataRefresh}
-              hasTV={hasTV}
-              hasMovies={hasMovies}
-              hasMusic={hasMusic}
-              onOpenSettings={handleOpenSettings}
-            />
-            <WishlistPanel
-              isOpen={showWishlistPanel}
-              onClose={() => setShowWishlistPanel(false)}
-            />
+            <SectionErrorBoundary section="Completeness Panel" compact>
+              <CompletenessPanel
+                isOpen={showCompletenessPanel}
+                onClose={() => setShowCompletenessPanel(false)}
+                seriesStats={seriesStats}
+                collectionStats={collectionStats}
+                musicStats={musicCompletenessStats}
+                onAnalyzeSeries={handleAnalyzeSeries}
+                onAnalyzeCollections={handleAnalyzeCollections}
+                onAnalyzeMusic={handleAnalyzeMusic}
+                onCancel={handleCancelAnalysis}
+                isAnalyzing={isAnalyzing}
+                analysisProgress={analysisProgress}
+                analysisType={analysisType}
+                onDataRefresh={handleCompletenessDataRefresh}
+                hasTV={hasTV}
+                hasMovies={hasMovies}
+                hasMusic={hasMusic}
+                onOpenSettings={handleOpenSettings}
+              />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary section="Wishlist Panel" compact>
+              <WishlistPanel
+                isOpen={showWishlistPanel}
+                onClose={() => setShowWishlistPanel(false)}
+              />
+            </SectionErrorBoundary>
           </>
         )}
       </div>

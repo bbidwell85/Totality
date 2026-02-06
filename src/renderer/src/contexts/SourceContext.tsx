@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * SourceContext
  *
@@ -202,6 +203,7 @@ export function SourceProvider({ children }: SourceProviderProps) {
     }
 
     window.electronAPI.onSourcesScanProgress(handleProgress as (progress: unknown) => void)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Check connections when sources change and periodically
@@ -291,8 +293,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
       await loadStats()
       // Detect library types immediately after loading sources
       await detectLibraryTypesFromList(sourceList)
-    } catch (err: any) {
-      setError(err.message || 'Failed to load sources')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to load sources')
       console.error('Failed to refresh sources:', err)
     } finally {
       setIsLoading(false)
@@ -317,8 +319,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
       const source = await window.electronAPI.sourcesAdd(config)
       await refreshSources()
       return source
-    } catch (err: any) {
-      setError(err.message || 'Failed to add source')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to add source')
       throw err
     }
   }, [refreshSources])
@@ -331,8 +333,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
     try {
       await window.electronAPI.sourcesUpdate(sourceId, updates)
       await refreshSources()
-    } catch (err: any) {
-      setError(err.message || 'Failed to update source')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to update source')
       throw err
     }
   }, [refreshSources])
@@ -342,8 +344,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
     try {
       await window.electronAPI.sourcesRemove(sourceId)
       await refreshSources()
-    } catch (err: any) {
-      setError(err.message || 'Failed to remove source')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to remove source')
       throw err
     }
   }, [refreshSources])
@@ -353,8 +355,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
     try {
       await window.electronAPI.sourcesToggle(sourceId, enabled)
       await refreshSources()
-    } catch (err: any) {
-      setError(err.message || 'Failed to toggle source')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to toggle source')
       throw err
     }
   }, [refreshSources])
@@ -363,8 +365,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
   const testConnection = useCallback(async (sourceId: string): Promise<ConnectionTestResult> => {
     try {
       return await window.electronAPI.sourcesTestConnection(sourceId)
-    } catch (err: any) {
-      return { success: false, error: err.message }
+    } catch (err: unknown) {
+      return { success: false, error: (err as Error).message }
     }
   }, [])
 
@@ -372,8 +374,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
   const getLibraries = useCallback(async (sourceId: string): Promise<MediaLibraryResponse[]> => {
     try {
       return await window.electronAPI.sourcesGetLibraries(sourceId)
-    } catch (err: any) {
-      setError(err.message || 'Failed to get libraries')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'Failed to get libraries')
       throw err
     }
   }, [])

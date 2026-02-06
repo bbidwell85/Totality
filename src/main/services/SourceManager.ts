@@ -426,11 +426,11 @@ export class SourceManager {
               }
             }
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error(`[SourceManager] Error during ${provider.providerType} authentication:`, err)
           return {
             success: false,
-            error: err.message || 'Authentication error',
+            error: err instanceof Error ? err.message : 'Authentication error',
           }
         }
       }
