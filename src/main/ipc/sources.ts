@@ -19,6 +19,12 @@ import { KodiMySQLProvider } from '../providers/kodi/KodiMySQLProvider'
 import { safeSend, getWindowFromEvent } from './utils/safeSend'
 import { getErrorMessage } from './utils'
 import { createProgressUpdater } from './utils/progressUpdater'
+import {
+  validateInput,
+  AddSourceSchema,
+  UpdateSourceSchema,
+  KodiMySQLConfigSchema,
+} from '../validation/schemas'
 
 /**
  * Register all source-related IPC handlers
@@ -33,14 +39,10 @@ export function registerSourceHandlers(): void {
   /**
    * Add a new media source
    */
-  ipcMain.handle('sources:add', async (_event, config: {
-    sourceType: ProviderType
-    displayName: string
-    connectionConfig: Record<string, unknown>
-    isEnabled?: boolean
-  }) => {
+  ipcMain.handle('sources:add', async (_event, config: unknown) => {
     try {
-      return await manager.addSource(config)
+      const validatedConfig = validateInput(AddSourceSchema, config, 'sources:add')
+      return await manager.addSource(validatedConfig)
     } catch (error: unknown) {
       console.error('Error adding source:', error)
       throw error
@@ -50,13 +52,13 @@ export function registerSourceHandlers(): void {
   /**
    * Update an existing media source
    */
-  ipcMain.handle('sources:update', async (_event, sourceId: string, updates: {
-    displayName?: string
-    connectionConfig?: Record<string, unknown>
-    isEnabled?: boolean
-  }) => {
+  ipcMain.handle('sources:update', async (_event, sourceId: unknown, updates: unknown) => {
     try {
-      await manager.updateSource(sourceId, updates)
+      if (typeof sourceId !== 'string' || !sourceId) {
+        throw new Error('Invalid source ID')
+      }
+      const validatedUpdates = validateInput(UpdateSourceSchema, updates, 'sources:update')
+      await manager.updateSource(sourceId, validatedUpdates)
     } catch (error: unknown) {
       console.error('Error updating source:', error)
       throw error
@@ -698,33 +700,25 @@ export function registerSourceHandlers(): void {
   /**
    * Add a Kodi MySQL source with authentication
    */
-  ipcMain.handle('kodi:authenticateMySQL', async (_event, config: {
-    host: string
-    port?: number
-    username: string
-    password: string
-    displayName: string
-    videoDatabaseName?: string
-    musicDatabaseName?: string
-    databasePrefix?: string
-    ssl?: boolean
-  }) => {
+  ipcMain.handle('kodi:authenticateMySQL', async (_event, config: unknown) => {
     try {
+      const validatedConfig = validateInput(KodiMySQLConfigSchema, config, 'kodi:authenticateMySQL')
+
       const provider = new KodiMySQLProvider({
         sourceType: 'kodi-mysql' as ProviderType,
-        displayName: config.displayName,
+        displayName: validatedConfig.displayName,
         connectionConfig: {},
       })
 
       const authResult = await provider.authenticate({
-        host: config.host,
-        port: config.port || 3306,
-        username: config.username,
-        password: config.password,
-        videoDatabaseName: config.videoDatabaseName,
-        musicDatabaseName: config.musicDatabaseName,
-        databasePrefix: config.databasePrefix || 'kodi_',
-        ssl: config.ssl,
+        host: validatedConfig.host,
+        port: validatedConfig.port || 3306,
+        username: validatedConfig.username,
+        password: validatedConfig.password,
+        videoDatabaseName: validatedConfig.videoDatabaseName,
+        musicDatabaseName: validatedConfig.musicDatabaseName,
+        databasePrefix: validatedConfig.databasePrefix || 'kodi_',
+        ssl: validatedConfig.ssl,
       })
 
       if (!authResult.success) {
@@ -738,7 +732,7 @@ export function registerSourceHandlers(): void {
       const manager = getSourceManager()
       const source = await manager.addSource({
         sourceType: 'kodi-mysql' as ProviderType,
-        displayName: config.displayName,
+        displayName: validatedConfig.displayName,
         connectionConfig: provider.getConnectionConfig(),
         isEnabled: true,
       })

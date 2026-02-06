@@ -10,6 +10,11 @@ import { getEmbyDiscoveryService } from '../services/EmbyDiscoveryService'
 import { getSourceManager } from '../services/SourceManager'
 import { JellyfinProvider } from '../providers/jellyfin-emby/JellyfinProvider'
 import { getErrorMessage } from './utils'
+import {
+  validateInput,
+  JellyfinApiKeyAuthSchema,
+  SafeUrlSchema,
+} from '../validation/schemas'
 
 export function registerJellyfinHandlers(): void {
   const jellyfinDiscovery = getJellyfinDiscoveryService()
@@ -37,9 +42,10 @@ export function registerJellyfinHandlers(): void {
   /**
    * Test a server URL to check if it's a valid Jellyfin server
    */
-  ipcMain.handle('jellyfin:testServerUrl', async (_event, url: string) => {
+  ipcMain.handle('jellyfin:testServerUrl', async (_event, url: unknown) => {
     try {
-      return await jellyfinDiscovery.testServerUrl(url)
+      const validatedUrl = validateInput(SafeUrlSchema, url, 'jellyfin:testServerUrl')
+      return await jellyfinDiscovery.testServerUrl(validatedUrl)
     } catch (error: unknown) {
       console.error('Error testing server URL:', error)
       throw error
@@ -67,9 +73,10 @@ export function registerJellyfinHandlers(): void {
   /**
    * Test a server URL to check if it's a valid Emby server
    */
-  ipcMain.handle('emby:testServerUrl', async (_event, url: string) => {
+  ipcMain.handle('emby:testServerUrl', async (_event, url: unknown) => {
     try {
-      return await embyDiscovery.testServerUrl(url)
+      const validatedUrl = validateInput(SafeUrlSchema, url, 'emby:testServerUrl')
+      return await embyDiscovery.testServerUrl(validatedUrl)
     } catch (error: unknown) {
       console.error('Error testing Emby server URL:', error)
       throw error
@@ -81,16 +88,22 @@ export function registerJellyfinHandlers(): void {
    */
   ipcMain.handle('jellyfin:authenticateApiKey', async (
     _event,
-    serverUrl: string,
-    apiKey: string,
-    displayName: string
+    serverUrl: unknown,
+    apiKey: unknown,
+    displayName: unknown
   ) => {
     try {
+      const validated = validateInput(JellyfinApiKeyAuthSchema, {
+        serverUrl,
+        apiKey,
+        displayName,
+      }, 'jellyfin:authenticateApiKey')
+
       const provider = new JellyfinProvider({
         sourceId: undefined, // Will be generated
         sourceType: 'jellyfin',
-        displayName,
-        connectionConfig: { serverUrl, apiKey },
+        displayName: validated.displayName,
+        connectionConfig: { serverUrl: validated.serverUrl, apiKey: validated.apiKey },
       })
 
       // Test the connection with the API key
@@ -105,10 +118,10 @@ export function registerJellyfinHandlers(): void {
       // Add the source with the API key
       const source = await manager.addSource({
         sourceType: 'jellyfin',
-        displayName,
+        displayName: validated.displayName,
         connectionConfig: {
-          serverUrl,
-          apiKey,
+          serverUrl: validated.serverUrl,
+          apiKey: validated.apiKey,
         },
       })
 
