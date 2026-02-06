@@ -71,9 +71,15 @@ export class LiveMonitoringService {
   private fileChangeDebounce: Map<string, NodeJS.Timeout> = new Map()
   private pendingFileChanges: Map<string, Set<string>> = new Map()
 
-  // Settings
+  // Timing constants
   private static readonly MIN_POLL_INTERVAL_MS = 30000 // Minimum 30s between polls
   private static readonly FILE_CHANGE_DEBOUNCE_MS = 2000 // Wait 2s after last file change
+  private static readonly STARTUP_DELAY_MS = 5000 // Delay before starting monitoring on app launch
+  private static readonly FIRST_POLL_DELAY_MS = 5000 // Delay before first poll after starting
+  private static readonly NETWORK_POLL_INTERVAL_MS = 10000 // 10s polling interval for network paths
+  private static readonly WRITE_STABILITY_THRESHOLD_MS = 2000 // Wait for file writes to stabilize
+  private static readonly CHOKIDAR_POLL_INTERVAL_MS = 500 // Poll interval for chokidar awaitWriteFinish
+  private static readonly MAX_REASONABLE_CHANGES = 50 // Max file changes to process at once
 
   /**
    * Initialize the monitoring service
@@ -106,7 +112,7 @@ export class LiveMonitoringService {
     // Auto-start if enabled
     if (this.config.enabled && this.config.startOnLaunch) {
       // Delay start to allow app initialization
-      setTimeout(() => this.start(), 5000)
+      setTimeout(() => this.start(), LiveMonitoringService.STARTUP_DELAY_MS)
     }
   }
 
@@ -342,10 +348,6 @@ export class LiveMonitoringService {
       // Determine if we should use polling (for network paths)
       const usePolling = isNetworkPath(watchPath)
 
-      // For network paths, use a longer polling interval to avoid blocking
-      // For local paths, native watchers are efficient
-      const NETWORK_POLL_INTERVAL = 10000 // 10 seconds for network paths
-
       console.log(`[LiveMonitoring] Starting file watcher for ${sourceName}: ${watchPath} (usePolling: ${usePolling})`)
       this.emitDebugEvent('info', `Starting file watcher: ${sourceName} (${usePolling ? 'polling' : 'native'})`)
 
@@ -354,12 +356,12 @@ export class LiveMonitoringService {
         persistent: true,
         ignoreInitial: true,
         awaitWriteFinish: {
-          stabilityThreshold: 2000,
-          pollInterval: 500,
+          stabilityThreshold: LiveMonitoringService.WRITE_STABILITY_THRESHOLD_MS,
+          pollInterval: LiveMonitoringService.CHOKIDAR_POLL_INTERVAL_MS,
         },
         usePolling,
-        interval: usePolling ? NETWORK_POLL_INTERVAL : undefined,
-        binaryInterval: usePolling ? NETWORK_POLL_INTERVAL : undefined,
+        interval: usePolling ? LiveMonitoringService.NETWORK_POLL_INTERVAL_MS : undefined,
+        binaryInterval: usePolling ? LiveMonitoringService.NETWORK_POLL_INTERVAL_MS : undefined,
       })
 
       watcher.on('add', (filePath) => {
@@ -504,8 +506,7 @@ export class LiveMonitoringService {
 
       // Safety check: if too many files changed at once, it's probably from scan interference
       // Normal user operations would be adding/removing a few files at a time
-      const MAX_REASONABLE_CHANGES = 50
-      if (changedFiles.length > MAX_REASONABLE_CHANGES) {
+      if (changedFiles.length > LiveMonitoringService.MAX_REASONABLE_CHANGES) {
         console.log(`[LiveMonitoring] Too many file changes (${changedFiles.length}), likely scan interference - skipping`)
         return
       }
@@ -688,7 +689,7 @@ export class LiveMonitoringService {
     console.log(`[LiveMonitoring] Starting polling for ${sourceId} (${sourceType}) every ${interval / 1000}s`)
 
     // Schedule first check after a short delay
-    const timer = setTimeout(() => this.pollSource(sourceId, sourceType), 5000)
+    const timer = setTimeout(() => this.pollSource(sourceId, sourceType), LiveMonitoringService.FIRST_POLL_DELAY_MS)
     this.pollingTimers.set(sourceId, timer)
   }
 
