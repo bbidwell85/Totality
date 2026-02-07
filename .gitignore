@@ -37,3 +37,11 @@ release
 
 # OS
 Thumbs.db
+nul
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Test coverage
+coverage/
