@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.9-beta.0](https://github.com/bbidwell85/totality/compare/v0.1.8...v0.1.9-beta.0) (2026-02-07)
+
+
+### Bug Fixes
+
+* use full Developer ID Application identity for macOS signing ([17f7792](https://github.com/bbidwell85/totality/commit/17f7792e62b241b0f7c6c6223b43996aecf965cd))
+
 ### [0.1.8](https://github.com/bbidwell85/totality/compare/v0.1.7...v0.1.8) (2026-02-07)
 
 
