@@ -506,41 +506,63 @@ export class BetterSQLiteService {
 
   /**
    * Get media items with filters
+   * By default, only returns items from enabled libraries
    */
-  getMediaItems(filters?: MediaItemFilters): MediaItem[] {
+  getMediaItems(filters?: MediaItemFilters & { includeDisabledLibraries?: boolean }): MediaItem[] {
     if (!this.db) throw new Error('Database not initialized')
 
-    let sql = 'SELECT * FROM media_items WHERE 1=1'
+    let sql = `
+      SELECT m.*,
+             q.overall_score, q.needs_upgrade,
+             q.quality_tier, q.tier_quality, q.tier_score, q.issues
+      FROM media_items m
+      LEFT JOIN quality_scores q ON m.id = q.media_item_id
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE 1=1
+    `
     const params: unknown[] = []
 
+    // Filter out items from disabled libraries (unless explicitly requested)
+    if (!filters?.includeDisabledLibraries) {
+      sql += ' AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)'
+    }
+
     if (filters?.type) {
-      sql += ' AND type = ?'
+      sql += ' AND m.type = ?'
       params.push(filters.type)
     }
     if (filters?.sourceId) {
-      sql += ' AND source_id = ?'
+      sql += ' AND m.source_id = ?'
       params.push(filters.sourceId)
     }
     if (filters?.sourceType) {
-      sql += ' AND source_type = ?'
+      sql += ' AND m.source_type = ?'
       params.push(filters.sourceType)
     }
     if (filters?.libraryId) {
-      sql += ' AND library_id = ?'
+      sql += ' AND m.library_id = ?'
       params.push(filters.libraryId)
     }
     if (filters?.searchQuery) {
-      sql += ' AND (title LIKE ? OR series_title LIKE ?)'
+      sql += ' AND (m.title LIKE ? OR m.series_title LIKE ?)'
       const search = `%${filters.searchQuery}%`
       params.push(search, search)
     }
     if (filters?.needsUpgrade !== undefined) {
-      sql += ` AND id IN (SELECT media_item_id FROM quality_scores WHERE needs_upgrade = ?)`
+      sql += ' AND q.needs_upgrade = ?'
       params.push(filters.needsUpgrade ? 1 : 0)
     }
 
-    // Sorting
-    const sortColumn = filters?.sortBy || 'title'
+    // Dynamic sorting with validated column names (prevent SQL injection)
+    const sortColumnMap: Record<string, string> = {
+      'title': 'm.title',
+      'year': 'm.year',
+      'updated_at': 'm.updated_at',
+      'created_at': 'm.created_at',
+      'tier_score': 'q.tier_score',
+      'overall_score': 'q.overall_score'
+    }
+    const sortColumn = sortColumnMap[filters?.sortBy || 'title'] || 'm.title'
     const sortOrder = filters?.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
     sql += ` ORDER BY ${sortColumn} ${sortOrder}`
 
@@ -598,36 +620,48 @@ export class BetterSQLiteService {
 
   /**
    * Count media items matching filters
+   * Uses same filter logic as getMediaItems but returns count only
    */
-  countMediaItems(filters?: MediaItemFilters): number {
+  countMediaItems(filters?: MediaItemFilters & { includeDisabledLibraries?: boolean }): number {
     if (!this.db) throw new Error('Database not initialized')
 
-    let sql = 'SELECT COUNT(*) as count FROM media_items WHERE 1=1'
+    let sql = `
+      SELECT COUNT(*) as count
+      FROM media_items m
+      LEFT JOIN quality_scores q ON m.id = q.media_item_id
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE 1=1
+    `
     const params: unknown[] = []
 
+    // Filter out items from disabled libraries (unless explicitly requested)
+    if (!filters?.includeDisabledLibraries) {
+      sql += ' AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)'
+    }
+
     if (filters?.type) {
-      sql += ' AND type = ?'
+      sql += ' AND m.type = ?'
       params.push(filters.type)
     }
     if (filters?.sourceId) {
-      sql += ' AND source_id = ?'
+      sql += ' AND m.source_id = ?'
       params.push(filters.sourceId)
     }
     if (filters?.sourceType) {
-      sql += ' AND source_type = ?'
+      sql += ' AND m.source_type = ?'
       params.push(filters.sourceType)
     }
     if (filters?.libraryId) {
-      sql += ' AND library_id = ?'
+      sql += ' AND m.library_id = ?'
       params.push(filters.libraryId)
     }
     if (filters?.searchQuery) {
-      sql += ' AND (title LIKE ? OR series_title LIKE ?)'
+      sql += ' AND (m.title LIKE ? OR m.series_title LIKE ?)'
       const search = `%${filters.searchQuery}%`
       params.push(search, search)
     }
     if (filters?.needsUpgrade !== undefined) {
-      sql += ` AND id IN (SELECT media_item_id FROM quality_scores WHERE needs_upgrade = ?)`
+      sql += ' AND q.needs_upgrade = ?'
       params.push(filters.needsUpgrade ? 1 : 0)
     }
 
@@ -1838,9 +1872,13 @@ export class BetterSQLiteService {
 
   /**
    * Get incomplete series (completeness < 100%)
+   * @param sourceId Optional source ID to filter by
    */
-  getIncompleteSeries(): SeriesCompleteness[] {
+  getIncompleteSeries(sourceId?: string): SeriesCompleteness[] {
     if (!this.db) throw new Error('Database not initialized')
+
+    const sourceFilter = sourceId ? ' AND source_id = ?' : ''
+    const params: unknown[] = sourceId ? [sourceId] : []
 
     const stmt = this.db.prepare(`
       SELECT sc.*
@@ -1848,15 +1886,17 @@ export class BetterSQLiteService {
       INNER JOIN (
         SELECT series_title, MAX(completeness_percentage) as max_pct
         FROM series_completeness
-        WHERE tmdb_id IS NOT NULL
+        WHERE tmdb_id IS NOT NULL${sourceFilter}
         GROUP BY series_title
         HAVING max_pct < 100
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
-      WHERE sc.tmdb_id IS NOT NULL
+      WHERE sc.tmdb_id IS NOT NULL${sourceFilter}
       GROUP BY sc.series_title
       ORDER BY sc.completeness_percentage ASC
     `)
-    return stmt.all() as SeriesCompleteness[]
+    // If sourceId is provided, we need to pass it twice (once for subquery, once for outer WHERE)
+    const allParams = sourceId ? [...params, ...params] : []
+    return stmt.all(...allParams) as SeriesCompleteness[]
   }
 
   /**
@@ -2059,9 +2099,18 @@ export class BetterSQLiteService {
 
   /**
    * Get incomplete movie collections
+   * @param sourceId Optional source ID to filter by
    */
-  getIncompleteMovieCollections(): MovieCollection[] {
+  getIncompleteMovieCollections(sourceId?: string): MovieCollection[] {
     if (!this.db) throw new Error('Database not initialized')
+
+    if (sourceId) {
+      const stmt = this.db.prepare(
+        'SELECT * FROM movie_collections WHERE completeness_percentage < 100 AND source_id = ? ORDER BY completeness_percentage ASC'
+      )
+      return stmt.all(sourceId) as MovieCollection[]
+    }
+
     const stmt = this.db.prepare(
       'SELECT * FROM movie_collections WHERE completeness_percentage < 100 ORDER BY completeness_percentage ASC'
     )
@@ -2182,22 +2231,30 @@ export class BetterSQLiteService {
 
   /**
    * Get albums needing upgrade
+   * @param limit Maximum number of albums to return
+   * @param sourceId Optional source ID to filter by
    */
-  getAlbumsNeedingUpgrade(limit?: number): MusicAlbum[] {
+  getAlbumsNeedingUpgrade(limit?: number, sourceId?: string): MusicAlbum[] {
     if (!this.db) throw new Error('Database not initialized')
 
     let sql = `
       SELECT a.* FROM music_albums a
       INNER JOIN music_quality_scores q ON a.id = q.album_id
       WHERE q.needs_upgrade = 1
-      ORDER BY q.tier_score ASC
     `
+
+    if (sourceId) {
+      sql += ` AND a.source_id = ?`
+    }
+
+    sql += ` ORDER BY q.tier_score ASC`
+
     if (limit) {
       sql += ` LIMIT ${limit}`
     }
 
     const stmt = this.db.prepare(sql)
-    return stmt.all() as MusicAlbum[]
+    return sourceId ? (stmt.all(sourceId) as MusicAlbum[]) : (stmt.all() as MusicAlbum[])
   }
 
   // ============================================================================
@@ -2257,9 +2314,22 @@ export class BetterSQLiteService {
 
   /**
    * Get all artist completeness records
+   * @param sourceId Optional source ID to filter by (filters by artists in that source)
    */
-  getAllArtistCompleteness(): ArtistCompleteness[] {
+  getAllArtistCompleteness(sourceId?: string): ArtistCompleteness[] {
     if (!this.db) throw new Error('Database not initialized')
+
+    if (sourceId) {
+      // When filtering by source, only return completeness for artists that exist in that source
+      const stmt = this.db.prepare(`
+        SELECT DISTINCT ac.*
+        FROM artist_completeness ac
+        INNER JOIN music_artists ma ON ac.artist_name = ma.name AND ma.source_id = ?
+        ORDER BY ac.artist_name ASC
+      `)
+      return stmt.all(sourceId) as ArtistCompleteness[]
+    }
+
     const stmt = this.db.prepare('SELECT * FROM artist_completeness ORDER BY artist_name ASC')
     return stmt.all() as ArtistCompleteness[]
   }
