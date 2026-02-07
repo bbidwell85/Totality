@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.8](https://github.com/bbidwell85/totality/compare/v0.1.7...v0.1.8) (2026-02-07)
+
+
+### Features
+
+* filter Dashboard content by selected source ([80a4609](https://github.com/bbidwell85/totality/commit/80a4609b82d16357a852aa133e4cc4d8e234e74b))
+
+
+### Bug Fixes
+
+* join quality_scores table in getMediaItems for upgrade icons ([e74754c](https://github.com/bbidwell85/totality/commit/e74754ce9131f48f22d51e445c776eb668a7fa9b))
+
 ### [0.1.7](https://github.com/bbidwell85/totality/compare/v0.1.6...v0.1.7) (2026-02-06)
 
 
