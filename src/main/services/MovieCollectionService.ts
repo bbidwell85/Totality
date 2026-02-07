@@ -629,10 +629,11 @@ export class MovieCollectionService extends CancellableOperation {
 
   /**
    * Get incomplete collections only
+   * @param sourceId Optional source ID to filter by
    */
-  getIncompleteCollections(): MovieCollection[] {
+  getIncompleteCollections(sourceId?: string): MovieCollection[] {
     const db = getDatabase()
-    return db.getIncompleteMovieCollections()
+    return db.getIncompleteMovieCollections(sourceId)
   }
 
   /**

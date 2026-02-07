@@ -50,9 +50,10 @@ export function registerCollectionHandlers() {
   })
 
   // Get incomplete collections only
-  ipcMain.handle('collections:getIncomplete', async () => {
+  // @param sourceId Optional source ID to filter by
+  ipcMain.handle('collections:getIncomplete', async (_event, sourceId?: string) => {
     try {
-      return service.getIncompleteCollections()
+      return service.getIncompleteCollections(sourceId)
     } catch (error) {
       console.error('Error getting incomplete collections:', error)
       throw error

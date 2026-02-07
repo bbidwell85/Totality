@@ -454,21 +454,31 @@ export class MusicRepository {
 
   /**
    * Get albums that need quality upgrades, sorted by worst quality first
+   * @param limit Maximum number of albums to return
+   * @param sourceId Optional source ID to filter by
    */
-  getAlbumsNeedingUpgrade(limit: number = 50): (MusicAlbum & {
+  getAlbumsNeedingUpgrade(limit: number = 50, sourceId?: string): (MusicAlbum & {
     quality_tier: string
     tier_quality: string
     tier_score: number
   })[] {
-    const sql = `
+    let sql = `
       SELECT ma.*, mqs.quality_tier, mqs.tier_quality, mqs.tier_score
       FROM music_albums ma
       INNER JOIN music_quality_scores mqs ON ma.id = mqs.album_id
       WHERE mqs.needs_upgrade = 1
-      ORDER BY mqs.tier_score ASC
-      LIMIT ?
     `
-    const result = this.db.exec(sql, [limit])
+    const params: (string | number)[] = []
+
+    if (sourceId) {
+      sql += ` AND ma.source_id = ?`
+      params.push(sourceId)
+    }
+
+    sql += ` ORDER BY mqs.tier_score ASC LIMIT ?`
+    params.push(limit)
+
+    const result = this.db.exec(sql, params)
     if (!result.length) return []
 
     return this.rowsToObjects<MusicAlbum & {
@@ -806,14 +816,31 @@ export class MusicRepository {
 
   /**
    * Get all artist completeness records with thumb URLs from music_artists
+   * @param sourceId Optional source ID to filter by (filters by artists in that source)
    */
-  getAllArtistCompleteness(): ArtistCompleteness[] {
-    const result = this.db.exec(`
-      SELECT ac.*, ma.thumb_url
-      FROM artist_completeness ac
-      LEFT JOIN music_artists ma ON ac.artist_name = ma.name
-      ORDER BY ac.artist_name ASC
-    `)
+  getAllArtistCompleteness(sourceId?: string): ArtistCompleteness[] {
+    let sql: string
+    const params: string[] = []
+
+    if (sourceId) {
+      // When filtering by source, only return completeness for artists that exist in that source
+      sql = `
+        SELECT DISTINCT ac.*, ma.thumb_url
+        FROM artist_completeness ac
+        INNER JOIN music_artists ma ON ac.artist_name = ma.name AND ma.source_id = ?
+        ORDER BY ac.artist_name ASC
+      `
+      params.push(sourceId)
+    } else {
+      sql = `
+        SELECT ac.*, ma.thumb_url
+        FROM artist_completeness ac
+        LEFT JOIN music_artists ma ON ac.artist_name = ma.name
+        ORDER BY ac.artist_name ASC
+      `
+    }
+
+    const result = this.db.exec(sql, params)
     if (!result.length) return []
 
     return this.rowsToObjects<ArtistCompleteness>(result[0])

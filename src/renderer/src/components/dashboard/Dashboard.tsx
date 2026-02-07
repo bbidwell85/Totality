@@ -85,7 +85,7 @@ export function Dashboard({
   hasTV = false,
   hasMusic = false
 }: DashboardProps) {
-  const { sources } = useSources()
+  const { sources, activeSourceId } = useSources()
   const [movieUpgrades, setMovieUpgrades] = useState<MediaItem[]>([])
   const [tvUpgrades, setTvUpgrades] = useState<MediaItem[]>([])
   const [musicUpgrades, setMusicUpgrades] = useState<MusicAlbumUpgrade[]>([])
@@ -143,23 +143,28 @@ export function Dashboard({
     setIsLoading(true)
     setError(null)
     try {
+      // Filter by active source if one is selected
+      const sourceId = activeSourceId || undefined
+
       const [movieUpgradeData, tvUpgradeData, musicUpgradeData, collectionsData, seriesData, artistsData] = await Promise.all([
         window.electronAPI.getMediaItems({
           needsUpgrade: true,
           type: 'movie',
           orderBy: 'tier_score',
-          orderDirection: 'asc'
+          orderDirection: 'asc',
+          sourceId
         }) as Promise<MediaItem[]>,
         window.electronAPI.getMediaItems({
           needsUpgrade: true,
           type: 'episode',
           orderBy: 'tier_score',
-          orderDirection: 'asc'
+          orderDirection: 'asc',
+          sourceId
         }) as Promise<MediaItem[]>,
-        window.electronAPI.musicGetAlbumsNeedingUpgrade() as Promise<MusicAlbumUpgrade[]>,
-        window.electronAPI.collectionsGetIncomplete() as Promise<MovieCollectionData[]>,
-        window.electronAPI.seriesGetIncomplete() as Promise<SeriesCompletenessData[]>,
-        window.electronAPI.musicGetAllArtistCompleteness() as Promise<ArtistCompletenessData[]>
+        window.electronAPI.musicGetAlbumsNeedingUpgrade(undefined, sourceId) as Promise<MusicAlbumUpgrade[]>,
+        window.electronAPI.collectionsGetIncomplete(sourceId) as Promise<MovieCollectionData[]>,
+        window.electronAPI.seriesGetIncomplete(sourceId) as Promise<SeriesCompletenessData[]>,
+        window.electronAPI.musicGetAllArtistCompleteness(sourceId) as Promise<ArtistCompletenessData[]>
       ])
 
       // Sort movie upgrades by tier_score ascending (worst first)
@@ -197,7 +202,7 @@ export function Dashboard({
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [activeSourceId])
 
   useEffect(() => {
     loadDashboardData()

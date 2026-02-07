@@ -327,7 +327,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   seriesAnalyzeAll: (sourceId?: string, libraryId?: string) => ipcRenderer.invoke('series:analyzeAll', sourceId, libraryId),
   seriesAnalyze: (seriesTitle: string) => ipcRenderer.invoke('series:analyze', seriesTitle),
   seriesGetAll: () => ipcRenderer.invoke('series:getAll'),
-  seriesGetIncomplete: () => ipcRenderer.invoke('series:getIncomplete'),
+  seriesGetIncomplete: (sourceId?: string) => ipcRenderer.invoke('series:getIncomplete', sourceId),
   seriesGetStats: () => ipcRenderer.invoke('series:getStats'),
   seriesGetEpisodes: (seriesTitle: string) => ipcRenderer.invoke('series:getEpisodes', seriesTitle),
   seriesDelete: (id: number) => ipcRenderer.invoke('series:delete', id),
@@ -355,7 +355,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Movie Collections
   collectionsAnalyzeAll: (sourceId?: string, libraryId?: string) => ipcRenderer.invoke('collections:analyzeAll', sourceId, libraryId),
   collectionsGetAll: () => ipcRenderer.invoke('collections:getAll'),
-  collectionsGetIncomplete: () => ipcRenderer.invoke('collections:getIncomplete'),
+  collectionsGetIncomplete: (sourceId?: string) => ipcRenderer.invoke('collections:getIncomplete', sourceId),
   collectionsGetStats: () => ipcRenderer.invoke('collections:getStats'),
   collectionsDelete: (id: number) => ipcRenderer.invoke('collections:delete', id),
   collectionsCancelAnalysis: () => ipcRenderer.invoke('collections:cancelAnalysis'),
@@ -390,7 +390,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Music Quality Analysis
   musicGetAlbumQuality: (albumId: number) => ipcRenderer.invoke('music:getAlbumQuality', albumId),
-  musicGetAlbumsNeedingUpgrade: (limit?: number) => ipcRenderer.invoke('music:getAlbumsNeedingUpgrade', limit),
+  musicGetAlbumsNeedingUpgrade: (limit?: number, sourceId?: string) => ipcRenderer.invoke('music:getAlbumsNeedingUpgrade', limit, sourceId),
   musicAnalyzeAllQuality: (sourceId?: string) => ipcRenderer.invoke('music:analyzeAllQuality', sourceId),
   onMusicQualityProgress: (callback: (progress: unknown) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress)
@@ -412,7 +412,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('music:analyzeArtistCompleteness', artistId),
   musicGetArtistCompleteness: (artistName: string) =>
     ipcRenderer.invoke('music:getArtistCompleteness', artistName),
-  musicGetAllArtistCompleteness: () => ipcRenderer.invoke('music:getAllArtistCompleteness'),
+  musicGetAllArtistCompleteness: (sourceId?: string) => ipcRenderer.invoke('music:getAllArtistCompleteness', sourceId),
 
   // Music - Album Track Completeness
   musicAnalyzeAlbumTrackCompleteness: (albumId: number) =>
@@ -1091,7 +1091,7 @@ export interface ElectronAPI {
   seriesAnalyzeAll: (sourceId?: string, libraryId?: string) => Promise<{ completed: boolean; analyzed: number }>
   seriesAnalyze: (seriesTitle: string) => Promise<unknown | null>
   seriesGetAll: () => Promise<unknown[]>
-  seriesGetIncomplete: () => Promise<unknown[]>
+  seriesGetIncomplete: (sourceId?: string) => Promise<unknown[]>
   seriesGetStats: () => Promise<{
     totalSeries: number
     completeSeries: number
@@ -1140,7 +1140,7 @@ export interface ElectronAPI {
   // Movie Collections
   collectionsAnalyzeAll: (sourceId?: string, libraryId?: string) => Promise<{ success: boolean; completed: boolean; analyzed: number }>
   collectionsGetAll: () => Promise<unknown[]>
-  collectionsGetIncomplete: () => Promise<unknown[]>
+  collectionsGetIncomplete: (sourceId?: string) => Promise<unknown[]>
   collectionsGetStats: () => Promise<{
     total: number
     complete: number
@@ -1187,7 +1187,7 @@ export interface ElectronAPI {
 
   // Music Quality Analysis
   musicGetAlbumQuality: (albumId: number) => Promise<unknown | null>
-  musicGetAlbumsNeedingUpgrade: (limit?: number) => Promise<unknown[]>
+  musicGetAlbumsNeedingUpgrade: (limit?: number, sourceId?: string) => Promise<unknown[]>
   musicAnalyzeAllQuality: (sourceId?: string) => Promise<{ success: boolean; analyzed: number }>
   onMusicQualityProgress: (callback: (progress: unknown) => void) => () => void
 
@@ -1203,7 +1203,7 @@ export interface ElectronAPI {
   musicAnalyzeArtistCompleteness: (artistId: number) => Promise<unknown>
   musicAnalyzeAllArtistsCompleteness: () => Promise<{ success: boolean }>
   musicGetArtistCompleteness: (artistName: string) => Promise<unknown | null>
-  musicGetAllArtistCompleteness: () => Promise<unknown[]>
+  musicGetAllArtistCompleteness: (sourceId?: string) => Promise<unknown[]>
   onMusicCompletenessProgress: (callback: (progress: unknown) => void) => void
 
   // Album Track Completeness

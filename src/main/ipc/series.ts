@@ -84,11 +84,12 @@ export function registerSeriesHandlers() {
 
   /**
    * Get incomplete series only
+   * @param sourceId Optional source ID to filter by
    */
-  ipcMain.handle('series:getIncomplete', async () => {
+  ipcMain.handle('series:getIncomplete', async (_event, sourceId?: string) => {
     try {
       const db = getDatabase()
-      return db.getIncompleteSeries()
+      return db.getIncompleteSeries(sourceId)
     } catch (error) {
       console.error('Error getting incomplete series:', error)
       throw error

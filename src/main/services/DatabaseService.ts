@@ -2808,9 +2808,13 @@ export class DatabaseService {
   /**
    * Get incomplete series (completeness < 100%, deduplicated by series_title)
    * Only includes series with TMDB matches since we can't determine completeness without them
+   * @param sourceId Optional source ID to filter by
    */
-  getIncompleteSeries(): SeriesCompleteness[] {
+  getIncompleteSeries(sourceId?: string): SeriesCompleteness[] {
     if (!this.db) throw new Error('Database not initialized')
+
+    const sourceFilter = sourceId ? ' AND source_id = ?' : ''
+    const params: (string | null)[] = sourceId ? [sourceId, sourceId] : []
 
     // Get deduplicated incomplete series with TMDB matches
     const result = this.db.exec(`
@@ -2819,14 +2823,14 @@ export class DatabaseService {
       INNER JOIN (
         SELECT series_title, MAX(completeness_percentage) as max_pct
         FROM series_completeness
-        WHERE tmdb_id IS NOT NULL
+        WHERE tmdb_id IS NOT NULL${sourceFilter}
         GROUP BY series_title
         HAVING max_pct < 100
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
-      WHERE sc.tmdb_id IS NOT NULL
+      WHERE sc.tmdb_id IS NOT NULL${sourceFilter}
       GROUP BY sc.series_title
       ORDER BY sc.completeness_percentage ASC
-    `)
+    `, params)
     if (!result.length) return []
 
     return this.rowsToObjects<SeriesCompleteness>(result[0])
@@ -3086,9 +3090,19 @@ export class DatabaseService {
 
   /**
    * Get incomplete movie collections (completeness < 100%)
+   * @param sourceId Optional source ID to filter by
    */
-  getIncompleteMovieCollections(): MovieCollection[] {
+  getIncompleteMovieCollections(sourceId?: string): MovieCollection[] {
     if (!this.db) throw new Error('Database not initialized')
+
+    if (sourceId) {
+      const result = this.db.exec(
+        'SELECT * FROM movie_collections WHERE completeness_percentage < 100 AND source_id = ? ORDER BY completeness_percentage ASC',
+        [sourceId]
+      )
+      if (!result.length) return []
+      return this.rowsToObjects<MovieCollection>(result[0])
+    }
 
     const result = this.db.exec(
       'SELECT * FROM movie_collections WHERE completeness_percentage < 100 ORDER BY completeness_percentage ASC'
@@ -3429,8 +3443,8 @@ export class DatabaseService {
   }
 
   /** Get albums that need quality upgrades */
-  getAlbumsNeedingUpgrade(limit?: number) {
-    return this.musicRepo.getAlbumsNeedingUpgrade(limit)
+  getAlbumsNeedingUpgrade(limit?: number, sourceId?: string) {
+    return this.musicRepo.getAlbumsNeedingUpgrade(limit, sourceId)
   }
 
   /** Insert or update artist completeness data */
@@ -3444,8 +3458,8 @@ export class DatabaseService {
   }
 
   /** Get all artist completeness records */
-  getAllArtistCompleteness(): ArtistCompleteness[] {
-    return this.musicRepo.getAllArtistCompleteness()
+  getAllArtistCompleteness(sourceId?: string): ArtistCompleteness[] {
+    return this.musicRepo.getAllArtistCompleteness(sourceId)
   }
 
   /** Upsert album completeness data */

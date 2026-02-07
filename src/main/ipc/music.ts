@@ -254,10 +254,10 @@ export function registerMusicHandlers(): void {
   /**
    * Get albums that need quality upgrades
    */
-  ipcMain.handle('music:getAlbumsNeedingUpgrade', async (_event, limit?: number) => {
+  ipcMain.handle('music:getAlbumsNeedingUpgrade', async (_event, limit?: number, sourceId?: string) => {
     try {
       const db = getDatabase()
-      return db.getAlbumsNeedingUpgrade(limit)
+      return db.getAlbumsNeedingUpgrade(limit, sourceId)
     } catch (error: unknown) {
       console.error('[music:getAlbumsNeedingUpgrade] Error:', error)
       throw error
@@ -447,10 +447,10 @@ export function registerMusicHandlers(): void {
   /**
    * Get all artist completeness data
    */
-  ipcMain.handle('music:getAllArtistCompleteness', async () => {
+  ipcMain.handle('music:getAllArtistCompleteness', async (_event, sourceId?: string) => {
     try {
       const db = getDatabase()
-      return db.getAllArtistCompleteness()
+      return db.getAllArtistCompleteness(sourceId)
     } catch (error: unknown) {
       console.error('[music:getAllArtistCompleteness] Error:', error)
       throw error
