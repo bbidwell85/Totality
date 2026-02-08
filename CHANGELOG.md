@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.10](https://github.com/bbidwell85/totality/compare/v0.1.9...v0.1.10) (2026-02-08)
+
+
+### Bug Fixes
+
+* dashboard columns now fill full height, add screenshots to README ([77ef429](https://github.com/bbidwell85/totality/commit/77ef4292363a7f988cce2abb1b6bea2212ad224b))
+
 ### [0.1.9-beta.0](https://github.com/bbidwell85/totality/compare/v0.1.8...v0.1.9-beta.0) (2026-02-07)
 
 
