@@ -2,9 +2,39 @@
 
 A desktop application for analyzing and managing your media library quality across multiple media servers and local folders.
 
-## Overview
-
 Totality connects to your media servers (Plex, Jellyfin, Emby, Kodi) and local folders to provide detailed quality analysis of your movies, TV shows, and music. It helps you identify items that could be upgraded to higher quality versions, tracks your collection completeness, and maintains a wishlist of media you want to acquire.
+
+## Screenshots
+
+### Dashboard
+Track upgrades, incomplete collections, TV series, and music discographies at a glance.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Movie Collections
+See which movies you own in a franchise and which ones are missing.
+
+![Movie Collections](docs/screenshots/collection.png)
+
+### Quality Analysis
+Detailed quality breakdown for each item — resolution, bitrate, codec, audio format, and scoring.
+
+![Quality Analysis](docs/screenshots/quality.png)
+
+### TV Series Completeness
+Track owned and missing episodes across all seasons with TMDB integration.
+
+![TV Completeness](docs/screenshots/tv-completeness.png)
+
+### Music Library
+Browse artists, albums, and tracks with MusicBrainz discography completeness.
+
+![Music Artist](docs/screenshots/music-artist.png)
+
+### Settings
+Configure quality thresholds, API keys, monitoring intervals, and appearance.
+
+![Settings](docs/screenshots/settings.png)
 
 ## Features
 

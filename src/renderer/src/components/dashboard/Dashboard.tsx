@@ -137,7 +137,7 @@ export function Dashboard({
     if (artistsListRef.current) resizeObserver.observe(artistsListRef.current)
 
     return () => resizeObserver.disconnect()
-  }, [hasMovies, hasTV, hasMusic]) // Re-run when columns appear/disappear
+  }, [hasMovies, hasTV, hasMusic, isLoading]) // Re-run when columns appear/disappear
 
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true)
