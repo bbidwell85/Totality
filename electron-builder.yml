@@ -40,7 +40,6 @@ mac:
   target:
     - dmg
   icon: resources/icon.icns
-  identity: null
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
