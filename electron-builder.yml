@@ -40,7 +40,7 @@ mac:
   target:
     - dmg
   icon: resources/icon.icns
-  identity: "Developer ID Application: Brandon Bidwell (LN7B5DD54X)"
+  identity: null
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
