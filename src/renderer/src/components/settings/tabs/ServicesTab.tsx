@@ -95,6 +95,7 @@ export function ServicesTab() {
 
   // FFprobe state
   const [ffprobeAvailable, setFfprobeAvailable] = useState<boolean | null>(null)
+  const [ffprobeBundled, setFfprobeBundled] = useState(false)
   const [ffprobeVersion, setFfprobeVersion] = useState<string | null>(null)
   const [ffprobeEnabled, setFfprobeEnabled] = useState(false)
   const [isInstalling, setIsInstalling] = useState(false)
@@ -166,9 +167,10 @@ export function ServicesTab() {
   const loadSettings = async () => {
     setIsLoading(true)
     try {
-      const [allSettings, ffAvailable, ffVersion, nfsMaps] = await Promise.all([
+      const [allSettings, ffAvailable, ffBundled, ffVersion, nfsMaps] = await Promise.all([
         window.electronAPI.getAllSettings(),
         window.electronAPI.ffprobeIsAvailable(),
+        window.electronAPI.ffprobeIsBundled(),
         window.electronAPI.ffprobeGetVersion().catch(() => null),
         window.electronAPI.getNfsMappings(),
       ])
@@ -181,6 +183,7 @@ export function ServicesTab() {
       }
 
       setFfprobeAvailable(ffAvailable)
+      setFfprobeBundled(ffBundled)
       setFfprobeVersion(ffVersion)
       setFfprobeEnabled(allSettings.ffprobe_enabled === 'true')
 
@@ -515,7 +518,7 @@ export function ServicesTab() {
                       : 'Check for updates'}
                 </button>
               )}
-              {ffprobeAvailable ? (
+              {ffprobeAvailable && ffprobeBundled ? (
                 <button
                   onClick={handleUninstallFFprobe}
                   disabled={isUninstalling || isInstalling}
@@ -528,6 +531,10 @@ export function ServicesTab() {
                   )}
                   Uninstall
                 </button>
+              ) : ffprobeAvailable && !ffprobeBundled ? (
+                <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground">
+                  System installed
+                </span>
               ) : (
                 <button
                   onClick={handleInstallFFprobe}
