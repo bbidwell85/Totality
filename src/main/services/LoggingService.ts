@@ -15,6 +15,12 @@ import * as os from 'os'
 
 export type LogLevel = 'verbose' | 'debug' | 'info' | 'warn' | 'error'
 
+export interface SourceInfo {
+  displayName: string
+  sourceType: string
+  serverVersion: string | null
+}
+
 export interface LogEntry {
   id: string
   timestamp: string
@@ -189,7 +195,7 @@ class LoggingService {
     }
   }
 
-  async exportLogs(filePath: string): Promise<void> {
+  async exportLogs(filePath: string, sourceInfo?: SourceInfo[]): Promise<void> {
     const sessionInfo = this.getSessionInfo()
 
     const exportData = {
@@ -205,6 +211,7 @@ class LoggingService {
       nodeVersion: process.versions.node,
       totalMemoryMB: Math.round(os.totalmem() / 1024 / 1024),
       freeMemoryMB: Math.round(os.freemem() / 1024 / 1024),
+      connectedSources: sourceInfo || [],
       statistics: {
         totalEntries: this.logs.length,
         infoCount: this.infoLogs.length,
@@ -218,9 +225,20 @@ class LoggingService {
   }
 
   // For plain text export (more readable)
-  async exportLogsAsText(filePath: string): Promise<void> {
+  async exportLogsAsText(filePath: string, sourceInfo?: SourceInfo[]): Promise<void> {
     const sessionInfo = this.getSessionInfo()
     const uptimeMinutes = Math.round(sessionInfo.uptimeMs / 60000)
+
+    const sourceLines: string[] = []
+    if (sourceInfo && sourceInfo.length > 0) {
+      sourceLines.push('Connected Sources:')
+      for (const s of sourceInfo) {
+        const version = s.serverVersion ? ` v${s.serverVersion}` : ''
+        sourceLines.push(`  - ${s.displayName} (${s.sourceType}${version})`)
+      }
+    } else {
+      sourceLines.push('Connected Sources: none')
+    }
 
     const header = [
       `Totality Log Export`,
@@ -232,6 +250,7 @@ class LoggingService {
       `Platform: ${process.platform} ${os.release()} (${os.arch()})`,
       `Memory: ${Math.round(os.freemem() / 1024 / 1024)} MB free / ${Math.round(os.totalmem() / 1024 / 1024)} MB total`,
       `Entries: ${this.logs.length} (${this.importantLogs.filter((l) => l.level === 'error').length} errors, ${this.importantLogs.filter((l) => l.level === 'warn').length} warnings)`,
+      ...sourceLines,
       '─'.repeat(80),
       '',
     ].join('\n')

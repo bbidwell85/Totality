@@ -6,7 +6,45 @@
 
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { getLoggingService } from '../services/LoggingService'
+import type { SourceInfo } from '../services/LoggingService'
+import { getSourceManager } from '../services/SourceManager'
 import { getErrorMessage } from './utils'
+
+async function getSourceInfo(): Promise<SourceInfo[]> {
+  try {
+    const manager = getSourceManager()
+    const sources = await manager.getSources()
+
+    const results = await Promise.all(
+      sources.map(async (source) => {
+        let serverVersion: string | null = null
+        const provider = manager.getProvider(source.source_id)
+        if (provider) {
+          try {
+            const test = await Promise.race([
+              provider.testConnection(),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+            ])
+            if (test && test.success) {
+              serverVersion = test.serverVersion || null
+            }
+          } catch {
+            // Source unreachable — leave version as null
+          }
+        }
+        return {
+          displayName: source.display_name,
+          sourceType: source.source_type,
+          serverVersion,
+        }
+      })
+    )
+
+    return results
+  } catch {
+    return []
+  }
+}
 
 export function registerLoggingHandlers(): void {
   ipcMain.handle('logs:getAll', async (_event, limit?: number) => {
@@ -44,11 +82,14 @@ export function registerLoggingHandlers(): void {
     }
 
     try {
+      // Gather connected source info with server versions
+      const sourceInfo = await getSourceInfo()
+
       const isJson = result.filePath.endsWith('.json')
       if (isJson) {
-        await getLoggingService().exportLogs(result.filePath)
+        await getLoggingService().exportLogs(result.filePath, sourceInfo)
       } else {
-        await getLoggingService().exportLogsAsText(result.filePath)
+        await getLoggingService().exportLogsAsText(result.filePath, sourceInfo)
       }
       return { success: true, filePath: result.filePath }
     } catch (error: unknown) {
