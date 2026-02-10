@@ -89,7 +89,7 @@ export class BetterSQLiteService {
       this.db.pragma('temp_store = MEMORY')
 
       if (dbExists) {
-        console.log('[BetterSQLite] Database loaded from:', this.dbPath)
+        console.log('[BetterSQLite] Database loaded from:', path.basename(this.dbPath))
 
         // Verify integrity
         const result = this.db.pragma('integrity_check') as Array<{ integrity_check: string }>

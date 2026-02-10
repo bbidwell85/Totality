@@ -434,7 +434,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:scanItem', async (event, sourceId: string, libraryId: string | null, filePath: string) => {
     try {
       const win = getWindowFromEvent(event)
-      console.log(`[IPC sources:scanItem] Starting single item scan for ${filePath}`)
+      console.log(`[IPC sources:scanItem] Starting single item scan for ${path.basename(filePath)}`)
 
       // If libraryId not provided, determine the appropriate default based on provider type
       let resolvedLibraryId = libraryId

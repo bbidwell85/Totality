@@ -140,7 +140,7 @@ export async function migrateDatabase(): Promise<MigrationResult> {
     console.log('[Migration] Creating backup of SQL.js database...')
     fs.copyFileSync(sqlJsDbPath, backupPath)
     result.backupPath = backupPath
-    console.log(`[Migration] Backup created at: ${backupPath}`)
+    console.log(`[Migration] Backup created at: ${path.basename(backupPath)}`)
 
     result.success = true
     console.log('[Migration] Database migration completed successfully!')

@@ -114,7 +114,7 @@ export class PlexService {
         maxDelay: 15000,
         retryableStatuses: [429, 500, 502, 503, 504],
         onRetry: (attempt, error, delay) => {
-          console.warn(`[PlexService] ${context || url} - Retry ${attempt}/3 after ${delay}ms: ${error.message}`)
+          console.warn(`[PlexService] ${context || 'request'} - Retry ${attempt}/3 after ${delay}ms: ${error.message}`)
         }
       }
     )

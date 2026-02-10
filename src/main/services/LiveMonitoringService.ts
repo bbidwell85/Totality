@@ -348,7 +348,7 @@ export class LiveMonitoringService {
       // Determine if we should use polling (for network paths)
       const usePolling = isNetworkPath(watchPath)
 
-      console.log(`[LiveMonitoring] Starting file watcher for ${sourceName}: ${watchPath} (usePolling: ${usePolling})`)
+      console.log(`[LiveMonitoring] Starting file watcher for ${sourceName} (usePolling: ${usePolling})`)
       this.emitDebugEvent('info', `Starting file watcher: ${sourceName} (${usePolling ? 'polling' : 'native'})`)
 
       const watcher = chokidar.watch(watchPath, {
@@ -464,7 +464,7 @@ export class LiveMonitoringService {
     const source = db.getMediaSourceById(sourceId)
     const sourceName = source?.display_name || sourceId
 
-    console.log(`[LiveMonitoring] File ${event}: ${filePath}`)
+    console.log(`[LiveMonitoring] File ${event}: ${path.basename(filePath)}`)
     const fileName = path.basename(filePath)
     this.emitDebugEvent(event === 'unlink' ? 'removed' : 'info', `[${sourceName}] File ${event}: ${fileName}`)
 

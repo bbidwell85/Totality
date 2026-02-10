@@ -7,6 +7,7 @@ import { retryWithBackoff } from '../../services/utils/retryWithBackoff'
  * Both servers share a very similar API since Jellyfin forked from Emby.
  */
 
+import * as path from 'path'
 import axios, { AxiosInstance } from 'axios'
 import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
@@ -1289,12 +1290,12 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       }
 
       if (bitrateMap.size > 0) {
-        console.log(`[${this.providerType}] Got audio bitrates via FFprobe for: ${filePath}`)
+        console.log(`[${this.providerType}] Got audio bitrates via FFprobe for: ${path.basename(filePath)}`)
       }
 
       return bitrateMap.size > 0 ? bitrateMap : null
     } catch (error) {
-      console.warn(`[${this.providerType}] FFprobe analysis failed for ${filePath}:`, error)
+      console.warn(`[${this.providerType}] FFprobe analysis failed for ${path.basename(filePath)}:`, error)
       return null
     }
   }

@@ -78,7 +78,7 @@ export class FFprobeWorkerPool {
 
     this.ffprobePath = ffprobePath
     this.initialized = true
-    console.log(`[FFprobeWorkerPool] Initialized with ${this.maxWorkers} workers, FFprobe: ${ffprobePath}`)
+    console.log(`[FFprobeWorkerPool] Initialized with ${this.maxWorkers} workers`)
   }
 
   /**

@@ -204,7 +204,7 @@ export class MediaFileAnalyzer {
         if (available) {
           this.ffprobePath = probePath
           this.ffprobeChecked = true
-          console.log(`[MediaFileAnalyzer] Found FFprobe at: ${probePath}`)
+          console.log(`[MediaFileAnalyzer] Found FFprobe at: ${probePath === 'ffprobe' ? 'system PATH' : 'bundled'}`)
           return true
         }
       } catch {
@@ -493,7 +493,7 @@ export class MediaFileAnalyzer {
 
       onProgress?.({ stage: 'Installation complete!', percent: 100 })
 
-      console.log(`[MediaFileAnalyzer] FFprobe installed successfully at: ${finalPath}`)
+      console.log('[MediaFileAnalyzer] FFprobe installed successfully')
 
       return {
         success: true,
@@ -1201,7 +1201,7 @@ export class MediaFileAnalyzer {
           // Verify file has content
           const stats = fs.statSync(outputPath)
           if (stats.size > 0) {
-            console.log(`[MediaFileAnalyzer] Extracted artwork to: ${outputPath}`)
+            console.log(`[MediaFileAnalyzer] Extracted artwork to: ${path.basename(outputPath)}`)
             resolve(true)
           } else {
             fs.unlinkSync(outputPath)

@@ -164,7 +164,7 @@ export class KodiLocalDiscoveryService {
       const userdataPath = this.getDefaultKodiPath()
       const databaseDir = path.join(userdataPath, 'Database')
 
-      console.log(`[KodiLocalDiscovery] Checking for Kodi database at: ${databaseDir}`)
+      console.log('[KodiLocalDiscovery] Checking for Kodi database directory')
 
       // Check if Database directory exists
       if (!fs.existsSync(databaseDir)) {
@@ -185,10 +185,10 @@ export class KodiLocalDiscoveryService {
       }
 
       if (videoDbInfo) {
-        console.log(`[KodiLocalDiscovery] Found video database: ${videoDbInfo.path} (version ${videoDbInfo.version})`)
+        console.log(`[KodiLocalDiscovery] Found video database: ${path.basename(videoDbInfo.path)} (version ${videoDbInfo.version})`)
       }
       if (musicDbInfo) {
-        console.log(`[KodiLocalDiscovery] Found music database: ${musicDbInfo.path} (version ${musicDbInfo.version})`)
+        console.log(`[KodiLocalDiscovery] Found music database: ${path.basename(musicDbInfo.path)} (version ${musicDbInfo.version})`)
       }
 
       // Check if Kodi is running

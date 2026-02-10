@@ -93,7 +93,7 @@ export class DatabaseService {
       // Create or load database
       if (dbBuffer) {
         this.db = new SQL.Database(dbBuffer)
-        console.log('Database loaded from:', this.dbPath)
+        console.log('[Database] Database loaded from:', path.basename(this.dbPath))
 
         // Verify database integrity
         if (!await this.verifyIntegrity()) {
