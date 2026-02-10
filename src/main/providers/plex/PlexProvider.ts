@@ -345,17 +345,8 @@ export class PlexProvider implements MediaProvider {
     }
 
     try {
-      const response = await this.api.get(
-        `${this.selectedServer.uri}/library/sections/${libraryId}/all`,
-        {
-          headers: {
-            'X-Plex-Token': this.selectedServer.accessToken,
-          },
-        }
-      )
-
-      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
-      const items = responseData?.MediaContainer?.Metadata || []
+      const url = `${this.selectedServer.uri}/library/sections/${libraryId}/all`
+      const items = await this.paginatedPlexFetch<PlexMediaItem>(url)
       return items.map((item: PlexMediaItem) => this.convertToMediaMetadata(item))
     } catch (error) {
       console.error('Failed to get library items:', error)
@@ -674,14 +665,7 @@ export class PlexProvider implements MediaProvider {
     }
 
     const url = `${this.selectedServer.uri}/library/sections/${libraryKey}/all`
-    const response = await this.api.get(url, {
-      headers: {
-        'X-Plex-Token': this.selectedServer.accessToken,
-      },
-    })
-
-    const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
-    const items = responseData?.MediaContainer?.Metadata || []
+    const items = await this.paginatedPlexFetch<PlexMediaItem>(url)
     const ids = new Set<string>()
 
     for (const item of items) {
@@ -756,27 +740,62 @@ export class PlexProvider implements MediaProvider {
   // PLEX-SPECIFIC HELPERS
   // ============================================================================
 
+  /**
+   * Paginated fetch for Plex API endpoints that return MediaContainer with Metadata arrays.
+   * Uses X-Plex-Container-Start/Size headers to avoid locking the PMS database for large libraries.
+   */
+  private async paginatedPlexFetch<T>(
+    url: string,
+    params?: Record<string, unknown>,
+    batchSize = 100
+  ): Promise<T[]> {
+    if (!this.selectedServer) {
+      throw new Error('No server selected')
+    }
+
+    const allItems: T[] = []
+    let offset = 0
+    let hasMore = true
+
+    while (hasMore) {
+      const response = await this.api.get(url, {
+        params,
+        headers: {
+          'X-Plex-Token': this.selectedServer.accessToken,
+          'X-Plex-Container-Start': String(offset),
+          'X-Plex-Container-Size': String(batchSize),
+        },
+      })
+
+      const container = (response.data as { MediaContainer?: { Metadata?: T[]; totalSize?: number; size?: number } })?.MediaContainer
+      const items = container?.Metadata || []
+      allItems.push(...items)
+
+      const totalSize = container?.totalSize
+      if (items.length === 0 || (totalSize != null && allItems.length >= totalSize)) {
+        hasMore = false
+      } else {
+        offset += items.length
+      }
+    }
+
+    return allItems
+  }
+
   private async getPlexLibraryItems(libraryKey: string, sinceTimestamp?: Date): Promise<PlexMediaItem[]> {
     if (!this.selectedServer) {
       throw new Error('No server selected')
     }
 
-    // Build URL with optional timestamp filter for incremental scan
-    let url = `${this.selectedServer.uri}/library/sections/${libraryKey}/all`
+    const url = `${this.selectedServer.uri}/library/sections/${libraryKey}/all`
+    const params: Record<string, unknown> = {}
     if (sinceTimestamp) {
       const unixSeconds = Math.floor(sinceTimestamp.getTime() / 1000)
-      url += `?addedAt>=${unixSeconds}`
+      params['addedAt>'] = unixSeconds
       console.log(`[PlexProvider ${this.sourceId}] Incremental scan: fetching items added after ${sinceTimestamp.toISOString()}`)
     }
 
-    const response = await this.api.get(url, {
-      headers: {
-        'X-Plex-Token': this.selectedServer.accessToken,
-      },
-    })
-
-    const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
-    const items = responseData?.MediaContainer?.Metadata || []
+    const items = await this.paginatedPlexFetch<PlexMediaItem>(url, Object.keys(params).length > 0 ? params : undefined)
     if (sinceTimestamp) {
       console.log(`[PlexProvider ${this.sourceId}] Incremental scan found ${items.length} new/updated items`)
     }
@@ -812,17 +831,8 @@ export class PlexProvider implements MediaProvider {
     }
 
     try {
-      const response = await this.api.get(
-        `${this.selectedServer.uri}/library/metadata/${showKey}/allLeaves`,
-        {
-          headers: {
-            'X-Plex-Token': this.selectedServer.accessToken,
-          },
-        }
-      )
-
-      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMediaItem[] } }
-      return responseData?.MediaContainer?.Metadata || []
+      const url = `${this.selectedServer.uri}/library/metadata/${showKey}/allLeaves`
+      return await this.paginatedPlexFetch<PlexMediaItem>(url)
     } catch (error) {
       console.error('Failed to get episodes:', error)
       return []
@@ -1102,22 +1112,8 @@ export class PlexProvider implements MediaProvider {
 
     // For music libraries (type 'artist'), calling /all returns artists by default
     // We explicitly request type=8 (artist) to ensure we get artists only
-    const response = await this.api.get(
-      `${this.selectedServer.uri}/library/sections/${libraryKey}/all`,
-      {
-        params: { type: 8 }, // 8 = artist in Plex API
-        headers: {
-          'X-Plex-Token': this.selectedServer.accessToken,
-          Accept: 'application/json',
-        },
-      }
-    )
-
-    console.log(`[PlexProvider] Response status: ${response.status}`)
-    const responseData = response.data as { MediaContainer?: { size?: number; Metadata?: PlexMusicArtist[] } }
-    console.log(`[PlexProvider] MediaContainer size: ${responseData?.MediaContainer?.size || 0}`)
-
-    const artists = responseData?.MediaContainer?.Metadata || []
+    const url = `${this.selectedServer.uri}/library/sections/${libraryKey}/all`
+    const artists = await this.paginatedPlexFetch<PlexMusicArtist>(url, { type: 8 })
     console.log(`[PlexProvider] Found ${artists.length} artists in library ${libraryKey}`)
 
     // Log first artist for debugging
@@ -1136,28 +1132,26 @@ export class PlexProvider implements MediaProvider {
       throw new Error('No server selected')
     }
 
-    let url: string
+    console.log(`[PlexProvider] Fetching albums from ${artistKey ? `artist ${artistKey}` : `library ${libraryKey}`}`)
+
+    let albums: PlexMusicAlbum[]
     if (artistKey) {
-      // Get albums for specific artist using /children endpoint
-      url = `${this.selectedServer.uri}/library/metadata/${artistKey}/children`
+      // Get albums for specific artist using /children endpoint (small dataset, no pagination needed)
+      const url = `${this.selectedServer.uri}/library/metadata/${artistKey}/children`
+      const response = await this.api.get(url, {
+        headers: {
+          'X-Plex-Token': this.selectedServer.accessToken,
+          Accept: 'application/json',
+        },
+      })
+      const responseData = response.data as { MediaContainer?: { Metadata?: PlexMusicAlbum[] } }
+      albums = responseData?.MediaContainer?.Metadata || []
     } else {
-      // Get all albums in library
-      url = `${this.selectedServer.uri}/library/sections/${libraryKey}/all`
+      // Get all albums in library — paginated
+      const url = `${this.selectedServer.uri}/library/sections/${libraryKey}/all`
+      albums = await this.paginatedPlexFetch<PlexMusicAlbum>(url, { type: 9 })
     }
 
-    console.log(`[PlexProvider] Fetching albums from ${artistKey ? `artist ${artistKey}` : `library ${libraryKey}`}`)
-    console.log(`[PlexProvider] URL: ${url}`)
-
-    const response = await this.api.get(url, {
-      params: artistKey ? undefined : { type: 9 }, // 9 = album
-      headers: {
-        'X-Plex-Token': this.selectedServer.accessToken,
-        Accept: 'application/json',
-      },
-    })
-
-    const responseData = response.data as { MediaContainer?: { Metadata?: PlexMusicAlbum[] } }
-    const albums = responseData?.MediaContainer?.Metadata || []
     console.log(`[PlexProvider] Found ${albums.length} albums`)
 
     // Log first album for debugging
