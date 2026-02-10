@@ -36,6 +36,11 @@ Configure quality thresholds, API keys, monitoring intervals, and appearance.
 
 ![Settings](docs/screenshots/settings.png)
 
+### Themes
+A wide variety of dark and light themes to match your style.
+
+![Themes](docs/screenshots/themes.png)
+
 ## Features
 
 ### Multi-Source Support
