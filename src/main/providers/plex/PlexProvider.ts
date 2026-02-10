@@ -1112,7 +1112,7 @@ export class PlexProvider implements MediaProvider {
     }
 
     console.log(`[PlexProvider] Fetching artists from library ${libraryKey}`)
-    console.log(`[PlexProvider] Server URI: ${this.selectedServer.uri}`)
+    console.log(`[PlexProvider] Fetching artists from server: ${this.selectedServer.name || 'unknown'}`)
 
     // For music libraries (type 'artist'), calling /all returns artists by default
     // We explicitly request type=8 (artist) to ensure we get artists only

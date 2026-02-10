@@ -255,7 +255,8 @@ class LoggingService {
         ? `available (${ff.version ? `v${ff.version}` : 'unknown version'}, ${ff.bundled ? 'bundled' : 'system'})`
         : 'not available'
       diagnosticLines.push(`FFprobe: ${ffStatus}`)
-      diagnosticLines.push(`Database: ${diagnostics.database.path} (${diagnostics.database.sizeMB} MB)`)
+      const dbFileName = diagnostics.database.path !== 'unknown' ? diagnostics.database.path.split(/[/\\]/).pop() : 'unknown'
+      diagnosticLines.push(`Database: ${dbFileName} (${diagnostics.database.sizeMB} MB)`)
       if (diagnostics.libraries.length > 0) {
         const libSummary = diagnostics.libraries.map(l => `${l.sourceName}/${l.sourceType} (${l.itemCount} items)`).join(', ')
         diagnosticLines.push(`Libraries: ${libSummary}`)

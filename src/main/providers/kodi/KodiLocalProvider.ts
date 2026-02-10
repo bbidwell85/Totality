@@ -17,6 +17,7 @@ import { getErrorMessage } from '../../services/utils/errorUtils'
 
 import initSqlJs, { Database } from 'sql.js'
 import * as fs from 'fs'
+import * as path from 'path'
 import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
 import { getKodiLocalDiscoveryService } from '../../services/KodiLocalDiscoveryService'
@@ -166,7 +167,7 @@ export class KodiLocalProvider implements MediaProvider {
       // Read database file as buffer
       const dbBuffer = fs.readFileSync(this.databasePath)
       this.db = new this.sqlJs!.Database(dbBuffer)
-      console.log(`[KodiLocalProvider] Database opened: ${this.databasePath}`)
+      console.log(`[KodiLocalProvider] Database opened: ${path.basename(this.databasePath)}`)
     } catch (error: unknown) {
       throw new Error(`Failed to open database: ${getErrorMessage(error)}`)
     }
@@ -952,7 +953,8 @@ export class KodiLocalProvider implements MediaProvider {
             if (ffprobeEnabled && metadata.filePath) {
               // Log first item's file path for debugging
               if (i === 0) {
-                console.log(`[KodiLocalProvider] FFprobe analyzing first file: "${metadata.filePath}"`)
+                console.log(`[KodiLocalProvider] FFprobe analyzing first file: "${path.basename(metadata.filePath)}"`)
+
               }
               try {
                 const ffprobeResult = await this.analyzeFileWithFFprobe(metadata.filePath)
@@ -980,8 +982,7 @@ export class KodiLocalProvider implements MediaProvider {
                 console.warn(`[KodiLocalProvider] FFprobe exception for ${metadata.title}: ${(ffprobeError as Error).message}`)
               }
             } else if (i === 0) {
-              console.log(`[KodiLocalProvider] FFprobe skipped - enabled: ${ffprobeEnabled}, filePath: "${metadata.filePath || 'EMPTY'}"`)
-            }
+              console.log(`[KodiLocalProvider] FFprobe skipped - enabled: ${ffprobeEnabled}, hasFilePath: ${!!metadata.filePath}`)            }
 
             const mediaItem = this.convertMetadataToMediaItem(metadata)
             if (mediaItem) {
@@ -1126,8 +1127,8 @@ export class KodiLocalProvider implements MediaProvider {
             }
 
             if (!kodiItem) {
-              console.log(`[KodiLocalProvider ${this.sourceId}] File not found in Kodi database: ${inputFilePath}`)
-              result.errors.push(`File not found in Kodi database: ${inputFilePath}`)
+              console.log(`[KodiLocalProvider ${this.sourceId}] File not found in Kodi database: ${path.basename(inputFilePath)}`)
+              result.errors.push(`File not found in Kodi database: ${path.basename(inputFilePath)}`)
               continue
             }
 
@@ -1656,7 +1657,7 @@ export class KodiLocalProvider implements MediaProvider {
             return numB - numA
           })
           this.musicDatabasePath = videoDbDir + (videoDbDir.includes('\\') ? '\\' : '/') + musicDbFiles[0]
-          console.log(`[KodiLocalProvider] Found music database: ${this.musicDatabasePath}`)
+          console.log(`[KodiLocalProvider] Found music database: ${path.basename(this.musicDatabasePath)}`)
         }
       } catch (error: unknown) {
         console.log(`[KodiLocalProvider] Could not search for music database: ${getErrorMessage(error)}`)
@@ -1670,7 +1671,7 @@ export class KodiLocalProvider implements MediaProvider {
     }
 
     if (!fs.existsSync(this.musicDatabasePath)) {
-      console.log(`[KodiLocalProvider] Music database file not found: ${this.musicDatabasePath}`)
+      console.log(`[KodiLocalProvider] Music database file not found: ${path.basename(this.musicDatabasePath)}`)
       return false
     }
 
@@ -1679,7 +1680,7 @@ export class KodiLocalProvider implements MediaProvider {
     try {
       const dbBuffer = fs.readFileSync(this.musicDatabasePath)
       this.musicDb = new this.sqlJs!.Database(dbBuffer)
-      console.log(`[KodiLocalProvider] Music database opened: ${this.musicDatabasePath}`)
+      console.log(`[KodiLocalProvider] Music database opened: ${path.basename(this.musicDatabasePath)}`)
       return true
     } catch (error: unknown) {
       console.error(`[KodiLocalProvider] Failed to open music database: ${getErrorMessage(error)}`)

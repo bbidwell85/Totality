@@ -582,7 +582,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       throw new Error('Not connected to server')
     }
 
-    console.log(`[${this.providerType}] getLibraries: serverUrl=${this.serverUrl}, userId=${this.userId}, hasToken=${!!this.accessToken}, hasApiKey=${!!this.apiKey}`)
+    console.log(`[${this.providerType}] getLibraries: hasServerUrl=${!!this.serverUrl}, hasUserId=${!!this.userId}, hasToken=${!!this.accessToken}, hasApiKey=${!!this.apiKey}`)
 
     try {
       // First try to get user views (works for all users)

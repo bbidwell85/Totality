@@ -944,14 +944,14 @@ export class LocalFolderProvider implements MediaProvider {
       const deletedFiles = filePaths.filter(filePath => !fs.existsSync(filePath))
       console.log(`[LocalFolderProvider ${this.sourceId}] Checking ${deletedFiles.length} deleted files`)
       for (const filePath of deletedFiles) {
-        console.log(`[LocalFolderProvider ${this.sourceId}] Looking up track by path: ${filePath}`)
+        console.log(`[LocalFolderProvider ${this.sourceId}] Looking up deleted track: ${path.basename(filePath)}`)
         const existingTrack = db.getMusicTrackByPath(filePath)
         if (existingTrack?.id) {
           await db.deleteMusicTrack(existingTrack.id)
           result.itemsRemoved++
           console.log(`[LocalFolderProvider ${this.sourceId}] Removed deleted track: ${path.basename(filePath)}`)
         } else {
-          console.log(`[LocalFolderProvider ${this.sourceId}] Track not found in database for: ${filePath}`)
+          console.log(`[LocalFolderProvider ${this.sourceId}] Track not found in database for: ${path.basename(filePath)}`)
         }
       }
 
@@ -1228,7 +1228,7 @@ export class LocalFolderProvider implements MediaProvider {
         }
       } catch (error) {
         // Skip inaccessible directories
-        console.warn(`[LocalFolderProvider] Cannot access directory: ${dir}`)
+        console.warn(`[LocalFolderProvider] Cannot access directory: ${path.basename(dir)}`)
       }
     }
 
@@ -2192,7 +2192,8 @@ export class LocalFolderProvider implements MediaProvider {
                 try {
                   artworkPath = await this.extractAlbumArtwork(filePath, albumId!, fileAnalyzer)
                   if (artworkPath) {
-                    console.log(`[LocalFolderProvider] Extracted embedded artwork for "${albumName}": ${artworkPath}`)
+                    console.log(`[LocalFolderProvider] Extracted embedded artwork for "${albumName}"`)
+
                   } else {
                     console.log(`[LocalFolderProvider] Failed to extract embedded artwork for "${albumName}" (returned null)`)
                   }
@@ -2209,7 +2210,7 @@ export class LocalFolderProvider implements MediaProvider {
                   artworkPath = `local-artwork://file?path=${encodeURIComponent(folderArtwork)}`
                   console.log(`[LocalFolderProvider] Using folder artwork for "${albumName}": ${path.basename(folderArtwork)}`)
                 } else {
-                  console.log(`[LocalFolderProvider] No folder artwork found for "${albumName}" in ${folderPath}`)
+                  console.log(`[LocalFolderProvider] No folder artwork found for "${albumName}" in ${path.basename(folderPath)}`)
                 }
               }
 
@@ -2325,7 +2326,7 @@ export class LocalFolderProvider implements MediaProvider {
         }
       } catch (error) {
         // Skip inaccessible directories
-        console.warn(`[LocalFolderProvider] Cannot access directory: ${dir}`)
+        console.warn(`[LocalFolderProvider] Cannot access directory: ${path.basename(dir)}`)
       }
     }
 
@@ -2398,7 +2399,7 @@ export class LocalFolderProvider implements MediaProvider {
 
       return null
     } catch (error) {
-      console.warn(`[LocalFolderProvider] Failed to extract artwork from ${audioFilePath}:`, error)
+      console.warn(`[LocalFolderProvider] Failed to extract artwork from ${path.basename(audioFilePath)}:`, error)
       return null
     }
   }

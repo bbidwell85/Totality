@@ -13,6 +13,7 @@ import { getLiveMonitoringService } from '../services/LiveMonitoringService'
 import { getDatabase } from '../database/getDatabase'
 import { getErrorMessage } from './utils'
 import * as fs from 'fs'
+import * as path from 'path'
 
 async function getSourceInfo(): Promise<SourceInfo[]> {
   try {
@@ -81,7 +82,7 @@ async function getDiagnosticInfo(): Promise<DiagnosticInfo> {
 
     return {
       ffprobe: { available: ffAvailable, version: ffVersion, bundled: ffBundled },
-      database: { path: dbPath, sizeMB: dbSizeMB },
+      database: { path: path.basename(dbPath), sizeMB: dbSizeMB },
       libraries,
       monitoring: { enabled: monitoring.isMonitoringActive() },
     }
