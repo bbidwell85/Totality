@@ -491,6 +491,7 @@ export class PlexProvider implements MediaProvider {
 
               const detailed = metaResult.value
               if (!detailed || !detailed.Media || detailed.Media.length === 0) {
+                console.warn(`[PlexProvider ${this.sourceId}] Skipping ${item.title}: no media data available`)
                 continue
               }
 
@@ -598,11 +599,13 @@ export class PlexProvider implements MediaProvider {
 
       result.success = true
       result.durationMs = Date.now() - startTime
+      console.log(`[PlexProvider ${this.sourceId}] Scan complete: ${result.itemsScanned} scanned, ${result.itemsAdded} added, ${result.itemsRemoved} removed, ${result.errors.length} errors (${(result.durationMs / 1000).toFixed(1)}s)`)
 
       return result
     } catch (error: unknown) {
       result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
+      console.error(`[PlexProvider ${this.sourceId}] Scan failed after ${(result.durationMs / 1000).toFixed(1)}s: ${getErrorMessage(error)}`)
       return result
     }
   }
@@ -970,7 +973,8 @@ export class PlexProvider implements MediaProvider {
     const audioStreams = part.Stream?.filter((s) => s.streamType === 2) || []
 
     if (!videoStream || audioStreams.length === 0) {
-      console.warn(`Missing streams for ${item.title}`)
+      const missing = !videoStream ? 'video stream' : 'audio tracks'
+      console.warn(`[PlexProvider] Skipping ${item.title}: no ${missing} found`)
       return null
     }
 

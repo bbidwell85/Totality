@@ -884,6 +884,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
           try {
             // Skip items without media sources
             if (!item.MediaSources || item.MediaSources.length === 0) {
+              console.warn(`[${this.providerType}Provider ${this.sourceId}] Skipping ${item.Name}: no media sources`)
               continue
             }
 
@@ -947,10 +948,13 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       result.success = true
       result.durationMs = Date.now() - startTime
 
+      console.log(`[${this.providerType}Provider ${this.sourceId}] Scan complete: ${result.itemsScanned} scanned, ${result.itemsAdded} added, ${result.itemsRemoved} removed, ${result.errors.length} errors (${(result.durationMs / 1000).toFixed(1)}s)`)
+
       return result
     } catch (error: unknown) {
       result.errors.push(getErrorMessage(error))
       result.durationMs = Date.now() - startTime
+      console.error(`[${this.providerType}Provider ${this.sourceId}] Scan failed after ${(result.durationMs / 1000).toFixed(1)}s: ${getErrorMessage(error)}`)
       return result
     }
   }

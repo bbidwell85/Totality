@@ -6,9 +6,13 @@
 
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { getLoggingService } from '../services/LoggingService'
-import type { SourceInfo } from '../services/LoggingService'
+import type { SourceInfo, DiagnosticInfo } from '../services/LoggingService'
 import { getSourceManager } from '../services/SourceManager'
+import { getMediaFileAnalyzer } from '../services/MediaFileAnalyzer'
+import { getLiveMonitoringService } from '../services/LiveMonitoringService'
+import { getDatabase } from '../database/getDatabase'
 import { getErrorMessage } from './utils'
+import * as fs from 'fs'
 
 async function getSourceInfo(): Promise<SourceInfo[]> {
   try {
@@ -43,6 +47,51 @@ async function getSourceInfo(): Promise<SourceInfo[]> {
     return results
   } catch {
     return []
+  }
+}
+
+async function getDiagnosticInfo(): Promise<DiagnosticInfo> {
+  try {
+    const analyzer = getMediaFileAnalyzer()
+    const db = getDatabase()
+    const monitoring = getLiveMonitoringService()
+    const manager = getSourceManager()
+
+    const [ffAvailable, ffVersion, ffBundled] = await Promise.all([
+      analyzer.isAvailable(),
+      analyzer.getVersion().catch(() => null),
+      analyzer.isBundledVersion().catch(() => false),
+    ])
+
+    const dbPath = db.getDbPath()
+    let dbSizeMB = 0
+    try {
+      const stats = fs.statSync(dbPath)
+      dbSizeMB = Math.round((stats.size / 1024 / 1024) * 10) / 10
+    } catch {
+      // DB file may not exist yet
+    }
+
+    const sources = await manager.getSources()
+    const libraries = sources.map((s) => ({
+      sourceName: s.display_name,
+      sourceType: s.source_type,
+      itemCount: db.getMediaItemsCountBySource(s.source_id),
+    }))
+
+    return {
+      ffprobe: { available: ffAvailable, version: ffVersion, bundled: ffBundled },
+      database: { path: dbPath, sizeMB: dbSizeMB },
+      libraries,
+      monitoring: { enabled: monitoring.isMonitoringActive() },
+    }
+  } catch {
+    return {
+      ffprobe: { available: false, version: null, bundled: false },
+      database: { path: 'unknown', sizeMB: 0 },
+      libraries: [],
+      monitoring: { enabled: false },
+    }
   }
 }
 
@@ -82,14 +131,17 @@ export function registerLoggingHandlers(): void {
     }
 
     try {
-      // Gather connected source info with server versions
-      const sourceInfo = await getSourceInfo()
+      // Gather connected source info and diagnostics
+      const [sourceInfo, diagnostics] = await Promise.all([
+        getSourceInfo(),
+        getDiagnosticInfo(),
+      ])
 
       const isJson = result.filePath.endsWith('.json')
       if (isJson) {
-        await getLoggingService().exportLogs(result.filePath, sourceInfo)
+        await getLoggingService().exportLogs(result.filePath, sourceInfo, diagnostics)
       } else {
-        await getLoggingService().exportLogsAsText(result.filePath, sourceInfo)
+        await getLoggingService().exportLogsAsText(result.filePath, sourceInfo, diagnostics)
       }
       return { success: true, filePath: result.filePath }
     } catch (error: unknown) {

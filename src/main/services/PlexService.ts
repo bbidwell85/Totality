@@ -795,7 +795,8 @@ export class PlexService {
     const audioStreams = part.Stream?.filter((s) => s.streamType === 2) || []
 
     if (!videoStream || audioStreams.length === 0) {
-      console.warn(`Missing streams for ${item.title}`)
+      const missing = !videoStream ? 'video stream' : 'audio tracks'
+      console.warn(`[PlexService] Skipping ${item.title}: no ${missing} found`)
       return null
     }
 

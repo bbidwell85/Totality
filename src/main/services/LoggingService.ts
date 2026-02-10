@@ -21,6 +21,13 @@ export interface SourceInfo {
   serverVersion: string | null
 }
 
+export interface DiagnosticInfo {
+  ffprobe: { available: boolean; version: string | null; bundled: boolean }
+  database: { path: string; sizeMB: number }
+  libraries: { sourceName: string; sourceType: string; itemCount: number }[]
+  monitoring: { enabled: boolean }
+}
+
 export interface LogEntry {
   id: string
   timestamp: string
@@ -195,7 +202,7 @@ class LoggingService {
     }
   }
 
-  async exportLogs(filePath: string, sourceInfo?: SourceInfo[]): Promise<void> {
+  async exportLogs(filePath: string, sourceInfo?: SourceInfo[], diagnostics?: DiagnosticInfo): Promise<void> {
     const sessionInfo = this.getSessionInfo()
 
     const exportData = {
@@ -212,6 +219,7 @@ class LoggingService {
       totalMemoryMB: Math.round(os.totalmem() / 1024 / 1024),
       freeMemoryMB: Math.round(os.freemem() / 1024 / 1024),
       connectedSources: sourceInfo || [],
+      diagnostics: diagnostics || null,
       statistics: {
         totalEntries: this.logs.length,
         infoCount: this.infoLogs.length,
@@ -225,7 +233,7 @@ class LoggingService {
   }
 
   // For plain text export (more readable)
-  async exportLogsAsText(filePath: string, sourceInfo?: SourceInfo[]): Promise<void> {
+  async exportLogsAsText(filePath: string, sourceInfo?: SourceInfo[], diagnostics?: DiagnosticInfo): Promise<void> {
     const sessionInfo = this.getSessionInfo()
     const uptimeMinutes = Math.round(sessionInfo.uptimeMs / 60000)
 
@@ -240,6 +248,23 @@ class LoggingService {
       sourceLines.push('Connected Sources: none')
     }
 
+    const diagnosticLines: string[] = []
+    if (diagnostics) {
+      const ff = diagnostics.ffprobe
+      const ffStatus = ff.available
+        ? `available (${ff.version ? `v${ff.version}` : 'unknown version'}, ${ff.bundled ? 'bundled' : 'system'})`
+        : 'not available'
+      diagnosticLines.push(`FFprobe: ${ffStatus}`)
+      diagnosticLines.push(`Database: ${diagnostics.database.path} (${diagnostics.database.sizeMB} MB)`)
+      if (diagnostics.libraries.length > 0) {
+        const libSummary = diagnostics.libraries.map(l => `${l.sourceName}/${l.sourceType} (${l.itemCount} items)`).join(', ')
+        diagnosticLines.push(`Libraries: ${libSummary}`)
+      } else {
+        diagnosticLines.push('Libraries: none')
+      }
+      diagnosticLines.push(`Monitoring: ${diagnostics.monitoring.enabled ? 'enabled' : 'disabled'}`)
+    }
+
     const header = [
       `Totality Log Export`,
       `Exported: ${new Date().toISOString()}`,
@@ -251,6 +276,7 @@ class LoggingService {
       `Memory: ${Math.round(os.freemem() / 1024 / 1024)} MB free / ${Math.round(os.totalmem() / 1024 / 1024)} MB total`,
       `Entries: ${this.logs.length} (${this.importantLogs.filter((l) => l.level === 'error').length} errors, ${this.importantLogs.filter((l) => l.level === 'warn').length} warnings)`,
       ...sourceLines,
+      ...diagnosticLines,
       '─'.repeat(80),
       '',
     ].join('\n')
