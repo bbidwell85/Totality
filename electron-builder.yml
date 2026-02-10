@@ -44,7 +44,8 @@ mac:
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
-  notarize: true
+  notarize:
+    teamId: LN7B5DD54X
 
 linux:
   target:
