@@ -535,7 +535,7 @@ export class MediaFileAnalyzer {
 
         protocol.get(requestUrl, (response: http.IncomingMessage) => {
           // Handle redirects
-          if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307) {
+          if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 303 || response.statusCode === 307 || response.statusCode === 308) {
             response.destroy() // Clean up the redirect response
             const location = response.headers.location
             if (location) {
