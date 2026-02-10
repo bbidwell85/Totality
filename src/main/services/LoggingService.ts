@@ -47,6 +47,7 @@ class LoggingService {
   private sessionId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
   private startedAt = new Date()
   private verboseEnabled = false
+  private homeDir = os.homedir()
   private originalConsole: {
     log: typeof console.log
     warn: typeof console.warn
@@ -64,6 +65,14 @@ class LoggingService {
       info: console.info.bind(console),
       debug: console.debug.bind(console),
     }
+  }
+
+  /** Replace the user's home directory with ~ to avoid leaking OS username */
+  private sanitize(text: string): string {
+    if (!this.homeDir) return text
+    // Replace both forward-slash and backslash variants
+    const escaped = this.homeDir.replace(/[\\]/g, '\\\\')
+    return text.replace(new RegExp(escaped, 'gi'), '~').replace(new RegExp(this.homeDir.replace(/\\/g, '/'), 'gi'), '~')
   }
 
   initialize(): void {
@@ -134,8 +143,8 @@ class LoggingService {
       timestamp: new Date().toISOString(),
       level,
       source,
-      message,
-      details,
+      message: this.sanitize(message),
+      details: details ? this.sanitize(details) : undefined,
     }
 
     // Route to appropriate buffer based on level
