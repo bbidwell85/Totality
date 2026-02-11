@@ -102,6 +102,7 @@ export class KodiLocalProvider implements MediaProvider {
   private musicDatabasePath: string = ''
   private musicDb: Database | null = null
   private musicScanCancelled = false
+  private scanCancelled = false
 
   // Database inclusion settings (reserved for future configurability)
   // Currently not read - always includes both if available
@@ -904,6 +905,7 @@ export class KodiLocalProvider implements MediaProvider {
 
   async scanLibrary(libraryId: string, options?: ScanOptions): Promise<ScanResult> {
     const { onProgress, sinceTimestamp, forceFullScan, targetFiles } = options || {}
+    this.scanCancelled = false
 
     // Handle targeted file scanning (for rescan of specific files)
     if (targetFiles && targetFiles.length > 0) {
@@ -966,6 +968,12 @@ export class KodiLocalProvider implements MediaProvider {
 
       try {
         for (let i = 0; i < items.length; i++) {
+          if (this.scanCancelled) {
+            console.log(`[KodiLocalProvider ${this.sourceId}] Scan cancelled at ${result.itemsScanned}/${totalItems}`)
+            result.cancelled = true
+            break
+          }
+
           let metadata = items[i]
 
           try {
@@ -1031,7 +1039,11 @@ export class KodiLocalProvider implements MediaProvider {
               })
             }
           } catch (error: unknown) {
-            result.errors.push(`Failed to process ${metadata.title}: ${getErrorMessage(error)}`)
+            const msg = getErrorMessage(error)
+            if (/cancel/i.test(msg)) {
+              throw error  // Don't swallow cancellation signals
+            }
+            result.errors.push(`Failed to process ${metadata.title}: ${msg}`)
           }
 
           // Periodic checkpoint
@@ -2127,5 +2139,15 @@ export class KodiLocalProvider implements MediaProvider {
   cancelMusicScan(): void {
     this.musicScanCancelled = true
     console.log(`[KodiLocalProvider ${this.sourceId}] Music scan cancellation requested`)
+  }
+
+  cancelScan(): void {
+    this.scanCancelled = true
+    this.musicScanCancelled = true
+    console.log(`[KodiLocalProvider ${this.sourceId}] Scan cancellation requested`)
+  }
+
+  isScanCancelled(): boolean {
+    return this.scanCancelled
   }
 }
