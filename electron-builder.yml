@@ -1,5 +1,10 @@
 appId: com.totality.app
 productName: Totality
+
+publish:
+  provider: github
+  owner: bbidwell85
+  repo: Totality
 directories:
   buildResources: resources
   output: release
@@ -33,12 +38,14 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  allowElevation: true
   deleteAppDataOnUninstall: false
   include: resources/installer.nsh
 
 mac:
   target:
     - dmg
+    - zip
   icon: resources/icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false

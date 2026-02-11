@@ -34,13 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            artifact-glob: 'release/*.AppImage'
-          - os: macos-latest
-            artifact-glob: 'release/*.dmg'
-          - os: windows-latest
-            artifact-glob: 'release/*.exe'
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -79,7 +73,7 @@ jobs:
           rm $RUNNER_TEMP/certificate.p12
 
       - name: Build and package
-        run: npm run build
+        run: npx tsc && npx vite build && npx electron-builder --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -95,6 +89,6 @@ jobs:
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact-glob }}
+          files: release/*
           draft: false
           generate_release_notes: true

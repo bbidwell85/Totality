@@ -584,6 +584,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // ============================================================================
+  // AUTO UPDATE
+  // ============================================================================
+  autoUpdateGetState: () => ipcRenderer.invoke('autoUpdate:getState'),
+  autoUpdateCheckForUpdates: () => ipcRenderer.invoke('autoUpdate:checkForUpdates'),
+  autoUpdateDownloadUpdate: () => ipcRenderer.invoke('autoUpdate:downloadUpdate'),
+  autoUpdateInstallUpdate: () => ipcRenderer.invoke('autoUpdate:installUpdate'),
+  onAutoUpdateStateChanged: (callback: (state: {
+    status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+    version?: string
+    releaseNotes?: string
+    downloadProgress?: { percent: number; bytesPerSecond: number; transferred: number; total: number }
+    error?: string
+    lastChecked?: string
+  }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: {
+      status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+      version?: string
+      releaseNotes?: string
+      downloadProgress?: { percent: number; bytesPerSecond: number; transferred: number; total: number }
+      error?: string
+      lastChecked?: string
+    }) => callback(state)
+    ipcRenderer.on('autoUpdate:stateChanged', handler)
+    return () => ipcRenderer.removeListener('autoUpdate:stateChanged', handler)
+  },
+
+  // ============================================================================
   // LOGGING
   // ============================================================================
   getLogs: (limit?: number) => ipcRenderer.invoke('logs:getAll', limit),
@@ -1647,6 +1674,29 @@ export interface ElectronAPI {
 
   // General
   onMessage: (callback: (message: string) => void) => () => void
+
+  // ============================================================================
+  // AUTO UPDATE
+  // ============================================================================
+  autoUpdateGetState: () => Promise<{
+    status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+    version?: string
+    releaseNotes?: string
+    downloadProgress?: { percent: number; bytesPerSecond: number; transferred: number; total: number }
+    error?: string
+    lastChecked?: string
+  }>
+  autoUpdateCheckForUpdates: () => Promise<{ success: boolean }>
+  autoUpdateDownloadUpdate: () => Promise<{ success: boolean }>
+  autoUpdateInstallUpdate: () => Promise<{ success: boolean }>
+  onAutoUpdateStateChanged: (callback: (state: {
+    status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+    version?: string
+    releaseNotes?: string
+    downloadProgress?: { percent: number; bytesPerSecond: number; transferred: number; total: number }
+    error?: string
+    lastChecked?: string
+  }) => void) => () => void
 
   // ============================================================================
   // LOGGING

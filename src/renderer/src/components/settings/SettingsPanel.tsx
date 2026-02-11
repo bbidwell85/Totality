@@ -1,5 +1,5 @@
 import { useState, useCallback, useId, useRef, useEffect } from 'react'
-import { X, Sliders, Wrench, Palette, Database, Activity, Bug } from 'lucide-react'
+import { X, Sliders, Wrench, Palette, Database, Activity, Bug, ArrowUpCircle } from 'lucide-react'
 import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { QualitySettingsTab } from './tabs/QualitySettingsTab'
@@ -8,8 +8,9 @@ import { AppearanceTab } from './tabs/AppearanceTab'
 import { DataManagementTab } from './tabs/DataManagementTab'
 import { MonitoringTab } from './tabs/MonitoringTab'
 import { TroubleshootTab } from './tabs/TroubleshootTab'
+import { UpdateTab } from './tabs/UpdateTab'
 
-type TabId = 'quality' | 'services' | 'appearance' | 'monitoring' | 'data' | 'troubleshoot'
+type TabId = 'quality' | 'services' | 'appearance' | 'monitoring' | 'data' | 'update' | 'troubleshoot'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -29,6 +30,7 @@ const TABS: Tab[] = [
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'monitoring', label: 'Monitoring', icon: Activity },
   { id: 'data', label: 'Data', icon: Database },
+  { id: 'update', label: 'Update', icon: ArrowUpCircle },
   { id: 'troubleshoot', label: 'Troubleshoot', icon: Bug },
 ]
 
@@ -122,6 +124,8 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
         return <MonitoringTab />
       case 'data':
         return <DataManagementTab />
+      case 'update':
+        return <UpdateTab />
       case 'troubleshoot':
         return <TroubleshootTab />
       default:

@@ -40,6 +40,7 @@
     "axios": "^1.6.0",
     "better-sqlite3": "^11.8.1",
     "chokidar": "^3.6.0",
+    "electron-updater": "^6.7.3",
     "lucide-react": "^0.562.0",
     "node-cron": "^3.0.3",
     "react": "^18.2.0",

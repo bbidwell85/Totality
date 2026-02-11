@@ -32,9 +32,11 @@ import { registerWishlistHandlers } from './ipc/wishlist'
 import { registerMonitoringHandlers } from './ipc/monitoring'
 import { registerTaskQueueHandlers } from './ipc/taskQueue'
 import { registerLoggingHandlers } from './ipc/logging'
+import { registerAutoUpdateHandlers } from './ipc/autoUpdate'
 import { getLiveMonitoringService } from './services/LiveMonitoringService'
 import { getTaskQueueService } from './services/TaskQueueService'
 import { getLoggingService } from './services/LoggingService'
+import { getAutoUpdateService } from './services/AutoUpdateService'
 
 // __dirname is provided by CommonJS/Node
 declare const __dirname: string
@@ -154,9 +156,12 @@ app.on('window-all-closed', async () => {
   }
 })
 
-// Before quit, close database
+// Before quit, close database and cleanup services
 app.on('before-quit', async (event) => {
   event.preventDefault()
+
+  // Cleanup auto-update timers
+  getAutoUpdateService().cleanup()
 
   // Close database
   const db = getDatabaseServiceSync()
@@ -259,6 +264,7 @@ app.whenReady().then(async () => {
     registerMonitoringHandlers()
     registerTaskQueueHandlers()
     registerLoggingHandlers()
+    registerAutoUpdateHandlers()
 
     // Initialize live monitoring service
     const liveMonitoringService = getLiveMonitoringService()
@@ -271,11 +277,16 @@ app.whenReady().then(async () => {
     const taskQueueService = getTaskQueueService()
     console.log('Task queue service initialized')
 
+    // Initialize auto-update service
+    const autoUpdateService = getAutoUpdateService()
+    autoUpdateService.initialize()
+
     // Set main window reference for services
     if (win) {
       liveMonitoringService.setMainWindow(win)
       taskQueueService.setMainWindow(win)
       getLoggingService().setMainWindow(win)
+      autoUpdateService.setMainWindow(win)
     }
 
   } catch (error) {

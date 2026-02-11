@@ -25,7 +25,7 @@ export default defineConfig({
               fileName: () => 'index.cjs'
             },
             rollupOptions: {
-              external: ['electron', 'sql.js', 'better-sqlite3', 'node-cron', 'axios', 'chokidar', 'fsevents', 'fs', 'path', 'fs/promises', 'node:path', 'node:url', 'node:fs/promises', 'worker_threads'],
+              external: ['electron', 'electron-updater', 'sql.js', 'better-sqlite3', 'node-cron', 'axios', 'chokidar', 'fsevents', 'fs', 'path', 'fs/promises', 'node:path', 'node:url', 'node:fs/promises', 'worker_threads'],
               output: {
                 format: 'cjs',
                 entryFileNames: 'index.cjs'
