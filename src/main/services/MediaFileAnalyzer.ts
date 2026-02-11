@@ -186,15 +186,24 @@ export function getMediaFileAnalyzer(): MediaFileAnalyzer {
 export class MediaFileAnalyzer {
   private ffprobePath: string | null = null
   private ffprobeChecked: boolean = false
+  private availabilityPromise: Promise<boolean> | null = null
 
   /**
    * Check if FFprobe is available on the system
    */
   async isAvailable(): Promise<boolean> {
-    if (this.ffprobeChecked && this.ffprobePath) {
-      return true
+    if (this.ffprobeChecked && this.ffprobePath) return true
+    if (this.ffprobeChecked) return false
+    if (this.availabilityPromise) return this.availabilityPromise
+    this.availabilityPromise = this.checkAvailability()
+    try {
+      return await this.availabilityPromise
+    } finally {
+      this.availabilityPromise = null
     }
+  }
 
+  private async checkAvailability(): Promise<boolean> {
     // Try common FFprobe locations
     const possiblePaths = this.getPossibleFFprobePaths()
 

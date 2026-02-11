@@ -351,9 +351,9 @@ export class PlexService {
         contentChangedAt: dir.contentChangedAt,
         hidden: dir.hidden,
       }))
-    } catch (error) {
-      console.error('Failed to get libraries:', error)
-      throw new Error('Failed to fetch Plex libraries')
+    } catch (error: unknown) {
+      const reason = error instanceof Error ? error.message.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?\b/g, '<server>') : 'unknown error'
+      throw new Error(`Failed to fetch Plex libraries: ${reason}`)
     }
   }
 

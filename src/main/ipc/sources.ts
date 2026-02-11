@@ -211,7 +211,8 @@ export function registerSourceHandlers(): void {
       const success = await plex.selectServer(resolvedServerId)
       return { success }
     } catch (error: unknown) {
-      console.error('Error selecting Plex server:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error(`[IPC] plex:selectServer failed: ${msg}`)
       throw error
     }
   })
