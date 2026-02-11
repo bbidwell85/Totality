@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.14](https://github.com/bbidwell85/totality/compare/v0.1.13...v0.1.14) (2026-02-11)
+
+
+### Features
+
+* enrich log exports with diagnostics, silent failure warnings, and scan summaries ([fa9d47d](https://github.com/bbidwell85/totality/commit/fa9d47dbab4b2b64797fb3acef8685fa2c3a5098))
+* include connected sources and server versions in log exports ([ce69c46](https://github.com/bbidwell85/totality/commit/ce69c464ddcb85b26068303f925b31c1a0fb82c0))
+
+
+### Bug Fixes
+
+* handle HTTP 303/308 redirects in FFprobe download ([89e8aab](https://github.com/bbidwell85/totality/commit/89e8aabc5a6234439fd6b0d413e7910f417fcfb3))
+* hide FFprobe uninstall button for system-installed FFprobe ([cdedb05](https://github.com/bbidwell85/totality/commit/cdedb05e721c56e673e82694c37f839b463a53ec))
+* Kodi music scan now responds to cancellation from activity monitor ([6d55522](https://github.com/bbidwell85/totality/commit/6d555220c7a9540ad26e59f2b519fc19562b095e))
+* Kodi scan now responds to cancellation from activity monitor ([c44f350](https://github.com/bbidwell85/totality/commit/c44f3503dc5ba142ec632e60a30315248bfe4f46))
+* paginate Plex API calls to avoid locking PMS database ([98e4d28](https://github.com/bbidwell85/totality/commit/98e4d289697637e2bf1dcc805e749f861adfa491))
+* redact personal information from logs and exports ([d0d3cab](https://github.com/bbidwell85/totality/commit/d0d3cab175bbcb2c2663c2fb0c89507c4d8cb957))
+* redact remaining file paths, URLs, and credentials from all log statements ([97b7997](https://github.com/bbidwell85/totality/commit/97b79972f674e686592448fa1600e1364a62f425))
+* sanitize home directory from log entries to prevent username leaks ([ed17ace](https://github.com/bbidwell85/totality/commit/ed17ace531a32a5ad1b2c1b61e975d80d52ec607))
+* serialize concurrent getLibraries calls in KodiLocalProvider ([4662fa1](https://github.com/bbidwell85/totality/commit/4662fa1242d10f38d9d25e0c97dd7e3a72bb5beb))
+* treat task cancellations as cancelled not failed, handle Kodi DB not ready ([dd68c4e](https://github.com/bbidwell85/totality/commit/dd68c4e64bad2316d882bc72763d2eae35196b08))
+
 ### [0.1.10](https://github.com/bbidwell85/totality/compare/v0.1.9...v0.1.10) (2026-02-08)
 
 
