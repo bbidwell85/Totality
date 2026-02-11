@@ -45,14 +45,11 @@ export class AutoUpdateService {
   initialize(): void {
     if (this.initialized) return
 
-    // Skip auto-update in development
-    if (!app.isPackaged) {
-      console.log('[AutoUpdate] Skipping — app is not packaged')
-      this.initialized = true
-      return
-    }
-
     this.initialized = true
+
+    if (!app.isPackaged) {
+      console.log('[AutoUpdate] Dev mode — checking works, download/install disabled')
+    }
 
     // Configure autoUpdater
     autoUpdater.autoDownload = false
@@ -134,11 +131,6 @@ export class AutoUpdateService {
    * Check for updates (manual trigger from UI)
    */
   async checkForUpdates(): Promise<void> {
-    if (!app.isPackaged) {
-      this.setState({ status: 'not-available', lastChecked: new Date().toISOString() })
-      return
-    }
-
     try {
       await autoUpdater.checkForUpdates()
     } catch (err: unknown) {
