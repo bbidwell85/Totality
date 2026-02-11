@@ -534,6 +534,28 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at TEXT
 );
 
+-- ============================================================================
+-- EXCLUSIONS (dismiss items from dashboard recommendations)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS exclusions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  exclusion_type TEXT NOT NULL CHECK(exclusion_type IN (
+    'media_upgrade',
+    'collection_movie',
+    'series_episode',
+    'artist_album'
+  )),
+  reference_id INTEGER,
+  reference_key TEXT,
+  parent_key TEXT,
+  title TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_exclusions_type_ref ON exclusions(exclusion_type, reference_id);
+CREATE INDEX IF NOT EXISTS idx_exclusions_type_key ON exclusions(exclusion_type, reference_key, parent_key);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_library_scans_source ON library_scans(source_id);
 CREATE INDEX IF NOT EXISTS idx_library_scans_lookup ON library_scans(source_id, library_id);

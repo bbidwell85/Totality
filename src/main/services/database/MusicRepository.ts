@@ -185,7 +185,24 @@ export class MusicRepository {
       params.push(`%${filters.searchQuery}%`)
     }
 
-    sql += ' ORDER BY sort_name ASC'
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND name NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(name, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    // Dynamic sorting
+    const artistSortMap: Record<string, string> = {
+      'name': 'sort_name',
+      'title': 'sort_name',
+      'added_at': 'created_at',
+    }
+    const sortCol = artistSortMap[filters?.sortBy || ''] || 'sort_name'
+    const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
+    sql += ` ORDER BY ${sortCol} ${sortDir}`
 
     if (filters?.limit) {
       sql += ' LIMIT ?'
@@ -201,6 +218,42 @@ export class MusicRepository {
     if (!result.length) return []
 
     return this.rowsToObjects<MusicArtist>(result[0])
+  }
+
+  /**
+   * Count music artists matching filters (for pagination)
+   */
+  countArtists(filters?: MusicFilters): number {
+    let sql = 'SELECT COUNT(*) as count FROM music_artists WHERE 1=1'
+    const params: (string | number)[] = []
+
+    if (filters?.sourceId) {
+      sql += ' AND source_id = ?'
+      params.push(filters.sourceId)
+    }
+
+    if (filters?.libraryId) {
+      sql += ' AND library_id = ?'
+      params.push(filters.libraryId)
+    }
+
+    if (filters?.searchQuery) {
+      sql += ' AND name LIKE ?'
+      params.push(`%${filters.searchQuery}%`)
+    }
+
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND name NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(name, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    const result = this.db.exec(sql, params)
+    if (!result.length) return 0
+    return (result[0].values[0]?.[0] as number) || 0
   }
 
   /**
@@ -398,7 +451,30 @@ export class MusicRepository {
       params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`)
     }
 
-    sql += ' ORDER BY artist_name ASC, year DESC'
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND title NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    // Dynamic sorting
+    const albumSortMap: Record<string, string> = {
+      'title': 'title',
+      'artist': 'artist_name',
+      'year': 'year',
+      'added_at': 'created_at',
+    }
+    const sortCol = albumSortMap[filters?.sortBy || ''] || 'artist_name'
+    const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
+    // Default secondary sort for artist-primary: year DESC
+    if (!filters?.sortBy || filters.sortBy === 'artist') {
+      sql += ` ORDER BY ${sortCol} ${sortDir}, year DESC`
+    } else {
+      sql += ` ORDER BY ${sortCol} ${sortDir}`
+    }
 
     if (filters?.limit) {
       sql += ' LIMIT ?'
@@ -414,6 +490,47 @@ export class MusicRepository {
     if (!result.length) return []
 
     return this.rowsToObjects<MusicAlbum>(result[0])
+  }
+
+  /**
+   * Count music albums matching filters (for pagination)
+   */
+  countAlbums(filters?: MusicFilters): number {
+    let sql = 'SELECT COUNT(*) as count FROM music_albums WHERE 1=1'
+    const params: (string | number)[] = []
+
+    if (filters?.sourceId) {
+      sql += ' AND source_id = ?'
+      params.push(filters.sourceId)
+    }
+
+    if (filters?.libraryId) {
+      sql += ' AND library_id = ?'
+      params.push(filters.libraryId)
+    }
+
+    if (filters?.artistId) {
+      sql += ' AND artist_id = ?'
+      params.push(filters.artistId)
+    }
+
+    if (filters?.searchQuery) {
+      sql += ' AND (title LIKE ? OR artist_name LIKE ?)'
+      params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`)
+    }
+
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND title NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    const result = this.db.exec(sql, params)
+    if (!result.length) return 0
+    return (result[0].values[0]?.[0] as number) || 0
   }
 
   /**
@@ -600,7 +717,37 @@ export class MusicRepository {
       params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`, `%${filters.searchQuery}%`)
     }
 
-    sql += ' ORDER BY disc_number ASC, track_number ASC'
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND title NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    // Dynamic sorting
+    const trackSortMap: Record<string, string> = {
+      'title': 'title',
+      'artist': 'artist_name',
+      'album': 'album_name',
+      'codec': 'audio_codec',
+      'duration': 'duration',
+      'added_at': 'created_at',
+    }
+
+    if (filters?.sortBy && trackSortMap[filters.sortBy]) {
+      const sortCol = trackSortMap[filters.sortBy]
+      const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
+      sql += ` ORDER BY ${sortCol} ${sortDir}`
+    } else {
+      // Default: disc/track order when browsing an album, title when browsing all
+      if (filters?.albumId) {
+        sql += ' ORDER BY disc_number ASC, track_number ASC'
+      } else {
+        sql += ' ORDER BY title ASC'
+      }
+    }
 
     if (filters?.limit) {
       sql += ' LIMIT ?'
@@ -616,6 +763,52 @@ export class MusicRepository {
     if (!result.length) return []
 
     return this.rowsToObjects<MusicTrack>(result[0])
+  }
+
+  /**
+   * Count music tracks matching filters (for pagination)
+   */
+  countTracks(filters?: MusicFilters): number {
+    let sql = 'SELECT COUNT(*) as count FROM music_tracks WHERE 1=1'
+    const params: (string | number)[] = []
+
+    if (filters?.sourceId) {
+      sql += ' AND source_id = ?'
+      params.push(filters.sourceId)
+    }
+
+    if (filters?.libraryId) {
+      sql += ' AND library_id = ?'
+      params.push(filters.libraryId)
+    }
+
+    if (filters?.artistId) {
+      sql += ' AND artist_id = ?'
+      params.push(filters.artistId)
+    }
+
+    if (filters?.albumId) {
+      sql += ' AND album_id = ?'
+      params.push(filters.albumId)
+    }
+
+    if (filters?.searchQuery) {
+      sql += ' AND (title LIKE ? OR artist_name LIKE ? OR album_name LIKE ?)'
+      params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`, `%${filters.searchQuery}%`)
+    }
+
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND title NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    const result = this.db.exec(sql, params)
+    if (!result.length) return 0
+    return (result[0].values[0]?.[0] as number) || 0
   }
 
   /**

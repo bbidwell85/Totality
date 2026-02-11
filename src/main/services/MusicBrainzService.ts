@@ -677,8 +677,17 @@ export class MusicBrainzService extends CancellableOperation {
     const ownedSinglesCount = discography.singles.length - missingSingles.length
 
     // Calculate completeness (albums weighted more heavily)
-    const totalItems = discography.albums.length * 3 + discography.eps.length * 2 + discography.singles.length
-    const ownedItems = ownedAlbumsCount * 3 + ownedEpsCount * 2 + ownedSinglesCount
+    // Read settings for whether to include EPs and singles
+    const db = getDatabase()
+    const includeEps = db.getSetting('completeness_include_eps') !== 'false'
+    const includeSingles = db.getSetting('completeness_include_singles') !== 'false'
+
+    const totalItems = discography.albums.length * 3
+      + (includeEps ? discography.eps.length * 2 : 0)
+      + (includeSingles ? discography.singles.length : 0)
+    const ownedItems = ownedAlbumsCount * 3
+      + (includeEps ? ownedEpsCount * 2 : 0)
+      + (includeSingles ? ownedSinglesCount : 0)
 
     const completenessPercentage = totalItems > 0
       ? Math.round((ownedItems / totalItems) * 100)

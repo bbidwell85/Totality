@@ -209,6 +209,39 @@ export function registerMusicHandlers(): void {
   })
 
   /**
+   * Count music items (for pagination)
+   */
+  ipcMain.handle('music:countArtists', async (_event, filters?: MusicFilters) => {
+    try {
+      const db = getDatabase()
+      return db.countMusicArtists(filters)
+    } catch (error: unknown) {
+      console.error('[music:countArtists] Error:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('music:countAlbums', async (_event, filters?: MusicFilters) => {
+    try {
+      const db = getDatabase()
+      return db.countMusicAlbums(filters)
+    } catch (error: unknown) {
+      console.error('[music:countAlbums] Error:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('music:countTracks', async (_event, filters?: MusicFilters) => {
+    try {
+      const db = getDatabase()
+      return db.countMusicTracks(filters)
+    } catch (error: unknown) {
+      console.error('[music:countTracks] Error:', error)
+      throw error
+    }
+  })
+
+  /**
    * Get tracks for a specific album
    */
   ipcMain.handle('music:getTracksByAlbum', async (_event, albumId: number) => {

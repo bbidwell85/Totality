@@ -457,5 +457,36 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  // ============================================================================
+  // EXCLUSIONS
+  // ============================================================================
+
+  ipcMain.handle('db:addExclusion', async (_event, exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string, title?: string) => {
+    try {
+      return db.addExclusion(exclusionType, referenceId, referenceKey, parentKey, title)
+    } catch (error) {
+      console.error('Error adding exclusion:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('db:removeExclusion', async (_event, id: number) => {
+    try {
+      db.removeExclusion(id)
+    } catch (error) {
+      console.error('Error removing exclusion:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('db:getExclusions', async (_event, exclusionType?: string, parentKey?: string) => {
+    try {
+      return db.getExclusions(exclusionType, parentKey)
+    } catch (error) {
+      console.error('Error getting exclusions:', error)
+      return []
+    }
+  })
+
   console.log('Database IPC handlers registered')
 }

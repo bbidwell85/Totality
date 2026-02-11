@@ -6,9 +6,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { FixedSizeList as VirtualList, VariableSizeList } from 'react-window'
-import { Sparkles, Library, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus } from 'lucide-react'
+import { Sparkles, Library, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus, X } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { useSources } from '../../contexts/SourceContext'
+import { useNavigation } from '../../contexts/NavigationContext'
 import type { MediaItem, MovieCollectionData, SeriesCompletenessData, ArtistCompletenessData, MusicAlbum } from '../library/types'
 
 // Music album with quality info from the upgrade query
@@ -78,7 +79,7 @@ const SECTION_HEADER_HEIGHT = 36    // Season/type section header
 const TYPE_SECTION_GAP = 12         // space-y-3 gap between album type groups
 
 export function Dashboard({
-  onNavigateToLibrary: _onNavigateToLibrary,
+  onNavigateToLibrary,
   onAddSource,
   sidebarCollapsed = false,
   hasMovies = false,
@@ -86,6 +87,7 @@ export function Dashboard({
   hasMusic = false
 }: DashboardProps) {
   const { sources, activeSourceId } = useSources()
+  const { navigateTo } = useNavigation()
   const [movieUpgrades, setMovieUpgrades] = useState<MediaItem[]>([])
   const [tvUpgrades, setTvUpgrades] = useState<MediaItem[]>([])
   const [musicUpgrades, setMusicUpgrades] = useState<MusicAlbumUpgrade[]>([])
@@ -94,6 +96,8 @@ export function Dashboard({
   const [artists, setArtists] = useState<ArtistCompletenessData[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [includeEps, setIncludeEps] = useState(true)
+  const [includeSingles, setIncludeSingles] = useState(true)
   // Default to first available library type
   const [upgradeTab, setUpgradeTab] = useState<UpgradeTab>(() =>
     hasMovies ? 'movies' : hasTV ? 'tv' : hasMusic ? 'music' : 'movies'
@@ -107,6 +111,12 @@ export function Dashboard({
   const collectionsListRef = useRef<HTMLDivElement>(null)
   const seriesListRef = useRef<HTMLDivElement>(null)
   const artistsListRef = useRef<HTMLDivElement>(null)
+
+  // Sort state for dashboard columns
+  const [upgradeSortBy, setUpgradeSortBy] = useState<'quality' | 'recent' | 'title'>('quality')
+  const [collectionSortBy, setCollectionSortBy] = useState<'completeness' | 'name' | 'recent'>('completeness')
+  const [seriesSortBy, setSeriesSortBy] = useState<'completeness' | 'name' | 'recent'>('completeness')
+  const [artistSortBy, setArtistSortBy] = useState<'completeness' | 'name'>('completeness')
 
   // Expanded state for expandable rows
   const [expandedCollections, setExpandedCollections] = useState<Set<number>>(new Set())
@@ -146,19 +156,29 @@ export function Dashboard({
       // Filter by active source if one is selected
       const sourceId = activeSourceId || undefined
 
+      // Read completeness settings
+      const [epsSettingVal, singlesSettingVal] = await Promise.all([
+        window.electronAPI.getSetting('completeness_include_eps'),
+        window.electronAPI.getSetting('completeness_include_singles'),
+      ])
+      const epsEnabled = epsSettingVal !== 'false'
+      const singlesEnabled = singlesSettingVal !== 'false'
+      setIncludeEps(epsEnabled)
+      setIncludeSingles(singlesEnabled)
+
       const [movieUpgradeData, tvUpgradeData, musicUpgradeData, collectionsData, seriesData, artistsData] = await Promise.all([
         window.electronAPI.getMediaItems({
           needsUpgrade: true,
           type: 'movie',
-          orderBy: 'tier_score',
-          orderDirection: 'asc',
+          sortBy: 'tier_score',
+          sortOrder: 'asc',
           sourceId
         }) as Promise<MediaItem[]>,
         window.electronAPI.getMediaItems({
           needsUpgrade: true,
           type: 'episode',
-          orderBy: 'tier_score',
-          orderDirection: 'asc',
+          sortBy: 'tier_score',
+          sortOrder: 'asc',
           sourceId
         }) as Promise<MediaItem[]>,
         window.electronAPI.musicGetAlbumsNeedingUpgrade(undefined, sourceId) as Promise<MusicAlbumUpgrade[]>,
@@ -180,19 +200,68 @@ export function Dashboard({
       // Music upgrades already sorted by database query
       setMusicUpgrades(musicUpgradeData || [])
 
-      // Filter collections to >50% complete, sort by completeness descending
+      // Load exclusions for completeness filtering
+      const [collectionExclusions, seriesExclusions, artistExclusions] = await Promise.all([
+        window.electronAPI.getExclusions('collection_movie'),
+        window.electronAPI.getExclusions('series_episode'),
+        window.electronAPI.getExclusions('artist_album'),
+      ])
+
+      // Build exclusion lookup sets
+      const excludedCollectionMovies = new Set(collectionExclusions.map(e => `${e.parent_key}:${e.reference_key}`))
+      const excludedSeriesEpisodes = new Set(seriesExclusions.map(e => `${e.parent_key}:${e.reference_key}`))
+      const excludedArtistAlbums = new Set(artistExclusions.map(e => `${e.parent_key}:${e.reference_key}`))
+
+      // Filter collections: remove excluded missing movies from JSON, recalc counts
       const filteredCollections = collectionsData
-        .filter(c => c.completeness_percentage >= 50)
+        .map(c => {
+          try {
+            const missing = JSON.parse(c.missing_movies || '[]') as MissingMovie[]
+            const filtered = missing.filter(m => !excludedCollectionMovies.has(`${c.tmdb_collection_id}:${m.tmdb_id}`))
+            if (filtered.length !== missing.length) {
+              const owned = c.total_movies - filtered.length
+              const pct = c.total_movies > 0 ? (owned / c.total_movies) * 100 : 100
+              return { ...c, missing_movies: JSON.stringify(filtered), owned_movies: owned, completeness_percentage: pct }
+            }
+          } catch { /* keep original */ }
+          return c
+        })
+        .filter(c => c.completeness_percentage >= 50 && c.completeness_percentage < 100)
         .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
       setCollections(filteredCollections)
 
-      // Sort series by completeness descending (almost complete first)
+      // Filter series: remove excluded missing episodes from JSON
       const sortedSeries = seriesData
+        .map(s => {
+          try {
+            const missing = JSON.parse(s.missing_episodes || '[]') as MissingEpisode[]
+            const parentKey = s.tmdb_id || s.series_title
+            const filtered = missing.filter(ep => !excludedSeriesEpisodes.has(`${parentKey}:S${ep.season_number}E${ep.episode_number}`))
+            if (filtered.length !== missing.length) {
+              const owned = s.total_episodes - filtered.length
+              const pct = s.total_episodes > 0 ? (owned / s.total_episodes) * 100 : 100
+              return { ...s, missing_episodes: JSON.stringify(filtered), owned_episodes: owned, completeness_percentage: pct }
+            }
+          } catch { /* keep original */ }
+          return s
+        })
         .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
       setSeries(sortedSeries)
 
-      // Filter artists to incomplete only, sort by completeness descending
+      // Filter artists: remove excluded missing albums from JSON
       const incompleteArtists = (artistsData || [])
+        .map(a => {
+          const parentKey = a.musicbrainz_id || a.artist_name
+          const filterJson = (json: string | undefined): string => {
+            try {
+              const parsed = JSON.parse(json || '[]') as Array<{ musicbrainz_id?: string }>
+              const filtered = parsed.filter(item => !excludedArtistAlbums.has(`${parentKey}:${item.musicbrainz_id}`))
+              if (filtered.length !== parsed.length) return JSON.stringify(filtered)
+            } catch { /* keep original */ }
+            return json || '[]'
+          }
+          return { ...a, missing_albums: filterJson(a.missing_albums), missing_eps: filterJson(a.missing_eps), missing_singles: filterJson(a.missing_singles) }
+        })
         .filter(a => a.completeness_percentage < 100)
         .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
       setArtists(incompleteArtists)
@@ -249,13 +318,13 @@ export function Dashboard({
           parsed.filter(isValidAlbum).forEach(a => albums.push({ ...a, musicbrainz_id: a.musicbrainz_id || '', album_type: 'album' }))
         }
       }
-      if (artist.missing_eps) {
+      if (includeEps && artist.missing_eps) {
         const parsed = JSON.parse(artist.missing_eps)
         if (Array.isArray(parsed)) {
           parsed.filter(isValidAlbum).forEach(a => albums.push({ ...a, musicbrainz_id: a.musicbrainz_id || '', album_type: 'ep' }))
         }
       }
-      if (artist.missing_singles) {
+      if (includeSingles && artist.missing_singles) {
         const parsed = JSON.parse(artist.missing_singles)
         if (Array.isArray(parsed)) {
           parsed.filter(isValidAlbum).forEach(a => albums.push({ ...a, musicbrainz_id: a.musicbrainz_id || '', album_type: 'single' }))
@@ -265,7 +334,7 @@ export function Dashboard({
       // Ignore parse errors
     }
     return albums
-  }, [])
+  }, [includeEps, includeSingles])
 
   // Group episodes by season for better visualization
   const groupEpisodesBySeason = useCallback((s: SeriesCompletenessData): SeasonGroup[] => {
@@ -388,13 +457,140 @@ export function Dashboard({
   const toggleSeriesExpand = createToggleExpand(setExpandedSeries, seriesListInstanceRef)
   const toggleArtistExpand = createToggleExpand(setExpandedArtists, artistsListInstanceRef)
 
+  // Dismiss handlers for exclusions
+  const dismissMovieUpgrade = useCallback(async (index: number) => {
+    const item = movieUpgrades[index]
+    if (!item) return
+    await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, item.title)
+    setMovieUpgrades(prev => prev.filter((_, i) => i !== index))
+  }, [movieUpgrades])
+
+  const dismissTvUpgrade = useCallback(async (index: number) => {
+    const item = tvUpgrades[index]
+    if (!item) return
+    await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, `${item.series_title} S${item.season_number}E${item.episode_number}`)
+    setTvUpgrades(prev => prev.filter((_, i) => i !== index))
+  }, [tvUpgrades])
+
+  const dismissMusicUpgrade = useCallback(async (index: number) => {
+    const album = musicUpgrades[index]
+    if (!album) return
+    await window.electronAPI.addExclusion('media_upgrade', album.id, undefined, undefined, `${album.artist_name} - ${album.title}`)
+    setMusicUpgrades(prev => prev.filter((_, i) => i !== index))
+  }, [musicUpgrades])
+
+  const dismissCollectionMovie = useCallback(async (collectionIndex: number, movie: MissingMovie) => {
+    const collection = collections[collectionIndex]
+    if (!collection) return
+    await window.electronAPI.addExclusion('collection_movie', undefined, movie.tmdb_id, collection.tmdb_collection_id, movie.title)
+    // Update the collection's missing movies in state
+    setCollections(prev => prev.map((c, i) => {
+      if (i !== collectionIndex) return c
+      try {
+        const missing = JSON.parse(c.missing_movies || '[]') as MissingMovie[]
+        const filtered = missing.filter(m => m.tmdb_id !== movie.tmdb_id)
+        return { ...c, missing_movies: JSON.stringify(filtered) }
+      } catch { return c }
+    }))
+  }, [collections])
+
+  const dismissSeriesEpisode = useCallback(async (seriesIndex: number, episode: MissingEpisode) => {
+    const s = series[seriesIndex]
+    if (!s) return
+    const refKey = `S${episode.season_number}E${episode.episode_number}`
+    await window.electronAPI.addExclusion('series_episode', undefined, refKey, s.tmdb_id || s.series_title, `${s.series_title} ${refKey}`)
+    setSeries(prev => prev.map((ser, i) => {
+      if (i !== seriesIndex) return ser
+      try {
+        const missing = JSON.parse(ser.missing_episodes || '[]') as MissingEpisode[]
+        const filtered = missing.filter(ep => !(ep.season_number === episode.season_number && ep.episode_number === episode.episode_number))
+        return { ...ser, missing_episodes: JSON.stringify(filtered) }
+      } catch { return ser }
+    }))
+  }, [series])
+
+  const dismissArtistAlbum = useCallback(async (artistIndex: number, album: MissingAlbumItem) => {
+    const artist = artists[artistIndex]
+    if (!artist) return
+    await window.electronAPI.addExclusion('artist_album', undefined, album.musicbrainz_id, artist.musicbrainz_id || artist.artist_name, album.title)
+    // Remove from the appropriate missing list in state
+    setArtists(prev => prev.map((a, i) => {
+      if (i !== artistIndex) return a
+      const removeFromJson = (json: string | undefined): string => {
+        try {
+          const parsed = JSON.parse(json || '[]') as Array<{ musicbrainz_id?: string; title?: string }>
+          return JSON.stringify(parsed.filter(item => item.musicbrainz_id !== album.musicbrainz_id))
+        } catch { return json || '[]' }
+      }
+      if (album.album_type === 'album') return { ...a, missing_albums: removeFromJson(a.missing_albums) }
+      if (album.album_type === 'ep') return { ...a, missing_eps: removeFromJson(a.missing_eps) }
+      if (album.album_type === 'single') return { ...a, missing_singles: removeFromJson(a.missing_singles) }
+      return a
+    }))
+  }, [artists])
+
+  // Re-sort data when sort option changes
+  // Helper to access created_at from DB row data (present in DB but not typed)
+  const getCreatedAt = (item: unknown): string => ((item as Record<string, unknown>).created_at as string) || ''
+
+  useEffect(() => {
+    setMovieUpgrades(prev => [...prev].sort((a, b) => {
+      if (upgradeSortBy === 'quality') return (a.tier_score ?? 100) - (b.tier_score ?? 100)
+      if (upgradeSortBy === 'recent') return getCreatedAt(b).localeCompare(getCreatedAt(a))
+      return a.title.localeCompare(b.title)
+    }))
+    setTvUpgrades(prev => [...prev].sort((a, b) => {
+      if (upgradeSortBy === 'quality') return (a.tier_score ?? 100) - (b.tier_score ?? 100)
+      if (upgradeSortBy === 'recent') return getCreatedAt(b).localeCompare(getCreatedAt(a))
+      return (a.series_title || a.title).localeCompare(b.series_title || b.title)
+    }))
+    setMusicUpgrades(prev => [...prev].sort((a, b) => {
+      if (upgradeSortBy === 'quality') return (a.tier_score ?? 100) - (b.tier_score ?? 100)
+      if (upgradeSortBy === 'recent') return getCreatedAt(b).localeCompare(getCreatedAt(a))
+      return a.title.localeCompare(b.title)
+    }))
+  }, [upgradeSortBy])
+
+  useEffect(() => {
+    setCollections(prev => [...prev].sort((a, b) => {
+      if (collectionSortBy === 'completeness') return b.completeness_percentage - a.completeness_percentage
+      if (collectionSortBy === 'recent') return getCreatedAt(b).localeCompare(getCreatedAt(a))
+      return a.collection_name.localeCompare(b.collection_name)
+    }))
+    // Reset expanded state and cached heights when sort changes
+    setExpandedCollections(new Set())
+    collectionsListInstanceRef.current?.resetAfterIndex(0)
+  }, [collectionSortBy])
+
+  useEffect(() => {
+    setSeries(prev => [...prev].sort((a, b) => {
+      if (seriesSortBy === 'completeness') return b.completeness_percentage - a.completeness_percentage
+      if (seriesSortBy === 'recent') return getCreatedAt(b).localeCompare(getCreatedAt(a))
+      return a.series_title.localeCompare(b.series_title)
+    }))
+    setExpandedSeries(new Set())
+    seriesListInstanceRef.current?.resetAfterIndex(0)
+  }, [seriesSortBy])
+
+  useEffect(() => {
+    setArtists(prev => [...prev].sort((a, b) => {
+      if (artistSortBy === 'completeness') return b.completeness_percentage - a.completeness_percentage
+      return a.artist_name.localeCompare(b.artist_name)
+    }))
+    setExpandedArtists(new Set())
+    artistsListInstanceRef.current?.resetAfterIndex(0)
+  }, [artistSortBy])
+
   // Virtual list row renderers
   const MovieUpgradeRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const item = movieUpgrades[index]
     if (!item) return null
     return (
       <div style={style} className="px-2">
-        <div className="flex items-center gap-3 px-2 py-2 hover:bg-muted/50 rounded-md transition-colors">
+        <div
+          className="flex items-center gap-3 px-2 py-2 hover:bg-muted/50 rounded-md transition-colors group/row cursor-pointer"
+          onClick={() => { navigateTo({ type: 'movie', id: item.id, sourceId: item.source_id }); onNavigateToLibrary('movies') }}
+        >
         <div className="w-10 h-14 bg-muted rounded overflow-hidden flex-shrink-0 shadow-md shadow-black/40">
           {item.poster_url ? (
             <img src={item.poster_url} alt="" className="w-full h-full object-cover" />
@@ -411,30 +607,42 @@ export function Dashboard({
             {item.quality_tier} · {item.tier_quality}
           </div>
         </div>
-        <AddToWishlistButton
-          mediaType="movie"
-          title={item.title}
-          year={item.year}
-          tmdbId={item.tmdb_id}
-          posterUrl={item.poster_url}
-          reason="upgrade"
-          mediaItemId={item.id}
-          currentQualityTier={item.quality_tier}
-          currentQualityLevel={item.tier_quality}
-          currentResolution={item.resolution}
-          compact
-        />
+        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+          <AddToWishlistButton
+            mediaType="movie"
+            title={item.title}
+            year={item.year}
+            tmdbId={item.tmdb_id}
+            posterUrl={item.poster_url}
+            reason="upgrade"
+            mediaItemId={item.id}
+            currentQualityTier={item.quality_tier}
+            currentQualityLevel={item.tier_quality}
+            currentResolution={item.resolution}
+            compact
+          />
+          <button
+            onClick={() => dismissMovieUpgrade(index)}
+            className="opacity-0 group-hover/row:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+            title="Dismiss"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
         </div>
       </div>
     )
-  }, [movieUpgrades])
+  }, [movieUpgrades, dismissMovieUpgrade, navigateTo, onNavigateToLibrary])
 
   const TvUpgradeRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const item = tvUpgrades[index]
     if (!item) return null
     return (
       <div style={style} className="px-2">
-        <div className="flex items-center gap-3 px-2 py-2 hover:bg-muted/50 rounded-md transition-colors">
+        <div
+          className="flex items-center gap-3 px-2 py-2 hover:bg-muted/50 rounded-md transition-colors group/row cursor-pointer"
+          onClick={() => { navigateTo({ type: 'episode', id: item.id, sourceId: item.source_id }); onNavigateToLibrary('tv') }}
+        >
         <div className="w-10 h-14 bg-muted rounded overflow-hidden flex-shrink-0 shadow-md shadow-black/40">
           {item.poster_url ? (
             <img src={item.poster_url} alt="" className="w-full h-full object-cover" />
@@ -453,33 +661,45 @@ export function Dashboard({
             {item.quality_tier} · {item.tier_quality}
           </div>
         </div>
-        <AddToWishlistButton
-          mediaType="episode"
-          title={item.title}
-          year={item.year}
-          tmdbId={item.tmdb_id}
-          posterUrl={item.poster_url}
-          seriesTitle={item.series_title}
-          seasonNumber={item.season_number}
-          episodeNumber={item.episode_number}
-          reason="upgrade"
-          mediaItemId={item.id}
-          currentQualityTier={item.quality_tier}
-          currentQualityLevel={item.tier_quality}
-          currentResolution={item.resolution}
-          compact
-        />
+        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+          <AddToWishlistButton
+            mediaType="episode"
+            title={item.title}
+            year={item.year}
+            tmdbId={item.tmdb_id}
+            posterUrl={item.poster_url}
+            seriesTitle={item.series_title}
+            seasonNumber={item.season_number}
+            episodeNumber={item.episode_number}
+            reason="upgrade"
+            mediaItemId={item.id}
+            currentQualityTier={item.quality_tier}
+            currentQualityLevel={item.tier_quality}
+            currentResolution={item.resolution}
+            compact
+          />
+          <button
+            onClick={() => dismissTvUpgrade(index)}
+            className="opacity-0 group-hover/row:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+            title="Dismiss"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
         </div>
       </div>
     )
-  }, [tvUpgrades])
+  }, [tvUpgrades, dismissTvUpgrade, navigateTo, onNavigateToLibrary])
 
   const MusicUpgradeRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const album = musicUpgrades[index]
     if (!album) return null
     return (
       <div style={style} className="px-2">
-        <div className="flex items-center gap-3 px-2 py-1 hover:bg-muted/50 rounded-md transition-colors">
+        <div
+          className="flex items-center gap-3 px-2 py-1 hover:bg-muted/50 rounded-md transition-colors group/row cursor-pointer"
+          onClick={() => { navigateTo({ type: 'album', id: album.id }); onNavigateToLibrary('music') }}
+        >
           <div className="w-10 h-10 bg-muted rounded overflow-hidden flex-shrink-0">
             {album.thumb_url ? (
               <img src={album.thumb_url} alt="" className="w-full h-full object-cover" />
@@ -496,19 +716,28 @@ export function Dashboard({
               {album.quality_tier} · {album.tier_quality}
             </div>
           </div>
-          <AddToWishlistButton
-            mediaType="album"
-            title={album.title}
-            year={album.year}
-            artistName={album.artist_name}
-            musicbrainzId={album.musicbrainz_id}
-            reason="upgrade"
-            compact
-          />
+          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            <AddToWishlistButton
+              mediaType="album"
+              title={album.title}
+              year={album.year}
+              artistName={album.artist_name}
+              musicbrainzId={album.musicbrainz_id}
+              reason="upgrade"
+              compact
+            />
+            <button
+              onClick={() => dismissMusicUpgrade(index)}
+              className="opacity-0 group-hover/row:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+              title="Dismiss"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     )
-  }, [musicUpgrades])
+  }, [musicUpgrades, dismissMusicUpgrade, navigateTo, onNavigateToLibrary])
 
   // Collection row renderer with expandable missing items (shows all)
   const CollectionRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
@@ -566,7 +795,7 @@ export function Dashboard({
             {missingMovies.map((movie, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors"
+                className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors group/item"
               >
                 <span className="text-sm text-muted-foreground truncate flex-1">
                   {movie.title} {movie.year ? `(${movie.year})` : ''}
@@ -580,13 +809,20 @@ export function Dashboard({
                   reason="missing"
                   compact
                 />
+                <button
+                  onClick={(e) => { e.stopPropagation(); dismissCollectionMovie(index, movie) }}
+                  className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                  title="Dismiss"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             ))}
           </div>
         )}
       </div>
     )
-  }, [collections, expandedCollections, parseMissingMovies, toggleCollectionExpand])
+  }, [collections, expandedCollections, parseMissingMovies, toggleCollectionExpand, dismissCollectionMovie])
 
   // Series row renderer with season-grouped missing episodes (shows all)
   const SeriesRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
@@ -644,7 +880,7 @@ export function Dashboard({
             {seasonGroups.map(group => (
               <div
                 key={group.seasonNumber}
-                className="flex items-center justify-between py-1.5 rounded-md hover:bg-muted/30 transition-colors"
+                className="flex items-center justify-between py-1.5 rounded-md hover:bg-muted/30 transition-colors group/item"
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span className="text-sm text-foreground/80 flex-shrink-0">
@@ -670,13 +906,23 @@ export function Dashboard({
                   reason="missing"
                   compact
                 />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    group.missingEpisodes.forEach(ep => dismissSeriesEpisode(index, ep))
+                  }}
+                  className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                  title="Dismiss season"
+                >
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             ))}
           </div>
         )}
       </div>
     )
-  }, [series, expandedSeries, groupEpisodesBySeason, toggleSeriesExpand])
+  }, [series, expandedSeries, groupEpisodesBySeason, toggleSeriesExpand, dismissSeriesEpisode])
 
   // Artist row renderer with grouped missing items by type
   const ArtistRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
@@ -738,16 +984,20 @@ export function Dashboard({
         {/* Expanded: Missing releases */}
         {isExpanded && allMissing.length > 0 && (
           <div className="ml-14 mt-2 space-y-3">
-            {groupedByType.album.length > 0 && (
-              <div>
+            {([
+              { items: groupedByType.album, label: 'Albums', prefix: 'album' },
+              { items: groupedByType.ep, label: 'EPs', prefix: 'ep' },
+              { items: groupedByType.single, label: 'Singles', prefix: 'single' },
+            ] as const).filter(g => g.items.length > 0).map(group => (
+              <div key={group.prefix}>
                 <div className="py-2 text-xs font-medium text-foreground/70 uppercase tracking-wider">
-                  Albums
+                  {group.label}
                 </div>
                 <div className="space-y-1">
-                  {groupedByType.album.map((item, idx) => (
+                  {group.items.map((item, idx) => (
                     <div
-                      key={item.musicbrainz_id || `album-${idx}`}
-                      className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors"
+                      key={item.musicbrainz_id || `${group.prefix}-${idx}`}
+                      className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors group/item"
                     >
                       <span className="text-sm text-muted-foreground truncate flex-1">
                         {item.title} {item.year ? `(${item.year})` : ''}
@@ -761,72 +1011,23 @@ export function Dashboard({
                         reason="missing"
                         compact
                       />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); dismissArtistAlbum(index, item) }}
+                        className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                        title="Dismiss"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
-            {groupedByType.ep.length > 0 && (
-              <div>
-                <div className="py-2 text-xs font-medium text-foreground/70 uppercase tracking-wider">
-                  EPs
-                </div>
-                <div className="space-y-1">
-                  {groupedByType.ep.map((item, idx) => (
-                    <div
-                      key={item.musicbrainz_id || `ep-${idx}`}
-                      className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors"
-                    >
-                      <span className="text-sm text-muted-foreground truncate flex-1">
-                        {item.title} {item.year ? `(${item.year})` : ''}
-                      </span>
-                      <AddToWishlistButton
-                        mediaType="album"
-                        title={item.title}
-                        year={item.year}
-                        artistName={artist.artist_name}
-                        musicbrainzId={item.musicbrainz_id}
-                        reason="missing"
-                        compact
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {groupedByType.single.length > 0 && (
-              <div>
-                <div className="py-2 text-xs font-medium text-foreground/70 uppercase tracking-wider">
-                  Singles
-                </div>
-                <div className="space-y-1">
-                  {groupedByType.single.map((item, idx) => (
-                    <div
-                      key={item.musicbrainz_id || `single-${idx}`}
-                      className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors"
-                    >
-                      <span className="text-sm text-muted-foreground truncate flex-1">
-                        {item.title} {item.year ? `(${item.year})` : ''}
-                      </span>
-                      <AddToWishlistButton
-                        mediaType="album"
-                        title={item.title}
-                        year={item.year}
-                        artistName={artist.artist_name}
-                        musicbrainzId={item.musicbrainz_id}
-                        reason="missing"
-                        compact
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            ))}
           </div>
         )}
       </div>
     )
-  }, [artists, expandedArtists, parseMissingAlbums, toggleArtistExpand])
+  }, [artists, expandedArtists, parseMissingAlbums, toggleArtistExpand, dismissArtistAlbum])
 
   const hasMovieUpgrades = hasMovies && movieUpgrades.length > 0
   const hasTvUpgrades = hasTV && tvUpgrades.length > 0
@@ -927,9 +1128,20 @@ export function Dashboard({
                   <CircleFadingArrowUp className="w-4 h-4 text-muted-foreground" />
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Upgrades</h2>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  {upgradeTab === 'movies' ? movieUpgrades.length : upgradeTab === 'tv' ? tvUpgrades.length : musicUpgrades.length} items
-                </span>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={upgradeSortBy}
+                    onChange={e => setUpgradeSortBy(e.target.value as 'quality' | 'recent' | 'title')}
+                    className="text-[10px] bg-muted/50 border border-white/10 rounded px-1.5 py-0.5 text-muted-foreground cursor-pointer focus:outline-none"
+                  >
+                    <option value="quality">Quality</option>
+                    <option value="recent">Recent</option>
+                    <option value="title">Title</option>
+                  </select>
+                  <span className="text-xs text-muted-foreground">
+                    {upgradeTab === 'movies' ? movieUpgrades.length : upgradeTab === 'tv' ? tvUpgrades.length : musicUpgrades.length}
+                  </span>
+                </div>
               </div>
               {/* Tabs - centered, only show if multiple library types exist */}
               {[hasMovies, hasTV, hasMusic].filter(Boolean).length > 1 && (
@@ -1041,7 +1253,18 @@ export function Dashboard({
                   <Film className="w-4 h-4 text-muted-foreground" />
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Collections</h2>
                 </div>
-                <span className="text-xs text-muted-foreground">{collections.length} incomplete</span>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={collectionSortBy}
+                    onChange={e => setCollectionSortBy(e.target.value as 'completeness' | 'name' | 'recent')}
+                    className="text-[10px] bg-muted/50 border border-white/10 rounded px-1.5 py-0.5 text-muted-foreground cursor-pointer focus:outline-none"
+                  >
+                    <option value="completeness">Completeness</option>
+                    <option value="name">Name</option>
+                    <option value="recent">Recent</option>
+                  </select>
+                  <span className="text-xs text-muted-foreground">{collections.length}</span>
+                </div>
               </div>
               <div className="flex-1 min-h-0 overflow-hidden pr-0.5 relative">
                 <div ref={collectionsListRef} className="absolute inset-0">
@@ -1073,7 +1296,18 @@ export function Dashboard({
                   <Tv className="w-4 h-4 text-muted-foreground" />
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">TV Series</h2>
                 </div>
-                <span className="text-xs text-muted-foreground">{series.length} incomplete</span>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={seriesSortBy}
+                    onChange={e => setSeriesSortBy(e.target.value as 'completeness' | 'name' | 'recent')}
+                    className="text-[10px] bg-muted/50 border border-white/10 rounded px-1.5 py-0.5 text-muted-foreground cursor-pointer focus:outline-none"
+                  >
+                    <option value="completeness">Completeness</option>
+                    <option value="name">Name</option>
+                    <option value="recent">Recent</option>
+                  </select>
+                  <span className="text-xs text-muted-foreground">{series.length}</span>
+                </div>
               </div>
               <div className="flex-1 min-h-0 overflow-hidden pr-0.5 relative">
                 <div ref={seriesListRef} className="absolute inset-0">
@@ -1105,7 +1339,17 @@ export function Dashboard({
                   <Music className="w-4 h-4 text-muted-foreground" />
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Music</h2>
                 </div>
-                <span className="text-xs text-muted-foreground">{artists.length} incomplete</span>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={artistSortBy}
+                    onChange={e => setArtistSortBy(e.target.value as 'completeness' | 'name')}
+                    className="text-[10px] bg-muted/50 border border-white/10 rounded px-1.5 py-0.5 text-muted-foreground cursor-pointer focus:outline-none"
+                  >
+                    <option value="completeness">Completeness</option>
+                    <option value="name">Name</option>
+                  </select>
+                  <span className="text-xs text-muted-foreground">{artists.length}</span>
+                </div>
               </div>
               <div className="flex-1 min-h-0 overflow-hidden pr-0.5 relative">
                 <div ref={artistsListRef} className="absolute inset-0">

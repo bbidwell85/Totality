@@ -287,6 +287,10 @@ export interface MediaItemFilters {
   // Sorting
   sortBy?: 'title' | 'year' | 'updated_at' | 'created_at' | 'tier_score' | 'overall_score'
   sortOrder?: 'asc' | 'desc'
+  // Server-side filtering
+  alphabetFilter?: string
+  qualityTier?: string
+  tierQuality?: string
 }
 
 // ============================================================================
@@ -529,6 +533,11 @@ export interface MusicFilters {
   sourceId?: string
   sourceType?: ProviderType
   libraryId?: string
+  // Sorting
+  sortBy?: 'title' | 'artist' | 'album' | 'codec' | 'duration' | 'added_at' | 'name' | 'year'
+  sortOrder?: 'asc' | 'desc'
+  // Alphabet filter
+  alphabetFilter?: string
 }
 
 // ============================================================================

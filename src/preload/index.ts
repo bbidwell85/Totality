@@ -387,6 +387,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   musicGetTracks: (filters?: unknown) => ipcRenderer.invoke('music:getTracks', filters),
   musicGetTracksByAlbum: (albumId: number) => ipcRenderer.invoke('music:getTracksByAlbum', albumId),
   musicGetStats: (sourceId?: string) => ipcRenderer.invoke('music:getStats', sourceId),
+  musicCountArtists: (filters?: unknown) => ipcRenderer.invoke('music:countArtists', filters),
+  musicCountAlbums: (filters?: unknown) => ipcRenderer.invoke('music:countAlbums', filters),
+  musicCountTracks: (filters?: unknown) => ipcRenderer.invoke('music:countTracks', filters),
 
   // Music Quality Analysis
   musicGetAlbumQuality: (albumId: number) => ipcRenderer.invoke('music:getAlbumQuality', albumId),
@@ -438,6 +441,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Database - Global Search
   mediaSearch: (query: string) => ipcRenderer.invoke('media:search', query),
+
+  // Database - Exclusions
+  addExclusion: (exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string, title?: string) =>
+    ipcRenderer.invoke('db:addExclusion', exclusionType, referenceId, referenceKey, parentKey, title),
+  removeExclusion: (id: number) => ipcRenderer.invoke('db:removeExclusion', id),
+  getExclusions: (exclusionType?: string, parentKey?: string) =>
+    ipcRenderer.invoke('db:getExclusions', exclusionType, parentKey),
 
   // ============================================================================
   // WISHLIST / SHOPPING LIST
@@ -1211,6 +1221,9 @@ export interface ElectronAPI {
     hiResAlbums: number
     avgBitrate: number
   }>
+  musicCountArtists: (filters?: unknown) => Promise<number>
+  musicCountAlbums: (filters?: unknown) => Promise<number>
+  musicCountTracks: (filters?: unknown) => Promise<number>
 
   // Music Quality Analysis
   musicGetAlbumQuality: (albumId: number) => Promise<unknown | null>
@@ -1281,6 +1294,14 @@ export interface ElectronAPI {
     albums: Array<{ id: number; title: string; artist_name: string; year?: number; thumb_url?: string }>
     tracks: Array<{ id: number; title: string; album_id?: number; album_title?: string; artist_name?: string }>
   }>
+
+  // Exclusions
+  addExclusion: (exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string, title?: string) => Promise<number>
+  removeExclusion: (id: number) => Promise<void>
+  getExclusions: (exclusionType?: string, parentKey?: string) => Promise<Array<{
+    id: number; exclusion_type: string; reference_id: number | null; reference_key: string | null
+    parent_key: string | null; title: string | null; created_at: string
+  }>>
 
   // ============================================================================
   // WISHLIST / SHOPPING LIST

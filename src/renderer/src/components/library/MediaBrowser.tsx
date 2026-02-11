@@ -110,8 +110,27 @@ export function MediaBrowser({
   const [selectedAlbum, setSelectedAlbum] = useState<MusicAlbum | null>(null)
   const [albumTracks, setAlbumTracks] = useState<MusicTrack[]>([])
   const [allMusicTracks, setAllMusicTracks] = useState<MusicTrack[]>([])
+  const [totalTrackCount, setTotalTrackCount] = useState(0)
+  const [tracksLoading, setTracksLoading] = useState(false)
+  const tracksOffsetRef = useRef(0)
+  const TRACKS_PAGE_SIZE = 500
   const [selectedAlbumCompleteness, setSelectedAlbumCompleteness] = useState<AlbumCompletenessData | null>(null)
   const [musicViewMode, setMusicViewMode] = useState<'artists' | 'albums' | 'tracks'>('artists')
+  const [trackSortColumn, setTrackSortColumn] = useState<'title' | 'artist' | 'album' | 'codec' | 'duration'>('title')
+  const [trackSortDirection, setTrackSortDirection] = useState<'asc' | 'desc'>('asc')
+  // Album pagination state
+  const [totalAlbumCount, setTotalAlbumCount] = useState(0)
+  const [albumsLoading, setAlbumsLoading] = useState(false)
+  const albumsOffsetRef = useRef(0)
+  const ALBUMS_PAGE_SIZE = 200
+  const [albumSortColumn, setAlbumSortColumn] = useState<'title' | 'artist'>('title')
+  const [albumSortDirection, setAlbumSortDirection] = useState<'asc' | 'desc'>('asc')
+  // Movie pagination state
+  const [paginatedMovies, setPaginatedMovies] = useState<MediaItem[]>([])
+  const [totalMovieCount, setTotalMovieCount] = useState(0)
+  const [moviesLoading, setMoviesLoading] = useState(false)
+  const moviesOffsetRef = useRef(0)
+  const MOVIES_PAGE_SIZE = 200
   const [tierFilter, setTierFilter] = useState<'all' | 'SD' | '720p' | '1080p' | '4K'>('all')
   const [qualityFilter, setQualityFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all')
   const [searchInput, setSearchInput] = useState('')
@@ -119,6 +138,8 @@ export function MediaBrowser({
   const [searchQuery, _setSearchQuery] = useState('')
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [searchResultIndex, setSearchResultIndex] = useState(-1)
+  const [searchTrackResults, setSearchTrackResults] = useState<Array<{ id: number; title: string; album_id: number; album_title?: string; artist_name?: string; thumb_url?: string; needs_upgrade: boolean; type: 'track' }>>([])
+  const searchTrackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const moviesTabRef = useRef<HTMLButtonElement>(null)
@@ -293,7 +314,7 @@ export function MediaBrowser({
           loadActiveSourceLibraries()
         }
       } else if (data.type === 'media') {
-        loadMedia()
+        loadEpisodes()
         loadStats(activeSourceId || undefined)
         loadCompletenessData()
       } else if (data.type === 'music') {
@@ -405,7 +426,7 @@ export function MediaBrowser({
   const isFilterFocused = (type: string, value: string) => focusedId === `filter-${type}-${value}` && isNavigationActive
 
   useEffect(() => {
-    loadMedia()
+    loadEpisodes()
     loadStats(activeSourceId || undefined)
     loadCompletenessData()
     loadMusicData()
@@ -549,7 +570,7 @@ export function MediaBrowser({
 
   // Reload media and stats when active source changes
   useEffect(() => {
-    loadMedia()
+    loadEpisodes()
     loadStats(activeSourceId || undefined)
     loadMusicData()
     loadCompletenessData()
@@ -600,7 +621,8 @@ export function MediaBrowser({
     }
   }, [hasMovies, hasTV, hasMusic, view, loading])
 
-  const loadMedia = async () => {
+  // Load episodes only (for TV show grouping). Movies are loaded separately via loadPaginatedMovies.
+  const loadEpisodes = async () => {
     try {
       // Use refreshing state after initial load (source switching)
       // Use loading state only for initial load
@@ -611,17 +633,17 @@ export function MediaBrowser({
       }
       setError(null)
 
-      // Build filters with active source
-      const filters: { sourceId?: string } = {}
+      // Build filters with active source — only load episodes
+      const filters: Record<string, unknown> = { type: 'episode' }
       if (activeSourceId) {
         filters.sourceId = activeSourceId
       }
 
-      const mediaItems = await window.electronAPI.getMediaItems(filters) as MediaItem[]
-      setItems(mediaItems)
+      const episodeItems = await window.electronAPI.getMediaItems(filters) as MediaItem[]
+      setItems(episodeItems)
       hasInitialLoadRef.current = true
     } catch (err) {
-      console.error('Error loading media:', err)
+      console.error('Error loading episodes:', err)
       setError('Failed to load media items')
     } finally {
       setLoading(false)
@@ -662,27 +684,178 @@ export function MediaBrowser({
     }
   }
 
-  // Load music data (non-blocking background load)
+  // Load music data (non-blocking background load) — tracks loaded separately via pagination
   const loadMusicData = async () => {
     try {
       const filters = activeSourceId
         ? { sourceId: activeSourceId }
         : undefined
-      const [artists, albums, tracks, mStats] = await Promise.all([
+      const [artists, mStats] = await Promise.all([
         window.electronAPI.musicGetArtists(filters),
-        window.electronAPI.musicGetAlbums(filters),
-        window.electronAPI.musicGetTracks(filters),
         window.electronAPI.musicGetStats(activeSourceId || undefined)
       ])
 
       setMusicArtists(artists as MusicArtist[])
-      setMusicAlbums(albums as MusicAlbum[])
-      setAllMusicTracks(tracks as MusicTrack[])
       setMusicStats(mStats as MusicStats)
     } catch (err) {
       console.warn('Failed to load music data:', err)
     }
   }
+
+  // Load paginated tracks from server with current filters/sorting
+  const loadPaginatedTracks = useCallback(async (reset = true) => {
+    if (tracksLoading) return
+    setTracksLoading(true)
+    try {
+      const offset = reset ? 0 : tracksOffsetRef.current
+      const filters: Record<string, unknown> = {
+        limit: TRACKS_PAGE_SIZE,
+        offset,
+        sortBy: trackSortColumn,
+        sortOrder: trackSortDirection,
+      }
+      if (activeSourceId) filters.sourceId = activeSourceId
+      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
+
+      const [tracks, count] = await Promise.all([
+        window.electronAPI.musicGetTracks(filters),
+        window.electronAPI.musicCountTracks(filters),
+      ])
+
+      if (reset) {
+        setAllMusicTracks(tracks as MusicTrack[])
+        tracksOffsetRef.current = TRACKS_PAGE_SIZE
+      } else {
+        setAllMusicTracks(prev => [...prev, ...(tracks as MusicTrack[])])
+        tracksOffsetRef.current = offset + TRACKS_PAGE_SIZE
+      }
+      setTotalTrackCount(count)
+    } catch (err) {
+      console.warn('Failed to load paginated tracks:', err)
+    } finally {
+      setTracksLoading(false)
+    }
+  }, [activeSourceId, alphabetFilter, searchQuery, trackSortColumn, trackSortDirection, tracksLoading])
+
+  // Load more tracks (infinite scroll callback)
+  const loadMoreTracks = useCallback(() => {
+    if (tracksOffsetRef.current < totalTrackCount && !tracksLoading) {
+      loadPaginatedTracks(false)
+    }
+  }, [totalTrackCount, tracksLoading, loadPaginatedTracks])
+
+  // Trigger server-side track loading when tracks tab is active and filters change
+  useEffect(() => {
+    if (view === 'music' && musicViewMode === 'tracks') {
+      loadPaginatedTracks(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, musicViewMode, activeSourceId, alphabetFilter, searchQuery, trackSortColumn, trackSortDirection])
+
+  // Load paginated albums from server with current filters/sorting
+  const loadPaginatedAlbums = useCallback(async (reset = true) => {
+    if (albumsLoading) return
+    setAlbumsLoading(true)
+    try {
+      const offset = reset ? 0 : albumsOffsetRef.current
+      const filters: Record<string, unknown> = {
+        limit: ALBUMS_PAGE_SIZE,
+        offset,
+        sortBy: albumSortColumn === 'artist' ? 'artist' : 'title',
+        sortOrder: albumSortDirection,
+      }
+      if (activeSourceId) filters.sourceId = activeSourceId
+      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
+
+      const [albums, count] = await Promise.all([
+        window.electronAPI.musicGetAlbums(filters),
+        window.electronAPI.musicCountAlbums(filters),
+      ])
+
+      if (reset) {
+        setMusicAlbums(albums as MusicAlbum[])
+        albumsOffsetRef.current = ALBUMS_PAGE_SIZE
+      } else {
+        setMusicAlbums(prev => [...prev, ...(albums as MusicAlbum[])])
+        albumsOffsetRef.current = offset + ALBUMS_PAGE_SIZE
+      }
+      setTotalAlbumCount(count)
+    } catch (err) {
+      console.warn('Failed to load paginated albums:', err)
+    } finally {
+      setAlbumsLoading(false)
+    }
+  }, [activeSourceId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, albumsLoading])
+
+  // Load more albums (infinite scroll callback)
+  const loadMoreAlbums = useCallback(() => {
+    if (albumsOffsetRef.current < totalAlbumCount && !albumsLoading) {
+      loadPaginatedAlbums(false)
+    }
+  }, [totalAlbumCount, albumsLoading, loadPaginatedAlbums])
+
+  // Trigger server-side album loading when albums tab is active and filters change
+  useEffect(() => {
+    if (view === 'music' && musicViewMode === 'albums') {
+      loadPaginatedAlbums(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, musicViewMode, activeSourceId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection])
+
+  // Load paginated movies from server with current filters/sorting
+  const loadPaginatedMovies = useCallback(async (reset = true) => {
+    if (moviesLoading) return
+    setMoviesLoading(true)
+    try {
+      const offset = reset ? 0 : moviesOffsetRef.current
+      const filters: Record<string, unknown> = {
+        type: 'movie',
+        limit: MOVIES_PAGE_SIZE,
+        offset,
+        sortBy: 'title',
+        sortOrder: 'asc',
+      }
+      if (activeSourceId) filters.sourceId = activeSourceId
+      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      if (debouncedTierFilter !== 'all') filters.qualityTier = debouncedTierFilter
+      if (debouncedQualityFilter !== 'all') filters.tierQuality = debouncedQualityFilter.toUpperCase()
+
+      const [movieItems, count] = await Promise.all([
+        window.electronAPI.getMediaItems(filters),
+        window.electronAPI.countMediaItems(filters),
+      ])
+
+      if (reset) {
+        setPaginatedMovies(movieItems as MediaItem[])
+        moviesOffsetRef.current = MOVIES_PAGE_SIZE
+      } else {
+        setPaginatedMovies(prev => [...prev, ...(movieItems as MediaItem[])])
+        moviesOffsetRef.current = offset + MOVIES_PAGE_SIZE
+      }
+      setTotalMovieCount(count)
+    } catch (err) {
+      console.warn('Failed to load paginated movies:', err)
+    } finally {
+      setMoviesLoading(false)
+    }
+  }, [activeSourceId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter, moviesLoading])
+
+  // Load more movies (infinite scroll callback)
+  const loadMoreMovies = useCallback(() => {
+    if (moviesOffsetRef.current < totalMovieCount && !moviesLoading) {
+      loadPaginatedMovies(false)
+    }
+  }, [totalMovieCount, moviesLoading, loadPaginatedMovies])
+
+  // Trigger server-side movie loading when movies view is active and filters change
+  useEffect(() => {
+    if (view === 'movies') {
+      loadPaginatedMovies(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, activeSourceId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter])
 
   // Load tracks for a specific album
   const loadAlbumTracks = async (albumId: number) => {
@@ -828,7 +1001,7 @@ export function MediaBrowser({
       console.log(`[MediaBrowser] Rescanning item: ${filePath}`)
       await window.electronAPI.sourcesScanItem(sourceId, libraryId, filePath)
       // Reload media items to show updated data
-      await loadMedia()
+      await loadEpisodes()
       // If the detail view is open for this item, force it to refresh
       if (selectedMediaId === mediaItemId) {
         setDetailRefreshKey(prev => prev + 1)
@@ -1008,10 +1181,8 @@ export function MediaBrowser({
     return true
   }, [alphabetFilter, searchQuery, debouncedTierFilter, debouncedQualityFilter])
 
-  const movies = useMemo(
-    () => items.filter(item => item.type === 'movie' && filterItem(item)),
-    [items, filterItem]
-  )
+  // Movies are now loaded from the server pre-filtered/sorted/paginated
+  const movies = paginatedMovies
 
   const tvShows = useMemo(() => organizeShows(), [organizeShows])
 
@@ -1044,9 +1215,9 @@ export function MediaBrowser({
     const query = searchInput.toLowerCase()
     const maxResults = 5 // Max results per category
 
-    // Search movies
-    const movieResults = items
-      .filter(item => item.type === 'movie' && item.title.toLowerCase().includes(query))
+    // Search movies (from loaded pages)
+    const movieResults = paginatedMovies
+      .filter(item => item.title.toLowerCase().includes(query))
       .slice(0, maxResults)
       .map(item => ({
         id: item.id,
@@ -1114,33 +1285,48 @@ export function MediaBrowser({
         type: 'album' as const
       }))
 
-    // Search music tracks (include album info)
-    const trackResults = allMusicTracks
-      .filter(track => track.title.toLowerCase().includes(query))
-      .slice(0, maxResults)
-      .map(track => {
-        const album = musicAlbums.find(a => a.id === track.album_id)
-        return {
-          id: track.id,
-          title: track.title,
-          album_id: track.album_id,
-          album_title: album?.title,
-          artist_name: album?.artist_name,
-          thumb_url: album?.thumb_url,
-          needs_upgrade: !track.is_lossless && !track.is_hi_res,
-          type: 'track' as const
-        }
-      })
-
     return {
       movies: movieResults,
       tvShows: tvResults,
       episodes: episodeResults,
       artists: artistResults,
       albums: albumResults,
-      tracks: trackResults
+      tracks: searchTrackResults
     }
-  }, [searchInput, items, tvShows, musicArtists, musicAlbums, allMusicTracks])
+  }, [searchInput, paginatedMovies, items, tvShows, musicArtists, musicAlbums, searchTrackResults])
+
+  // Async track search for global search dropdown (server-side query since tracks are paginated)
+  useEffect(() => {
+    if (searchTrackTimerRef.current) clearTimeout(searchTrackTimerRef.current)
+    const query = searchInput.trim().toLowerCase()
+    if (!query || query.length < 2) {
+      setSearchTrackResults([])
+      return
+    }
+    searchTrackTimerRef.current = setTimeout(async () => {
+      try {
+        const filters: Record<string, unknown> = { searchQuery: query, limit: 5, offset: 0 }
+        if (activeSourceId) filters.sourceId = activeSourceId
+        const tracks = await window.electronAPI.musicGetTracks(filters) as MusicTrack[]
+        setSearchTrackResults(tracks.map(track => {
+          const album = musicAlbums.find(a => a.id === track.album_id)
+          return {
+            id: track.id,
+            title: track.title,
+            album_id: track.album_id || 0,
+            album_title: album?.title,
+            artist_name: album?.artist_name,
+            thumb_url: album?.thumb_url,
+            needs_upgrade: !track.is_lossless && !track.is_hi_res,
+            type: 'track' as const
+          }
+        }))
+      } catch {
+        setSearchTrackResults([])
+      }
+    }, 200)
+    return () => { if (searchTrackTimerRef.current) clearTimeout(searchTrackTimerRef.current) }
+  }, [searchInput, activeSourceId, musicAlbums])
 
   const hasSearchResults = globalSearchResults.movies.length > 0 ||
     globalSearchResults.tvShows.length > 0 ||
@@ -2007,6 +2193,9 @@ export function MediaBrowser({
               showSourceBadge={!activeSourceId && sources.length > 1}
               onFixMatch={(mediaItemId, title, year, filePath) => setMatchFixModal({ isOpen: true, type: 'movie', title, year, filePath, mediaItemId })}
               onRescan={handleRescanItem}
+              totalMovieCount={totalMovieCount}
+              moviesLoading={moviesLoading}
+              onLoadMoreMovies={loadMoreMovies}
             />
           ) : view === 'tv' ? (
           <TVShowsView
@@ -2036,6 +2225,15 @@ export function MediaBrowser({
             albums={musicAlbums}
             tracks={albumTracks}
             allTracks={allMusicTracks}
+            totalTrackCount={totalTrackCount}
+            tracksLoading={tracksLoading}
+            onLoadMoreTracks={loadMoreTracks}
+            totalAlbumCount={totalAlbumCount}
+            albumsLoading={albumsLoading}
+            onLoadMoreAlbums={loadMoreAlbums}
+            albumSortColumn={albumSortColumn}
+            albumSortDirection={albumSortDirection}
+            onAlbumSortChange={(col, dir) => { setAlbumSortColumn(col); setAlbumSortDirection(dir) }}
             stats={musicStats}
             selectedArtist={selectedArtist}
             selectedAlbum={selectedAlbum}
@@ -2043,6 +2241,9 @@ export function MediaBrowser({
             albumCompleteness={selectedAlbumCompleteness}
             allAlbumCompleteness={allAlbumCompleteness}
             musicViewMode={musicViewMode}
+            trackSortColumn={trackSortColumn}
+            trackSortDirection={trackSortDirection}
+            onTrackSortChange={(col, dir) => { setTrackSortColumn(col); setTrackSortDirection(dir) }}
             onSelectArtist={(artist) => {
               setSelectedArtist(artist)
               setSelectedAlbum(null)
@@ -2236,7 +2437,7 @@ export function MediaBrowser({
             if (matchFixModal.type === 'artist' || matchFixModal.type === 'album') {
               loadMusicData()
             } else {
-              loadMedia()
+              loadEpisodes()
             }
           }}
         />
@@ -2260,7 +2461,10 @@ function MoviesView({
   movieCollections,
   showSourceBadge,
   onFixMatch,
-  onRescan
+  onRescan,
+  totalMovieCount,
+  moviesLoading,
+  onLoadMoreMovies
 }: {
   movies: MediaItem[]
   onSelectMovie: (id: number, movie: MediaItem) => void
@@ -2272,6 +2476,9 @@ function MoviesView({
   showSourceBadge: boolean
   onFixMatch?: (mediaItemId: number, title: string, year?: number, filePath?: string) => void
   onRescan?: (mediaItemId: number, sourceId: string, libraryId: string | null, filePath: string) => Promise<void>
+  totalMovieCount: number
+  moviesLoading: boolean
+  onLoadMoreMovies: () => void
 }) {
   // Map scale to minimum poster width (1=smallest, 7=largest)
   const posterMinWidth = useMemo(() => {
@@ -2286,6 +2493,23 @@ function MoviesView({
     }
     return widthMap[gridScale] || widthMap[5]
   }, [gridScale])
+
+  const movieSentinelRef = useRef<HTMLDivElement>(null)
+
+  // IntersectionObserver for movie grid infinite scroll
+  useEffect(() => {
+    if (!movieSentinelRef.current) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          onLoadMoreMovies()
+        }
+      },
+      { rootMargin: '400px' }
+    )
+    observer.observe(movieSentinelRef.current)
+    return () => observer.disconnect()
+  }, [onLoadMoreMovies])
 
   // Group movies by collection - show collections as single items
   const displayItems = useMemo<MovieDisplayItem[]>(() => {
@@ -2347,11 +2571,59 @@ function MoviesView({
 
   if (viewType === 'list') {
     return (
-      <div className="space-y-2">
+      <div>
+        <div className="space-y-2">
+          {displayItems.map((item, index) => {
+            if (item.type === 'collection') {
+              return (
+                <CollectionListItem
+                  key={`collection-${item.collection.id}`}
+                  collection={item.collection}
+                  onClick={() => onSelectCollection(item.collection)}
+                  focusIndex={index}
+                />
+              )
+            }
+            return (
+              <MovieListItem
+                key={item.movie.id}
+                movie={item.movie}
+                onClick={() => onSelectMovie(item.movie.id, item.movie)}
+                showSourceBadge={showSourceBadge}
+                collectionData={getCollectionForMovie(item.movie)}
+                onFixMatch={onFixMatch ? () => onFixMatch(item.movie.id, item.movie.title, item.movie.year, item.movie.file_path) : undefined}
+                onRescan={onRescan && item.movie.source_id && item.movie.file_path ? () => onRescan(item.movie.id, item.movie.source_id!, item.movie.library_id || null, item.movie.file_path!) : undefined}
+                focusIndex={index}
+              />
+            )
+          })}
+        </div>
+        <div ref={movieSentinelRef} className="h-1" />
+        <div className="px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-2">
+          {moviesLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+          <span>
+            {movies.length === totalMovieCount
+              ? `${totalMovieCount.toLocaleString()} movies`
+              : `${movies.length.toLocaleString()} of ${totalMovieCount.toLocaleString()} movies`}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // Grid view using standard grid (VirtualizedGrid doesn't support mixed item types well)
+  return (
+    <div>
+      <div
+        className="grid gap-8"
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
+        }}
+      >
         {displayItems.map((item, index) => {
           if (item.type === 'collection') {
             return (
-              <CollectionListItem
+              <CollectionCard
                 key={`collection-${item.collection.id}`}
                 collection={item.collection}
                 onClick={() => onSelectCollection(item.collection)}
@@ -2360,12 +2632,12 @@ function MoviesView({
             )
           }
           return (
-            <MovieListItem
+            <MovieCard
               key={item.movie.id}
               movie={item.movie}
               onClick={() => onSelectMovie(item.movie.id, item.movie)}
-              showSourceBadge={showSourceBadge}
               collectionData={getCollectionForMovie(item.movie)}
+              showSourceBadge={showSourceBadge}
               onFixMatch={onFixMatch ? () => onFixMatch(item.movie.id, item.movie.title, item.movie.year, item.movie.file_path) : undefined}
               onRescan={onRescan && item.movie.source_id && item.movie.file_path ? () => onRescan(item.movie.id, item.movie.source_id!, item.movie.library_id || null, item.movie.file_path!) : undefined}
               focusIndex={index}
@@ -2373,41 +2645,15 @@ function MoviesView({
           )
         })}
       </div>
-    )
-  }
-
-  // Grid view using standard grid (VirtualizedGrid doesn't support mixed item types well)
-  return (
-    <div
-      className="grid gap-8"
-      style={{
-        gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
-      }}
-    >
-      {displayItems.map((item, index) => {
-        if (item.type === 'collection') {
-          return (
-            <CollectionCard
-              key={`collection-${item.collection.id}`}
-              collection={item.collection}
-              onClick={() => onSelectCollection(item.collection)}
-              focusIndex={index}
-            />
-          )
-        }
-        return (
-          <MovieCard
-            key={item.movie.id}
-            movie={item.movie}
-            onClick={() => onSelectMovie(item.movie.id, item.movie)}
-            collectionData={getCollectionForMovie(item.movie)}
-            showSourceBadge={showSourceBadge}
-            onFixMatch={onFixMatch ? () => onFixMatch(item.movie.id, item.movie.title, item.movie.year, item.movie.file_path) : undefined}
-            onRescan={onRescan && item.movie.source_id && item.movie.file_path ? () => onRescan(item.movie.id, item.movie.source_id!, item.movie.library_id || null, item.movie.file_path!) : undefined}
-            focusIndex={index}
-          />
-        )
-      })}
+      <div ref={movieSentinelRef} className="h-1" />
+      <div className="px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-2">
+        {moviesLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+        <span>
+          {movies.length === totalMovieCount
+            ? `${totalMovieCount.toLocaleString()} movies`
+            : `${movies.length.toLocaleString()} of ${totalMovieCount.toLocaleString()} movies`}
+        </span>
+      </div>
     </div>
   )
 }
@@ -3928,6 +4174,15 @@ function MusicView({
   albums,
   tracks,
   allTracks,
+  totalTrackCount,
+  tracksLoading,
+  onLoadMoreTracks,
+  totalAlbumCount,
+  albumsLoading,
+  onLoadMoreAlbums,
+  albumSortColumn,
+  albumSortDirection,
+  onAlbumSortChange,
   stats,
   selectedArtist,
   selectedAlbum,
@@ -3935,6 +4190,9 @@ function MusicView({
   albumCompleteness,
   allAlbumCompleteness,
   musicViewMode,
+  trackSortColumn,
+  trackSortDirection,
+  onTrackSortChange,
   onSelectArtist,
   onSelectAlbum,
   onBack,
@@ -3955,6 +4213,15 @@ function MusicView({
   albums: MusicAlbum[]
   tracks: MusicTrack[]
   allTracks: MusicTrack[]
+  totalTrackCount: number
+  tracksLoading: boolean
+  onLoadMoreTracks: () => void
+  totalAlbumCount: number
+  albumsLoading: boolean
+  onLoadMoreAlbums: () => void
+  albumSortColumn: 'title' | 'artist'
+  albumSortDirection: 'asc' | 'desc'
+  onAlbumSortChange: (column: 'title' | 'artist', direction: 'asc' | 'desc') => void
   stats: MusicStats | null
   selectedArtist: MusicArtist | null
   selectedAlbum: MusicAlbum | null
@@ -3962,6 +4229,9 @@ function MusicView({
   albumCompleteness: AlbumCompletenessData | null
   allAlbumCompleteness: Map<number, AlbumCompletenessData>
   musicViewMode: 'artists' | 'albums' | 'tracks'
+  trackSortColumn: 'title' | 'artist' | 'album' | 'codec' | 'duration'
+  trackSortDirection: 'asc' | 'desc'
+  onTrackSortChange: (column: 'title' | 'artist' | 'album' | 'codec' | 'duration', direction: 'asc' | 'desc') => void
   onSelectArtist: (artist: MusicArtist) => void
   onSelectAlbum: (album: MusicAlbum) => void
   onBack: () => void
@@ -3983,6 +4253,22 @@ function MusicView({
   const [trackMenuOpen, setTrackMenuOpen] = useState<string | number | null>(null)
   const [rescanningTrackId, setRescanningTrackId] = useState<string | number | null>(null)
   const trackMenuRef = useRef<HTMLDivElement>(null)
+  const albumSentinelRef = useRef<HTMLDivElement>(null)
+
+  // IntersectionObserver for album grid infinite scroll
+  useEffect(() => {
+    if (!albumSentinelRef.current || musicViewMode !== 'albums' || viewType !== 'grid') return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          onLoadMoreAlbums()
+        }
+      },
+      { rootMargin: '400px' }
+    )
+    observer.observe(albumSentinelRef.current)
+    return () => observer.disconnect()
+  }, [onLoadMoreAlbums, musicViewMode, viewType])
 
   // Click-outside handler for track menu
   useEffect(() => {
@@ -4041,12 +4327,9 @@ function MusicView({
     codec: 70,
     duration: 60
   })
-  const [trackSortColumn, setTrackSortColumn] = useState<'title' | 'artist' | 'album' | 'codec' | 'duration'>('title')
-  const [trackSortDirection, setTrackSortDirection] = useState<'asc' | 'desc'>('asc')
+  // trackSortColumn and trackSortDirection are now passed as props from parent
 
-  // Album sort state
-  const [albumSortColumn, setAlbumSortColumn] = useState<'title' | 'artist'>('title')
-  const [albumSortDirection, setAlbumSortDirection] = useState<'asc' | 'desc'>('asc')
+  // Album sort state is now passed from parent (for server-side pagination)
   const [resizingColumn, setResizingColumn] = useState<string | null>(null)
   const resizeStartX = useRef(0)
   const resizeStartWidth = useRef(0)
@@ -4095,23 +4378,21 @@ function MusicView({
     }
   }, [resizingColumn])
 
-  // Column sort handler for tracks
+  // Column sort handler for tracks (delegates to parent via prop)
   const handleTrackSort = (column: 'title' | 'artist' | 'album' | 'codec' | 'duration') => {
     if (trackSortColumn === column) {
-      setTrackSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+      onTrackSortChange(column, trackSortDirection === 'asc' ? 'desc' : 'asc')
     } else {
-      setTrackSortColumn(column)
-      setTrackSortDirection('asc')
+      onTrackSortChange(column, 'asc')
     }
   }
 
-  // Column sort handler for albums
+  // Column sort handler for albums (delegates to parent via prop)
   const handleAlbumSort = (column: 'title' | 'artist') => {
     if (albumSortColumn === column) {
-      setAlbumSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+      onAlbumSortChange(column, albumSortDirection === 'asc' ? 'desc' : 'asc')
     } else {
-      setAlbumSortColumn(column)
-      setAlbumSortDirection('asc')
+      onAlbumSortChange(column, 'asc')
     }
   }
 
@@ -4205,148 +4486,46 @@ function MusicView({
     return filtered.sort((a, b) => (a.year || 0) - (b.year || 0))
   }, [albums, selectedArtist, searchQuery, alphabetFilter])
 
-  // Filter all albums for albums view mode (must be before early returns)
-  const allFilteredAlbums = useMemo(() => {
-    let filtered = albums
+  // Albums are now filtered/sorted server-side via loadPaginatedAlbums
+  const allFilteredAlbums = albums
 
-    // Apply search filter
-    if (searchQuery.trim()) {
-      filtered = filtered.filter(album =>
-        album.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        album.artist_name.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-
-    // Apply alphabet filter
-    if (alphabetFilter) {
-      filtered = filtered.filter(album => {
-        const firstChar = album.title.charAt(0).toUpperCase()
-        if (alphabetFilter === '#') {
-          return !/[A-Z]/.test(firstChar)
-        }
-        return firstChar === alphabetFilter
-      })
-    }
-
-    // Sort based on selected column
-    return filtered.sort((a, b) => {
-      let comparison = 0
-      switch (albumSortColumn) {
-        case 'title':
-          comparison = a.title.localeCompare(b.title)
-          break
-        case 'artist':
-          comparison = (a.artist_name || '').localeCompare(b.artist_name || '')
-          break
-      }
-      return albumSortDirection === 'asc' ? comparison : -comparison
-    })
-  }, [albums, searchQuery, alphabetFilter, albumSortColumn, albumSortDirection])
-
-  // Filter all tracks for tracks view mode (must be before early returns)
+  // Tracks are now loaded from the server pre-filtered/sorted/paginated.
+  // Quality filter is still applied client-side on the loaded page (lightweight).
   const filteredTracks = useMemo(() => {
-    // Quality tier calculation helper
-    const LOSSLESS_CODECS = ['flac', 'alac', 'wav', 'aiff', 'pcm', 'dsd', 'ape', 'wavpack', 'wv']
+    if (qualityFilter === 'all') return allTracks
 
+    const LOSSLESS_CODECS = ['flac', 'alac', 'wav', 'aiff', 'pcm', 'dsd', 'ape', 'wavpack', 'wv']
     const isLosslessCodec = (codec?: string): boolean => {
       if (!codec) return false
-      const codecLower = codec.toLowerCase()
-      return LOSSLESS_CODECS.some(c => codecLower.includes(c))
+      return LOSSLESS_CODECS.some(c => codec.toLowerCase().includes(c))
     }
-
-    const isAACCodec = (codec?: string): boolean => {
-      if (!codec) return false
-      return codec.toLowerCase().includes('aac')
-    }
-
     const getTrackQualityTier = (track: MusicTrack): 'ultra' | 'high' | 'medium' | 'low' | null => {
       const bitrateKbps = track.audio_bitrate || 0
       const sampleRate = track.sample_rate || 0
       const bitDepth = track.bit_depth || 16
       const isLossless = track.is_lossless || isLosslessCodec(track.audio_codec)
-
       if (isLossless && (bitDepth >= 24 || sampleRate > 48000)) return 'ultra'
       if (isLossless) return 'high'
-      if (isAACCodec(track.audio_codec)) {
+      if (track.audio_codec?.toLowerCase().includes('aac')) {
         if (bitrateKbps >= 128) return 'medium'
       } else {
         if (bitrateKbps >= 160) return 'medium'
       }
       if (bitrateKbps > 0) return 'low'
       if (track.audio_codec) {
-        const codecLower = track.audio_codec.toLowerCase()
-        if (codecLower.includes('mp3') || codecLower.includes('aac') || codecLower.includes('ogg')) {
-          return 'medium'
-        }
+        const cl = track.audio_codec.toLowerCase()
+        if (cl.includes('mp3') || cl.includes('aac') || cl.includes('ogg')) return 'medium'
       }
       return null
     }
-
-    let filtered = allTracks
-
-    // Apply search filter
-    if (searchQuery.trim()) {
-      filtered = filtered.filter(track =>
-        track.title.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-
-    // Apply alphabet filter
-    if (alphabetFilter) {
-      filtered = filtered.filter(track => {
-        const firstChar = track.title.charAt(0).toUpperCase()
-        if (alphabetFilter === '#') {
-          return !/[A-Z]/.test(firstChar)
-        }
-        return firstChar === alphabetFilter
-      })
-    }
-
-    // Apply quality filter
-    if (qualityFilter !== 'all') {
-      filtered = filtered.filter(track => {
-        const tier = getTrackQualityTier(track)
-        if (qualityFilter === 'high') {
-          // High includes ultra and high
-          return tier === 'ultra' || tier === 'high'
-        } else if (qualityFilter === 'medium') {
-          return tier === 'medium'
-        } else if (qualityFilter === 'low') {
-          return tier === 'low'
-        }
-        return true
-      })
-    }
-
-    // Sort based on selected column
-    return filtered.sort((a, b) => {
-      let comparison = 0
-      switch (trackSortColumn) {
-        case 'title':
-          comparison = a.title.localeCompare(b.title)
-          break
-        case 'artist': {
-          const artistA = a.artist_id ? (artistNameMap.get(a.artist_id) || '') : (a.album_id ? (albumInfoMap.get(a.album_id)?.artistName || '') : '')
-          const artistB = b.artist_id ? (artistNameMap.get(b.artist_id) || '') : (b.album_id ? (albumInfoMap.get(b.album_id)?.artistName || '') : '')
-          comparison = artistA.localeCompare(artistB)
-          break
-        }
-        case 'album': {
-          const albumA = a.album_id ? (albumInfoMap.get(a.album_id)?.title || '') : ''
-          const albumB = b.album_id ? (albumInfoMap.get(b.album_id)?.title || '') : ''
-          comparison = albumA.localeCompare(albumB)
-          break
-        }
-        case 'codec':
-          comparison = (a.audio_codec || '').localeCompare(b.audio_codec || '')
-          break
-        case 'duration':
-          comparison = (a.duration || 0) - (b.duration || 0)
-          break
-      }
-      return trackSortDirection === 'asc' ? comparison : -comparison
+    return allTracks.filter(track => {
+      const tier = getTrackQualityTier(track)
+      if (qualityFilter === 'high') return tier === 'ultra' || tier === 'high'
+      if (qualityFilter === 'medium') return tier === 'medium'
+      if (qualityFilter === 'low') return tier === 'low'
+      return true
     })
-  }, [allTracks, searchQuery, alphabetFilter, qualityFilter, trackSortColumn, trackSortDirection, artistNameMap, albumInfoMap])
+  }, [allTracks, qualityFilter])
 
   // Album detail view
   if (selectedAlbum) {
@@ -5005,7 +5184,7 @@ function MusicView({
   }
 
   // Main view - check for empty state
-  const hasNoMusic = filteredArtists.length === 0 && albums.length === 0 && allTracks.length === 0
+  const hasNoMusic = filteredArtists.length === 0 && albums.length === 0 && (stats?.totalTracks || 0) === 0
   if (hasNoMusic) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -5131,6 +5310,11 @@ function MusicView({
                   showSourceBadge,
                   allAlbumCompleteness
                 }}
+                onItemsRendered={({ visibleStopIndex }) => {
+                  if (visibleStopIndex >= allFilteredAlbums.length - 20) {
+                    onLoadMoreAlbums()
+                  }
+                }}
               >
                 {({ index, style, data }: { index: number; style: React.CSSProperties; data: {
                   albums: MusicAlbum[];
@@ -5172,13 +5356,24 @@ function MusicView({
               ))}
             </div>
           )}
+          {/* Sentinel for album grid infinite scroll */}
+          <div ref={albumSentinelRef} className="h-1" />
+          {/* Album count footer */}
+          <div className="px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-2">
+            {albumsLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+            <span>
+              {allFilteredAlbums.length === totalAlbumCount
+                ? `${totalAlbumCount.toLocaleString()} albums`
+                : `${allFilteredAlbums.length.toLocaleString()} of ${totalAlbumCount.toLocaleString()} albums`}
+            </span>
+          </div>
         </div>
       )}
 
       {/* Tracks View Mode */}
       {musicViewMode === 'tracks' && (
         <div>
-          {filteredTracks.length === 0 ? (
+          {filteredTracks.length === 0 && !tracksLoading ? (
             <div className="p-12 text-center">
               <Music className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
               <p className="text-muted-foreground">No tracks found</p>
@@ -5278,6 +5473,12 @@ function MusicView({
                 itemSize={40}
                 width="100%"
                 className="scrollbar-visible"
+                onItemsRendered={({ visibleStopIndex }: { visibleStopIndex: number }) => {
+                  // Load more tracks when scrolling near the end
+                  if (visibleStopIndex >= filteredTracks.length - 50) {
+                    onLoadMoreTracks()
+                  }
+                }}
                 itemData={{
                   tracks: filteredTracks,
                   artistNameMap,
@@ -5341,6 +5542,15 @@ function MusicView({
                   )
                 }}
               </VirtualList>
+              {/* Track count / loading indicator */}
+              <div className="px-4 py-1.5 text-xs text-muted-foreground border-t border-border flex items-center gap-2">
+                {tracksLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+                <span>
+                  {filteredTracks.length === totalTrackCount
+                    ? `${totalTrackCount.toLocaleString()} tracks`
+                    : `${filteredTracks.length.toLocaleString()} of ${totalTrackCount.toLocaleString()} tracks`}
+                </span>
+              </div>
             </div>
           )}
         </div>

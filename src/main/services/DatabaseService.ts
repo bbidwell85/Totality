@@ -580,6 +580,30 @@ export class DatabaseService {
         }
       }
 
+      // Create exclusions table if it doesn't exist (for existing databases)
+      try {
+        this.db.run(`
+          CREATE TABLE IF NOT EXISTS exclusions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            exclusion_type TEXT NOT NULL CHECK(exclusion_type IN (
+              'media_upgrade',
+              'collection_movie',
+              'series_episode',
+              'artist_album'
+            )),
+            reference_id INTEGER,
+            reference_key TEXT,
+            parent_key TEXT,
+            title TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          )
+        `)
+        this.db.run('CREATE INDEX IF NOT EXISTS idx_exclusions_type_ref ON exclusions(exclusion_type, reference_id)')
+        this.db.run('CREATE INDEX IF NOT EXISTS idx_exclusions_type_key ON exclusions(exclusion_type, reference_key, parent_key)')
+      } catch (error: unknown) {
+        console.log('[Database] Exclusions table migration:', getErrorMessage(error))
+      }
+
       // Migrate existing plain-text credentials to encrypted format
       await this.migrateCredentialsToEncrypted()
 
@@ -1405,12 +1429,35 @@ export class DatabaseService {
     if (filters?.needsUpgrade !== undefined) {
       sql += ' AND q.needs_upgrade = ?'
       params.push(filters.needsUpgrade ? 1 : 0)
+      // Exclude items the user has dismissed from upgrade recommendations
+      if (filters.needsUpgrade) {
+        sql += ` AND m.id NOT IN (SELECT reference_id FROM exclusions WHERE exclusion_type = 'media_upgrade' AND reference_id IS NOT NULL)`
+      }
     }
 
     if (filters?.searchQuery) {
       sql += ' AND (m.title LIKE ? OR m.series_title LIKE ?)'
       const searchTerm = `%${filters.searchQuery}%`
       params.push(searchTerm, searchTerm)
+    }
+
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND m.title NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(m.title, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    if (filters?.qualityTier) {
+      sql += ' AND q.quality_tier = ?'
+      params.push(filters.qualityTier)
+    }
+
+    if (filters?.tierQuality) {
+      sql += ' AND q.tier_quality = ?'
+      params.push(filters.tierQuality)
     }
 
     // Multi-source filters
@@ -1498,12 +1545,34 @@ export class DatabaseService {
     if (filters?.needsUpgrade !== undefined) {
       sql += ' AND q.needs_upgrade = ?'
       params.push(filters.needsUpgrade ? 1 : 0)
+      if (filters.needsUpgrade) {
+        sql += ` AND m.id NOT IN (SELECT reference_id FROM exclusions WHERE exclusion_type = 'media_upgrade' AND reference_id IS NOT NULL)`
+      }
     }
 
     if (filters?.searchQuery) {
       sql += ' AND (m.title LIKE ? OR m.series_title LIKE ?)'
       const searchTerm = `%${filters.searchQuery}%`
       params.push(searchTerm, searchTerm)
+    }
+
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND m.title NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(m.title, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    if (filters?.qualityTier) {
+      sql += ' AND q.quality_tier = ?'
+      params.push(filters.qualityTier)
+    }
+
+    if (filters?.tierQuality) {
+      sql += ' AND q.tier_quality = ?'
+      params.push(filters.tierQuality)
     }
 
     if (filters?.sourceId) {
@@ -3405,6 +3474,21 @@ export class DatabaseService {
     return this.musicRepo.getTracks(filters)
   }
 
+  /** Count music artists matching filters */
+  countMusicArtists(filters?: MusicFilters): number {
+    return this.musicRepo.countArtists(filters)
+  }
+
+  /** Count music albums matching filters */
+  countMusicAlbums(filters?: MusicFilters): number {
+    return this.musicRepo.countAlbums(filters)
+  }
+
+  /** Count music tracks matching filters */
+  countMusicTracks(filters?: MusicFilters): number {
+    return this.musicRepo.countTracks(filters)
+  }
+
   /** Get a music track by ID */
   getMusicTrackById(id: number): MusicTrack | null {
     return this.musicRepo.getTrackById(id)
@@ -4194,6 +4278,88 @@ export class DatabaseService {
     )
 
     return { movies, tvShows, episodes, artists, albums, tracks }
+  }
+
+  // ============================================================================
+  // EXCLUSIONS
+  // ============================================================================
+
+  /** Add an exclusion to hide an item from dashboard recommendations */
+  addExclusion(exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string, title?: string): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    this.db.run(
+      `INSERT INTO exclusions (exclusion_type, reference_id, reference_key, parent_key, title) VALUES (?, ?, ?, ?, ?)`,
+      [exclusionType, referenceId ?? null, referenceKey ?? null, parentKey ?? null, title ?? null]
+    )
+    this.save()
+
+    const result = this.db.exec('SELECT last_insert_rowid()')
+    return result[0]?.values[0]?.[0] as number || 0
+  }
+
+  /** Remove an exclusion by ID */
+  removeExclusion(id: number): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.run('DELETE FROM exclusions WHERE id = ?', [id])
+    this.save()
+  }
+
+  /** Get exclusions, optionally filtered by type and/or parent key */
+  getExclusions(exclusionType?: string, parentKey?: string): Array<{
+    id: number
+    exclusion_type: string
+    reference_id: number | null
+    reference_key: string | null
+    parent_key: string | null
+    title: string | null
+    created_at: string
+  }> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    let sql = 'SELECT * FROM exclusions WHERE 1=1'
+    const params: (string | number)[] = []
+
+    if (exclusionType) {
+      sql += ' AND exclusion_type = ?'
+      params.push(exclusionType)
+    }
+    if (parentKey) {
+      sql += ' AND parent_key = ?'
+      params.push(parentKey)
+    }
+
+    sql += ' ORDER BY created_at DESC'
+    const result = this.db.exec(sql, params)
+    if (!result.length) return []
+    return this.rowsToObjects(result[0])
+  }
+
+  /** Check if a specific item is excluded */
+  isExcluded(exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string): boolean {
+    if (!this.db) throw new Error('Database not initialized')
+
+    if (referenceId) {
+      const result = this.db.exec(
+        'SELECT 1 FROM exclusions WHERE exclusion_type = ? AND reference_id = ? LIMIT 1',
+        [exclusionType, referenceId]
+      )
+      return result.length > 0 && result[0].values.length > 0
+    }
+
+    if (referenceKey) {
+      let sql = 'SELECT 1 FROM exclusions WHERE exclusion_type = ? AND reference_key = ?'
+      const params: (string | number)[] = [exclusionType, referenceKey]
+      if (parentKey) {
+        sql += ' AND parent_key = ?'
+        params.push(parentKey)
+      }
+      sql += ' LIMIT 1'
+      const result = this.db.exec(sql, params)
+      return result.length > 0 && result[0].values.length > 0
+    }
+
+    return false
   }
 }
 

@@ -548,9 +548,28 @@ export class BetterSQLiteService {
       const search = `%${filters.searchQuery}%`
       params.push(search, search)
     }
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND m.title NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(m.title, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+    if (filters?.qualityTier) {
+      sql += ' AND q.quality_tier = ?'
+      params.push(filters.qualityTier)
+    }
+    if (filters?.tierQuality) {
+      sql += ' AND q.tier_quality = ?'
+      params.push(filters.tierQuality)
+    }
     if (filters?.needsUpgrade !== undefined) {
       sql += ' AND q.needs_upgrade = ?'
       params.push(filters.needsUpgrade ? 1 : 0)
+      if (filters.needsUpgrade) {
+        sql += ` AND m.id NOT IN (SELECT reference_id FROM exclusions WHERE exclusion_type = 'media_upgrade' AND reference_id IS NOT NULL)`
+      }
     }
 
     // Dynamic sorting with validated column names (prevent SQL injection)
@@ -660,9 +679,28 @@ export class BetterSQLiteService {
       const search = `%${filters.searchQuery}%`
       params.push(search, search)
     }
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND m.title NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(m.title, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+    if (filters?.qualityTier) {
+      sql += ' AND q.quality_tier = ?'
+      params.push(filters.qualityTier)
+    }
+    if (filters?.tierQuality) {
+      sql += ' AND q.tier_quality = ?'
+      params.push(filters.tierQuality)
+    }
     if (filters?.needsUpgrade !== undefined) {
       sql += ' AND q.needs_upgrade = ?'
       params.push(filters.needsUpgrade ? 1 : 0)
+      if (filters.needsUpgrade) {
+        sql += ` AND m.id NOT IN (SELECT reference_id FROM exclusions WHERE exclusion_type = 'media_upgrade' AND reference_id IS NOT NULL)`
+      }
     }
 
     const stmt = this.db.prepare(sql)
@@ -1526,6 +1564,20 @@ export class BetterSQLiteService {
       sql += ' AND name LIKE ?'
       params.push(`%${filters.searchQuery}%`)
     }
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND name NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += ' AND UPPER(SUBSTR(name, 1, 1)) = ?'
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    const artistSortMap: Record<string, string> = { 'name': 'sort_name', 'title': 'sort_name', 'added_at': 'created_at' }
+    const sortCol = artistSortMap[filters?.sortBy || ''] || 'sort_name'
+    const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
+    sql += ` ORDER BY ${sortCol} ${sortDir}`
+
     if (filters?.limit) {
       sql += ' LIMIT ?'
       params.push(filters.limit)
@@ -1537,6 +1589,21 @@ export class BetterSQLiteService {
 
     const stmt = this.db.prepare(sql)
     return stmt.all(...params) as MusicArtist[]
+  }
+
+  countMusicArtists(filters?: MusicFilters): number {
+    if (!this.db) throw new Error('Database not initialized')
+    let sql = 'SELECT COUNT(*) as count FROM music_artists WHERE 1=1'
+    const params: unknown[] = []
+    if (filters?.sourceId) { sql += ' AND source_id = ?'; params.push(filters.sourceId) }
+    if (filters?.searchQuery) { sql += ' AND name LIKE ?'; params.push(`%${filters.searchQuery}%`) }
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') { sql += " AND name NOT GLOB '[A-Za-z]*'" }
+      else { sql += ' AND UPPER(SUBSTR(name, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
+    }
+    const stmt = this.db.prepare(sql)
+    const row = stmt.get(...params) as { count: number } | undefined
+    return row?.count || 0
   }
 
   /**
@@ -1578,6 +1645,20 @@ export class BetterSQLiteService {
       sql += ' AND (title LIKE ? OR artist_name LIKE ?)'
       params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`)
     }
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
+      else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
+    }
+
+    const albumSortMap: Record<string, string> = { 'title': 'title', 'artist': 'artist_name', 'year': 'year', 'added_at': 'created_at' }
+    const sortCol = albumSortMap[filters?.sortBy || ''] || 'artist_name'
+    const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
+    if (!filters?.sortBy || filters.sortBy === 'artist') {
+      sql += ` ORDER BY ${sortCol} ${sortDir}, year DESC`
+    } else {
+      sql += ` ORDER BY ${sortCol} ${sortDir}`
+    }
+
     if (filters?.limit) {
       sql += ' LIMIT ?'
       params.push(filters.limit)
@@ -1589,6 +1670,22 @@ export class BetterSQLiteService {
 
     const stmt = this.db.prepare(sql)
     return stmt.all(...params) as MusicAlbum[]
+  }
+
+  countMusicAlbums(filters?: MusicFilters): number {
+    if (!this.db) throw new Error('Database not initialized')
+    let sql = 'SELECT COUNT(*) as count FROM music_albums WHERE 1=1'
+    const params: unknown[] = []
+    if (filters?.artistId) { sql += ' AND artist_id = ?'; params.push(filters.artistId) }
+    if (filters?.sourceId) { sql += ' AND source_id = ?'; params.push(filters.sourceId) }
+    if (filters?.searchQuery) { sql += ' AND (title LIKE ? OR artist_name LIKE ?)'; params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`) }
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
+      else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
+    }
+    const stmt = this.db.prepare(sql)
+    const row = stmt.get(...params) as { count: number } | undefined
+    return row?.count || 0
   }
 
   /**
@@ -1639,6 +1736,26 @@ export class BetterSQLiteService {
       sql += ' AND source_id = ?'
       params.push(filters.sourceId)
     }
+    if (filters?.searchQuery) {
+      sql += ' AND (title LIKE ? OR artist_name LIKE ? OR album_name LIKE ?)'
+      params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`, `%${filters.searchQuery}%`)
+    }
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
+      else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
+    }
+
+    const trackSortMap: Record<string, string> = { 'title': 'title', 'artist': 'artist_name', 'album': 'album_name', 'codec': 'audio_codec', 'duration': 'duration', 'added_at': 'created_at' }
+    if (filters?.sortBy && trackSortMap[filters.sortBy]) {
+      const sortCol = trackSortMap[filters.sortBy]
+      const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
+      sql += ` ORDER BY ${sortCol} ${sortDir}`
+    } else if (filters?.albumId) {
+      sql += ' ORDER BY disc_number ASC, track_number ASC'
+    } else {
+      sql += ' ORDER BY title ASC'
+    }
+
     if (filters?.limit) {
       sql += ' LIMIT ?'
       params.push(filters.limit)
@@ -1650,6 +1767,23 @@ export class BetterSQLiteService {
 
     const stmt = this.db.prepare(sql)
     return stmt.all(...params) as MusicTrack[]
+  }
+
+  countMusicTracks(filters?: MusicFilters): number {
+    if (!this.db) throw new Error('Database not initialized')
+    let sql = 'SELECT COUNT(*) as count FROM music_tracks WHERE 1=1'
+    const params: unknown[] = []
+    if (filters?.albumId) { sql += ' AND album_id = ?'; params.push(filters.albumId) }
+    if (filters?.artistId) { sql += ' AND artist_id = ?'; params.push(filters.artistId) }
+    if (filters?.sourceId) { sql += ' AND source_id = ?'; params.push(filters.sourceId) }
+    if (filters?.searchQuery) { sql += ' AND (title LIKE ? OR artist_name LIKE ? OR album_name LIKE ?)'; params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`, `%${filters.searchQuery}%`) }
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
+      else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
+    }
+    const stmt = this.db.prepare(sql)
+    const row = stmt.get(...params) as { count: number } | undefined
+    return row?.count || 0
   }
 
   /**
@@ -3317,5 +3451,55 @@ export class BetterSQLiteService {
     }>
 
     return { movies, tvShows, episodes, artists, albums, tracks }
+  }
+
+  // ============================================================================
+  // EXCLUSIONS
+  // ============================================================================
+
+  addExclusion(exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string, title?: string): number {
+    if (!this.db) throw new Error('Database not initialized')
+    const stmt = this.db.prepare(
+      'INSERT INTO exclusions (exclusion_type, reference_id, reference_key, parent_key, title) VALUES (?, ?, ?, ?, ?)'
+    )
+    const result = stmt.run(exclusionType, referenceId ?? null, referenceKey ?? null, parentKey ?? null, title ?? null)
+    return result.lastInsertRowid as number
+  }
+
+  removeExclusion(id: number): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.prepare('DELETE FROM exclusions WHERE id = ?').run(id)
+  }
+
+  getExclusions(exclusionType?: string, parentKey?: string): Array<{
+    id: number; exclusion_type: string; reference_id: number | null; reference_key: string | null
+    parent_key: string | null; title: string | null; created_at: string
+  }> {
+    if (!this.db) throw new Error('Database not initialized')
+    let sql = 'SELECT * FROM exclusions WHERE 1=1'
+    const params: unknown[] = []
+    if (exclusionType) { sql += ' AND exclusion_type = ?'; params.push(exclusionType) }
+    if (parentKey) { sql += ' AND parent_key = ?'; params.push(parentKey) }
+    sql += ' ORDER BY created_at DESC'
+    return this.db.prepare(sql).all(...params) as Array<{
+      id: number; exclusion_type: string; reference_id: number | null; reference_key: string | null
+      parent_key: string | null; title: string | null; created_at: string
+    }>
+  }
+
+  isExcluded(exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string): boolean {
+    if (!this.db) throw new Error('Database not initialized')
+    if (referenceId) {
+      const row = this.db.prepare('SELECT 1 FROM exclusions WHERE exclusion_type = ? AND reference_id = ? LIMIT 1').get(exclusionType, referenceId)
+      return !!row
+    }
+    if (referenceKey) {
+      let sql = 'SELECT 1 FROM exclusions WHERE exclusion_type = ? AND reference_key = ?'
+      const params: unknown[] = [exclusionType, referenceKey]
+      if (parentKey) { sql += ' AND parent_key = ?'; params.push(parentKey) }
+      sql += ' LIMIT 1'
+      return !!this.db.prepare(sql).get(...params)
+    }
+    return false
   }
 }
