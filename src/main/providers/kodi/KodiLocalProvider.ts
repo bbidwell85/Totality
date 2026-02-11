@@ -108,6 +108,9 @@ export class KodiLocalProvider implements MediaProvider {
   private _includeVideo: boolean = true
   private _includeMusic: boolean = true
 
+  // Concurrency guard for getLibraries (prevents race condition from parallel IPC calls)
+  private getLibrariesPromise: Promise<MediaLibrary[]> | null = null
+
   // FFprobe file analysis settings - enabled by default for accurate quality scoring
   private useFFprobeAnalysis: boolean = true
   private ffprobeAvailable: boolean | null = null
@@ -167,7 +170,7 @@ export class KodiLocalProvider implements MediaProvider {
       // Read database file as buffer
       const dbBuffer = fs.readFileSync(this.databasePath)
       this.db = new this.sqlJs!.Database(dbBuffer)
-      console.log(`[KodiLocalProvider] Database opened: ${path.basename(this.databasePath)}`)
+      console.debug(`[KodiLocalProvider] Database opened: ${path.basename(this.databasePath)}`)
     } catch (error: unknown) {
       throw new Error(`Failed to open database: ${getErrorMessage(error)}`)
     }
@@ -180,7 +183,7 @@ export class KodiLocalProvider implements MediaProvider {
     if (this.db) {
       this.db.close()
       this.db = null
-      console.log('[KodiLocalProvider] Database closed')
+      console.debug('[KodiLocalProvider] Database closed')
     }
   }
 
@@ -599,6 +602,19 @@ export class KodiLocalProvider implements MediaProvider {
   // ============================================================================
 
   async getLibraries(): Promise<MediaLibrary[]> {
+    // Serialize concurrent calls to prevent race conditions with DB open/close
+    if (this.getLibrariesPromise) {
+      return this.getLibrariesPromise
+    }
+    this.getLibrariesPromise = this.getLibrariesImpl()
+    try {
+      return await this.getLibrariesPromise
+    } finally {
+      this.getLibrariesPromise = null
+    }
+  }
+
+  private async getLibrariesImpl(): Promise<MediaLibrary[]> {
     // Kodi local database provides virtual libraries for Movies, TV Shows, and Music
     // Return all available databases as library options
     const libraries: MediaLibrary[] = []
@@ -1684,7 +1700,7 @@ export class KodiLocalProvider implements MediaProvider {
     try {
       const dbBuffer = fs.readFileSync(this.musicDatabasePath)
       this.musicDb = new this.sqlJs!.Database(dbBuffer)
-      console.log(`[KodiLocalProvider] Music database opened: ${path.basename(this.musicDatabasePath)}`)
+      console.debug(`[KodiLocalProvider] Music database opened: ${path.basename(this.musicDatabasePath)}`)
       return true
     } catch (error: unknown) {
       console.error(`[KodiLocalProvider] Failed to open music database: ${getErrorMessage(error)}`)
@@ -1699,7 +1715,7 @@ export class KodiLocalProvider implements MediaProvider {
     if (this.musicDb) {
       this.musicDb.close()
       this.musicDb = null
-      console.log('[KodiLocalProvider] Music database closed')
+      console.debug('[KodiLocalProvider] Music database closed')
     }
   }
 
