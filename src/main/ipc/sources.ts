@@ -188,33 +188,27 @@ export function registerSourceHandlers(): void {
    *   - New: (sourceId, serverId) - uses specified source
    */
   ipcMain.handle('plex:selectServer', async (_event, sourceIdOrServerId: string, serverId?: string) => {
-    try {
-      // New API: both sourceId and serverId provided
-      if (serverId) {
-        return await manager.plexSelectServer(sourceIdOrServerId, serverId)
-      }
-
-      // Legacy API: only serverId provided
-      const resolvedServerId = sourceIdOrServerId
-
-      // Try to find first Plex source
-      const plexSources = await manager.getSources('plex')
-      if (plexSources.length > 0) {
-        const resolvedSourceId = plexSources[0].source_id
-        console.log(`[plex:selectServer] Using first Plex source: ${resolvedSourceId}`)
-        return await manager.plexSelectServer(resolvedSourceId, resolvedServerId)
-      }
-
-      // Fallback to legacy PlexService for old auth flow
-      console.log('[plex:selectServer] No sources found, using legacy PlexService')
-      const plex = getPlexService()
-      const success = await plex.selectServer(resolvedServerId)
-      return { success }
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error)
-      console.error(`[IPC] plex:selectServer failed: ${msg}`)
-      throw error
+    // New API: both sourceId and serverId provided
+    if (serverId) {
+      return await manager.plexSelectServer(sourceIdOrServerId, serverId)
     }
+
+    // Legacy API: only serverId provided
+    const resolvedServerId = sourceIdOrServerId
+
+    // Try to find first Plex source
+    const plexSources = await manager.getSources('plex')
+    if (plexSources.length > 0) {
+      const resolvedSourceId = plexSources[0].source_id
+      console.log(`[plex:selectServer] Using first Plex source: ${resolvedSourceId}`)
+      return await manager.plexSelectServer(resolvedSourceId, resolvedServerId)
+    }
+
+    // Fallback to legacy PlexService for old auth flow
+    console.log('[plex:selectServer] No sources found, using legacy PlexService')
+    const plex = getPlexService()
+    const success = await plex.selectServer(resolvedServerId)
+    return { success }
   })
 
   /**
@@ -259,8 +253,9 @@ export function registerSourceHandlers(): void {
     try {
       return await manager.getLibraries(sourceId)
     } catch (error: unknown) {
-      console.error('Error getting libraries:', error)
-      throw error
+      const msg = error instanceof Error ? error.message : String(error)
+      console.warn(`[IPC] sources:getLibraries failed for ${sourceId}: ${msg}`)
+      return []
     }
   })
 
@@ -297,8 +292,9 @@ export function registerSourceHandlers(): void {
         }
       })
     } catch (error: unknown) {
-      console.error('Error getting libraries with status:', error)
-      throw error
+      const msg = error instanceof Error ? error.message : String(error)
+      console.warn(`[IPC] sources:getLibrariesWithStatus failed for ${sourceId}: ${msg}`)
+      return []
     }
   })
 

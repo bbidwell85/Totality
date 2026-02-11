@@ -44,6 +44,7 @@ export class SourceManager {
   private initPromise: Promise<void> | null = null
   private scanCancelled: boolean = false
   private isScanning: boolean = false
+  private getLibrariesPromises: Map<string, Promise<MediaLibrary[]>> = new Map()
 
   constructor() {
     // Initialize will be called explicitly
@@ -911,8 +912,6 @@ export class SourceManager {
 
     const provider = this.providers.get(sourceId)
     if (!provider) {
-      console.error(`[SourceManager] Provider not found: ${sourceId}`)
-      console.error(`[SourceManager] Available providers: ${Array.from(this.providers.keys()).join(', ')}`)
       throw new Error(`Source not found: ${sourceId}`)
     }
 
@@ -925,6 +924,22 @@ export class SourceManager {
       }
     }
 
+    // Deduplicate concurrent calls for the same source
+    const existing = this.getLibrariesPromises.get(sourceId)
+    if (existing) {
+      return existing
+    }
+
+    const promise = this.fetchLibraries(sourceId, provider)
+    this.getLibrariesPromises.set(sourceId, promise)
+    try {
+      return await promise
+    } finally {
+      this.getLibrariesPromises.delete(sourceId)
+    }
+  }
+
+  private async fetchLibraries(sourceId: string, provider: MediaProvider): Promise<MediaLibrary[]> {
     console.log(`[SourceManager] Getting libraries for ${sourceId} (${provider.providerType})`)
     const libraries = await provider.getLibraries()
 
