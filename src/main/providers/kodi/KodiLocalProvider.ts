@@ -608,32 +608,36 @@ export class KodiLocalProvider implements MediaProvider {
       try {
         await this.openDatabase()
 
-        const movieCount = this.query<{ count: number }>(QUERY_MOVIE_COUNT)
-        const episodeCount = this.query<{ count: number }>(QUERY_EPISODE_COUNT)
+        if (!this.db) {
+          console.warn('[KodiLocalProvider] Video database not ready yet')
+        } else {
+          const movieCount = this.query<{ count: number }>(QUERY_MOVIE_COUNT)
+          const episodeCount = this.query<{ count: number }>(QUERY_EPISODE_COUNT)
 
-        this.closeDatabase()
+          this.closeDatabase()
 
-        const movies = movieCount[0]?.count || 0
-        const episodes = episodeCount[0]?.count || 0
+          const movies = movieCount[0]?.count || 0
+          const episodes = episodeCount[0]?.count || 0
 
-        // Always add Movies library if video database exists
-        libraries.push({
-          id: 'movies',
-          name: 'Movies',
-          type: 'movie',
-          itemCount: movies,
-        })
+          // Always add Movies library if video database exists
+          libraries.push({
+            id: 'movies',
+            name: 'Movies',
+            type: 'movie',
+            itemCount: movies,
+          })
 
-        // Always add TV Shows library if video database exists
-        libraries.push({
-          id: 'tvshows',
-          name: 'TV Shows',
-          type: 'show',
-          itemCount: episodes,
-        })
+          // Always add TV Shows library if video database exists
+          libraries.push({
+            id: 'tvshows',
+            name: 'TV Shows',
+            type: 'show',
+            itemCount: episodes,
+          })
+        }
       } catch (error: unknown) {
         this.closeDatabase()
-        console.error('[KodiLocalProvider] Error getting video libraries:', error)
+        console.warn('[KodiLocalProvider] Could not read video libraries:', getErrorMessage(error))
       }
     }
 

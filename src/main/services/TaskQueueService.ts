@@ -367,10 +367,19 @@ export class TaskQueueService {
         this.addTaskHistoryEntry(task, 'task-complete', this.formatCompletionMessage(task))
       }
     } catch (error: unknown) {
-      task.status = 'failed'
-      task.error = getErrorMessage(error) || 'Unknown error'
-      this.addTaskHistoryEntry(task, 'task-failed', `Failed: ${task.label} - ${task.error}`)
-      console.error(`[TaskQueue] Task failed: ${task.label}`, error)
+      const errorMsg = getErrorMessage(error) || 'Unknown error'
+      const isCancellation = this.cancelRequested || /cancel/i.test(errorMsg)
+
+      if (isCancellation) {
+        task.status = 'cancelled'
+        this.addTaskHistoryEntry(task, 'task-cancelled', `Cancelled: ${task.label}`)
+        console.log(`[TaskQueue] Task cancelled: ${task.label}`)
+      } else {
+        task.status = 'failed'
+        task.error = errorMsg
+        this.addTaskHistoryEntry(task, 'task-failed', `Failed: ${task.label} - ${task.error}`)
+        console.error(`[TaskQueue] Task failed: ${task.label}`, error)
+      }
     }
 
     task.completedAt = new Date().toISOString()
