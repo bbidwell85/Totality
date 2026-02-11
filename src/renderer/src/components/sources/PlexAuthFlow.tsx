@@ -112,10 +112,15 @@ export function PlexAuthFlow({ onSuccess, onBack }: PlexAuthFlowProps) {
         setSelectedLibraries(new Set(libs.map(lib => lib.id)))
         setStep('libraries')
       } else {
-        setError('Failed to connect to server')
+        setError('Could not reach server. Make sure it is running and accessible on your network.')
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to select server')
+      const msg = err instanceof Error ? err.message : ''
+      if (/ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ENETUNREACH|timed?\s*out|not reachable/i.test(msg)) {
+        setError('Could not reach server. Make sure it is running and accessible on your network.')
+      } else {
+        setError(msg || 'Failed to connect to server')
+      }
     }
   }
 

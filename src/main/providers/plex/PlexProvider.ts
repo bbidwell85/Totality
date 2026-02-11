@@ -245,20 +245,45 @@ export class PlexProvider implements MediaProvider {
         throw new Error('Server not found')
       }
 
-      const localHttp = server.connections?.find((c) => c.local && c.protocol === 'http')
-      const preferredConnection = localHttp || server.connections?.[0]
+      // Try connections in priority order: local first, then remote, relay last
+      const connections = server.connections || []
+      const sorted = [
+        ...connections.filter(c => c.local && !c.relay),
+        ...connections.filter(c => !c.local && !c.relay),
+        ...connections.filter(c => c.relay),
+      ]
+
+      // Find a reachable connection by testing each with a short timeout
+      let workingConnection = sorted[0]
+      for (const conn of sorted) {
+        try {
+          await this.api.get(`${conn.uri}/identity`, {
+            headers: { 'X-Plex-Token': server.accessToken || '' },
+            timeout: 5000,
+          })
+          workingConnection = conn
+          console.log(`[PlexProvider] Connected via ${conn.local ? 'local' : conn.relay ? 'relay' : 'remote'} (${conn.protocol})`)
+          break
+        } catch {
+          console.debug(`[PlexProvider] Connection failed: ${conn.local ? 'local' : conn.relay ? 'relay' : 'remote'} (${conn.protocol}), trying next...`)
+        }
+      }
+
+      if (!workingConnection) {
+        throw new Error('No reachable connection found for server')
+      }
 
       this.selectedServer = {
         name: server.name,
         host: server.publicAddress || '',
-        port: preferredConnection?.port || 32400,
+        port: workingConnection.port || 32400,
         machineIdentifier: server.clientIdentifier,
         version: server.productVersion,
-        scheme: preferredConnection?.protocol || 'https',
-        address: preferredConnection?.address || server.publicAddress || '',
-        uri: preferredConnection?.uri || `${preferredConnection?.protocol}://${preferredConnection?.address}:${preferredConnection?.port}`,
-        localAddresses: server.connections
-          ?.filter((c) => c.local)
+        scheme: workingConnection.protocol || 'https',
+        address: workingConnection.address || server.publicAddress || '',
+        uri: workingConnection.uri || `${workingConnection.protocol}://${workingConnection.address}:${workingConnection.port}`,
+        localAddresses: connections
+          .filter((c) => c.local)
           .map((c) => c.address)
           .join(',') || '',
         owned: server.owned === true || server.owned === 1,
@@ -267,7 +292,8 @@ export class PlexProvider implements MediaProvider {
 
       return true
     } catch (error) {
-      console.error('Failed to select server:', error)
+      const reason = error instanceof Error ? error.message.replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?\b/g, '<server>') : 'unknown error'
+      console.error(`[PlexProvider] Failed to select server: ${reason}`)
       return false
     }
   }
