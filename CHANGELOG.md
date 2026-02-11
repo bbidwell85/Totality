@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.15](https://github.com/bbidwell85/totality/compare/v0.1.14...v0.1.15) (2026-02-11)
+
+
+### Features
+
+* add auto-update with electron-updater and GitHub Releases ([3f0a6ab](https://github.com/bbidwell85/totality/commit/3f0a6ab7c4525e5cab14efa33a5db6dd480f9444))
+
+
+### Bug Fixes
+
+* deduplicate concurrent getLibraries calls, return empty on timeout ([7eb201d](https://github.com/bbidwell85/totality/commit/7eb201d53d9d4fcb4f89f472b960ffdaa43c7cab))
+* deduplicate Plex error logging, redact IPs, fix triple FFprobe log ([ad6a07e](https://github.com/bbidwell85/totality/commit/ad6a07e4ed0d2931464ce5379ceb759eca6d09e2))
+* try all Plex connections before failing, show friendly error message ([8fe0bf5](https://github.com/bbidwell85/totality/commit/8fe0bf5e156621db0fb3aa91f22053af254caa69))
+
 ### [0.1.14](https://github.com/bbidwell85/totality/compare/v0.1.13...v0.1.14) (2026-02-11)
 
 
