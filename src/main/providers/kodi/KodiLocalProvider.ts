@@ -2065,7 +2065,11 @@ export class KodiLocalProvider implements MediaProvider {
             })
           }
         } catch (error: unknown) {
-          result.errors.push(`Failed to process artist ${kodiArtist.strArtist}: ${getErrorMessage(error)}`)
+          const msg = getErrorMessage(error)
+          if (/cancel/i.test(msg)) {
+            throw error  // Don't swallow cancellation signals
+          }
+          result.errors.push(`Failed to process artist ${kodiArtist.strArtist}: ${msg}`)
         }
       }
 
@@ -2112,7 +2116,11 @@ export class KodiLocalProvider implements MediaProvider {
             })
           }
         } catch (error: unknown) {
-          result.errors.push(`Failed to process album ${kodiAlbum.strAlbum}: ${getErrorMessage(error)}`)
+          const msg = getErrorMessage(error)
+          if (/cancel/i.test(msg)) {
+            throw error  // Don't swallow cancellation signals
+          }
+          result.errors.push(`Failed to process album ${kodiAlbum.strAlbum}: ${msg}`)
         }
       }
 
