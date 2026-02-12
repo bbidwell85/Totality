@@ -1568,6 +1568,10 @@ export class BetterSQLiteService {
       sql += ' AND source_id = ?'
       params.push(filters.sourceId)
     }
+    if (filters?.libraryId) {
+      sql += ' AND library_id = ?'
+      params.push(filters.libraryId)
+    }
     if (filters?.searchQuery) {
       sql += ' AND name LIKE ?'
       params.push(`%${filters.searchQuery}%`)
@@ -1604,6 +1608,7 @@ export class BetterSQLiteService {
     let sql = 'SELECT COUNT(*) as count FROM music_artists WHERE 1=1'
     const params: unknown[] = []
     if (filters?.sourceId) { sql += ' AND source_id = ?'; params.push(filters.sourceId) }
+    if (filters?.libraryId) { sql += ' AND library_id = ?'; params.push(filters.libraryId) }
     if (filters?.searchQuery) { sql += ' AND name LIKE ?'; params.push(`%${filters.searchQuery}%`) }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') { sql += " AND name NOT GLOB '[A-Za-z]*'" }

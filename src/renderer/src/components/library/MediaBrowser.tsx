@@ -126,6 +126,11 @@ export function MediaBrowser({
   const [musicViewMode, setMusicViewMode] = useState<'artists' | 'albums' | 'tracks'>('artists')
   const [trackSortColumn, setTrackSortColumn] = useState<'title' | 'artist' | 'album' | 'codec' | 'duration'>('title')
   const [trackSortDirection, setTrackSortDirection] = useState<'asc' | 'desc'>('asc')
+  // Artist pagination state
+  const [totalArtistCount, setTotalArtistCount] = useState(0)
+  const [artistsLoading, setArtistsLoading] = useState(false)
+  const artistsOffsetRef = useRef(0)
+  const ARTISTS_PAGE_SIZE = 50
   // Album pagination state
   const [totalAlbumCount, setTotalAlbumCount] = useState(0)
   const [albumsLoading, setAlbumsLoading] = useState(false)
@@ -420,23 +425,61 @@ export function MediaBrowser({
     handleAnalyzeSingleSeries, handleCancelAnalysis, checkTmdbApiKey,
   } = useAnalysisManager({ sources, activeSourceId, activeSourceLibraries, loadCompletenessData })
 
-  // Load music data (non-blocking background load) — tracks loaded separately via pagination
+  // Load music stats (non-blocking background load)
   const loadMusicData = async () => {
     try {
-      const filters = activeSourceId
-        ? { sourceId: activeSourceId }
-        : undefined
-      const [artists, mStats] = await Promise.all([
-        window.electronAPI.musicGetArtists(filters),
-        window.electronAPI.musicGetStats(activeSourceId || undefined)
-      ])
-
-      setMusicArtists(artists as MusicArtist[])
+      const mStats = await window.electronAPI.musicGetStats(activeSourceId || undefined)
       setMusicStats(mStats as MusicStats)
     } catch (err) {
-      console.warn('Failed to load music data:', err)
+      console.warn('Failed to load music stats:', err)
     }
+    // Also reload paginated artists when music data refreshes
+    loadPaginatedArtists(true)
   }
+
+  // Load paginated artists from server with current filters/sorting
+  const loadPaginatedArtists = useCallback(async (reset = true) => {
+    if (artistsLoading) return
+    setArtistsLoading(true)
+    try {
+      const offset = reset ? 0 : artistsOffsetRef.current
+      const filters: Record<string, unknown> = {
+        limit: ARTISTS_PAGE_SIZE,
+        offset,
+        sortBy: 'name',
+        sortOrder: 'asc',
+      }
+      if (activeSourceId) filters.sourceId = activeSourceId
+      if (activeLibraryId) filters.libraryId = activeLibraryId
+      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
+
+      const [artists, count] = await Promise.all([
+        window.electronAPI.musicGetArtists(filters),
+        window.electronAPI.musicCountArtists(filters),
+      ])
+
+      if (reset) {
+        setMusicArtists(artists as MusicArtist[])
+        artistsOffsetRef.current = ARTISTS_PAGE_SIZE
+      } else {
+        setMusicArtists(prev => [...prev, ...(artists as MusicArtist[])])
+        artistsOffsetRef.current = offset + ARTISTS_PAGE_SIZE
+      }
+      setTotalArtistCount(count)
+    } catch (err) {
+      console.warn('Failed to load paginated artists:', err)
+    } finally {
+      setArtistsLoading(false)
+    }
+  }, [activeSourceId, activeLibraryId, alphabetFilter, searchQuery, artistsLoading])
+
+  // Load more artists (infinite scroll callback)
+  const loadMoreArtists = useCallback(() => {
+    if (artistsOffsetRef.current < totalArtistCount && !artistsLoading) {
+      loadPaginatedArtists(false)
+    }
+  }, [totalArtistCount, artistsLoading, loadPaginatedArtists])
 
   // Load paginated tracks from server with current filters/sorting
   const loadPaginatedTracks = useCallback(async (reset = true) => {
@@ -451,6 +494,7 @@ export function MediaBrowser({
         sortOrder: trackSortDirection,
       }
       if (activeSourceId) filters.sourceId = activeSourceId
+      if (activeLibraryId) filters.libraryId = activeLibraryId
       if (alphabetFilter) filters.alphabetFilter = alphabetFilter
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
 
@@ -472,7 +516,7 @@ export function MediaBrowser({
     } finally {
       setTracksLoading(false)
     }
-  }, [activeSourceId, alphabetFilter, searchQuery, trackSortColumn, trackSortDirection, tracksLoading])
+  }, [activeSourceId, activeLibraryId, alphabetFilter, searchQuery, trackSortColumn, trackSortDirection, tracksLoading])
 
   // Load more tracks (infinite scroll callback)
   const loadMoreTracks = useCallback(() => {
@@ -487,7 +531,7 @@ export function MediaBrowser({
       loadPaginatedTracks(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, alphabetFilter, searchQuery, trackSortColumn, trackSortDirection])
+  }, [view, musicViewMode, activeSourceId, activeLibraryId, alphabetFilter, searchQuery, trackSortColumn, trackSortDirection])
 
   // Load paginated albums from server with current filters/sorting
   const loadPaginatedAlbums = useCallback(async (reset = true) => {
@@ -502,6 +546,7 @@ export function MediaBrowser({
         sortOrder: albumSortDirection,
       }
       if (activeSourceId) filters.sourceId = activeSourceId
+      if (activeLibraryId) filters.libraryId = activeLibraryId
       if (alphabetFilter) filters.alphabetFilter = alphabetFilter
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
       if (selectedArtist) filters.artistId = selectedArtist.id
@@ -524,7 +569,7 @@ export function MediaBrowser({
     } finally {
       setAlbumsLoading(false)
     }
-  }, [activeSourceId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
+  }, [activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
 
   // Load more albums (infinite scroll callback)
   const loadMoreAlbums = useCallback(() => {
@@ -533,13 +578,21 @@ export function MediaBrowser({
     }
   }, [totalAlbumCount, albumsLoading, loadPaginatedAlbums])
 
+  // Trigger server-side artist loading when artists tab is active and filters change
+  useEffect(() => {
+    if (view === 'music' && musicViewMode === 'artists') {
+      loadPaginatedArtists(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, musicViewMode, activeSourceId, activeLibraryId, alphabetFilter, searchQuery])
+
   // Trigger server-side album loading when albums tab is active and filters change
   useEffect(() => {
     if (view === 'music' && (musicViewMode === 'albums' || selectedArtist)) {
       loadPaginatedAlbums(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, selectedArtist])
+  }, [view, musicViewMode, activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, selectedArtist])
 
   // Load paginated movies from server with current filters/sorting
   const loadPaginatedMovies = useCallback(async (reset = true) => {
@@ -559,6 +612,7 @@ export function MediaBrowser({
       if (alphabetFilter) filters.alphabetFilter = alphabetFilter
       if (debouncedTierFilter !== 'all') filters.qualityTier = debouncedTierFilter
       if (debouncedQualityFilter !== 'all') filters.tierQuality = debouncedQualityFilter.toUpperCase()
+      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
 
       const [movieItems, count] = await Promise.all([
         window.electronAPI.getMediaItems(filters),
@@ -578,7 +632,7 @@ export function MediaBrowser({
     } finally {
       setMoviesLoading(false)
     }
-  }, [activeSourceId, activeLibraryId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter, moviesLoading])
+  }, [activeSourceId, activeLibraryId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter, searchQuery, moviesLoading])
 
   // Load more movies (infinite scroll callback)
   const loadMoreMovies = useCallback(() => {
@@ -593,7 +647,7 @@ export function MediaBrowser({
       loadPaginatedMovies(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, activeSourceId, activeLibraryId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter])
+  }, [view, activeSourceId, activeLibraryId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter, searchQuery])
 
   // Load paginated TV shows from server with current filters
   const loadPaginatedShows = useCallback(async (reset = true) => {
@@ -777,7 +831,7 @@ export function MediaBrowser({
       setAllAlbumCompleteness(albumCompletenessMap)
 
       // Calculate stats
-      const totalArtists = musicArtists.length
+      const totalArtists = musicStats?.totalArtists ?? musicArtists.length
       const analyzedArtists = completenessData.length
       const completeArtists = completenessData.filter(c => c.completeness_percentage >= 100).length
       const incompleteArtists = analyzedArtists - completeArtists
@@ -1172,7 +1226,15 @@ export function MediaBrowser({
       // Find artist by name since we may not have the ID directly
       if (artistName) {
         const artist = musicArtists.find(a => a.name === artistName)
-        if (artist) setSelectedArtist(artist)
+        if (artist) {
+          setSelectedArtist(artist)
+        } else {
+          // Artist not in paginated list — search server by name
+          window.electronAPI.musicGetArtists({ searchQuery: artistName, limit: 1, offset: 0 }).then(result => {
+            const artists = result as MusicArtist[]
+            if (artists.length > 0) setSelectedArtist(artists[0])
+          }).catch(err => console.error('Failed to find artist for navigation:', err))
+        }
       }
     } else if (type === 'album') {
       setView('music')
@@ -1956,6 +2018,9 @@ export function MediaBrowser({
         ) : (
           <MusicView
             artists={musicArtists}
+            totalArtistCount={totalArtistCount}
+            artistsLoading={artistsLoading}
+            onLoadMoreArtists={loadMoreArtists}
             albums={musicAlbums}
             tracks={albumTracks}
             allTracks={allMusicTracks}
@@ -3923,6 +3988,9 @@ const SeasonCard = memo(({ season, showTitle, onClick }: { season: SeasonInfo; s
 
 function MusicView({
   artists,
+  totalArtistCount,
+  artistsLoading,
+  onLoadMoreArtists,
   albums,
   tracks,
   allTracks,
@@ -3962,6 +4030,9 @@ function MusicView({
   onRescanTrack
 }: {
   artists: MusicArtist[]
+  totalArtistCount: number
+  artistsLoading: boolean
+  onLoadMoreArtists: () => void
   albums: MusicAlbum[]
   tracks: MusicTrack[]
   allTracks: MusicTrack[]
@@ -4006,6 +4077,22 @@ function MusicView({
   const [rescanningTrackId, setRescanningTrackId] = useState<string | number | null>(null)
   const trackMenuRef = useRef<HTMLDivElement>(null)
   const albumSentinelRef = useRef<HTMLDivElement>(null)
+  const artistSentinelRef = useRef<HTMLDivElement>(null)
+
+  // IntersectionObserver for artist grid infinite scroll
+  useEffect(() => {
+    if (!artistSentinelRef.current || musicViewMode !== 'artists') return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          onLoadMoreArtists()
+        }
+      },
+      { rootMargin: '400px' }
+    )
+    observer.observe(artistSentinelRef.current)
+    return () => observer.disconnect()
+  }, [onLoadMoreArtists, musicViewMode])
 
   // IntersectionObserver for album grid infinite scroll
   useEffect(() => {
@@ -4190,25 +4277,7 @@ function MusicView({
     return map
   }, [albums])
 
-  // Filter artists by search and alphabet
-  const filteredArtists = useMemo(() => {
-    return artists.filter(artist => {
-      // Alphabet filter
-      if (alphabetFilter) {
-        const firstChar = artist.name.charAt(0).toUpperCase()
-        if (alphabetFilter === '#') {
-          if (/[A-Z]/.test(firstChar)) return false
-        } else {
-          if (firstChar !== alphabetFilter) return false
-        }
-      }
-      // Search filter
-      if (searchQuery.trim()) {
-        return artist.name.toLowerCase().includes(searchQuery.toLowerCase())
-      }
-      return true
-    }).sort((a, b) => a.name.localeCompare(b.name))
-  }, [artists, searchQuery, alphabetFilter])
+  // Artists are now filtered and sorted server-side via pagination
 
   // Filter albums for selected artist or all albums
   const filteredAlbums = useMemo(() => {
@@ -4936,7 +5005,7 @@ function MusicView({
   }
 
   // Main view - check for empty state
-  const hasNoMusic = filteredArtists.length === 0 && albums.length === 0 && (stats?.totalTracks || 0) === 0
+  const hasNoMusic = artists.length === 0 && totalArtistCount === 0 && albums.length === 0 && (stats?.totalTracks || 0) === 0
   if (hasNoMusic) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -4975,11 +5044,11 @@ function MusicView({
       )}
 
       {/* Artists View Mode */}
-      {musicViewMode === 'artists' && filteredArtists.length > 0 && (
+      {musicViewMode === 'artists' && artists.length > 0 && (
         <div>
           {viewType === 'list' ? (
             <div className="space-y-2">
-              {filteredArtists.map(artist => (
+              {artists.map(artist => (
                 <ArtistListItem
                   key={artist.id}
                   artist={artist}
@@ -4996,7 +5065,7 @@ function MusicView({
               className="grid gap-6"
               style={{ gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }}
             >
-              {filteredArtists.map(artist => (
+              {artists.map(artist => (
                 <ArtistCard
                   key={artist.id}
                   artist={artist}
@@ -5006,6 +5075,18 @@ function MusicView({
                   onAnalyzeCompleteness={onAnalyzeArtist}
                 />
               ))}
+            </div>
+          )}
+          {/* Infinite scroll sentinel + loading indicator */}
+          <div ref={artistSentinelRef} className="h-1" />
+          {artistsLoading && (
+            <div className="flex justify-center py-4">
+              <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          {artists.length < totalArtistCount && !artistsLoading && (
+            <div className="text-center py-2 text-xs text-muted-foreground">
+              {artists.length.toLocaleString()} of {totalArtistCount.toLocaleString()} artists
             </div>
           )}
         </div>
@@ -5309,7 +5390,7 @@ function MusicView({
       )}
 
       {/* Empty state for artists view */}
-      {musicViewMode === 'artists' && filteredArtists.length === 0 && (
+      {musicViewMode === 'artists' && artists.length === 0 && (
         <div className="p-12 text-center">
           <User className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
           <p className="text-muted-foreground">No artists found</p>
