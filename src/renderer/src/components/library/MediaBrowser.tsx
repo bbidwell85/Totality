@@ -26,10 +26,14 @@ import {
   useThemeAccent,
   usePanelState,
   useLibraryFilters,
+  useCollections,
+  useMediaActions,
+  useAnalysisManager,
+  useDismissHandlers,
+  useLibraryEventListeners,
 } from './hooks'
 import {
   emitDismissUpgrade,
-  emitDismissCollectionMovie,
 } from '../../utils/dismissEvents'
 
 // Import types from shared types file
@@ -54,7 +58,6 @@ import type {
   MissingAlbum,
   MissingTrack,
   AlbumCompletenessData,
-  AnalysisProgress,
   MediaBrowserProps,
 } from './types'
 
@@ -190,43 +193,17 @@ export function MediaBrowser({
   const [musicCompletenessStats, setMusicCompletenessStats] = useState<MusicCompletenessStats | null>(null)
   const [artistCompleteness, setArtistCompleteness] = useState<Map<string, ArtistCompletenessData>>(new Map())
   const [allAlbumCompleteness, setAllAlbumCompleteness] = useState<Map<number, AlbumCompletenessData>>(new Map())
-  // Panel state now managed by usePanelState hook (defined above)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null)
-  const [analysisType, setAnalysisType] = useState<'series' | 'collections' | 'music' | null>(null)
-  const [tmdbApiKeySet, setTmdbApiKeySet] = useState(false)
+  // isAnalyzing, analysisProgress, analysisType, tmdbApiKeySet, analysis handlers: see useAnalysisManager hook below
 
-  // Collection modal state
-  const [showCollectionModal, setShowCollectionModal] = useState(false)
-  const [selectedCollection, setSelectedCollection] = useState<MovieCollectionData | null>(null)
+  // Collection modal state + helpers (extracted hook)
+  const {
+    showCollectionModal, setShowCollectionModal,
+    selectedCollection, setSelectedCollection,
+    getCollectionForMovie,
+    ownedMoviesForSelectedCollection,
+  } = useCollections(paginatedMovies, movieCollections)
 
-  // Missing item popup state
-  const [selectedMissingItem, setSelectedMissingItem] = useState<{
-    type: 'episode' | 'season' | 'movie'
-    title: string
-    year?: number
-    airDate?: string
-    seasonNumber?: number
-    episodeNumber?: number
-    posterUrl?: string
-    tmdbId?: string
-    imdbId?: string
-    seriesTitle?: string
-  } | null>(null)
-
-  // Match fix modal state
-  const [matchFixModal, setMatchFixModal] = useState<{
-    isOpen: boolean
-    type: 'series' | 'movie' | 'artist' | 'album'
-    title: string
-    year?: number
-    filePath?: string
-    artistName?: string
-    sourceId?: string
-    mediaItemId?: number
-    artistId?: number
-    albumId?: number
-  } | null>(null)
+  // matchFixModal, selectedMissingItem, handleRescanItem provided by useMediaActions hook (below pagination functions)
 
   // Active source libraries (to determine which library types exist)
   const [activeSourceLibraries, setActiveSourceLibraries] = useState<Array<{ id: string; name: string; type: string }>>([])
@@ -324,194 +301,7 @@ export function MediaBrowser({
     loadActiveSourceLibraries()
   }, [loadActiveSourceLibraries])
 
-  // Debounced library update handler for live refresh during scans/analysis
-  const pendingUpdateRef = useRef<NodeJS.Timeout | null>(null)
-  const handleLibraryUpdate = useCallback((data: { type: 'media' | 'music' | 'libraryToggle'; sourceId?: string }) => {
-    // Skip expensive DB queries during active scans - will reload when scan completes via flush()
-    const hasActiveScan = scanProgress.size > 0
-    if (hasActiveScan && data.type !== 'libraryToggle') {
-      return
-    }
-
-    // Debounce updates to avoid excessive refreshes
-    if (pendingUpdateRef.current) {
-      clearTimeout(pendingUpdateRef.current)
-    }
-    pendingUpdateRef.current = setTimeout(() => {
-      if (data.type === 'libraryToggle') {
-        // Refresh enabled libraries when a library is toggled
-        // Only refresh if it's the active source or no sourceId specified
-        if (!data.sourceId || data.sourceId === activeSourceId) {
-          loadActiveSourceLibraries()
-        }
-      } else if (data.type === 'media') {
-        loadPaginatedMovies(true)
-        loadPaginatedShows(true)
-        if (selectedShow) loadSelectedShowEpisodes(selectedShow)
-        loadStats(activeSourceId || undefined)
-        loadCompletenessData()
-      } else if (data.type === 'music') {
-        loadMusicData()
-        loadMusicCompletenessData()
-      }
-      pendingUpdateRef.current = null
-    }, 500) // 500ms debounce for live updates
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSourceId, loadActiveSourceLibraries, scanProgress.size])
-
-  useEffect(() => {
-    // Initial data load — media items are loaded via per-view pagination useEffects
-    loadStats(activeSourceId || undefined).then(() => {
-      hasInitialLoadRef.current = true
-      setLoading(false)
-    })
-    loadCompletenessData()
-    loadMusicData()
-    loadMusicCompletenessData()
-    checkTmdbApiKey()
-
-    // Listen for completeness analysis progress
-    const cleanupSeriesProgress = window.electronAPI.onSeriesProgress((prog: unknown) => {
-      setAnalysisProgress(prog as AnalysisProgress)
-    })
-    const cleanupCollectionsProgress = window.electronAPI.onCollectionsProgress((prog: unknown) => {
-      setAnalysisProgress(prog as AnalysisProgress)
-    })
-    const cleanupMusicAnalysisProgress = window.electronAPI.onMusicAnalysisProgress((prog: unknown) => {
-      setAnalysisProgress(prog as AnalysisProgress)
-    })
-
-    // Listen for library updates (live refresh during scans/analysis)
-    const cleanupLibraryUpdated = window.electronAPI.onLibraryUpdated(handleLibraryUpdate)
-
-    // Listen for auto-refresh events (incremental scan on app start)
-    const cleanupAutoRefreshStarted = window.electronAPI.onAutoRefreshStarted(() => {
-      setIsAutoRefreshing(true)
-    })
-    const cleanupAutoRefreshComplete = window.electronAPI.onAutoRefreshComplete(() => {
-      setIsAutoRefreshing(false)
-    })
-
-    // Listen for task queue task completion (refreshes data after queued scans complete)
-    const cleanupTaskComplete = window.electronAPI.onTaskQueueTaskComplete?.((task: unknown) => {
-      const t = task as { type: string; status: string }
-      // Refresh data when a scan task completes successfully
-      if (t.status === 'completed') {
-        if (t.type === 'library-scan' || t.type === 'music-scan') {
-          handleLibraryUpdate({ type: t.type === 'music-scan' ? 'music' : 'media' })
-        }
-        // Refresh completeness data after completeness tasks
-        if (t.type === 'series-completeness' || t.type === 'collection-completeness') {
-          loadCompletenessData()
-        }
-        if (t.type === 'music-completeness') {
-          loadMusicCompletenessData()
-        }
-      }
-    })
-
-    // Listen for task queue state updates to sync analyzing state
-    const cleanupTaskQueueUpdated = window.electronAPI.onTaskQueueUpdated?.((state: unknown) => {
-      const s = state as { currentTask: { type: string; progress?: AnalysisProgress } | null }
-      if (s.currentTask) {
-        const taskType = s.currentTask.type
-        if (taskType === 'series-completeness') {
-          setIsAnalyzing(true)
-          setAnalysisType('series')
-          if (s.currentTask.progress) {
-            setAnalysisProgress(s.currentTask.progress)
-          }
-        } else if (taskType === 'collection-completeness') {
-          setIsAnalyzing(true)
-          setAnalysisType('collections')
-          if (s.currentTask.progress) {
-            setAnalysisProgress(s.currentTask.progress)
-          }
-        } else if (taskType === 'music-completeness') {
-          setIsAnalyzing(true)
-          setAnalysisType('music')
-          if (s.currentTask.progress) {
-            setAnalysisProgress(s.currentTask.progress)
-          }
-        } else {
-          // Non-completeness task running, reset completeness analyzing state
-          setIsAnalyzing(false)
-          setAnalysisType(null)
-        }
-      } else {
-        // No task running
-        setIsAnalyzing(false)
-        setAnalysisType(null)
-        setAnalysisProgress(null)
-      }
-    })
-
-    // Listen for settings changes (e.g., API key added/removed in Settings)
-    const cleanupSettingsChanged = window.electronAPI.onSettingsChanged?.((data) => {
-      if (data.key === 'tmdb_api_key') {
-        setTmdbApiKeySet(data.hasValue)
-      }
-    })
-
-    // Listen for scan completion to show toast notification
-    const cleanupScanCompleted = window.electronAPI.onScanCompleted?.((data) => {
-      // Show toast notification
-      const itemsChanged = data.itemsAdded + data.itemsUpdated
-      const message = itemsChanged > 0
-        ? `Added ${data.itemsAdded}, updated ${data.itemsUpdated}`
-        : `${data.itemsScanned} items scanned, no changes`
-
-      addToast({
-        type: 'success',
-        title: `${data.libraryName} complete`,
-        message,
-        action: data.sourceId ? {
-          label: 'View Library',
-          onClick: () => {
-            if (data.sourceId) {
-              setActiveSource(data.sourceId)
-            }
-          }
-        } : undefined
-      })
-
-      // Mark library as having new items (for sidebar badge)
-      if (data.sourceId && data.libraryId && data.itemsAdded > 0) {
-        markLibraryAsNew(`${data.sourceId}:${data.libraryId}`, data.itemsAdded)
-      }
-
-      // Auto-navigate on first scan to help new users
-      if (data.isFirstScan && data.sourceId) {
-        setActiveSource(data.sourceId)
-      }
-    })
-
-    // Cleanup all listeners on unmount
-    return () => {
-      if (pendingUpdateRef.current) {
-        clearTimeout(pendingUpdateRef.current)
-      }
-      cleanupSeriesProgress?.()
-      cleanupCollectionsProgress?.()
-      cleanupMusicAnalysisProgress?.()
-      cleanupLibraryUpdated?.()
-      cleanupAutoRefreshStarted?.()
-      cleanupAutoRefreshComplete?.()
-      cleanupTaskComplete?.()
-      cleanupTaskQueueUpdated?.()
-      cleanupSettingsChanged?.()
-      cleanupScanCompleted?.()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleLibraryUpdate, addToast, setActiveSource, markLibraryAsNew])
-
-  // Reload media and stats when active source changes
-  useEffect(() => {
-    loadStats(activeSourceId || undefined)
-    loadMusicData()
-    loadCompletenessData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSourceId])
+  // Event listeners and initial data load placed after pagination functions (see below)
 
 
   // Compute which library types exist for the active source
@@ -619,6 +409,16 @@ export function MediaBrowser({
       console.warn('Failed to load completeness data:', err)
     }
   }
+
+  // Analysis state + handlers (extracted hook)
+  const {
+    isAnalyzing, setIsAnalyzing,
+    analysisProgress, setAnalysisProgress,
+    analysisType, setAnalysisType,
+    tmdbApiKeySet, setTmdbApiKeySet,
+    handleAnalyzeSeries, handleAnalyzeCollections, handleAnalyzeMusic,
+    handleAnalyzeSingleSeries, handleCancelAnalysis, checkTmdbApiKey,
+  } = useAnalysisManager({ sources, activeSourceId, activeSourceLibraries, loadCompletenessData })
 
   // Load music data (non-blocking background load) — tracks loaded separately via pagination
   const loadMusicData = async () => {
@@ -869,6 +669,8 @@ export function MediaBrowser({
     }
   }, [selectedShow, loadSelectedShowEpisodes])
 
+  // Event listeners and initial data load placed after loadMusicCompletenessData (see below)
+
   // Load tracks for a specific album
   const loadAlbumTracks = async (albumId: number) => {
     try {
@@ -927,249 +729,32 @@ export function MediaBrowser({
     }
   }
 
-  // Check if TMDB API key is configured
-  const checkTmdbApiKey = async () => {
-    try {
-      const key = await window.electronAPI.getSetting('tmdb_api_key')
-      setTmdbApiKeySet(!!key && key.length > 0)
-    } catch (err) {
-      console.warn('Failed to check TMDB API key:', err)
-    }
-  }
+  // Media actions (match fix modal, missing item popup, rescan) — extracted hook
+  const reloadAfterRescan = useCallback(async () => {
+    loadPaginatedMovies(true)
+    loadPaginatedShows(true)
+    if (selectedShow) await loadSelectedShowEpisodes(selectedShow)
+  }, [loadPaginatedMovies, loadPaginatedShows, selectedShow, loadSelectedShowEpisodes])
 
-  // Run series analysis via task queue
-  const handleAnalyzeSeries = async (libraryId?: string) => {
-    try {
-      const sourceName = activeSourceId
-        ? sources.find(s => s.source_id === activeSourceId)?.display_name
-        : 'All Sources'
-      const libraryName = libraryId
-        ? activeSourceLibraries.find(l => l.id === libraryId)?.name
-        : undefined
-      const label = libraryName
-        ? `Analyze TV Series (${sourceName} - ${libraryName})`
-        : `Analyze TV Series (${sourceName || 'All Sources'})`
-      await window.electronAPI.taskQueueAddTask({
-        type: 'series-completeness',
-        label,
-        sourceId: activeSourceId || undefined,
-        libraryId,
-      })
-    } catch (err) {
-      console.error('Failed to queue series analysis:', err)
-    }
-  }
+  const {
+    matchFixModal, setMatchFixModal,
+    selectedMissingItem, setSelectedMissingItem,
+    handleRescanItem,
+  } = useMediaActions({ selectedMediaId, loadMedia: reloadAfterRescan, setDetailRefreshKey })
 
-  // Run collections analysis via task queue
-  const handleAnalyzeCollections = async (libraryId?: string) => {
-    try {
-      const sourceName = activeSourceId
-        ? sources.find(s => s.source_id === activeSourceId)?.display_name
-        : 'All Sources'
-      const libraryName = libraryId
-        ? activeSourceLibraries.find(l => l.id === libraryId)?.name
-        : undefined
-      const label = libraryName
-        ? `Analyze Collections (${sourceName} - ${libraryName})`
-        : `Analyze Collections (${sourceName || 'All Sources'})`
-      await window.electronAPI.taskQueueAddTask({
-        type: 'collection-completeness',
-        label,
-        sourceId: activeSourceId || undefined,
-        libraryId,
-      })
-    } catch (err) {
-      console.error('Failed to queue collections analysis:', err)
-    }
-  }
-
-  // Run unified music analysis via task queue
-  const handleAnalyzeMusic = async () => {
-    try {
-      const sourceName = activeSourceId
-        ? sources.find(s => s.source_id === activeSourceId)?.display_name
-        : 'All Sources'
-      await window.electronAPI.taskQueueAddTask({
-        type: 'music-completeness',
-        label: `Analyze Music (${sourceName || 'All Sources'})`,
-        sourceId: activeSourceId || undefined,
-      })
-    } catch (err) {
-      console.error('Failed to queue music analysis:', err)
-    }
-  }
-
-  // Analyze a single series for completeness
-  const handleAnalyzeSingleSeries = async (seriesTitle: string) => {
-    try {
-      console.log(`[MediaBrowser] Analyzing series: ${seriesTitle}`)
-      await window.electronAPI.seriesAnalyze(seriesTitle)
-      // Reload completeness data after analysis
-      await loadCompletenessData()
-    } catch (err) {
-      console.error('Single series analysis failed:', err)
-    }
-  }
-
-  // Cancel current analysis
-  const handleCancelAnalysis = async (_type: 'series' | 'collections' | 'music') => {
-    try {
-      // Cancel the current task in the queue
-      await window.electronAPI.taskQueueCancelCurrent()
-    } catch (err) {
-      console.error('Failed to cancel analysis:', err)
-    }
-  }
-
-  // Rescan a single media item
-  const handleRescanItem = async (mediaItemId: number, sourceId: string, libraryId: string | null, filePath: string) => {
-    try {
-      console.log(`[MediaBrowser] Rescanning item: ${filePath}`)
-      await window.electronAPI.sourcesScanItem(sourceId, libraryId, filePath)
-      // Reload relevant data to show updated state
-      loadPaginatedMovies(true)
-      loadPaginatedShows(true)
-      if (selectedShow) await loadSelectedShowEpisodes(selectedShow)
-      // If the detail view is open for this item, force it to refresh
-      if (selectedMediaId === mediaItemId) {
-        setDetailRefreshKey(prev => prev + 1)
-      }
-    } catch (err) {
-      console.error('Rescan failed:', err)
-    }
-  }
-
-  // Dismiss upgrade recommendation for a movie or episode
-  const handleDismissUpgrade = async (item: MediaItem) => {
-    try {
-      const title = item.series_title
-        ? `${item.series_title} S${item.season_number}E${item.episode_number}`
-        : item.title
-      await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, title)
-      // Update local state: mark as no longer needing upgrade
-      setPaginatedMovies(prev => prev.map(m =>
-        m.id === item.id ? { ...m, needs_upgrade: false, tier_quality: m.tier_quality === 'LOW' ? 'MEDIUM' : m.tier_quality } : m
-      ))
-      setSelectedShowEpisodes(prev => prev.map(e =>
-        e.id === item.id ? { ...e, needs_upgrade: false, tier_quality: e.tier_quality === 'LOW' ? 'MEDIUM' : e.tier_quality } : e
-      ))
-      emitDismissUpgrade({ mediaId: item.id })
-      addToast({ type: 'success', title: 'Upgrade dismissed', message: `"${title}" removed from upgrade recommendations` })
-    } catch (err) {
-      console.error('Failed to dismiss upgrade:', err)
-    }
-  }
-
-  // Dismiss a missing episode from series completeness
-  const handleDismissMissingEpisode = async (episode: MissingEpisode, seriesTitle: string, tmdbId?: string) => {
-    try {
-      const refKey = `S${episode.season_number}E${episode.episode_number}`
-      const title = `${seriesTitle} ${refKey}`
-      await window.electronAPI.addExclusion('series_episode', undefined, refKey, tmdbId || seriesTitle, title)
-      // Update local state: remove from seriesCompleteness
-      setSeriesCompleteness(prev => {
-        const next = new Map(prev)
-        const data = next.get(seriesTitle)
-        if (data?.missing_episodes) {
-          try {
-            const missing: MissingEpisode[] = JSON.parse(data.missing_episodes)
-            const filtered = missing.filter(e => !(e.season_number === episode.season_number && e.episode_number === episode.episode_number))
-            next.set(seriesTitle, { ...data, missing_episodes: JSON.stringify(filtered) })
-          } catch { /* ignore */ }
-        }
-        return next
-      })
-      addToast({ type: 'success', title: 'Item dismissed', message: `"${title}" removed from recommendations` })
-    } catch (err) {
-      console.error('Failed to dismiss missing episode:', err)
-    }
-  }
-
-  // Dismiss all missing episodes in a season
-  const handleDismissMissingSeason = async (seasonNumber: number, seriesTitle: string, tmdbId?: string) => {
-    try {
-      const data = seriesCompleteness.get(seriesTitle)
-      if (!data?.missing_episodes) return
-      const allMissing: MissingEpisode[] = JSON.parse(data.missing_episodes || '[]')
-      const seasonEpisodes = allMissing.filter(e => e.season_number === seasonNumber)
-      await Promise.all(seasonEpisodes.map(ep => {
-        const refKey = `S${ep.season_number}E${ep.episode_number}`
-        return window.electronAPI.addExclusion('series_episode', undefined, refKey, tmdbId || seriesTitle, `${seriesTitle} ${refKey}`)
-      }))
-      // Update local state
-      setSeriesCompleteness(prev => {
-        const next = new Map(prev)
-        const d = next.get(seriesTitle)
-        if (d?.missing_episodes) {
-          try {
-            const missing: MissingEpisode[] = JSON.parse(d.missing_episodes)
-            const filtered = missing.filter(e => e.season_number !== seasonNumber)
-            next.set(seriesTitle, { ...d, missing_episodes: JSON.stringify(filtered) })
-          } catch { /* ignore */ }
-        }
-        return next
-      })
-      addToast({ type: 'success', title: 'Season dismissed', message: `${seasonEpisodes.length} missing episodes from Season ${seasonNumber} removed` })
-    } catch (err) {
-      console.error('Failed to dismiss missing season:', err)
-    }
-  }
-
-  // Dismiss a missing movie from collection completeness
-  const handleDismissCollectionMovie = async (tmdbId: string, movieTitle: string) => {
-    try {
-      if (!selectedCollection) return
-      const collectionId = selectedCollection.tmdb_collection_id
-      await window.electronAPI.addExclusion('collection_movie', undefined, tmdbId, collectionId, movieTitle)
-
-      // Helper to update a collection's missing_movies and totals
-      const updateCollection = (c: MovieCollectionData): MovieCollectionData => {
-        try {
-          const missing = JSON.parse(c.missing_movies || '[]')
-          const filtered = missing.filter((m: { tmdb_id: string }) => m.tmdb_id !== tmdbId)
-          const newTotal = c.total_movies - 1
-          return {
-            ...c,
-            missing_movies: JSON.stringify(filtered),
-            total_movies: newTotal,
-            completeness_percentage: newTotal > 0 ? c.owned_movies / newTotal * 100 : 100
-          }
-        } catch { return c }
-      }
-
-      // Update selected collection modal
-      setSelectedCollection(prev => prev ? updateCollection(prev) : prev)
-
-      // Update movieCollections grid, removing collections with <=1 total movie
-      setMovieCollections(prev =>
-        prev.map(c => c.tmdb_collection_id === collectionId ? updateCollection(c) : c)
-            .filter(c => c.total_movies > 1)
-      )
-
-      emitDismissCollectionMovie({ collectionId, tmdbId })
-      addToast({ type: 'success', title: 'Movie dismissed', message: `"${movieTitle}" removed from collection recommendations` })
-    } catch (err) {
-      console.error('Failed to dismiss collection movie:', err)
-    }
-  }
-
-  // Dismiss the currently selected missing item (from MissingItemPopup)
-  const handleDismissMissingItem = () => {
-    if (!selectedMissingItem) return
-    const item = selectedMissingItem
-    if (item.type === 'episode' && item.seasonNumber !== undefined && item.episodeNumber !== undefined) {
-      handleDismissMissingEpisode(
-        { season_number: item.seasonNumber, episode_number: item.episodeNumber, title: item.title, air_date: item.airDate },
-        item.seriesTitle || '',
-        item.tmdbId
-      )
-    } else if (item.type === 'season' && item.seasonNumber !== undefined) {
-      handleDismissMissingSeason(item.seasonNumber, item.seriesTitle || '', item.tmdbId)
-    } else if (item.type === 'movie' && item.tmdbId) {
-      handleDismissCollectionMovie(item.tmdbId, item.title)
-    }
-    setSelectedMissingItem(null)
-  }
+  // Dismiss handlers (extracted hook)
+  const {
+    handleDismissUpgrade,
+    handleDismissMissingEpisode,
+    handleDismissMissingSeason,
+    handleDismissCollectionMovie,
+    handleDismissMissingItem,
+  } = useDismissHandlers({
+    setPaginatedMovies, setSelectedShowEpisodes,
+    seriesCompleteness, setSeriesCompleteness,
+    selectedCollection, setSelectedCollection, setMovieCollections,
+    selectedMissingItem, setSelectedMissingItem, addToast,
+  })
 
   // Load music completeness data
   const loadMusicCompletenessData = async () => {
@@ -1223,36 +808,43 @@ export function MediaBrowser({
     }
   }
 
-  // Get collection data for a movie by checking owned_movie_ids
-  const getCollectionForMovie = useCallback((movie: MediaItem): MovieCollectionData | undefined => {
-    if (!movie.tmdb_id) return undefined
-    return movieCollections.find(c => {
-      try {
-        const ownedIds = JSON.parse(c.owned_movie_ids || '[]')
-        return ownedIds.includes(movie.tmdb_id)
-      } catch {
-        return false
-      }
+  // Reload media callback for event-driven updates
+  const reloadMediaForEvents = useCallback(async () => {
+    loadPaginatedMovies(true)
+    loadPaginatedShows(true)
+    if (selectedShow) loadSelectedShowEpisodes(selectedShow)
+  }, [loadPaginatedMovies, loadPaginatedShows, selectedShow, loadSelectedShowEpisodes])
+
+  // Event listeners: analysis progress, library updates, auto-refresh, task queue, scan completion (extracted hook)
+  useLibraryEventListeners({
+    activeSourceId,
+    scanProgressSize: scanProgress.size,
+    loadMedia: reloadMediaForEvents,
+    loadStats,
+    loadCompletenessData,
+    loadMusicData,
+    loadMusicCompletenessData,
+    loadActiveSourceLibraries,
+    setIsAnalyzing, setAnalysisType, setAnalysisProgress,
+    setTmdbApiKeySet, setIsAutoRefreshing,
+    setActiveSource, markLibraryAsNew, addToast,
+  })
+
+  // Initial data load + reload on source change
+  useEffect(() => {
+    loadStats(activeSourceId || undefined).then(() => {
+      hasInitialLoadRef.current = true
+      setLoading(false)
     })
-  }, [movieCollections])
+    loadCompletenessData()
+    loadMusicData()
+    loadMusicCompletenessData()
+    checkTmdbApiKey()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSourceId])
 
-  // Get owned movies for a collection
-  const getOwnedMoviesForCollection = useCallback((collection: MovieCollectionData): MediaItem[] => {
-    try {
-      const ownedIds = new Set(JSON.parse(collection.owned_movie_ids || '[]'))
-      return paginatedMovies.filter(item =>
-        item.tmdb_id && ownedIds.has(item.tmdb_id)
-      )
-    } catch {
-      return []
-    }
-  }, [paginatedMovies])
-
-  // Memoize owned movies for the selected collection to avoid recalculating on every render
-  const ownedMoviesForSelectedCollection = useMemo(() => {
-    if (!selectedCollection) return []
-    return getOwnedMoviesForCollection(selectedCollection)
-  }, [selectedCollection, getOwnedMoviesForCollection])
+  // getCollectionForMovie, getOwnedMoviesForCollection, ownedMoviesForSelectedCollection
+  // provided by useCollections hook above
 
   // Organize selected show's episodes into seasons (on-demand when show is clicked)
   const selectedShowData = useMemo((): TVShow | null => {

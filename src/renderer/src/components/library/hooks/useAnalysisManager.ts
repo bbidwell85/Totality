@@ -3,9 +3,16 @@ import type { AnalysisProgress, MediaSource } from '../types'
 
 type AnalysisType = 'series' | 'collections' | 'music'
 
+interface LibraryInfo {
+  id: string
+  name: string
+  type: string
+}
+
 interface UseAnalysisManagerOptions {
   sources: MediaSource[]
   activeSourceId: string | null
+  activeSourceLibraries: LibraryInfo[]
   loadCompletenessData: () => Promise<void>
 }
 
@@ -18,11 +25,11 @@ interface UseAnalysisManagerReturn {
   setAnalysisType: (type: AnalysisType | null) => void
   tmdbApiKeySet: boolean
   setTmdbApiKeySet: (set: boolean) => void
-  handleAnalyzeSeries: () => Promise<void>
-  handleAnalyzeCollections: () => Promise<void>
+  handleAnalyzeSeries: (libraryId?: string) => Promise<void>
+  handleAnalyzeCollections: (libraryId?: string) => Promise<void>
   handleAnalyzeMusic: () => Promise<void>
   handleAnalyzeSingleSeries: (seriesTitle: string) => Promise<void>
-  handleCancelAnalysis: () => Promise<void>
+  handleCancelAnalysis: (type: 'series' | 'collections' | 'music') => Promise<void>
   checkTmdbApiKey: () => Promise<void>
 }
 
@@ -31,13 +38,11 @@ interface UseAnalysisManagerReturn {
  *
  * Handles running series, collection, and music completeness analysis
  * via the task queue, with progress tracking and cancellation support.
- *
- * @param options Sources and data reload callbacks
- * @returns Analysis state and action handlers
  */
 export function useAnalysisManager({
   sources,
   activeSourceId,
+  activeSourceLibraries,
   loadCompletenessData,
 }: UseAnalysisManagerOptions): UseAnalysisManagerReturn {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -63,32 +68,46 @@ export function useAnalysisManager({
   }, [])
 
   // Run series analysis via task queue
-  const handleAnalyzeSeries = useCallback(async () => {
+  const handleAnalyzeSeries = useCallback(async (libraryId?: string) => {
     try {
       const sourceName = getSourceName()
+      const libraryName = libraryId
+        ? activeSourceLibraries.find(l => l.id === libraryId)?.name
+        : undefined
+      const label = libraryName
+        ? `Analyze TV Series (${sourceName} - ${libraryName})`
+        : `Analyze TV Series (${sourceName})`
       await window.electronAPI.taskQueueAddTask({
         type: 'series-completeness',
-        label: `Analyze TV Series (${sourceName})`,
+        label,
         sourceId: activeSourceId || undefined,
+        libraryId,
       })
     } catch (err) {
       console.error('Failed to queue series analysis:', err)
     }
-  }, [activeSourceId, getSourceName])
+  }, [activeSourceId, activeSourceLibraries, getSourceName])
 
   // Run collections analysis via task queue
-  const handleAnalyzeCollections = useCallback(async () => {
+  const handleAnalyzeCollections = useCallback(async (libraryId?: string) => {
     try {
       const sourceName = getSourceName()
+      const libraryName = libraryId
+        ? activeSourceLibraries.find(l => l.id === libraryId)?.name
+        : undefined
+      const label = libraryName
+        ? `Analyze Collections (${sourceName} - ${libraryName})`
+        : `Analyze Collections (${sourceName})`
       await window.electronAPI.taskQueueAddTask({
         type: 'collection-completeness',
-        label: `Analyze Collections (${sourceName})`,
+        label,
         sourceId: activeSourceId || undefined,
+        libraryId,
       })
     } catch (err) {
       console.error('Failed to queue collections analysis:', err)
     }
-  }, [activeSourceId, getSourceName])
+  }, [activeSourceId, activeSourceLibraries, getSourceName])
 
   // Run unified music analysis via task queue
   const handleAnalyzeMusic = useCallback(async () => {
@@ -110,7 +129,6 @@ export function useAnalysisManager({
       try {
         console.log(`[useAnalysisManager] Analyzing series: ${seriesTitle}`)
         await window.electronAPI.seriesAnalyze(seriesTitle)
-        // Reload completeness data after analysis
         await loadCompletenessData()
       } catch (err) {
         console.error('Single series analysis failed:', err)
@@ -120,9 +138,8 @@ export function useAnalysisManager({
   )
 
   // Cancel current analysis
-  const handleCancelAnalysis = useCallback(async () => {
+  const handleCancelAnalysis = useCallback(async (_type: 'series' | 'collections' | 'music') => {
     try {
-      // Cancel the current task in the queue
       await window.electronAPI.taskQueueCancelCurrent()
     } catch (err) {
       console.error('Failed to cancel analysis:', err)

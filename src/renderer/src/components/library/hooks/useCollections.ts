@@ -1,11 +1,11 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, type Dispatch, type SetStateAction } from 'react'
 import type { MediaItem, MovieCollectionData } from '../types'
 
 interface UseCollectionsReturn {
   showCollectionModal: boolean
-  setShowCollectionModal: (show: boolean) => void
+  setShowCollectionModal: Dispatch<SetStateAction<boolean>>
   selectedCollection: MovieCollectionData | null
-  setSelectedCollection: (collection: MovieCollectionData | null) => void
+  setSelectedCollection: Dispatch<SetStateAction<MovieCollectionData | null>>
   getCollectionForMovie: (movie: MediaItem) => MovieCollectionData | undefined
   getOwnedMoviesForCollection: (collection: MovieCollectionData) => MediaItem[]
   ownedMoviesForSelectedCollection: MediaItem[]
