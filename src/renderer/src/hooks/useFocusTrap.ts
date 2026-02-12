@@ -106,36 +106,3 @@ export function useFocusTrap(
     }
   }, [isActive, containerRef, autoFocusFirst])
 }
-
-/**
- * Hook to manage modal focus with the keyboard navigation context.
- * Combines focus trapping with modal registration.
- *
- * @param isOpen - Whether the modal is open
- * @param modalId - Unique identifier for the modal
- * @param containerRef - Ref to the modal container element
- * @param openModal - Function from KeyboardNavigationContext to register modal
- * @param closeModal - Function from KeyboardNavigationContext to unregister modal
- */
-export function useModalFocus(
-  isOpen: boolean,
-  modalId: string,
-  containerRef: RefObject<HTMLElement>,
-  openModal: (id: string) => void,
-  closeModal: () => void
-) {
-  // Use the focus trap
-  useFocusTrap(isOpen, containerRef)
-
-  // Register/unregister with keyboard navigation context
-  useEffect(() => {
-    if (isOpen) {
-      openModal(modalId)
-    }
-    return () => {
-      if (isOpen) {
-        closeModal()
-      }
-    }
-  }, [isOpen, modalId, openModal, closeModal])
-}

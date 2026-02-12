@@ -284,6 +284,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Database - Media Items
   getMediaItems: (filters?: unknown) => ipcRenderer.invoke('db:getMediaItems', filters),
   countMediaItems: (filters?: unknown) => ipcRenderer.invoke('db:countMediaItems', filters),
+  getTVShows: (filters?: unknown) => ipcRenderer.invoke('db:getTVShows', filters),
+  countTVShows: (filters?: unknown) => ipcRenderer.invoke('db:countTVShows', filters),
   getMediaItemById: (id: number) => ipcRenderer.invoke('db:getMediaItemById', id),
   upsertMediaItem: (item: unknown) => ipcRenderer.invoke('db:upsertMediaItem', item),
   deleteMediaItem: (id: number) => ipcRenderer.invoke('db:deleteMediaItem', id),
@@ -329,7 +331,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   seriesGetAll: () => ipcRenderer.invoke('series:getAll'),
   seriesGetIncomplete: (sourceId?: string) => ipcRenderer.invoke('series:getIncomplete', sourceId),
   seriesGetStats: () => ipcRenderer.invoke('series:getStats'),
-  seriesGetEpisodes: (seriesTitle: string) => ipcRenderer.invoke('series:getEpisodes', seriesTitle),
+  seriesGetEpisodes: (seriesTitle: string, sourceId?: string) => ipcRenderer.invoke('series:getEpisodes', seriesTitle, sourceId),
   seriesDelete: (id: number) => ipcRenderer.invoke('series:delete', id),
   seriesGetSeasonPoster: (tmdbId: string, seasonNumber: number) =>
     ipcRenderer.invoke('series:getSeasonPoster', tmdbId, seasonNumber),
@@ -1084,6 +1086,8 @@ export interface ElectronAPI {
   // Database - Media Items
   getMediaItems: (filters?: unknown) => Promise<unknown[]>
   countMediaItems: (filters?: unknown) => Promise<number>
+  getTVShows: (filters?: unknown) => Promise<unknown[]>
+  countTVShows: (filters?: unknown) => Promise<number>
   getMediaItemById: (id: number) => Promise<unknown | null>
   upsertMediaItem: (item: unknown) => Promise<number>
   deleteMediaItem: (id: number) => Promise<boolean>
@@ -1136,7 +1140,7 @@ export interface ElectronAPI {
     totalMissingEpisodes: number
     averageCompleteness: number
   }>
-  seriesGetEpisodes: (seriesTitle: string) => Promise<unknown[]>
+  seriesGetEpisodes: (seriesTitle: string, sourceId?: string) => Promise<unknown[]>
   seriesDelete: (id: number) => Promise<boolean>
   seriesGetSeasonPoster: (tmdbId: string, seasonNumber: number) => Promise<string | null>
   seriesGetEpisodeStill: (tmdbId: string, seasonNumber: number, episodeNumber: number) => Promise<string | null>

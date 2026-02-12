@@ -1,9 +1,11 @@
 import { ipcMain } from 'electron'
+import { z } from 'zod'
 import { getSeriesCompletenessService } from '../services/SeriesCompletenessService'
 import { getDatabase } from '../database/getDatabase'
 import { getTMDBService } from '../services/TMDBService'
 import { getWindowFromEvent } from './utils/safeSend'
 import { createProgressUpdater } from './utils/progressUpdater'
+import { validateInput, NonEmptyStringSchema, OptionalSourceIdSchema, PositiveIntSchema } from '../validation/schemas'
 
 /**
  * Register all series completeness IPC handlers
@@ -18,23 +20,24 @@ export function registerSeriesHandlers() {
    * @param sourceId Optional source ID to scope analysis
    * @param libraryId Optional library ID to scope analysis
    */
-  ipcMain.handle('series:analyzeAll', async (event, sourceId?: string, libraryId?: string) => {
-    try {
-      const win = getWindowFromEvent(event)
-      const service = getSeriesCompletenessService()
-      const { onProgress, flush } = createProgressUpdater(win, 'series:progress', 'media')
+  ipcMain.handle('series:analyzeAll', async (event, sourceId?: unknown, libraryId?: unknown) => {
+    const validSourceId = sourceId !== undefined ? validateInput(NonEmptyStringSchema, sourceId, 'series:analyzeAll.sourceId') : undefined
+    const validLibraryId = libraryId !== undefined ? validateInput(NonEmptyStringSchema, libraryId, 'series:analyzeAll.libraryId') : undefined
+    const win = getWindowFromEvent(event)
+    const service = getSeriesCompletenessService()
+    const { onProgress, flush } = createProgressUpdater(win, 'series:progress', 'media')
 
+    try {
       const result = await service.analyzeAllSeries((progress) => {
         onProgress(progress)
-      }, sourceId, libraryId)
-
-      // Send final update when analysis completes
-      flush()
+      }, validSourceId, validLibraryId)
 
       return result
     } catch (error) {
       console.error('Error analyzing series completeness:', error)
       throw error
+    } finally {
+      flush()
     }
   })
 
@@ -55,12 +58,13 @@ export function registerSeriesHandlers() {
   /**
    * Analyze a single series by title
    */
-  ipcMain.handle('series:analyze', async (_event, seriesTitle: string) => {
+  ipcMain.handle('series:analyze', async (_event, seriesTitle: unknown) => {
+    const validSeriesTitle = validateInput(NonEmptyStringSchema, seriesTitle, 'series:analyze.seriesTitle')
     try {
       const service = getSeriesCompletenessService()
-      return await service.analyzeSeries(seriesTitle)
+      return await service.analyzeSeries(validSeriesTitle)
     } catch (error) {
-      console.error(`Error analyzing series "${seriesTitle}":`, error)
+      console.error(`Error analyzing series "${validSeriesTitle}":`, error)
       throw error
     }
   })
@@ -86,10 +90,11 @@ export function registerSeriesHandlers() {
    * Get incomplete series only
    * @param sourceId Optional source ID to filter by
    */
-  ipcMain.handle('series:getIncomplete', async (_event, sourceId?: string) => {
+  ipcMain.handle('series:getIncomplete', async (_event, sourceId?: unknown) => {
+    const validSourceId = sourceId !== undefined ? validateInput(OptionalSourceIdSchema, sourceId, 'series:getIncomplete.sourceId') : undefined
     try {
       const db = getDatabase()
-      return db.getIncompleteSeries(sourceId)
+      return db.getIncompleteSeries(validSourceId)
     } catch (error) {
       console.error('Error getting incomplete series:', error)
       throw error
@@ -112,12 +117,14 @@ export function registerSeriesHandlers() {
   /**
    * Get episodes for a specific series
    */
-  ipcMain.handle('series:getEpisodes', async (_event, seriesTitle: string) => {
+  ipcMain.handle('series:getEpisodes', async (_event, seriesTitle: unknown, sourceId?: unknown) => {
+    const validSeriesTitle = validateInput(NonEmptyStringSchema, seriesTitle, 'series:getEpisodes.seriesTitle')
+    const validSourceId = sourceId !== undefined ? validateInput(NonEmptyStringSchema, sourceId, 'series:getEpisodes.sourceId') : undefined
     try {
       const db = getDatabase()
-      return db.getEpisodesForSeries(seriesTitle)
+      return db.getEpisodesForSeries(validSeriesTitle, validSourceId)
     } catch (error) {
-      console.error(`Error getting episodes for "${seriesTitle}":`, error)
+      console.error(`Error getting episodes for "${validSeriesTitle}":`, error)
       throw error
     }
   })
@@ -125,12 +132,13 @@ export function registerSeriesHandlers() {
   /**
    * Delete a series completeness record
    */
-  ipcMain.handle('series:delete', async (_event, id: number) => {
+  ipcMain.handle('series:delete', async (_event, id: unknown) => {
+    const validId = validateInput(PositiveIntSchema, id, 'series:delete.id')
     try {
       const db = getDatabase()
-      return await db.deleteSeriesCompleteness(id)
+      return await db.deleteSeriesCompleteness(validId)
     } catch (error) {
-      console.error(`Error deleting series completeness ${id}:`, error)
+      console.error(`Error deleting series completeness ${validId}:`, error)
       throw error
     }
   })
@@ -142,13 +150,15 @@ export function registerSeriesHandlers() {
   /**
    * Get season poster URL from TMDB
    */
-  ipcMain.handle('series:getSeasonPoster', async (_event, tmdbId: string, seasonNumber: number) => {
+  ipcMain.handle('series:getSeasonPoster', async (_event, tmdbId: unknown, seasonNumber: unknown) => {
+    const validTmdbId = validateInput(NonEmptyStringSchema, tmdbId, 'series:getSeasonPoster.tmdbId')
+    const validSeasonNumber = validateInput(z.number().int().nonnegative(), seasonNumber, 'series:getSeasonPoster.seasonNumber')
     try {
       const tmdb = getTMDBService()
-      const seasonDetails = await tmdb.getSeasonDetails(tmdbId, seasonNumber)
+      const seasonDetails = await tmdb.getSeasonDetails(validTmdbId, validSeasonNumber)
       return tmdb.buildImageUrl(seasonDetails.poster_path, 'w500')
     } catch (error) {
-      console.error(`Error fetching season poster for ${tmdbId} S${seasonNumber}:`, error)
+      console.error(`Error fetching season poster for ${validTmdbId} S${validSeasonNumber}:`, error)
       return null
     }
   })
@@ -156,17 +166,20 @@ export function registerSeriesHandlers() {
   /**
    * Get episode still URL from TMDB
    */
-  ipcMain.handle('series:getEpisodeStill', async (_event, tmdbId: string, seasonNumber: number, episodeNumber: number) => {
+  ipcMain.handle('series:getEpisodeStill', async (_event, tmdbId: unknown, seasonNumber: unknown, episodeNumber: unknown) => {
+    const validTmdbId = validateInput(NonEmptyStringSchema, tmdbId, 'series:getEpisodeStill.tmdbId')
+    const validSeasonNumber = validateInput(z.number().int().nonnegative(), seasonNumber, 'series:getEpisodeStill.seasonNumber')
+    const validEpisodeNumber = validateInput(z.number().int().nonnegative(), episodeNumber, 'series:getEpisodeStill.episodeNumber')
     try {
       const tmdb = getTMDBService()
-      const seasonDetails = await tmdb.getSeasonDetails(tmdbId, seasonNumber)
-      const episode = seasonDetails.episodes.find(ep => ep.episode_number === episodeNumber)
+      const seasonDetails = await tmdb.getSeasonDetails(validTmdbId, validSeasonNumber)
+      const episode = seasonDetails.episodes.find(ep => ep.episode_number === validEpisodeNumber)
       if (episode) {
         return tmdb.buildImageUrl(episode.still_path, 'w300')
       }
       return null
     } catch (error) {
-      console.error(`Error fetching episode still for ${tmdbId} S${seasonNumber}E${episodeNumber}:`, error)
+      console.error(`Error fetching episode still for ${validTmdbId} S${validSeasonNumber}E${validEpisodeNumber}:`, error)
       return null
     }
   })
@@ -178,11 +191,12 @@ export function registerSeriesHandlers() {
   /**
    * Search TMDB for TV shows to fix a match
    */
-  ipcMain.handle('series:searchTMDB', async (_event, query: string) => {
+  ipcMain.handle('series:searchTMDB', async (_event, query: unknown) => {
+    const validQuery = validateInput(NonEmptyStringSchema, query, 'series:searchTMDB.query')
     try {
       const tmdb = getTMDBService()
       await tmdb.initialize()
-      const response = await tmdb.searchTVShow(query)
+      const response = await tmdb.searchTVShow(validQuery)
 
       // Transform results to include poster URLs
       return response.results.map(show => ({
@@ -203,7 +217,10 @@ export function registerSeriesHandlers() {
    * Fix the TMDB match for a TV series
    * Updates all episodes of the series with the new TMDB ID and title
    */
-  ipcMain.handle('series:fixMatch', async (_event, seriesTitle: string, sourceId: string, tmdbId: number) => {
+  ipcMain.handle('series:fixMatch', async (_event, seriesTitle: unknown, sourceId: unknown, tmdbId: unknown) => {
+    const validSeriesTitle = validateInput(NonEmptyStringSchema, seriesTitle, 'series:fixMatch.seriesTitle')
+    const validSourceId = validateInput(NonEmptyStringSchema, sourceId, 'series:fixMatch.sourceId')
+    const validTmdbId = validateInput(PositiveIntSchema, tmdbId, 'series:fixMatch.tmdbId')
     try {
       const db = getDatabase()
       const tmdb = getTMDBService()
@@ -211,21 +228,21 @@ export function registerSeriesHandlers() {
 
       // Get show details from TMDB for the poster and title
       await tmdb.initialize()
-      const showDetails = await tmdb.getTVShowDetails(tmdbId.toString())
+      const showDetails = await tmdb.getTVShowDetails(validTmdbId.toString())
       const posterUrl = tmdb.buildImageUrl(showDetails.poster_path, 'w500') || undefined
       const newSeriesTitle = showDetails.name
 
       // Update all episodes with the new TMDB ID and series title
       const updatedCount = await db.updateSeriesMatch(
-        seriesTitle,
-        sourceId,
-        tmdbId.toString(),
+        validSeriesTitle,
+        validSourceId,
+        validTmdbId.toString(),
         posterUrl,
         newSeriesTitle
       )
 
       // Re-analyze the series with the new title
-      const completeness = await service.analyzeSeries(newSeriesTitle, sourceId)
+      const completeness = await service.analyzeSeries(newSeriesTitle, validSourceId)
 
       return {
         success: true,

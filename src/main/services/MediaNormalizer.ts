@@ -119,10 +119,19 @@ export function normalizeVideoCodec(codec: string | null | undefined): string {
  * Normalize audio codec to a standard display name
  * Maps various codec identifiers to consistent names
  */
-export function normalizeAudioCodec(codec: string | null | undefined): string {
+export function normalizeAudioCodec(codec: string | null | undefined, profile?: string): string {
   if (!codec) return ''
 
   const codecLower = codec.toLowerCase().trim()
+  const profileLower = (profile || '').toLowerCase().trim()
+
+  // Plex/FFprobe sends DTS variants as codec 'dca'/'dts' + profile to distinguish
+  if (codecLower === 'dca' || (codecLower === 'dts' && profileLower)) {
+    if (profileLower === 'ma' || profileLower.includes('dts-hd ma')) return 'DTS-HD MA'
+    if (profileLower === 'hra' || profileLower.includes('dts-hd hra') || profileLower.includes('dts-hd hr')) return 'DTS-HD'
+    if (profileLower.includes('dts:x') || profileLower.includes('dtsx') || profileLower === 'x') return 'DTS:X'
+    if (codecLower === 'dca') return 'DTS'
+  }
 
   // TrueHD (with or without Atmos)
   if (codecLower.includes('truehd')) {

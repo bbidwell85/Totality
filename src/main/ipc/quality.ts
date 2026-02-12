@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
 import { getDatabase } from '../database/getDatabase'
+import { validateInput, PositiveIntSchema } from '../validation/schemas'
 
 /**
  * Register all quality analysis IPC handlers
@@ -52,16 +53,17 @@ export function registerQualityHandlers() {
     }
   })
 
-  ipcMain.handle('quality:getRecommendedFormat', async (_event, mediaItemId: number) => {
+  ipcMain.handle('quality:getRecommendedFormat', async (_event, mediaItemId: unknown) => {
     try {
+      const validMediaItemId = validateInput(PositiveIntSchema, mediaItemId, 'quality:getRecommendedFormat')
       const db = getDatabase()
-      const mediaItem = db.getMediaItemById(mediaItemId)
+      const mediaItem = db.getMediaItemById(validMediaItemId)
 
       if (!mediaItem) {
         throw new Error('Media item not found')
       }
 
-      const qualityScore = db.getQualityScoreByMediaId(mediaItemId)
+      const qualityScore = db.getQualityScoreByMediaId(validMediaItemId)
       const currentScore = qualityScore?.overall_score || 0
 
       return analyzer.getRecommendedFormat(mediaItem, currentScore)

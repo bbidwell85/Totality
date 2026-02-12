@@ -367,13 +367,12 @@ export function registerSourceHandlers(): void {
    * Scan a library
    */
   ipcMain.handle('sources:scanLibrary', async (event, sourceId: string, libraryId: string) => {
+    const win = getWindowFromEvent(event)
+    console.log(`[IPC sources:scanLibrary] Starting scan for ${sourceId}/${libraryId}, win exists: ${!!win}`)
+    const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
+    let progressCount = 0
+
     try {
-      const win = getWindowFromEvent(event)
-      console.log(`[IPC sources:scanLibrary] Starting scan for ${sourceId}/${libraryId}, win exists: ${!!win}`)
-
-      const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
-      let progressCount = 0
-
       const result = await manager.scanLibrary(sourceId, libraryId, (progress) => {
         progressCount++
         if (progressCount <= 3 || progressCount % 50 === 0) {
@@ -383,14 +382,12 @@ export function registerSourceHandlers(): void {
       })
 
       console.log(`[IPC sources:scanLibrary] Scan complete, sent ${progressCount} progress events`)
-
-      // Send final update when scan completes
-      flush()
-
       return result
     } catch (error: unknown) {
       console.error('Error scanning library:', error)
       throw error
+    } finally {
+      flush()
     }
   })
 
@@ -398,16 +395,13 @@ export function registerSourceHandlers(): void {
    * Scan all enabled sources
    */
   ipcMain.handle('sources:scanAll', async (event) => {
-    try {
-      const win = getWindowFromEvent(event)
-      const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
+    const win = getWindowFromEvent(event)
+    const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
 
+    try {
       const results = await manager.scanAllSources((sourceId, sourceName, progress) => {
         onProgress(progress, { sourceId, sourceName })
       })
-
-      // Send final update when scan completes
-      flush()
 
       // Convert Map to array for IPC
       return Array.from(results.entries()).map(([key, value]) => ({
@@ -417,6 +411,8 @@ export function registerSourceHandlers(): void {
     } catch (error: unknown) {
       console.error('Error scanning all sources:', error)
       throw error
+    } finally {
+      flush()
     }
   })
 
@@ -429,38 +425,38 @@ export function registerSourceHandlers(): void {
    * If libraryId is not provided, attempts to auto-detect from file path
    */
   ipcMain.handle('sources:scanItem', async (event, sourceId: string, libraryId: string | null, filePath: string) => {
-    try {
-      const win = getWindowFromEvent(event)
-      console.log(`[IPC sources:scanItem] Starting single item scan for ${path.basename(filePath)}`)
+    const win = getWindowFromEvent(event)
+    console.log(`[IPC sources:scanItem] Starting single item scan for ${path.basename(filePath)}`)
 
-      // If libraryId not provided, determine the appropriate default based on provider type
-      let resolvedLibraryId = libraryId
-      if (!resolvedLibraryId) {
-        // Get the provider to determine its type
-        const provider = manager.getProvider(sourceId)
-        if (provider?.providerType === 'kodi-local' || provider?.providerType === 'kodi-mysql') {
-          // Kodi uses 'movies' and 'tvshows' as library IDs
-          resolvedLibraryId = 'movies'
-        } else {
-          // LocalFolderProvider uses 'movie' and 'tvshows'
-          resolvedLibraryId = 'movie'
-        }
-        console.log(`[IPC sources:scanItem] No libraryId provided, using default for ${provider?.providerType || 'unknown'}: ${resolvedLibraryId}`)
+    // If libraryId not provided, determine the appropriate default based on provider type
+    let resolvedLibraryId = libraryId
+    if (!resolvedLibraryId) {
+      // Get the provider to determine its type
+      const provider = manager.getProvider(sourceId)
+      if (provider?.providerType === 'kodi-local' || provider?.providerType === 'kodi-mysql') {
+        // Kodi uses 'movies' and 'tvshows' as library IDs
+        resolvedLibraryId = 'movies'
+      } else {
+        // LocalFolderProvider uses 'movie' and 'tvshows'
+        resolvedLibraryId = 'movie'
       }
+      console.log(`[IPC sources:scanItem] No libraryId provided, using default for ${provider?.providerType || 'unknown'}: ${resolvedLibraryId}`)
+    }
 
-      const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
+    const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
 
+    try {
       const result = await manager.scanTargetedFiles(sourceId, resolvedLibraryId, [filePath], (progress) => {
         onProgress(progress, { sourceId, libraryId: resolvedLibraryId })
       })
 
       console.log(`[IPC sources:scanItem] Scan complete: ${result.itemsScanned} items`)
-      flush()
-
       return result
     } catch (error: unknown) {
       console.error('Error scanning single item:', error)
       throw error
+    } finally {
+      flush()
     }
   })
 
@@ -468,23 +464,22 @@ export function registerSourceHandlers(): void {
    * Incremental scan of a single library (only new/changed items since last scan)
    */
   ipcMain.handle('sources:scanLibraryIncremental', async (event, sourceId: string, libraryId: string) => {
+    const win = getWindowFromEvent(event)
+    console.log(`[IPC sources:scanLibraryIncremental] Starting incremental scan for ${sourceId}/${libraryId}`)
+    const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
+
     try {
-      const win = getWindowFromEvent(event)
-      console.log(`[IPC sources:scanLibraryIncremental] Starting incremental scan for ${sourceId}/${libraryId}`)
-
-      const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
-
       const result = await manager.scanLibraryIncremental(sourceId, libraryId, (progress) => {
         onProgress(progress, { sourceId, libraryId })
       })
 
       console.log(`[IPC sources:scanLibraryIncremental] Scan complete: ${result.itemsScanned} items`)
-      flush()
-
       return result
     } catch (error: unknown) {
       console.error('Error in incremental library scan:', error)
       throw error
+    } finally {
+      flush()
     }
   })
 
@@ -492,18 +487,14 @@ export function registerSourceHandlers(): void {
    * Incremental scan of all enabled sources (only new/changed items since last scan)
    */
   ipcMain.handle('sources:scanAllIncremental', async (event) => {
+    const win = getWindowFromEvent(event)
+    console.log('[IPC sources:scanAllIncremental] Starting incremental scan of all sources')
+    const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
+
     try {
-      const win = getWindowFromEvent(event)
-      console.log('[IPC sources:scanAllIncremental] Starting incremental scan of all sources')
-
-      const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
-
       const results = await manager.scanAllIncremental((sourceId, sourceName, progress) => {
         onProgress(progress, { sourceId, sourceName })
       })
-
-      // Send final updates
-      flush()
 
       console.log('[IPC sources:scanAllIncremental] Incremental scan complete')
 
@@ -515,6 +506,8 @@ export function registerSourceHandlers(): void {
     } catch (error: unknown) {
       console.error('Error in incremental scan all:', error)
       throw error
+    } finally {
+      flush()
     }
   })
 
@@ -581,33 +574,32 @@ export function registerSourceHandlers(): void {
    * Import collections from Kodi local database
    */
   ipcMain.handle('kodi:importCollections', async (event, sourceId: string) => {
+    const provider = manager.getProvider(sourceId)
+    if (!provider) {
+      throw new Error(`Source not found: ${sourceId}`)
+    }
+
+    // Check if it's a Kodi local provider
+    if (provider.providerType !== 'kodi-local') {
+      throw new Error('Collection import is only supported for Kodi local sources')
+    }
+
+    const win = getWindowFromEvent(event)
+    const { onProgress, flush } = createProgressUpdater(win, 'kodi:collectionProgress', 'media')
+
     try {
-      const provider = manager.getProvider(sourceId)
-      if (!provider) {
-        throw new Error(`Source not found: ${sourceId}`)
-      }
-
-      // Check if it's a Kodi local provider
-      if (provider.providerType !== 'kodi-local') {
-        throw new Error('Collection import is only supported for Kodi local sources')
-      }
-
-      const win = getWindowFromEvent(event)
-      const { onProgress, flush } = createProgressUpdater(win, 'kodi:collectionProgress', 'media')
-
       // Import collections
       const kodiProvider = provider as KodiLocalProvider
       const result = await kodiProvider.importCollections((progress: { current: number; total: number; currentItem: string }) => {
         onProgress(progress)
       })
 
-      // Send final update when import completes
-      flush()
-
       return result
     } catch (error: unknown) {
       console.error('Error importing Kodi collections:', error)
       throw error
+    } finally {
+      flush()
     }
   })
 

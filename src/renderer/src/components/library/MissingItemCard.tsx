@@ -1,6 +1,5 @@
-import { memo, useRef, useEffect } from 'react'
-import { Tv } from 'lucide-react'
-import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
+import { memo, useRef } from 'react'
+import { Tv, X } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import type { WishlistMediaType } from '../../contexts/WishlistContext'
 
@@ -10,13 +9,13 @@ interface MissingItemCardProps {
   subtitle?: string // e.g., "S2 E5" or "2012"
   posterUrl?: string
   onClick: () => void
-  focusIndex?: number
-  focusId?: string
   // Wishlist props
   tmdbId?: string
   seriesTitle?: string
   seasonNumber?: number
   year?: number
+  // Dismiss
+  onDismiss?: () => void
 }
 
 export const MissingItemCard = memo(function MissingItemCard({
@@ -25,24 +24,13 @@ export const MissingItemCard = memo(function MissingItemCard({
   subtitle,
   posterUrl,
   onClick,
-  focusIndex,
-  focusId: providedFocusId,
   tmdbId,
   seriesTitle,
   seasonNumber,
-  year
+  year,
+  onDismiss
 }: MissingItemCardProps) {
   const cardRef = useRef<HTMLDivElement>(null)
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = providedFocusId || `content-missing-${type}-${title}`
-  const isFocused = focusedId === focusId && isNavigationActive
-
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
 
   // Map type to wishlist media type
   const wishlistMediaType: WishlistMediaType = type === 'movie' ? 'movie' : type === 'season' ? 'season' : 'episode'
@@ -51,7 +39,7 @@ export const MissingItemCard = memo(function MissingItemCard({
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`group cursor-pointer hover-scale outline-none ${isFocused ? 'active' : ''}`}
+      className="group cursor-pointer hover-scale outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -60,7 +48,7 @@ export const MissingItemCard = memo(function MissingItemCard({
         }
       }}
     >
-      <div className={`aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30 ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
+      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {/* Grayscale poster or placeholder */}
         {posterUrl ? (
           <img
@@ -87,8 +75,17 @@ export const MissingItemCard = memo(function MissingItemCard({
             <p className="text-xs text-muted-foreground/70">{subtitle}</p>
           )}
         </div>
-        {/* Wishlist button */}
-        <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        {/* Action buttons */}
+        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          {onDismiss && (
+            <button
+              onClick={onDismiss}
+              className="w-7 h-7 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              title="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
           <AddToWishlistButton
             mediaType={wishlistMediaType}
             title={type === 'season' ? (seriesTitle || title) : title}

@@ -152,6 +152,15 @@ export interface TVSeason {
   posterUrl?: string
 }
 
+export interface TVShowSummary {
+  series_title: string
+  episode_count: number
+  season_count: number
+  poster_url?: string
+  source_id?: string
+  source_type?: string
+}
+
 export interface MissingEpisode {
   season_number: number
   episode_number: number

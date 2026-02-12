@@ -1,15 +1,13 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { z } from 'zod'
 import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
 import { getTMDBService } from '../services/TMDBService'
 import { invalidateNfsMappingsCache } from '../providers/kodi/KodiDatabaseSchema'
 import { getErrorMessage, isNodeError } from './utils'
 import fs from 'fs/promises'
-import type {
-  MediaItem,
-  QualityScore,
-  MediaItemFilters,
-} from '../types/database'
+import type { MediaItem } from '../types/database'
+import { validateInput, PositiveIntSchema, NonEmptyStringSchema, SettingKeySchema, SettingValueSchema, MediaItemFiltersSchema, TVShowFiltersSchema, MediaItemSchema, QualityScoreSchema, NfsMappingsSchema, ExportCSVOptionsSchema, AddExclusionSchema, OptionalSourceIdSchema } from '../validation/schemas'
 
 /**
  * Register all database-related IPC handlers
@@ -21,9 +19,10 @@ export function registerDatabaseHandlers() {
   // MEDIA ITEMS
   // ============================================================================
 
-  ipcMain.handle('db:getMediaItems', async (_event, filters?: MediaItemFilters) => {
+  ipcMain.handle('db:getMediaItems', async (_event, filters?: unknown) => {
     try {
-      const items = db.getMediaItems(filters) as MediaItem[]
+      const validFilters = filters !== undefined ? validateInput(MediaItemFiltersSchema, filters, 'db:getMediaItems') : undefined
+      const items = db.getMediaItems(validFilters) as MediaItem[]
       // Debug logging for movies without year data
       const moviesWithoutYear = items.filter((i: MediaItem) => i.type === 'movie' && !i.year)
       if (moviesWithoutYear.length > 0) {
@@ -40,36 +39,64 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  ipcMain.handle('db:countMediaItems', async (_event, filters?: MediaItemFilters) => {
+  ipcMain.handle('db:countMediaItems', async (_event, filters?: unknown) => {
     try {
-      return db.countMediaItems(filters)
+      const validFilters = filters !== undefined ? validateInput(MediaItemFiltersSchema, filters, 'db:countMediaItems') : undefined
+      return db.countMediaItems(validFilters)
     } catch (error) {
       console.error('Error counting media items:', error)
       throw error
     }
   })
 
-  ipcMain.handle('db:getMediaItemById', async (_event, id: number) => {
+  // ============================================================================
+  // TV SHOWS (grouped by series_title)
+  // ============================================================================
+
+  ipcMain.handle('db:getTVShows', async (_event, filters?: unknown) => {
     try {
-      return db.getMediaItemById(id)
+      const validFilters = validateInput(TVShowFiltersSchema, filters, 'db:getTVShows')
+      return db.getTVShows(validFilters)
+    } catch (error) {
+      console.error('Error getting TV shows:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('db:countTVShows', async (_event, filters?: unknown) => {
+    try {
+      const validFilters = validateInput(TVShowFiltersSchema, filters, 'db:countTVShows')
+      return db.countTVShows(validFilters)
+    } catch (error) {
+      console.error('Error counting TV shows:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('db:getMediaItemById', async (_event, id: unknown) => {
+    try {
+      const validId = validateInput(PositiveIntSchema, id, 'db:getMediaItemById')
+      return db.getMediaItemById(validId)
     } catch (error) {
       console.error('Error getting media item:', error)
       throw error
     }
   })
 
-  ipcMain.handle('db:upsertMediaItem', async (_event, item: MediaItem) => {
+  ipcMain.handle('db:upsertMediaItem', async (_event, item: unknown) => {
     try {
-      return await db.upsertMediaItem(item)
+      const validItem = validateInput(MediaItemSchema, item, 'db:upsertMediaItem')
+      return await db.upsertMediaItem(validItem)
     } catch (error) {
       console.error('Error upserting media item:', error)
       throw error
     }
   })
 
-  ipcMain.handle('db:deleteMediaItem', async (_event, id: number) => {
+  ipcMain.handle('db:deleteMediaItem', async (_event, id: unknown) => {
     try {
-      await db.deleteMediaItem(id)
+      const validId = validateInput(PositiveIntSchema, id, 'db:deleteMediaItem')
+      await db.deleteMediaItem(validId)
       return true
     } catch (error) {
       console.error('Error deleting media item:', error)
@@ -90,18 +117,20 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  ipcMain.handle('db:getQualityScoreByMediaId', async (_event, mediaItemId: number) => {
+  ipcMain.handle('db:getQualityScoreByMediaId', async (_event, mediaItemId: unknown) => {
     try {
-      return db.getQualityScoreByMediaId(mediaItemId)
+      const validMediaItemId = validateInput(PositiveIntSchema, mediaItemId, 'db:getQualityScoreByMediaId')
+      return db.getQualityScoreByMediaId(validMediaItemId)
     } catch (error) {
       console.error('Error getting quality score:', error)
       throw error
     }
   })
 
-  ipcMain.handle('db:upsertQualityScore', async (_event, score: QualityScore) => {
+  ipcMain.handle('db:upsertQualityScore', async (_event, score: unknown) => {
     try {
-      return await db.upsertQualityScore(score)
+      const validScore = validateInput(QualityScoreSchema, score, 'db:upsertQualityScore')
+      return await db.upsertQualityScore(validScore)
     } catch (error) {
       console.error('Error upserting quality score:', error)
       throw error
@@ -112,28 +141,31 @@ export function registerDatabaseHandlers() {
   // SETTINGS
   // ============================================================================
 
-  ipcMain.handle('db:getSetting', async (_event, key: string) => {
+  ipcMain.handle('db:getSetting', async (_event, key: unknown) => {
     try {
-      return db.getSetting(key)
+      const validKey = validateInput(SettingKeySchema, key, 'db:getSetting')
+      return db.getSetting(validKey)
     } catch (error) {
       console.error('Error getting setting:', error)
       throw error
     }
   })
 
-  ipcMain.handle('db:setSetting', async (event, key: string, value: string) => {
+  ipcMain.handle('db:setSetting', async (event, key: unknown, value: unknown) => {
     try {
-      await db.setSetting(key, value)
+      const validKey = validateInput(SettingKeySchema, key, 'db:setSetting')
+      const validValue = validateInput(SettingValueSchema, value, 'db:setSetting')
+      await db.setSetting(validKey, validValue)
 
       // Invalidate quality analyzer cache when quality settings change
-      if (key.startsWith('quality_')) {
+      if (validKey.startsWith('quality_')) {
         getQualityAnalyzer().invalidateThresholdsCache()
       }
 
       // Broadcast settings change event to all windows
       const win = BrowserWindow.fromWebContents(event.sender)
       if (win) {
-        win.webContents.send('settings:changed', { key, hasValue: !!value })
+        win.webContents.send('settings:changed', { key: validKey, hasValue: !!validValue })
       }
 
       return true
@@ -163,9 +195,10 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  ipcMain.handle('settings:setNfsMappings', async (_event, mappings: Record<string, string>) => {
+  ipcMain.handle('settings:setNfsMappings', async (_event, mappings: unknown) => {
     try {
-      await db.setSetting('nfs_mount_mappings', JSON.stringify(mappings))
+      const validMappings = validateInput(NfsMappingsSchema, mappings, 'settings:setNfsMappings')
+      await db.setSetting('nfs_mount_mappings', JSON.stringify(validMappings))
       invalidateNfsMappingsCache()
       return true
     } catch (error) {
@@ -174,14 +207,15 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  ipcMain.handle('settings:testNfsMapping', async (_event, _nfsPath: string, localPath: string) => {
+  ipcMain.handle('settings:testNfsMapping', async (_event, _nfsPath: unknown, localPath: unknown) => {
+    const validLocalPath = validateInput(NonEmptyStringSchema, localPath, 'settings:testNfsMapping')
     try {
-      const stats = await fs.stat(localPath)
+      const stats = await fs.stat(validLocalPath)
       if (!stats.isDirectory()) {
-        return { success: false, error: `Path is not a directory: ${localPath}` }
+        return { success: false, error: `Path is not a directory: ${validLocalPath}` }
       }
 
-      const entries = await fs.readdir(localPath, { withFileTypes: true })
+      const entries = await fs.readdir(validLocalPath, { withFileTypes: true })
       const folderCount = entries.filter(e => e.isDirectory()).length
       const fileCount = entries.filter(e => e.isFile()).length
 
@@ -193,14 +227,14 @@ export function registerDatabaseHandlers() {
       }
     } catch (error: unknown) {
       // Provide user-friendly error messages
-      let errorMessage = getErrorMessage(error) || `Unable to access: ${localPath}`
+      let errorMessage = getErrorMessage(error) || `Unable to access: ${validLocalPath}`
       if (isNodeError(error)) {
         if (error.code === 'ENOENT') {
-          errorMessage = `Path does not exist: ${localPath}`
+          errorMessage = `Path does not exist: ${validLocalPath}`
         } else if (error.code === 'EACCES') {
-          errorMessage = `Permission denied: ${localPath}`
+          errorMessage = `Permission denied: ${validLocalPath}`
         } else if (error.code === 'ENOTDIR') {
-          errorMessage = `Not a directory: ${localPath}`
+          errorMessage = `Not a directory: ${validLocalPath}`
         }
       }
       return { success: false, error: errorMessage }
@@ -211,9 +245,10 @@ export function registerDatabaseHandlers() {
   // STATISTICS
   // ============================================================================
 
-  ipcMain.handle('db:getLibraryStats', async (_event, sourceId?: string) => {
+  ipcMain.handle('db:getLibraryStats', async (_event, sourceId?: unknown) => {
     try {
-      return db.getLibraryStats(sourceId)
+      const validSourceId = validateInput(OptionalSourceIdSchema, sourceId, 'db:getLibraryStats')
+      return db.getLibraryStats(validSourceId)
     } catch (error) {
       console.error('Error getting library stats:', error)
       throw error
@@ -227,12 +262,16 @@ export function registerDatabaseHandlers() {
   /**
    * Search TMDB for movies to fix a match
    */
-  ipcMain.handle('movie:searchTMDB', async (_event, query: string, year?: number) => {
+  const OptionalYearSchema = z.number().int().min(1800).max(2100).optional()
+
+  ipcMain.handle('movie:searchTMDB', async (_event, query: unknown, year?: unknown) => {
     try {
-      console.log('[movie:searchTMDB] Searching for:', query, 'year:', year)
+      const validQuery = validateInput(NonEmptyStringSchema, query, 'movie:searchTMDB')
+      const validYear = validateInput(OptionalYearSchema, year, 'movie:searchTMDB')
+      console.log('[movie:searchTMDB] Searching for:', validQuery, 'year:', validYear)
       const tmdb = getTMDBService()
       await tmdb.initialize()
-      const response = await tmdb.searchMovie(query, year)
+      const response = await tmdb.searchMovie(validQuery, validYear)
       console.log('[movie:searchTMDB] Got response:', JSON.stringify(response).substring(0, 500))
 
       // Handle null/undefined results
@@ -263,14 +302,16 @@ export function registerDatabaseHandlers() {
   /**
    * Fix the TMDB match for a movie
    */
-  ipcMain.handle('movie:fixMatch', async (event, mediaItemId: number, tmdbId: number) => {
+  ipcMain.handle('movie:fixMatch', async (event, mediaItemId: unknown, tmdbId: unknown) => {
     try {
+      const validMediaItemId = validateInput(PositiveIntSchema, mediaItemId, 'movie:fixMatch')
+      const validTmdbId = validateInput(PositiveIntSchema, tmdbId, 'movie:fixMatch')
       const tmdb = getTMDBService()
       const win = BrowserWindow.fromWebContents(event.sender)
 
       // Get movie details from TMDB for the poster, title, and year
       await tmdb.initialize()
-      const movieDetails = await tmdb.getMovieDetails(tmdbId.toString())
+      const movieDetails = await tmdb.getMovieDetails(validTmdbId.toString())
       const posterUrl = tmdb.buildImageUrl(movieDetails.poster_path, 'w500') || undefined
       const title = movieDetails.title
       const year = movieDetails.release_date
@@ -278,14 +319,14 @@ export function registerDatabaseHandlers() {
         : undefined
 
       // Update the movie with the new TMDB ID, poster, title, and year
-      await db.updateMovieMatch(mediaItemId, tmdbId.toString(), posterUrl, title, year)
+      await db.updateMovieMatch(validMediaItemId, validTmdbId.toString(), posterUrl, title, year)
 
       // Send library update for live refresh
       win?.webContents.send('library:updated', { type: 'media' })
 
       return {
         success: true,
-        tmdbId,
+        tmdbId: validTmdbId,
         posterUrl,
         title,
         year,
@@ -348,13 +389,9 @@ export function registerDatabaseHandlers() {
   /**
    * Export working document CSV for tracking upgrades and completions
    */
-  ipcMain.handle('db:exportCSV', async (event, options: {
-    includeUpgrades: boolean
-    includeMissingMovies: boolean
-    includeMissingEpisodes: boolean
-    includeMissingAlbums: boolean
-  }) => {
+  ipcMain.handle('db:exportCSV', async (event, options: unknown) => {
     try {
+      const validOptions = validateInput(ExportCSVOptionsSchema, options, 'db:exportCSV')
       const win = BrowserWindow.fromWebContents(event.sender)
       if (!win) throw new Error('No window found')
 
@@ -373,7 +410,7 @@ export function registerDatabaseHandlers() {
       }
 
       // Export data as CSV
-      const csv = db.exportWorkingCSV(options)
+      const csv = db.exportWorkingCSV(validOptions)
       await fs.writeFile(result.filePath, csv, 'utf-8')
 
       return { success: true, path: result.filePath }
@@ -448,9 +485,10 @@ export function registerDatabaseHandlers() {
   /**
    * Search across all media types for global search bar
    */
-  ipcMain.handle('media:search', async (_event, query: string) => {
+  ipcMain.handle('media:search', async (_event, query: unknown) => {
     try {
-      return db.globalSearch(query)
+      const validQuery = validateInput(NonEmptyStringSchema, query, 'media:search')
+      return db.globalSearch(validQuery)
     } catch (error) {
       console.error('Error in global search:', error)
       return { movies: [], tvShows: [], episodes: [], artists: [], albums: [], tracks: [] }
@@ -461,27 +499,33 @@ export function registerDatabaseHandlers() {
   // EXCLUSIONS
   // ============================================================================
 
-  ipcMain.handle('db:addExclusion', async (_event, exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string, title?: string) => {
+  ipcMain.handle('db:addExclusion', async (_event, exclusionType: unknown, referenceId?: unknown, referenceKey?: unknown, parentKey?: unknown, title?: unknown) => {
     try {
-      return db.addExclusion(exclusionType, referenceId, referenceKey, parentKey, title)
+      const validArgs = validateInput(AddExclusionSchema, { exclusionType, referenceId, referenceKey, parentKey, title }, 'db:addExclusion')
+      return db.addExclusion(validArgs.exclusionType, validArgs.referenceId, validArgs.referenceKey, validArgs.parentKey, validArgs.title)
     } catch (error) {
       console.error('Error adding exclusion:', error)
       throw error
     }
   })
 
-  ipcMain.handle('db:removeExclusion', async (_event, id: number) => {
+  ipcMain.handle('db:removeExclusion', async (_event, id: unknown) => {
     try {
-      db.removeExclusion(id)
+      const validId = validateInput(PositiveIntSchema, id, 'db:removeExclusion')
+      db.removeExclusion(validId)
     } catch (error) {
       console.error('Error removing exclusion:', error)
       throw error
     }
   })
 
-  ipcMain.handle('db:getExclusions', async (_event, exclusionType?: string, parentKey?: string) => {
+  const OptionalStringSchema = z.string().max(500).optional()
+
+  ipcMain.handle('db:getExclusions', async (_event, exclusionType?: unknown, parentKey?: unknown) => {
     try {
-      return db.getExclusions(exclusionType, parentKey)
+      const validExclusionType = validateInput(OptionalStringSchema, exclusionType, 'db:getExclusions')
+      const validParentKey = validateInput(OptionalStringSchema, parentKey, 'db:getExclusions')
+      return db.getExclusions(validExclusionType, validParentKey)
     } catch (error) {
       console.error('Error getting exclusions:', error)
       return []

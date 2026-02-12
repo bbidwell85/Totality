@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback, memo, useRef, useEffect } from 'react'
-import { X, CircleFadingArrowUp } from 'lucide-react'
-import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
+import { X, CircleFadingArrowUp, EyeOff } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { MissingItemPopup } from './MissingItemPopup'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
@@ -39,26 +38,21 @@ interface CollectionModalProps {
   ownedMovies: OwnedMovie[]
   onClose: () => void
   onMovieClick: (movieId: number) => void
+  onDismissCollectionMovie?: (tmdbId: string, movieTitle: string) => void
 }
 
 export const CollectionModal = memo(function CollectionModal({
   collection,
   ownedMovies,
   onClose,
-  onMovieClick
+  onMovieClick,
+  onDismissCollectionMovie
 }: CollectionModalProps) {
   const [selectedMissing, setSelectedMissing] = useState<MissingMovie | null>(null)
-  const { openModal, closeModal } = useKeyboardNavigation()
   const modalRef = useRef<HTMLDivElement>(null)
 
   // Focus trap
   useFocusTrap(true, modalRef)
-
-  // Modal registration
-  useEffect(() => {
-    openModal('collection-modal')
-    return () => closeModal()
-  }, [openModal, closeModal])
 
   // Handle Escape key
   useEffect(() => {
@@ -199,7 +193,16 @@ export const CollectionModal = memo(function CollectionModal({
                       {movie.year && <p className="text-xs text-muted-foreground">{movie.year}</p>}
                     </div>
                     {movie.type === 'missing' && (
-                      <div onClick={(e) => e.stopPropagation()} className="flex-shrink-0">
+                      <div onClick={(e) => e.stopPropagation()} className="flex-shrink-0 flex items-center gap-1">
+                        {onDismissCollectionMovie && movie.tmdb_id && (
+                          <button
+                            onClick={() => onDismissCollectionMovie(movie.tmdb_id!, movie.title)}
+                            className="w-7 h-7 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                            title="Dismiss"
+                          >
+                            <EyeOff className="w-4 h-4" />
+                          </button>
+                        )}
                         <AddToWishlistButton
                           mediaType="movie"
                           title={movie.title}
@@ -234,6 +237,10 @@ export const CollectionModal = memo(function CollectionModal({
           tmdbId={selectedMissing.tmdb_id}
           posterUrl={selectedMissing.poster_path ? `https://image.tmdb.org/t/p/w500${selectedMissing.poster_path}` : undefined}
           onClose={() => setSelectedMissing(null)}
+          onDismiss={onDismissCollectionMovie ? () => {
+            onDismissCollectionMovie(selectedMissing.tmdb_id, selectedMissing.title)
+            setSelectedMissing(null)
+          } : undefined}
         />
       )}
     </>

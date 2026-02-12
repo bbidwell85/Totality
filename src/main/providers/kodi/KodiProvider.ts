@@ -635,7 +635,7 @@ export class KodiProvider implements MediaProvider {
       // Remove stale items (only for full scans, not incremental)
       if (!isIncremental && scannedProviderIds.size > 0) {
         const itemType = libraryId === 'movies' ? 'movie' : 'episode'
-        const existingItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId })
+        const existingItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId })
 
         for (const item of existingItems) {
           if (!scannedProviderIds.has(item.plex_id)) {

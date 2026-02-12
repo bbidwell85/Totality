@@ -97,6 +97,16 @@ export interface AudioTrack {
   hasObjectAudio?: boolean
 }
 
+// Subtitle track information
+export interface SubtitleTrack {
+  index: number
+  codec: string
+  language?: string
+  title?: string
+  isDefault?: boolean
+  isForced?: boolean
+}
+
 export interface MediaItem {
   id?: number
 
@@ -146,6 +156,9 @@ export interface MediaItem {
 
   // All audio tracks (JSON string in DB, parsed here)
   audio_tracks?: string           // JSON array of AudioTrack
+
+  // All subtitle tracks (JSON string in DB, parsed here)
+  subtitle_tracks?: string        // JSON array of SubtitleTrack
 
   // Container metadata
   container?: string              // "mkv", "mp4", "avi"
@@ -291,6 +304,31 @@ export interface MediaItemFilters {
   alphabetFilter?: string
   qualityTier?: string
   tierQuality?: string
+}
+
+// ============================================================================
+// TV SHOW TYPES (for show-level pagination)
+// ============================================================================
+
+// TV Show summary returned by GROUP BY series_title query
+export interface TVShowSummary {
+  series_title: string
+  episode_count: number
+  season_count: number
+  poster_url?: string
+  source_id?: string
+  source_type?: string
+}
+
+export interface TVShowFilters {
+  sourceId?: string
+  libraryId?: string
+  alphabetFilter?: string    // 'A'-'Z' or '#' for non-alpha
+  searchQuery?: string
+  sortBy?: 'title' | 'episode_count' | 'season_count'
+  sortOrder?: 'asc' | 'desc'
+  limit?: number
+  offset?: number
 }
 
 // ============================================================================

@@ -6,7 +6,6 @@ import { Dashboard } from './components/dashboard'
 import { WishlistPanel } from './components/wishlist/WishlistPanel'
 import { CompletenessPanel } from './components/library/CompletenessPanel'
 import { SourceProvider, useSources } from './contexts/SourceContext'
-import { KeyboardNavigationProvider } from './contexts/KeyboardNavigationContext'
 import { WishlistProvider } from './contexts/WishlistContext'
 import { NavigationProvider } from './contexts/NavigationContext'
 import { ToastProvider } from './contexts/ToastContext'
@@ -173,7 +172,7 @@ function AppContent() {
   }, [loadCompletenessData, loadMusicCompletenessData])
 
   // Analysis handlers
-  const handleAnalyzeSeries = async () => {
+  const handleAnalyzeSeries = async (_libraryId?: string) => {
     try {
       const sourceName = activeSourceId
         ? sources.find(s => s.source_id === activeSourceId)?.display_name
@@ -188,7 +187,7 @@ function AppContent() {
     }
   }
 
-  const handleAnalyzeCollections = async () => {
+  const handleAnalyzeCollections = async (_libraryId?: string) => {
     try {
       const sourceName = activeSourceId
         ? sources.find(s => s.source_id === activeSourceId)?.display_name
@@ -382,7 +381,7 @@ function AppContent() {
             setShowSettingsModal(false)
             setSettingsInitialTab(undefined)
           }}
-          initialTab={settingsInitialTab as 'quality' | 'services' | 'appearance' | 'monitoring' | 'data' | 'troubleshoot' | undefined}
+          initialTab={settingsInitialTab as 'library' | 'quality' | 'services' | 'appearance' | 'data' | 'update' | 'troubleshoot' | undefined}
         />
         {/* Panels - rendered at App level for Dashboard view */}
         {currentView === 'dashboard' && (
@@ -406,6 +405,7 @@ function AppContent() {
                 hasMovies={hasMovies}
                 hasMusic={hasMusic}
                 onOpenSettings={handleOpenSettings}
+                libraries={[]}
               />
             </SectionErrorBoundary>
             <SectionErrorBoundary section="Wishlist Panel" compact>
@@ -431,13 +431,11 @@ function App() {
       <ToastProvider>
         <ThemeProvider>
           <SourceProvider>
-            <KeyboardNavigationProvider>
-              <WishlistProvider>
-                <NavigationProvider>
-                  <AppContent />
-                </NavigationProvider>
-              </WishlistProvider>
-            </KeyboardNavigationProvider>
+            <WishlistProvider>
+              <NavigationProvider>
+                <AppContent />
+              </NavigationProvider>
+            </WishlistProvider>
           </SourceProvider>
         </ThemeProvider>
       </ToastProvider>

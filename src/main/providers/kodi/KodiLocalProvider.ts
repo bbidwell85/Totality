@@ -622,6 +622,7 @@ export class KodiLocalProvider implements MediaProvider {
 
     // Check video database
     if (this.databasePath) {
+      const videoWasAlreadyOpen = !!this.db
       try {
         await this.openDatabase()
 
@@ -631,7 +632,9 @@ export class KodiLocalProvider implements MediaProvider {
           const movieCount = this.query<{ count: number }>(QUERY_MOVIE_COUNT)
           const episodeCount = this.query<{ count: number }>(QUERY_EPISODE_COUNT)
 
-          this.closeDatabase()
+          if (!videoWasAlreadyOpen) {
+            this.closeDatabase()
+          }
 
           const movies = movieCount[0]?.count || 0
           const episodes = episodeCount[0]?.count || 0
@@ -653,17 +656,22 @@ export class KodiLocalProvider implements MediaProvider {
           })
         }
       } catch (error: unknown) {
-        this.closeDatabase()
+        if (!videoWasAlreadyOpen) {
+          this.closeDatabase()
+        }
         console.warn('[KodiLocalProvider] Could not read video libraries:', getErrorMessage(error))
       }
     }
 
     // Check music database
+    const musicWasAlreadyOpen = !!this.musicDb
     try {
       const musicDbAvailable = await this.openMusicDatabase()
       if (musicDbAvailable) {
         const songCount = this.queryMusicDb<{ count: number }>(QUERY_MUSIC_SONG_COUNT)
-        this.closeMusicDatabase()
+        if (!musicWasAlreadyOpen) {
+          this.closeMusicDatabase()
+        }
 
         const songs = songCount[0]?.count || 0
 
@@ -676,7 +684,9 @@ export class KodiLocalProvider implements MediaProvider {
         })
       }
     } catch (error: unknown) {
-      this.closeMusicDatabase()
+      if (!musicWasAlreadyOpen) {
+        this.closeMusicDatabase()
+      }
       console.log('[KodiLocalProvider] Music library not available:', getErrorMessage(error))
     }
 
@@ -1058,7 +1068,7 @@ export class KodiLocalProvider implements MediaProvider {
       // Remove stale items (only for full scans, not incremental)
       if (!isIncremental && scannedProviderIds.size > 0) {
         const itemType = libraryId === 'movies' ? 'movie' : 'episode'
-        const existingItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId })
+        const existingItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId })
 
         for (const item of existingItems) {
           if (!scannedProviderIds.has(item.plex_id)) {
@@ -1648,6 +1658,16 @@ export class KodiLocalProvider implements MediaProvider {
       has_object_audio: metadata.hasObjectAudio || false,
       hdr_format: metadata.hdrFormat,
       audio_tracks: JSON.stringify(audioTracks),
+      subtitle_tracks: metadata.subtitleTracks && metadata.subtitleTracks.length > 0
+        ? JSON.stringify(metadata.subtitleTracks.map((t, i) => ({
+            index: i,
+            codec: t.codec || 'unknown',
+            language: t.language,
+            title: t.title,
+            isDefault: t.isDefault || false,
+            isForced: t.isForced || false,
+          })))
+        : undefined,
       imdb_id: metadata.imdbId,
       tmdb_id: metadata.tmdbId?.toString(),
       poster_url: metadata.posterUrl,
@@ -1861,7 +1881,7 @@ export class KodiLocalProvider implements MediaProvider {
 
       // Update with accurate FFprobe data
       if (audioStream.codec) {
-        track.audio_codec = normalizeAudioCodec(audioStream.codec)
+        track.audio_codec = normalizeAudioCodec(audioStream.codec, audioStream.profile)
         track.is_lossless = isLosslessCodec(track.audio_codec)
       }
 

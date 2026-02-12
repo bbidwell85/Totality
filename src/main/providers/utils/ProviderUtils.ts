@@ -17,6 +17,7 @@ export interface AudioTrackInfo {
   bitrate: number
   hasObjectAudio?: boolean
   language?: string
+  title?: string
   isDefault?: boolean
 }
 
@@ -36,7 +37,11 @@ export function selectBestAudioTrack<T extends AudioTrackInfo>(audioTracks: T[])
     return undefined
   }
 
-  return audioTracks.reduce((best, current) => {
+  // Filter out commentary tracks for best-track selection
+  const nonCommentary = audioTracks.filter(t => !isCommentaryTrack(t))
+  const candidates = nonCommentary.length > 0 ? nonCommentary : audioTracks
+
+  return candidates.reduce((best, current) => {
     const bestTier = AudioCodecRanker.getTier(best.codec, best.hasObjectAudio || false)
     const currentTier = AudioCodecRanker.getTier(current.codec, current.hasObjectAudio || false)
 
@@ -46,7 +51,16 @@ export function selectBestAudioTrack<T extends AudioTrackInfo>(audioTracks: T[])
     if (best.channels > current.channels) return best
     if (current.bitrate > best.bitrate) return current
     return best
-  }, audioTracks[0])
+  }, candidates[0])
+}
+
+/**
+ * Check if an audio track is a commentary track based on its title
+ */
+export function isCommentaryTrack(track: { title?: string }): boolean {
+  if (!track.title) return false
+  const t = track.title.toLowerCase()
+  return t.includes('commentary')
 }
 
 /**

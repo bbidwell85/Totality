@@ -12,6 +12,8 @@ import { getMediaFileAnalyzer } from '../services/MediaFileAnalyzer'
 import { getLiveMonitoringService } from '../services/LiveMonitoringService'
 import { getDatabase } from '../database/getDatabase'
 import { getErrorMessage } from './utils'
+import { validateInput, BooleanSchema } from '../validation/schemas'
+import { z } from 'zod'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -97,16 +99,18 @@ async function getDiagnosticInfo(): Promise<DiagnosticInfo> {
 }
 
 export function registerLoggingHandlers(): void {
-  ipcMain.handle('logs:getAll', async (_event, limit?: number) => {
-    return getLoggingService().getLogs(limit)
+  ipcMain.handle('logs:getAll', async (_event, limit?: unknown) => {
+    const validLimit = limit !== undefined ? validateInput(z.number().int().positive().max(100000), limit, 'logs:getAll') : undefined
+    return getLoggingService().getLogs(validLimit)
   })
 
   ipcMain.handle('logs:clear', async () => {
     getLoggingService().clearLogs()
   })
 
-  ipcMain.handle('logs:setVerbose', async (_event, enabled: boolean) => {
-    getLoggingService().setVerboseLogging(enabled)
+  ipcMain.handle('logs:setVerbose', async (_event, enabled: unknown) => {
+    const validEnabled = validateInput(BooleanSchema, enabled, 'logs:setVerbose')
+    getLoggingService().setVerboseLogging(validEnabled)
     return { success: true }
   })
 

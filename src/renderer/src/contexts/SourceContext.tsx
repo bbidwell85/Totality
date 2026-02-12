@@ -202,7 +202,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
       })
     }
 
-    window.electronAPI.onSourcesScanProgress(handleProgress as (progress: unknown) => void)
+    const cleanupProgress = window.electronAPI.onSourcesScanProgress(handleProgress as (progress: unknown) => void)
+    return () => cleanupProgress()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

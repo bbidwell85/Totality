@@ -4,7 +4,7 @@
 
 import { ipcMain } from 'electron'
 import { getLiveMonitoringService } from '../services/LiveMonitoringService'
-import type { MonitoringConfig } from '../types/monitoring'
+import { validateInput, MonitoringConfigSchema, SourceIdSchema } from '../validation/schemas'
 
 export function registerMonitoringHandlers(): void {
   const service = getLiveMonitoringService()
@@ -19,8 +19,9 @@ export function registerMonitoringHandlers(): void {
   /**
    * Update monitoring configuration
    */
-  ipcMain.handle('monitoring:setConfig', async (_event, config: Partial<MonitoringConfig>) => {
-    await service.setConfig(config)
+  ipcMain.handle('monitoring:setConfig', async (_event, config: unknown) => {
+    const validConfig = validateInput(MonitoringConfigSchema, config, 'monitoring:setConfig')
+    await service.setConfig(validConfig)
     return { success: true }
   })
 
@@ -57,8 +58,9 @@ export function registerMonitoringHandlers(): void {
   /**
    * Force check a specific source immediately
    */
-  ipcMain.handle('monitoring:forceCheck', async (_event, sourceId: string) => {
-    const events = await service.forceCheck(sourceId)
+  ipcMain.handle('monitoring:forceCheck', async (_event, sourceId: unknown) => {
+    const validSourceId = validateInput(SourceIdSchema, sourceId, 'monitoring:forceCheck')
+    const events = await service.forceCheck(validSourceId)
     return events
   })
 

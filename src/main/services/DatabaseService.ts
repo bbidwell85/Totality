@@ -31,6 +31,8 @@ import type {
   MusicFilters,
   WishlistItem,
   WishlistFilters,
+  TVShowSummary,
+  TVShowFilters,
 } from '../types/database'
 
 export class DatabaseService {
@@ -472,6 +474,16 @@ export class DatabaseService {
         }
       }
 
+      // Add subtitle_tracks column to media_items
+      try {
+        this.db.run('ALTER TABLE media_items ADD COLUMN subtitle_tracks TEXT')
+        console.log('[Database] Added subtitle_tracks column to media_items')
+      } catch (error: unknown) {
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
+        }
+      }
+
       // Add file_mtime column to media_items for skip-unchanged-files optimization
       try {
         this.db.run('ALTER TABLE media_items ADD COLUMN file_mtime INTEGER')
@@ -495,7 +507,7 @@ export class DatabaseService {
 
       // Run multi-source migration if needed
       let currentMigrationVersion = this.db.exec(`SELECT value FROM settings WHERE key = 'migration_version'`)
-      let currentVersion = parseInt(currentMigrationVersion[0]?.values[0]?.[0] as string || '0', 10)
+      let currentVersion = parseInt(currentMigrationVersion[0]?.values[0]?.[0] as string || '0', 10) || 0
 
       if (currentVersion < MULTI_SOURCE_VERSION) {
         console.log(`Running multi-source migration (current: ${currentVersion}, target: ${MULTI_SOURCE_VERSION})...`)
@@ -506,7 +518,7 @@ export class DatabaseService {
 
       // Run kodi-local migration if needed
       currentMigrationVersion = this.db.exec(`SELECT value FROM settings WHERE key = 'migration_version'`)
-      currentVersion = parseInt(currentMigrationVersion[0]?.values[0]?.[0] as string || '0', 10)
+      currentVersion = parseInt(currentMigrationVersion[0]?.values[0]?.[0] as string || '0', 10) || 0
 
       if (currentVersion < KODI_LOCAL_VERSION) {
         console.log(`Running kodi-local migration (current: ${currentVersion}, target: ${KODI_LOCAL_VERSION})...`)
@@ -1282,9 +1294,10 @@ export class DatabaseService {
         audio_codec, audio_channels, audio_bitrate,
         video_frame_rate, color_bit_depth, hdr_format, color_space, video_profile, video_level,
         audio_profile, audio_sample_rate, has_object_audio, audio_tracks,
+        subtitle_tracks,
         container,
         imdb_id, tmdb_id, series_tmdb_id, poster_url, episode_thumb_url, season_poster_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, plex_id) DO UPDATE SET
         source_type = excluded.source_type,
         library_id = excluded.library_id,
@@ -1315,6 +1328,7 @@ export class DatabaseService {
         audio_sample_rate = excluded.audio_sample_rate,
         has_object_audio = excluded.has_object_audio,
         audio_tracks = excluded.audio_tracks,
+        subtitle_tracks = excluded.subtitle_tracks,
         container = excluded.container,
         imdb_id = excluded.imdb_id,
         tmdb_id = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.tmdb_id ELSE COALESCE(excluded.tmdb_id, media_items.tmdb_id) END,
@@ -1361,6 +1375,7 @@ export class DatabaseService {
       item.audio_sample_rate || null,
       item.has_object_audio ? 1 : 0,
       item.audio_tracks || null,
+      item.subtitle_tracks || null,
       item.container || null,
       item.imdb_id || null,
       item.tmdb_id || null,
@@ -2918,6 +2933,121 @@ export class DatabaseService {
   }
 
   /**
+   * Get TV shows grouped by series_title with pagination support
+   */
+  getTVShows(filters?: TVShowFilters): TVShowSummary[] {
+    if (!this.db) throw new Error('Database not initialized')
+
+    let sql = `
+      SELECT
+        COALESCE(m.series_title, 'Unknown Series') as series_title,
+        COUNT(*) as episode_count,
+        COUNT(DISTINCT m.season_number) as season_count,
+        MAX(m.poster_url) as poster_url,
+        MIN(m.source_id) as source_id,
+        MIN(m.source_type) as source_type
+      FROM media_items m
+      WHERE m.type = 'episode'
+    `
+    const params: (string | number)[] = []
+
+    if (filters?.sourceId) {
+      sql += ' AND m.source_id = ?'
+      params.push(filters.sourceId)
+    }
+
+    if (filters?.libraryId) {
+      sql += ' AND m.library_id = ?'
+      params.push(filters.libraryId)
+    }
+
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND COALESCE(m.series_title, 'Unknown Series') NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += " AND UPPER(SUBSTR(COALESCE(m.series_title, 'Unknown Series'), 1, 1)) = ?"
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    if (filters?.searchQuery) {
+      sql += " AND COALESCE(m.series_title, 'Unknown Series') LIKE '%' || ? || '%'"
+      params.push(filters.searchQuery)
+    }
+
+    sql += " GROUP BY COALESCE(m.series_title, 'Unknown Series')"
+
+    // Sorting
+    const sortOrder = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
+    switch (filters?.sortBy) {
+      case 'episode_count':
+        sql += ` ORDER BY episode_count ${sortOrder}`
+        break
+      case 'season_count':
+        sql += ` ORDER BY season_count ${sortOrder}`
+        break
+      default:
+        sql += ` ORDER BY series_title ${sortOrder}`
+    }
+
+    // Pagination
+    if (filters?.limit) {
+      sql += ' LIMIT ?'
+      params.push(filters.limit)
+      if (filters.offset) {
+        sql += ' OFFSET ?'
+        params.push(filters.offset)
+      }
+    }
+
+    const result = this.db.exec(sql, params)
+    if (!result.length) return []
+    return this.rowsToObjects<TVShowSummary>(result[0])
+  }
+
+  /**
+   * Count distinct TV shows matching filters
+   */
+  countTVShows(filters?: TVShowFilters): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    let sql = `
+      SELECT COUNT(DISTINCT COALESCE(m.series_title, 'Unknown Series')) as count
+      FROM media_items m
+      WHERE m.type = 'episode'
+    `
+    const params: (string | number)[] = []
+
+    if (filters?.sourceId) {
+      sql += ' AND m.source_id = ?'
+      params.push(filters.sourceId)
+    }
+
+    if (filters?.libraryId) {
+      sql += ' AND m.library_id = ?'
+      params.push(filters.libraryId)
+    }
+
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND COALESCE(m.series_title, 'Unknown Series') NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += " AND UPPER(SUBSTR(COALESCE(m.series_title, 'Unknown Series'), 1, 1)) = ?"
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    if (filters?.searchQuery) {
+      sql += " AND COALESCE(m.series_title, 'Unknown Series') LIKE '%' || ? || '%'"
+      params.push(filters.searchQuery)
+    }
+
+    const result = this.db.exec(sql, params)
+    if (!result.length || !result[0].values.length) return 0
+    return Number(result[0].values[0][0]) || 0
+  }
+
+  /**
    * Get all episodes for a specific series
    * @param seriesTitle The series title to find episodes for
    * @param sourceId Optional source ID to filter by
@@ -2926,19 +3056,23 @@ export class DatabaseService {
   getEpisodesForSeries(seriesTitle: string, sourceId?: string, libraryId?: string): MediaItem[] {
     if (!this.db) throw new Error('Database not initialized')
 
-    let sql = `SELECT * FROM media_items WHERE type = 'episode' AND series_title = ?`
+    let sql = `
+      SELECT m.*, q.overall_score, q.needs_upgrade, q.quality_tier, q.tier_quality, q.tier_score, q.issues
+      FROM media_items m
+      LEFT JOIN quality_scores q ON m.id = q.media_item_id
+      WHERE m.type = 'episode' AND m.series_title = ?`
     const params: (string | null)[] = [seriesTitle]
 
     if (sourceId) {
-      sql += ' AND source_id = ?'
+      sql += ' AND m.source_id = ?'
       params.push(sourceId)
     }
     if (libraryId) {
-      sql += ' AND library_id = ?'
+      sql += ' AND m.library_id = ?'
       params.push(libraryId)
     }
 
-    sql += ' ORDER BY season_number ASC, episode_number ASC'
+    sql += ' ORDER BY m.season_number ASC, m.episode_number ASC'
 
     const result = this.db.exec(sql, params)
     if (!result.length) return []

@@ -36,7 +36,7 @@ import type {
   ScanOptions,
   SourceConfig,
 } from '../base/MediaProvider'
-import type { MediaItem, AudioTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
+import type { MediaItem, AudioTrack, SubtitleTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
 import {
   isLosslessCodec,
   isHiRes,
@@ -147,6 +147,8 @@ export interface JellyfinMediaStream {
   Channels?: number
   SampleRate?: number
   ChannelLayout?: string
+  // Subtitle properties
+  IsForced?: boolean
 }
 
 // Music-specific types for Jellyfin/Emby
@@ -635,7 +637,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       const folders = Array.isArray(response.data) ? response.data : (response.data as { Items?: JellyfinLibrary[] }).Items || []
       console.log(`[${this.providerType}] Got ${folders.length} virtual folders`)
 
-      const mediaTypes = ['movies', 'tvshows', 'homevideos', 'musicvideos', 'music']
+      const mediaTypes = ['movies', 'tvshows', 'homevideos', 'musicvideos', 'music', 'boxsets']
       return folders
         .filter((lib: JellyfinLibrary) => mediaTypes.includes((lib.CollectionType || '').toLowerCase()))
         .map((lib: JellyfinLibrary) => ({
@@ -670,6 +672,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       case 'movies':
       case 'homevideos':
       case 'musicvideos':
+      case 'boxsets':
         return 'movie'
       case 'tvshows':
         return 'show'
@@ -931,7 +934,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       // Remove stale items (only for full scans, not incremental)
       if (!isIncremental && scannedProviderIds.size > 0) {
         const itemType = libraryType === 'show' ? 'episode' : 'movie'
-        const items = db.getMediaItems({ type: itemType, sourceId: this.sourceId })
+        const items = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId })
 
         for (const item of items) {
           if (!scannedProviderIds.has(item.plex_id)) {
@@ -1041,7 +1044,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       ),
       colorSpace: videoStream?.ColorSpace,
       videoProfile: videoStream?.Profile,
-      audioCodec: normalizeAudioCodec(audioStream?.Codec),
+      audioCodec: normalizeAudioCodec(audioStream?.Codec, audioStream?.Profile),
       audioChannels: normalizeAudioChannels(audioStream?.Channels, audioStream?.ChannelLayout),
       audioBitrate: normalizeBitrate(audioBitrate, 'bps'),
       audioSampleRate: normalizeSampleRate(audioStream?.SampleRate),
@@ -1061,6 +1064,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
 
     const videoStream = mediaSource.MediaStreams?.find(s => s.Type === 'Video')
     const audioStreams = mediaSource.MediaStreams?.filter(s => s.Type === 'Audio') || []
+    const subtitleStreams = mediaSource.MediaStreams?.filter(s => s.Type === 'Subtitle') || []
 
     if (!videoStream || audioStreams.length === 0) {
       return null
@@ -1116,7 +1120,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
 
       return {
         index,
-        codec: normalizeAudioCodec(stream.Codec),
+        codec: normalizeAudioCodec(stream.Codec, stream.Profile),
         channels: normalizeAudioChannels(stream.Channels, stream.ChannelLayout),
         bitrate: normalizeBitrate(streamBitrate, 'bps'),
         language: stream.Language,
@@ -1132,6 +1136,16 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         ),
       }
     })
+
+    // Build subtitle tracks array
+    const subtitleTracks: SubtitleTrack[] = subtitleStreams.map((stream, index) => ({
+      index,
+      codec: stream.Codec || 'unknown',
+      language: stream.Language,
+      title: stream.DisplayTitle || stream.Title,
+      isDefault: stream.IsDefault,
+      isForced: stream.IsForced,
+    }))
 
     // Find best audio track using shared utility
     const bestAudioTrack = selectBestAudioTrack(audioTracks) || audioTracks[0]
@@ -1219,7 +1233,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       video_codec: normalizeVideoCodec(videoStream.Codec),
       // Jellyfin returns BitRate in bps - prefer mediaSource.Bitrate (total) over videoStream.BitRate (video only)
       video_bitrate: normalizeBitrate(mediaSource.Bitrate || videoStream.BitRate, 'bps'),
-      audio_codec: normalizeAudioCodec(audioStream.Codec),
+      audio_codec: normalizeAudioCodec(audioStream.Codec, audioStream.Profile),
       audio_channels: normalizeAudioChannels(audioStream.Channels, audioStream.ChannelLayout),
       // Use the bitrate from bestAudioTrack which already has fallback logic for lossless codecs
       audio_bitrate: bestAudioTrack.bitrate,
@@ -1244,6 +1258,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         audioStream.ChannelLayout
       ),
       audio_tracks: JSON.stringify(audioTracks),
+      subtitle_tracks: subtitleTracks.length > 0 ? JSON.stringify(subtitleTracks) : undefined,
       container: normalizeContainer(mediaSource.Container),
       imdb_id: item.ProviderIds?.Imdb,
       tmdb_id: item.ProviderIds?.Tmdb,

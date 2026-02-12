@@ -614,7 +614,7 @@ export class KodiMySQLProvider implements MediaProvider {
       // Remove stale items
       if (scannedProviderIds.size > 0) {
         const itemType = libraryId === 'movies' ? 'movie' : 'episode'
-        const existingItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId })
+        const existingItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId })
 
         for (const item of existingItems) {
           if (!scannedProviderIds.has(item.plex_id)) {

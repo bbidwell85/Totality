@@ -11,14 +11,13 @@ import { QualityBadges } from './QualityBadges'
 import { WishlistPanel } from '../wishlist/WishlistPanel'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { ActivityPanel } from '../ui/ActivityPanel'
-import { Grid3x3, List, Search, X, Library, Layers, Music, Disc3, User, MoreVertical, RefreshCw, Film, Tv, Folder, CircleFadingArrowUp, Pencil, Settings, Star, Home } from 'lucide-react'
+import { Grid3x3, List, Search, X, Library, Layers, Music, Disc3, User, MoreVertical, RefreshCw, Film, Tv, Folder, CircleFadingArrowUp, Pencil, Settings, Star, Home, EyeOff } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useNavigation } from '../../contexts/NavigationContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { useToast } from '../../contexts/ToastContext'
 import { EnhancedEmptyState } from '../onboarding'
 import logoImage from '../../assets/totality_header_logo.png'
-import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
 import { MoviePlaceholder, TvPlaceholder, EpisodePlaceholder } from '../ui/MediaPlaceholders'
 import { useMenuClose } from '../../hooks/useMenuClose'
 
@@ -26,7 +25,12 @@ import { useMenuClose } from '../../hooks/useMenuClose'
 import {
   useThemeAccent,
   usePanelState,
+  useLibraryFilters,
 } from './hooks'
+import {
+  emitDismissUpgrade,
+  emitDismissCollectionMovie,
+} from '../../utils/dismissEvents'
 
 // Import types from shared types file
 import type {
@@ -37,6 +41,7 @@ import type {
   MissingEpisode,
   MediaItem,
   TVShow,
+  TVShowSummary,
   SeasonInfo,
   TVSeason,
   LibraryStats,
@@ -54,6 +59,7 @@ import type {
 } from './types'
 
 // Import utilities from shared utils file
+import type { ProviderType } from '../../contexts/SourceContext'
 import { providerColors, formatSeasonLabel, getStatusBadge } from './mediaUtils'
 
 export function MediaBrowser({
@@ -92,11 +98,10 @@ export function MediaBrowser({
     onToggleWishlist: externalToggleWishlist,
   })
 
-  const [items, setItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false) // For source switching without full UI flash
+  const isRefreshing = false // Placeholder: set to true during source switching for dimmed UI
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false) // For background incremental scan on app start
-  const [error, setError] = useState<string | null>(null)
+  const error: string | null = null // Placeholder: set during load failures
   const hasInitialLoadRef = useRef(false) // Track if initial load is complete
   const hasAutoSwitchedRef = useRef(false) // Track if auto-switch has been done (to prevent loop)
   const [stats, setStats] = useState<LibraryStats | null>(null)
@@ -131,9 +136,23 @@ export function MediaBrowser({
   const [moviesLoading, setMoviesLoading] = useState(false)
   const moviesOffsetRef = useRef(0)
   const MOVIES_PAGE_SIZE = 200
-  const [tierFilter, setTierFilter] = useState<'all' | 'SD' | '720p' | '1080p' | '4K'>('all')
-  const [qualityFilter, setQualityFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all')
+  // TV show pagination state
+  const [paginatedShows, setPaginatedShows] = useState<TVShowSummary[]>([])
+  const [totalShowCount, setTotalShowCount] = useState(0)
+  const [showsLoading, setShowsLoading] = useState(false)
+  const showsOffsetRef = useRef(0)
+  const SHOWS_PAGE_SIZE = 200
+  // Selected show episode loading (on-demand)
+  const [selectedShowEpisodes, setSelectedShowEpisodes] = useState<MediaItem[]>([])
+  const [selectedShowEpisodesLoading, setSelectedShowEpisodesLoading] = useState(false)
   const [searchInput, setSearchInput] = useState('')
+  // Filters (extracted to useLibraryFilters hook)
+  const {
+    tierFilter, setTierFilter,
+    qualityFilter, setQualityFilter,
+    alphabetFilter, setAlphabetFilter,
+    debouncedTierFilter, debouncedQualityFilter,
+  } = useLibraryFilters(searchInput)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [searchQuery, _setSearchQuery] = useState('')
   const [showSearchResults, setShowSearchResults] = useState(false)
@@ -154,14 +173,10 @@ export function MediaBrowser({
   const alphabetFilterRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const gridViewRef = useRef<HTMLButtonElement>(null)
   const listViewRef = useRef<HTMLButtonElement>(null)
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const [debouncedTierFilter, setDebouncedTierFilter] = useState<'all' | 'SD' | '720p' | '1080p' | '4K'>('all')
-  const [debouncedQualityFilter, setDebouncedQualityFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all')
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null)
   const [detailRefreshKey, setDetailRefreshKey] = useState(0) // Increment to force detail view refresh
   const [viewType, setViewType] = useState<'grid' | 'list'>('grid')
   const [gridScale, setGridScale] = useState(4) // 1-7 scale for grid columns (4 = 50%)
-  const [alphabetFilter, setAlphabetFilter] = useState<string | null>(null)
 
   // TV Show navigation
   const [selectedShow, setSelectedShow] = useState<string | null>(null)
@@ -214,9 +229,25 @@ export function MediaBrowser({
   } | null>(null)
 
   // Active source libraries (to determine which library types exist)
-  const [activeSourceLibraries, setActiveSourceLibraries] = useState<Array<{ type: string }>>([])
+  const [activeSourceLibraries, setActiveSourceLibraries] = useState<Array<{ id: string; name: string; type: string }>>([])
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_librariesLoading, setLibrariesLoading] = useState(false)
+
+  // Library filter within current view
+  const [activeLibraryId, setActiveLibraryId] = useState<string | null>(null)
+
+  // Libraries of the current view type (for library filter dropdown)
+  const currentTypeLibraries = useMemo(() =>
+    activeSourceLibraries.filter(lib =>
+      view === 'movies' ? lib.type === 'movie' :
+      view === 'tv' ? lib.type === 'show' :
+      lib.type === 'music'
+    ), [activeSourceLibraries, view])
+
+  // Reset library filter when view or source changes
+  useEffect(() => {
+    setActiveLibraryId(null)
+  }, [view, activeSourceId])
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -314,7 +345,9 @@ export function MediaBrowser({
           loadActiveSourceLibraries()
         }
       } else if (data.type === 'media') {
-        loadEpisodes()
+        loadPaginatedMovies(true)
+        loadPaginatedShows(true)
+        if (selectedShow) loadSelectedShowEpisodes(selectedShow)
         loadStats(activeSourceId || undefined)
         loadCompletenessData()
       } else if (data.type === 'music') {
@@ -326,108 +359,12 @@ export function MediaBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSourceId, loadActiveSourceLibraries, scanProgress.size])
 
-  // Register toolbar elements for keyboard navigation
   useEffect(() => {
-    // Toolbar elements: search, view tabs, panel buttons, settings
-    if (searchInputRef.current) {
-      registerFocusable('toolbar-search', searchInputRef.current, 'toolbar', 0)
-    }
-    if (moviesTabRef.current) {
-      registerFocusable('toolbar-movies', moviesTabRef.current, 'toolbar', 1)
-    }
-    if (tvTabRef.current) {
-      registerFocusable('toolbar-tv', tvTabRef.current, 'toolbar', 2)
-    }
-    if (musicTabRef.current) {
-      registerFocusable('toolbar-music', musicTabRef.current, 'toolbar', 3)
-    }
-    if (completenessButtonRef.current) {
-      registerFocusable('toolbar-completeness', completenessButtonRef.current, 'toolbar', 4)
-    }
-    if (wishlistButtonRef.current) {
-      registerFocusable('toolbar-wishlist', wishlistButtonRef.current, 'toolbar', 5)
-    }
-    if (settingsButtonRef.current) {
-      registerFocusable('toolbar-settings', settingsButtonRef.current, 'toolbar', 6)
-    }
-    return () => {
-      unregisterFocusable('toolbar-search')
-      unregisterFocusable('toolbar-movies')
-      unregisterFocusable('toolbar-tv')
-      unregisterFocusable('toolbar-music')
-      unregisterFocusable('toolbar-completeness')
-      unregisterFocusable('toolbar-wishlist')
-      unregisterFocusable('toolbar-settings')
-    }
-  }, [registerFocusable, unregisterFocusable])
-
-  // Check which toolbar elements are focused
-  const isSearchFocused = focusedId === 'toolbar-search' && isNavigationActive
-  const isMoviesTabFocused = focusedId === 'toolbar-movies' && isNavigationActive
-  const isTvTabFocused = focusedId === 'toolbar-tv' && isNavigationActive
-  const isMusicTabFocused = focusedId === 'toolbar-music' && isNavigationActive
-  const isCompletenessButtonFocused = focusedId === 'toolbar-completeness' && isNavigationActive
-  const isWishlistButtonFocused = focusedId === 'toolbar-wishlist' && isNavigationActive
-  const isSettingsButtonFocused = focusedId === 'toolbar-settings' && isNavigationActive
-
-  // Register filter elements for keyboard navigation
-  useEffect(() => {
-    let filterIndex = 0
-
-    // Tier filter buttons
-    const tierOptions = ['all', '4K', '1080p', '720p', 'SD']
-    tierOptions.forEach((tier) => {
-      const ref = tierFilterRefs.current.get(tier)
-      if (ref) {
-        registerFocusable(`filter-tier-${tier}`, ref, 'filters', filterIndex++)
-      }
+    // Initial data load — media items are loaded via per-view pagination useEffects
+    loadStats(activeSourceId || undefined).then(() => {
+      hasInitialLoadRef.current = true
+      setLoading(false)
     })
-
-    // Quality filter buttons
-    const qualityOptions = ['all', 'high', 'medium', 'low']
-    qualityOptions.forEach((quality) => {
-      const ref = qualityFilterRefs.current.get(quality)
-      if (ref) {
-        registerFocusable(`filter-quality-${quality}`, ref, 'filters', filterIndex++)
-      }
-    })
-
-    // View toggle buttons
-    if (gridViewRef.current) {
-      registerFocusable('filter-view-grid', gridViewRef.current, 'filters', filterIndex++)
-    }
-    if (listViewRef.current) {
-      registerFocusable('filter-view-list', listViewRef.current, 'filters', filterIndex++)
-    }
-
-    // Alphabet filter buttons
-    const alphabetOptions = [null, '#', ...Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ')]
-    alphabetOptions.forEach((letter) => {
-      const key = letter === null ? 'all' : letter
-      const ref = alphabetFilterRefs.current.get(key)
-      if (ref) {
-        registerFocusable(`filter-alpha-${key}`, ref, 'filters', filterIndex++)
-      }
-    })
-
-    return () => {
-      tierOptions.forEach((tier) => unregisterFocusable(`filter-tier-${tier}`))
-      qualityOptions.forEach((quality) => unregisterFocusable(`filter-quality-${quality}`))
-      unregisterFocusable('filter-view-grid')
-      unregisterFocusable('filter-view-list')
-      alphabetOptions.forEach((letter) => {
-        const key = letter === null ? 'all' : letter
-        unregisterFocusable(`filter-alpha-${key}`)
-      })
-    }
-  }, [registerFocusable, unregisterFocusable, view])
-
-  // Helper to check if a filter element is focused
-  const isFilterFocused = (type: string, value: string) => focusedId === `filter-${type}-${value}` && isNavigationActive
-
-  useEffect(() => {
-    loadEpisodes()
-    loadStats(activeSourceId || undefined)
     loadCompletenessData()
     loadMusicData()
     loadMusicCompletenessData()
@@ -570,22 +507,12 @@ export function MediaBrowser({
 
   // Reload media and stats when active source changes
   useEffect(() => {
-    loadEpisodes()
     loadStats(activeSourceId || undefined)
     loadMusicData()
     loadCompletenessData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSourceId])
 
-  // Debounce filter changes (faster than search since they're button clicks)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedTierFilter(tierFilter)
-      setDebouncedQualityFilter(qualityFilter)
-    }, 150) // 150ms debounce for filters
-
-    return () => clearTimeout(timer)
-  }, [tierFilter, qualityFilter])
 
   // Compute which library types exist for the active source
   // When a source is selected, check its actual library types
@@ -621,36 +548,6 @@ export function MediaBrowser({
     }
   }, [hasMovies, hasTV, hasMusic, view, loading])
 
-  // Load episodes only (for TV show grouping). Movies are loaded separately via loadPaginatedMovies.
-  const loadEpisodes = async () => {
-    try {
-      // Use refreshing state after initial load (source switching)
-      // Use loading state only for initial load
-      if (hasInitialLoadRef.current) {
-        setIsRefreshing(true)
-      } else {
-        setLoading(true)
-      }
-      setError(null)
-
-      // Build filters with active source — only load episodes
-      const filters: Record<string, unknown> = { type: 'episode' }
-      if (activeSourceId) {
-        filters.sourceId = activeSourceId
-      }
-
-      const episodeItems = await window.electronAPI.getMediaItems(filters) as MediaItem[]
-      setItems(episodeItems)
-      hasInitialLoadRef.current = true
-    } catch (err) {
-      console.error('Error loading episodes:', err)
-      setError('Failed to load media items')
-    } finally {
-      setLoading(false)
-      setIsRefreshing(false)
-    }
-  }
-
   const loadStats = async (sourceId?: string) => {
     try {
       const libraryStats = await window.electronAPI.getLibraryStats(sourceId || undefined)
@@ -663,20 +560,59 @@ export function MediaBrowser({
   // Load completeness data (non-blocking background load)
   const loadCompletenessData = async () => {
     try {
-      const [seriesData, collectionsData, sStats, cStats] = await Promise.all([
+      const [seriesData, collectionsData, sStats, cStats, collectionExclusions, seriesExclusions] = await Promise.all([
         window.electronAPI.seriesGetAll(),
         window.electronAPI.collectionsGetAll(),
         window.electronAPI.seriesGetStats(),
-        window.electronAPI.collectionsGetStats()
+        window.electronAPI.collectionsGetStats(),
+        window.electronAPI.getExclusions('collection_movie'),
+        window.electronAPI.getExclusions('series_episode'),
       ])
 
-      // Index series by title for O(1) lookup
+      // Build exclusion lookup sets
+      const excludedCollectionMovies = new Set(collectionExclusions.map((e: { parent_key: string | null; reference_key: string | null }) => `${e.parent_key}:${e.reference_key}`))
+      const excludedSeriesEpisodes = new Set(seriesExclusions.map((e: { parent_key: string | null; reference_key: string | null }) => `${e.parent_key}:${e.reference_key}`))
+
+      // Filter collections: remove excluded missing movies, adjust totals
+      const filteredCollections = (collectionsData as MovieCollectionData[])
+        .map(c => {
+          try {
+            const missing = JSON.parse(c.missing_movies || '[]')
+            const filtered = missing.filter((m: { tmdb_id: string }) => !excludedCollectionMovies.has(`${c.tmdb_collection_id}:${m.tmdb_id}`))
+            if (filtered.length !== missing.length) {
+              const excludedCount = missing.length - filtered.length
+              const newTotal = c.total_movies - excludedCount
+              return {
+                ...c,
+                missing_movies: JSON.stringify(filtered),
+                total_movies: newTotal,
+                completeness_percentage: newTotal > 0 ? c.owned_movies / newTotal * 100 : 100
+              }
+            }
+          } catch { /* keep original */ }
+          return c
+        })
+        .filter(c => c.total_movies > 1)
+      setMovieCollections(filteredCollections)
+
+      // Filter series: remove excluded missing episodes
       const seriesMap = new Map<string, SeriesCompletenessData>()
       ;(seriesData as SeriesCompletenessData[]).forEach(s => {
+        try {
+          const missing = JSON.parse(s.missing_episodes || '[]')
+          const parentKey = s.tmdb_id || s.series_title
+          const filtered = missing.filter((ep: { season_number: number; episode_number: number }) =>
+            !excludedSeriesEpisodes.has(`${parentKey}:S${ep.season_number}E${ep.episode_number}`)
+          )
+          if (filtered.length !== missing.length) {
+            seriesMap.set(s.series_title, { ...s, missing_episodes: JSON.stringify(filtered) })
+            return
+          }
+        } catch { /* keep original */ }
         seriesMap.set(s.series_title, s)
       })
       setSeriesCompleteness(seriesMap)
-      setMovieCollections(collectionsData as MovieCollectionData[])
+
       setSeriesStats(sStats as SeriesStats)
       setCollectionStats(cStats as CollectionStats)
     } catch (err) {
@@ -768,6 +704,7 @@ export function MediaBrowser({
       if (activeSourceId) filters.sourceId = activeSourceId
       if (alphabetFilter) filters.alphabetFilter = alphabetFilter
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
+      if (selectedArtist) filters.artistId = selectedArtist.id
 
       const [albums, count] = await Promise.all([
         window.electronAPI.musicGetAlbums(filters),
@@ -787,7 +724,7 @@ export function MediaBrowser({
     } finally {
       setAlbumsLoading(false)
     }
-  }, [activeSourceId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, albumsLoading])
+  }, [activeSourceId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
 
   // Load more albums (infinite scroll callback)
   const loadMoreAlbums = useCallback(() => {
@@ -798,11 +735,11 @@ export function MediaBrowser({
 
   // Trigger server-side album loading when albums tab is active and filters change
   useEffect(() => {
-    if (view === 'music' && musicViewMode === 'albums') {
+    if (view === 'music' && (musicViewMode === 'albums' || selectedArtist)) {
       loadPaginatedAlbums(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection])
+  }, [view, musicViewMode, activeSourceId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, selectedArtist])
 
   // Load paginated movies from server with current filters/sorting
   const loadPaginatedMovies = useCallback(async (reset = true) => {
@@ -818,6 +755,7 @@ export function MediaBrowser({
         sortOrder: 'asc',
       }
       if (activeSourceId) filters.sourceId = activeSourceId
+      if (activeLibraryId) filters.libraryId = activeLibraryId
       if (alphabetFilter) filters.alphabetFilter = alphabetFilter
       if (debouncedTierFilter !== 'all') filters.qualityTier = debouncedTierFilter
       if (debouncedQualityFilter !== 'all') filters.tierQuality = debouncedQualityFilter.toUpperCase()
@@ -840,7 +778,7 @@ export function MediaBrowser({
     } finally {
       setMoviesLoading(false)
     }
-  }, [activeSourceId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter, moviesLoading])
+  }, [activeSourceId, activeLibraryId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter, moviesLoading])
 
   // Load more movies (infinite scroll callback)
   const loadMoreMovies = useCallback(() => {
@@ -855,7 +793,81 @@ export function MediaBrowser({
       loadPaginatedMovies(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, activeSourceId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter])
+  }, [view, activeSourceId, activeLibraryId, alphabetFilter, debouncedTierFilter, debouncedQualityFilter])
+
+  // Load paginated TV shows from server with current filters
+  const loadPaginatedShows = useCallback(async (reset = true) => {
+    if (showsLoading) return
+    setShowsLoading(true)
+    try {
+      const offset = reset ? 0 : showsOffsetRef.current
+      const filters: Record<string, unknown> = {
+        limit: SHOWS_PAGE_SIZE,
+        offset,
+        sortBy: 'title',
+        sortOrder: 'asc',
+      }
+      if (activeSourceId) filters.sourceId = activeSourceId
+      if (activeLibraryId) filters.libraryId = activeLibraryId
+      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
+
+      const [newShows, count] = await Promise.all([
+        window.electronAPI.getTVShows(filters),
+        window.electronAPI.countTVShows(filters)
+      ])
+
+      if (reset) {
+        setPaginatedShows(newShows as TVShowSummary[])
+        showsOffsetRef.current = SHOWS_PAGE_SIZE
+      } else {
+        setPaginatedShows(prev => [...prev, ...(newShows as TVShowSummary[])])
+        showsOffsetRef.current = offset + SHOWS_PAGE_SIZE
+      }
+      setTotalShowCount(count as number)
+    } catch (err) {
+      console.error('Error loading TV shows:', err)
+    } finally {
+      setShowsLoading(false)
+    }
+  }, [showsLoading, activeSourceId, activeLibraryId, alphabetFilter, searchQuery])
+
+  const loadMoreShows = useCallback(() => {
+    if (showsOffsetRef.current < totalShowCount && !showsLoading) {
+      loadPaginatedShows(false)
+    }
+  }, [totalShowCount, showsLoading, loadPaginatedShows])
+
+  // Load episodes on demand when a show is selected
+  const loadSelectedShowEpisodes = useCallback(async (showTitle: string) => {
+    setSelectedShowEpisodesLoading(true)
+    try {
+      const episodes = await window.electronAPI.seriesGetEpisodes(showTitle, activeSourceId || undefined)
+      setSelectedShowEpisodes(episodes as MediaItem[])
+    } catch (err) {
+      console.error('Error loading episodes for show:', err)
+      setSelectedShowEpisodes([])
+    } finally {
+      setSelectedShowEpisodesLoading(false)
+    }
+  }, [activeSourceId])
+
+  // Trigger server-side TV show loading when TV view is active and filters change
+  useEffect(() => {
+    if (view === 'tv') {
+      loadPaginatedShows(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, activeSourceId, activeLibraryId, alphabetFilter, searchQuery])
+
+  // Load episodes when a show is selected
+  useEffect(() => {
+    if (selectedShow) {
+      loadSelectedShowEpisodes(selectedShow)
+    } else {
+      setSelectedShowEpisodes([])
+    }
+  }, [selectedShow, loadSelectedShowEpisodes])
 
   // Load tracks for a specific album
   const loadAlbumTracks = async (albumId: number) => {
@@ -926,15 +938,22 @@ export function MediaBrowser({
   }
 
   // Run series analysis via task queue
-  const handleAnalyzeSeries = async () => {
+  const handleAnalyzeSeries = async (libraryId?: string) => {
     try {
       const sourceName = activeSourceId
         ? sources.find(s => s.source_id === activeSourceId)?.display_name
         : 'All Sources'
+      const libraryName = libraryId
+        ? activeSourceLibraries.find(l => l.id === libraryId)?.name
+        : undefined
+      const label = libraryName
+        ? `Analyze TV Series (${sourceName} - ${libraryName})`
+        : `Analyze TV Series (${sourceName || 'All Sources'})`
       await window.electronAPI.taskQueueAddTask({
         type: 'series-completeness',
-        label: `Analyze TV Series (${sourceName || 'All Sources'})`,
+        label,
         sourceId: activeSourceId || undefined,
+        libraryId,
       })
     } catch (err) {
       console.error('Failed to queue series analysis:', err)
@@ -942,15 +961,22 @@ export function MediaBrowser({
   }
 
   // Run collections analysis via task queue
-  const handleAnalyzeCollections = async () => {
+  const handleAnalyzeCollections = async (libraryId?: string) => {
     try {
       const sourceName = activeSourceId
         ? sources.find(s => s.source_id === activeSourceId)?.display_name
         : 'All Sources'
+      const libraryName = libraryId
+        ? activeSourceLibraries.find(l => l.id === libraryId)?.name
+        : undefined
+      const label = libraryName
+        ? `Analyze Collections (${sourceName} - ${libraryName})`
+        : `Analyze Collections (${sourceName || 'All Sources'})`
       await window.electronAPI.taskQueueAddTask({
         type: 'collection-completeness',
-        label: `Analyze Collections (${sourceName || 'All Sources'})`,
+        label,
         sourceId: activeSourceId || undefined,
+        libraryId,
       })
     } catch (err) {
       console.error('Failed to queue collections analysis:', err)
@@ -1000,8 +1026,10 @@ export function MediaBrowser({
     try {
       console.log(`[MediaBrowser] Rescanning item: ${filePath}`)
       await window.electronAPI.sourcesScanItem(sourceId, libraryId, filePath)
-      // Reload media items to show updated data
-      await loadEpisodes()
+      // Reload relevant data to show updated state
+      loadPaginatedMovies(true)
+      loadPaginatedShows(true)
+      if (selectedShow) await loadSelectedShowEpisodes(selectedShow)
       // If the detail view is open for this item, force it to refresh
       if (selectedMediaId === mediaItemId) {
         setDetailRefreshKey(prev => prev + 1)
@@ -1009,6 +1037,138 @@ export function MediaBrowser({
     } catch (err) {
       console.error('Rescan failed:', err)
     }
+  }
+
+  // Dismiss upgrade recommendation for a movie or episode
+  const handleDismissUpgrade = async (item: MediaItem) => {
+    try {
+      const title = item.series_title
+        ? `${item.series_title} S${item.season_number}E${item.episode_number}`
+        : item.title
+      await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, title)
+      // Update local state: mark as no longer needing upgrade
+      setPaginatedMovies(prev => prev.map(m =>
+        m.id === item.id ? { ...m, needs_upgrade: false, tier_quality: m.tier_quality === 'LOW' ? 'MEDIUM' : m.tier_quality } : m
+      ))
+      setSelectedShowEpisodes(prev => prev.map(e =>
+        e.id === item.id ? { ...e, needs_upgrade: false, tier_quality: e.tier_quality === 'LOW' ? 'MEDIUM' : e.tier_quality } : e
+      ))
+      emitDismissUpgrade({ mediaId: item.id })
+      addToast({ type: 'success', title: 'Upgrade dismissed', message: `"${title}" removed from upgrade recommendations` })
+    } catch (err) {
+      console.error('Failed to dismiss upgrade:', err)
+    }
+  }
+
+  // Dismiss a missing episode from series completeness
+  const handleDismissMissingEpisode = async (episode: MissingEpisode, seriesTitle: string, tmdbId?: string) => {
+    try {
+      const refKey = `S${episode.season_number}E${episode.episode_number}`
+      const title = `${seriesTitle} ${refKey}`
+      await window.electronAPI.addExclusion('series_episode', undefined, refKey, tmdbId || seriesTitle, title)
+      // Update local state: remove from seriesCompleteness
+      setSeriesCompleteness(prev => {
+        const next = new Map(prev)
+        const data = next.get(seriesTitle)
+        if (data?.missing_episodes) {
+          try {
+            const missing: MissingEpisode[] = JSON.parse(data.missing_episodes)
+            const filtered = missing.filter(e => !(e.season_number === episode.season_number && e.episode_number === episode.episode_number))
+            next.set(seriesTitle, { ...data, missing_episodes: JSON.stringify(filtered) })
+          } catch { /* ignore */ }
+        }
+        return next
+      })
+      addToast({ type: 'success', title: 'Item dismissed', message: `"${title}" removed from recommendations` })
+    } catch (err) {
+      console.error('Failed to dismiss missing episode:', err)
+    }
+  }
+
+  // Dismiss all missing episodes in a season
+  const handleDismissMissingSeason = async (seasonNumber: number, seriesTitle: string, tmdbId?: string) => {
+    try {
+      const data = seriesCompleteness.get(seriesTitle)
+      if (!data?.missing_episodes) return
+      const allMissing: MissingEpisode[] = JSON.parse(data.missing_episodes || '[]')
+      const seasonEpisodes = allMissing.filter(e => e.season_number === seasonNumber)
+      await Promise.all(seasonEpisodes.map(ep => {
+        const refKey = `S${ep.season_number}E${ep.episode_number}`
+        return window.electronAPI.addExclusion('series_episode', undefined, refKey, tmdbId || seriesTitle, `${seriesTitle} ${refKey}`)
+      }))
+      // Update local state
+      setSeriesCompleteness(prev => {
+        const next = new Map(prev)
+        const d = next.get(seriesTitle)
+        if (d?.missing_episodes) {
+          try {
+            const missing: MissingEpisode[] = JSON.parse(d.missing_episodes)
+            const filtered = missing.filter(e => e.season_number !== seasonNumber)
+            next.set(seriesTitle, { ...d, missing_episodes: JSON.stringify(filtered) })
+          } catch { /* ignore */ }
+        }
+        return next
+      })
+      addToast({ type: 'success', title: 'Season dismissed', message: `${seasonEpisodes.length} missing episodes from Season ${seasonNumber} removed` })
+    } catch (err) {
+      console.error('Failed to dismiss missing season:', err)
+    }
+  }
+
+  // Dismiss a missing movie from collection completeness
+  const handleDismissCollectionMovie = async (tmdbId: string, movieTitle: string) => {
+    try {
+      if (!selectedCollection) return
+      const collectionId = selectedCollection.tmdb_collection_id
+      await window.electronAPI.addExclusion('collection_movie', undefined, tmdbId, collectionId, movieTitle)
+
+      // Helper to update a collection's missing_movies and totals
+      const updateCollection = (c: MovieCollectionData): MovieCollectionData => {
+        try {
+          const missing = JSON.parse(c.missing_movies || '[]')
+          const filtered = missing.filter((m: { tmdb_id: string }) => m.tmdb_id !== tmdbId)
+          const newTotal = c.total_movies - 1
+          return {
+            ...c,
+            missing_movies: JSON.stringify(filtered),
+            total_movies: newTotal,
+            completeness_percentage: newTotal > 0 ? c.owned_movies / newTotal * 100 : 100
+          }
+        } catch { return c }
+      }
+
+      // Update selected collection modal
+      setSelectedCollection(prev => prev ? updateCollection(prev) : prev)
+
+      // Update movieCollections grid, removing collections with <=1 total movie
+      setMovieCollections(prev =>
+        prev.map(c => c.tmdb_collection_id === collectionId ? updateCollection(c) : c)
+            .filter(c => c.total_movies > 1)
+      )
+
+      emitDismissCollectionMovie({ collectionId, tmdbId })
+      addToast({ type: 'success', title: 'Movie dismissed', message: `"${movieTitle}" removed from collection recommendations` })
+    } catch (err) {
+      console.error('Failed to dismiss collection movie:', err)
+    }
+  }
+
+  // Dismiss the currently selected missing item (from MissingItemPopup)
+  const handleDismissMissingItem = () => {
+    if (!selectedMissingItem) return
+    const item = selectedMissingItem
+    if (item.type === 'episode' && item.seasonNumber !== undefined && item.episodeNumber !== undefined) {
+      handleDismissMissingEpisode(
+        { season_number: item.seasonNumber, episode_number: item.episodeNumber, title: item.title, air_date: item.airDate },
+        item.seriesTitle || '',
+        item.tmdbId
+      )
+    } else if (item.type === 'season' && item.seasonNumber !== undefined) {
+      handleDismissMissingSeason(item.seasonNumber, item.seriesTitle || '', item.tmdbId)
+    } else if (item.type === 'movie' && item.tmdbId) {
+      handleDismissCollectionMovie(item.tmdbId, item.title)
+    }
+    setSelectedMissingItem(null)
   }
 
   // Load music completeness data
@@ -1080,13 +1240,13 @@ export function MediaBrowser({
   const getOwnedMoviesForCollection = useCallback((collection: MovieCollectionData): MediaItem[] => {
     try {
       const ownedIds = new Set(JSON.parse(collection.owned_movie_ids || '[]'))
-      return items.filter(item =>
-        item.type === 'movie' && item.tmdb_id && ownedIds.has(item.tmdb_id)
+      return paginatedMovies.filter(item =>
+        item.tmdb_id && ownedIds.has(item.tmdb_id)
       )
     } catch {
       return []
     }
-  }, [items])
+  }, [paginatedMovies])
 
   // Memoize owned movies for the selected collection to avoid recalculating on every render
   const ownedMoviesForSelectedCollection = useMemo(() => {
@@ -1094,57 +1254,37 @@ export function MediaBrowser({
     return getOwnedMoviesForCollection(selectedCollection)
   }, [selectedCollection, getOwnedMoviesForCollection])
 
-  // Organize TV shows hierarchically
-  const organizeShows = useCallback((): Map<string, TVShow> => {
-    const shows = new Map<string, TVShow>()
+  // Organize selected show's episodes into seasons (on-demand when show is clicked)
+  const selectedShowData = useMemo((): TVShow | null => {
+    if (!selectedShow || selectedShowEpisodes.length === 0) return null
 
-    items
-      .filter(item => item.type === 'episode')
-      .forEach(episode => {
-        const showTitle = episode.series_title || 'Unknown Series'
-
-        if (!shows.has(showTitle)) {
-          shows.set(showTitle, {
-            title: showTitle,
-            poster_url: episode.poster_url,
-            seasons: new Map()
-          })
-        }
-
-        const show = shows.get(showTitle)!
-        const seasonNum = episode.season_number || 0
-
-        // Update show poster if not set yet but this episode has one
-        if (!show.poster_url && episode.poster_url) {
-          show.poster_url = episode.poster_url
-        }
-
-        if (!show.seasons.has(seasonNum)) {
-          show.seasons.set(seasonNum, {
-            seasonNumber: seasonNum,
-            episodes: [],
-            posterUrl: episode.season_poster_url
-          })
-        }
-
-        // Update season poster if not set yet
-        const season = show.seasons.get(seasonNum)!
-        if (!season.posterUrl && episode.season_poster_url) {
-          season.posterUrl = episode.season_poster_url
-        }
-
-        season.episodes.push(episode)
-      })
-
-    // Sort episodes within each season
-    shows.forEach(show => {
-      show.seasons.forEach(season => {
-        season.episodes.sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0))
-      })
+    const seasons = new Map<number, TVSeason>()
+    selectedShowEpisodes.forEach(episode => {
+      const seasonNum = episode.season_number || 0
+      if (!seasons.has(seasonNum)) {
+        seasons.set(seasonNum, {
+          seasonNumber: seasonNum,
+          episodes: [],
+          posterUrl: episode.season_poster_url
+        })
+      }
+      const season = seasons.get(seasonNum)!
+      if (!season.posterUrl && episode.season_poster_url) {
+        season.posterUrl = episode.season_poster_url
+      }
+      season.episodes.push(episode)
+    })
+    // Sort episodes within seasons
+    seasons.forEach(season => {
+      season.episodes.sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0))
     })
 
-    return shows
-  }, [items])
+    return {
+      title: selectedShow,
+      poster_url: selectedShowEpisodes[0]?.poster_url,
+      seasons
+    }
+  }, [selectedShow, selectedShowEpisodes])
 
   const filterItem = useCallback((item: MediaItem): boolean => {
     // Alphabet filter
@@ -1184,30 +1324,6 @@ export function MediaBrowser({
   // Movies are now loaded from the server pre-filtered/sorted/paginated
   const movies = paginatedMovies
 
-  const tvShows = useMemo(() => organizeShows(), [organizeShows])
-
-  // Filter TV shows by alphabet and search, then sort alphabetically
-  const filteredShows = useMemo(
-    () => Array.from(tvShows.entries())
-      .filter(([title]) => {
-        // Alphabet filter
-        if (alphabetFilter) {
-          const firstChar = title.charAt(0).toUpperCase()
-          if (alphabetFilter === '#') {
-            if (/[A-Z]/.test(firstChar)) return false
-          } else {
-            if (firstChar !== alphabetFilter) return false
-          }
-        }
-
-        // Search filter
-        if (!searchQuery.trim()) return true
-        return title.toLowerCase().includes(searchQuery.toLowerCase())
-      })
-      .sort((a, b) => a[0].localeCompare(b[0])),
-    [tvShows, alphabetFilter, searchQuery]
-  )
-
   // Global search results for live preview (searches all content types)
   const globalSearchResults = useMemo(() => {
     if (!searchInput.trim() || searchInput.length < 2) return { movies: [], tvShows: [], episodes: [], artists: [], albums: [], tracks: [] }
@@ -1228,20 +1344,20 @@ export function MediaBrowser({
         type: 'movie' as const
       }))
 
-    // Search TV shows (unique titles only)
-    const tvResults = Array.from(tvShows.entries())
-      .filter(([title]) => title.toLowerCase().includes(query))
+    // Search TV shows (from loaded pages)
+    const tvResults = paginatedShows
+      .filter(show => show.series_title.toLowerCase().includes(query))
       .slice(0, maxResults)
-      .map(([title, show]) => ({
-        id: title,
-        title: title,
+      .map(show => ({
+        id: show.series_title,
+        title: show.series_title,
         poster_url: show.poster_url,
         type: 'tv' as const
       }))
 
-    // Search episodes
-    const episodeResults = items
-      .filter(item => item.type === 'episode' && (
+    // Search episodes (from currently selected show only)
+    const episodeResults = selectedShowEpisodes
+      .filter(item => (
         item.title.toLowerCase().includes(query) ||
         (item.series_title && item.series_title.toLowerCase().includes(query))
       ))
@@ -1293,7 +1409,7 @@ export function MediaBrowser({
       albums: albumResults,
       tracks: searchTrackResults
     }
-  }, [searchInput, paginatedMovies, items, tvShows, musicArtists, musicAlbums, searchTrackResults])
+  }, [searchInput, paginatedMovies, paginatedShows, selectedShowEpisodes, musicArtists, musicAlbums, searchTrackResults])
 
   // Async track search for global search dropdown (server-side query since tracks are paginated)
   useEffect(() => {
@@ -1550,7 +1666,7 @@ export function MediaBrowser({
               }}
               onFocus={() => setShowSearchResults(true)}
               onKeyDown={handleSearchKeyDown}
-              className={`w-full pl-10 pr-8 py-2 bg-muted/50 border border-border/50 rounded-lg text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary ${isSearchFocused ? 'ring-2 ring-primary' : ''}`}
+              className="w-full pl-10 pr-8 py-2 bg-muted/50 border border-border/50 rounded-lg text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               aria-label="Search all libraries"
               aria-autocomplete="list"
               aria-controls="search-results-listbox"
@@ -1877,7 +1993,7 @@ export function MediaBrowser({
                     view === 'movies'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-card text-muted-foreground hover:bg-muted'
-                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50 ${isMoviesTabFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
+                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50`}
                   role="tab"
                   aria-selected={view === 'movies'}
                   aria-controls="library-content"
@@ -1904,7 +2020,7 @@ export function MediaBrowser({
                     view === 'tv'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-card text-muted-foreground hover:bg-muted'
-                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50 ${isTvTabFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
+                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50`}
                   role="tab"
                   aria-selected={view === 'tv'}
                   aria-controls="library-content"
@@ -1931,7 +2047,7 @@ export function MediaBrowser({
                     view === 'music'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-card text-muted-foreground hover:bg-muted'
-                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50 ${isMusicTabFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
+                  } disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted/50`}
                   role="tab"
                   aria-selected={view === 'music'}
                   aria-controls="library-content"
@@ -1965,7 +2081,7 @@ export function MediaBrowser({
                 showCompletenessPanel
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-card text-muted-foreground hover:bg-muted'
-              } ${isCompletenessButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
+              }`}
               aria-label={showCompletenessPanel ? 'Hide completeness panel' : 'Show completeness panel'}
               aria-expanded={showCompletenessPanel}
               aria-controls="completeness-panel"
@@ -1984,7 +2100,7 @@ export function MediaBrowser({
                 showWishlistPanel
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-card text-muted-foreground hover:bg-muted'
-              } ${isWishlistButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
+              }`}
               aria-label={showWishlistPanel ? 'Hide wishlist panel' : 'Show wishlist panel'}
               aria-expanded={showWishlistPanel}
               aria-controls="wishlist-panel"
@@ -2003,7 +2119,7 @@ export function MediaBrowser({
             <button
               ref={settingsButtonRef}
               onClick={() => onOpenSettings?.()}
-              className={`p-2.5 rounded-md transition-colors flex-shrink-0 bg-card text-muted-foreground hover:bg-muted focus:outline-none ${isSettingsButtonFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}
+              className="p-2.5 rounded-md transition-colors flex-shrink-0 bg-card text-muted-foreground hover:bg-muted focus:outline-none"
               aria-label="Open settings"
             >
               <Settings className="w-4 h-4" aria-hidden="true" />
@@ -2058,6 +2174,23 @@ export function MediaBrowser({
                   </div>
                 )}
 
+                {/* Library Filter (shown when source has 2+ libraries of current type) */}
+                {activeSourceId && currentTypeLibraries.length >= 2 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Library</span>
+                    <select
+                      value={activeLibraryId || ''}
+                      onChange={(e) => setActiveLibraryId(e.target.value || null)}
+                      className="px-2.5 py-1 bg-card border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">All Libraries</option>
+                      {currentTypeLibraries.map(lib => (
+                        <option key={lib.id} value={lib.id}>{lib.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 {/* Resolution Tier Filter (only for video, not music artists/albums) */}
                 {(view === 'movies' || view === 'tv' || (view === 'music' && musicViewMode === 'tracks')) && (
                   <div className="flex items-center gap-2">
@@ -2075,7 +2208,7 @@ export function MediaBrowser({
                             tierFilter === tier
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-card text-muted-foreground hover:bg-muted'
-                          } ${isFilterFocused('tier', tier) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
+                          }`}
                         >
                           {tier === 'all' ? 'All' : tier}
                         </button>
@@ -2107,7 +2240,7 @@ export function MediaBrowser({
                             qualityFilter === quality
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-card text-muted-foreground hover:bg-muted'
-                          } ${isFilterFocused('quality', quality) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
+                          }`}
                         >
                           {quality.charAt(0).toUpperCase() + quality.slice(1)}
                         </button>
@@ -2146,7 +2279,7 @@ export function MediaBrowser({
                         viewType === 'grid'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-card text-muted-foreground hover:bg-muted'
-                      } ${isFilterFocused('view', 'grid') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
+                      }`}
                     >
                       <Grid3x3 className="w-4 h-4" />
                     </button>
@@ -2157,7 +2290,7 @@ export function MediaBrowser({
                         viewType === 'list'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-card text-muted-foreground hover:bg-muted'
-                      } ${isFilterFocused('view', 'list') ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}`}
+                      }`}
                     >
                       <List className="w-4 h-4" />
                     </button>
@@ -2193,15 +2326,18 @@ export function MediaBrowser({
               showSourceBadge={!activeSourceId && sources.length > 1}
               onFixMatch={(mediaItemId, title, year, filePath) => setMatchFixModal({ isOpen: true, type: 'movie', title, year, filePath, mediaItemId })}
               onRescan={handleRescanItem}
+              onDismissUpgrade={handleDismissUpgrade}
               totalMovieCount={totalMovieCount}
               moviesLoading={moviesLoading}
               onLoadMoreMovies={loadMoreMovies}
             />
           ) : view === 'tv' ? (
           <TVShowsView
-            shows={filteredShows}
+            shows={paginatedShows}
             selectedShow={selectedShow}
             selectedSeason={selectedSeason}
+            selectedShowData={selectedShowData}
+            selectedShowLoading={selectedShowEpisodesLoading}
             onSelectShow={setSelectedShow}
             onSelectSeason={setSelectedSeason}
             onSelectEpisode={setSelectedMediaId}
@@ -2218,6 +2354,12 @@ export function MediaBrowser({
                 await handleRescanItem(episode.id, episode.source_id, episode.library_id || null, episode.file_path)
               }
             }}
+            onDismissUpgrade={handleDismissUpgrade}
+            onDismissMissingEpisode={handleDismissMissingEpisode}
+            onDismissMissingSeason={handleDismissMissingSeason}
+            totalShowCount={totalShowCount}
+            showsLoading={showsLoading}
+            onLoadMoreShows={loadMoreShows}
           />
         ) : (
           <MusicView
@@ -2351,6 +2493,19 @@ export function MediaBrowser({
           onClose={() => setSelectedMediaId(null)}
           onRescan={handleRescanItem}
           onFixMatch={(mediaItemId, title, year, filePath) => setMatchFixModal({ isOpen: true, type: 'movie', title, year, filePath, mediaItemId })}
+          onDismissUpgrade={(mediaId, title) => {
+            // Find the item in current view and delegate to existing handler
+            const movieItem = paginatedMovies.find(m => m.id === mediaId)
+            const episodeItem = selectedShowEpisodes.find(e => e.id === mediaId)
+            const item = movieItem || episodeItem
+            if (item) {
+              handleDismissUpgrade(item)
+            } else {
+              // Item not in current paginated view, call addExclusion directly
+              window.electronAPI.addExclusion('media_upgrade', mediaId, undefined, undefined, title)
+            }
+            emitDismissUpgrade({ mediaId })
+          }}
         />
       )}
 
@@ -2376,6 +2531,7 @@ export function MediaBrowser({
         hasMovies={hasMovies}
         hasMusic={hasMusic}
         onOpenSettings={onOpenSettings}
+        libraries={activeSourceLibraries}
       />
 
       {/* Wishlist Panel */}
@@ -2398,6 +2554,7 @@ export function MediaBrowser({
             setSelectedCollection(null)
             setSelectedMediaId(movieId)
           }}
+          onDismissCollectionMovie={handleDismissCollectionMovie}
         />
       )}
 
@@ -2415,6 +2572,7 @@ export function MediaBrowser({
           imdbId={selectedMissingItem.imdbId}
           seriesTitle={selectedMissingItem.seriesTitle}
           onClose={() => setSelectedMissingItem(null)}
+          onDismiss={handleDismissMissingItem}
         />
       )}
 
@@ -2437,7 +2595,9 @@ export function MediaBrowser({
             if (matchFixModal.type === 'artist' || matchFixModal.type === 'album') {
               loadMusicData()
             } else {
-              loadEpisodes()
+              loadPaginatedMovies(true)
+              loadPaginatedShows(true)
+              if (selectedShow) loadSelectedShowEpisodes(selectedShow)
             }
           }}
         />
@@ -2462,6 +2622,7 @@ function MoviesView({
   showSourceBadge,
   onFixMatch,
   onRescan,
+  onDismissUpgrade,
   totalMovieCount,
   moviesLoading,
   onLoadMoreMovies
@@ -2476,6 +2637,7 @@ function MoviesView({
   showSourceBadge: boolean
   onFixMatch?: (mediaItemId: number, title: string, year?: number, filePath?: string) => void
   onRescan?: (mediaItemId: number, sourceId: string, libraryId: string | null, filePath: string) => Promise<void>
+  onDismissUpgrade?: (movie: MediaItem) => void
   totalMovieCount: number
   moviesLoading: boolean
   onLoadMoreMovies: () => void
@@ -2573,15 +2735,14 @@ function MoviesView({
     return (
       <div>
         <div className="space-y-2">
-          {displayItems.map((item, index) => {
+          {displayItems.map((item) => {
             if (item.type === 'collection') {
               return (
                 <CollectionListItem
                   key={`collection-${item.collection.id}`}
                   collection={item.collection}
                   onClick={() => onSelectCollection(item.collection)}
-                  focusIndex={index}
-                />
+                                 />
               )
             }
             return (
@@ -2593,8 +2754,8 @@ function MoviesView({
                 collectionData={getCollectionForMovie(item.movie)}
                 onFixMatch={onFixMatch ? () => onFixMatch(item.movie.id, item.movie.title, item.movie.year, item.movie.file_path) : undefined}
                 onRescan={onRescan && item.movie.source_id && item.movie.file_path ? () => onRescan(item.movie.id, item.movie.source_id!, item.movie.library_id || null, item.movie.file_path!) : undefined}
-                focusIndex={index}
-              />
+                onDismissUpgrade={onDismissUpgrade}
+                             />
             )
           })}
         </div>
@@ -2620,15 +2781,14 @@ function MoviesView({
           gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
         }}
       >
-        {displayItems.map((item, index) => {
+        {displayItems.map((item) => {
           if (item.type === 'collection') {
             return (
               <CollectionCard
                 key={`collection-${item.collection.id}`}
                 collection={item.collection}
                 onClick={() => onSelectCollection(item.collection)}
-                focusIndex={index}
-              />
+                             />
             )
           }
           return (
@@ -2640,8 +2800,8 @@ function MoviesView({
               showSourceBadge={showSourceBadge}
               onFixMatch={onFixMatch ? () => onFixMatch(item.movie.id, item.movie.title, item.movie.year, item.movie.file_path) : undefined}
               onRescan={onRescan && item.movie.source_id && item.movie.file_path ? () => onRescan(item.movie.id, item.movie.source_id!, item.movie.library_id || null, item.movie.file_path!) : undefined}
-              focusIndex={index}
-            />
+              onDismissUpgrade={onDismissUpgrade}
+                         />
           )
         })}
       </div>
@@ -2659,24 +2819,14 @@ function MoviesView({
 }
 
 // Collection card for grid view
-const CollectionCard = memo(({ collection, onClick, focusIndex }: { collection: MovieCollectionData; onClick: () => void; focusIndex?: number }) => {
+const CollectionCard = memo(({ collection, onClick }: { collection: MovieCollectionData; onClick: () => void }) => {
   const cardRef = useRef<HTMLDivElement>(null)
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `content-collection-${collection.id}`
-  const isFocused = focusedId === focusId && isNavigationActive
-
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
 
   return (
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`focus-poster-only cursor-pointer hover-scale outline-none ${isFocused ? 'active' : ''}`}
+      className="focus-poster-only cursor-pointer hover-scale outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -2686,7 +2836,7 @@ const CollectionCard = memo(({ collection, onClick, focusIndex }: { collection: 
       }}
     >
       {/* Poster */}
-      <div className={`aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30 ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
+      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {collection.poster_url ? (
           <img
             src={collection.poster_url}
@@ -2731,29 +2881,18 @@ const CollectionCard = memo(({ collection, onClick, focusIndex }: { collection: 
   return prevProps.collection.id === nextProps.collection.id &&
          prevProps.collection.owned_movies === nextProps.collection.owned_movies &&
          prevProps.collection.total_movies === nextProps.collection.total_movies &&
-         prevProps.collection.poster_url === nextProps.collection.poster_url &&
-         prevProps.focusIndex === nextProps.focusIndex
+         prevProps.collection.poster_url === nextProps.collection.poster_url
 })
 
 // Collection list item for list view
-function CollectionListItem({ collection, onClick, focusIndex }: { collection: MovieCollectionData; onClick: () => void; focusIndex?: number }) {
+function CollectionListItem({ collection, onClick }: { collection: MovieCollectionData; onClick: () => void }) {
   const cardRef = useRef<HTMLDivElement>(null)
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `content-collection-list-${collection.id}`
-  const isFocused = focusedId === focusId && isNavigationActive
-
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
 
   return (
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`group cursor-pointer rounded-md overflow-hidden bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-none ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+      className="group cursor-pointer rounded-md overflow-hidden bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -2807,21 +2946,11 @@ function CollectionListItem({ collection, onClick, focusIndex }: { collection: M
   )
 }
 
-const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFixMatch, onRescan, focusIndex }: { movie: MediaItem; onClick: () => void; collectionData?: MovieCollectionData; showSourceBadge?: boolean; onFixMatch?: (mediaItemId: number) => void; onRescan?: (mediaItemId: number) => Promise<void>; focusIndex?: number }) => {
+const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFixMatch, onRescan, onDismissUpgrade }: { movie: MediaItem; onClick: () => void; collectionData?: MovieCollectionData; showSourceBadge?: boolean; onFixMatch?: (mediaItemId: number) => void; onRescan?: (mediaItemId: number) => Promise<void>; onDismissUpgrade?: (movie: MediaItem) => void }) => {
   const [showMenu, setShowMenu] = useState(false)
   const [isRescanning, setIsRescanning] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   const menuRef = useMenuClose({ isOpen: showMenu, onClose: useCallback(() => setShowMenu(false), []) })
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `content-movie-${movie.id}`
-  const isFocused = focusedId === focusId && isNavigationActive
-
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
 
   const handleFixMatch = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -2844,11 +2973,22 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
     }
   }
 
+  const handleDismissUpgrade = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowMenu(false)
+    if (onDismissUpgrade) {
+      onDismissUpgrade(movie)
+    }
+  }
+
+  const needsUpgrade = movie.tier_quality === 'LOW' || !!movie.needs_upgrade
+  const showMenuButton = onFixMatch || onRescan || (onDismissUpgrade && needsUpgrade)
+
   return (
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`focus-poster-only group cursor-pointer hover-scale outline-none ${isFocused ? 'active' : ''}`}
+      className="focus-poster-only group cursor-pointer hover-scale outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -2858,9 +2998,9 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
       }}
     >
       {/* Poster */}
-      <div className={`aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30 ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
+      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {/* 3-dot menu button */}
-        {(onFixMatch || onRescan) && (
+        {showMenuButton && (
           <div ref={menuRef} className="absolute top-2 left-2 z-20">
             <button
               onClick={(e) => {
@@ -2895,6 +3035,15 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
                   >
                     <Pencil className="w-3.5 h-3.5" />
                     Fix Match
+                  </button>
+                )}
+                {onDismissUpgrade && needsUpgrade && (
+                  <button
+                    onClick={handleDismissUpgrade}
+                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    Dismiss Upgrade
                   </button>
                 )}
               </div>
@@ -2968,26 +3117,15 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
          prevProps.movie.source_type === nextProps.movie.source_type &&
          prevProps.showSourceBadge === nextProps.showSourceBadge &&
          prevProps.collectionData?.id === nextProps.collectionData?.id &&
-         prevProps.collectionData?.completeness_percentage === nextProps.collectionData?.completeness_percentage &&
-         prevProps.focusIndex === nextProps.focusIndex
+         prevProps.collectionData?.completeness_percentage === nextProps.collectionData?.completeness_percentage
 })
 
-const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, onFixMatch, onRescan, focusIndex }: { movie: MediaItem; onClick: () => void; showSourceBadge?: boolean; collectionData?: MovieCollectionData; onFixMatch?: (mediaItemId: number) => void; onRescan?: (mediaItemId: number) => Promise<void>; focusIndex?: number }) => {
+const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, onFixMatch, onRescan, onDismissUpgrade }: { movie: MediaItem; onClick: () => void; showSourceBadge?: boolean; collectionData?: MovieCollectionData; onFixMatch?: (mediaItemId: number) => void; onRescan?: (mediaItemId: number) => Promise<void>; onDismissUpgrade?: (movie: MediaItem) => void }) => {
   const [showMenu, setShowMenu] = useState(false)
   const [isRescanning, setIsRescanning] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   const menuRef = useMenuClose({ isOpen: showMenu, onClose: useCallback(() => setShowMenu(false), []) })
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `content-movie-list-${movie.id}`
-  const isFocused = focusedId === focusId && isNavigationActive
   const needsUpgrade = movie.tier_quality === 'LOW' || !!movie.needs_upgrade
-
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
 
   const handleFixMatch = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -3010,11 +3148,21 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
     }
   }
 
+  const handleDismissUpgrade = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowMenu(false)
+    if (onDismissUpgrade) {
+      onDismissUpgrade(movie)
+    }
+  }
+
+  const showMenuButton = onFixMatch || onRescan || (onDismissUpgrade && needsUpgrade)
+
   return (
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`group cursor-pointer rounded-md overflow-hidden bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-none ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+      className="group cursor-pointer rounded-md overflow-hidden bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -3039,7 +3187,7 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
           <div className="w-full h-full flex items-center justify-center bg-muted/50"><MoviePlaceholder className="w-8 h-8 text-muted-foreground" /></div>
         )}
         {/* 3-dot menu button */}
-        {(onFixMatch || onRescan) && (
+        {showMenuButton && (
           <div ref={menuRef} className="absolute top-1 left-1 z-20">
             <button
               onClick={(e) => {
@@ -3074,6 +3222,15 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
                   >
                     <Pencil className="w-3.5 h-3.5" />
                     Fix Match
+                  </button>
+                )}
+                {onDismissUpgrade && needsUpgrade && (
+                  <button
+                    onClick={handleDismissUpgrade}
+                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    Dismiss Upgrade
                   </button>
                 )}
               </div>
@@ -3139,57 +3296,27 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
          prevProps.movie.poster_url === nextProps.movie.poster_url &&
          prevProps.movie.quality_tier === nextProps.movie.quality_tier &&
          prevProps.movie.source_type === nextProps.movie.source_type &&
-         prevProps.showSourceBadge === nextProps.showSourceBadge &&
-         prevProps.focusIndex === nextProps.focusIndex
+         prevProps.showSourceBadge === nextProps.showSourceBadge
 })
 
 // List item component for TV shows
-const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, onAnalyzeSeries, onFixMatch, focusIndex }: {
-  show: TVShow
+const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, onAnalyzeSeries, onFixMatch }: {
+  show: TVShowSummary
   onClick: () => void
   completenessData?: SeriesCompletenessData
   showSourceBadge?: boolean
   onAnalyzeSeries?: () => Promise<void>
   onFixMatch?: (sourceId: string, folderPath?: string) => void
-  focusIndex?: number
 }) => {
   const [showMenu, setShowMenu] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `content-show-list-${show.title}`
-  const isFocused = focusedId === focusId && isNavigationActive
 
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
-
-  const totalEpisodes = Array.from(show.seasons.values()).reduce(
-    (sum, season) => sum + season.episodes.length,
-    0
-  )
-  const seasonCount = show.seasons.size
-
-  // Get source type, source ID, and folder path from the first episode
-  const { sourceType, sourceId, folderPath } = (() => {
-    for (const season of show.seasons.values()) {
-      if (season.episodes.length > 0) {
-        const ep = season.episodes[0]
-        // Extract folder path from file path (remove filename)
-        const filePath = ep.file_path
-        const folder = filePath ? filePath.replace(/[/\\][^/\\]+$/, '') : undefined
-        return {
-          sourceType: ep.source_type,
-          sourceId: ep.source_id,
-          folderPath: folder
-        }
-      }
-    }
-    return { sourceType: undefined, sourceId: undefined, folderPath: undefined }
-  })()
+  const totalEpisodes = show.episode_count
+  const seasonCount = show.season_count
+  const sourceType = show.source_type as ProviderType | undefined
+  const sourceId = show.source_id
+  const folderPath: string | undefined = undefined
 
   const handleAnalyze = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -3213,7 +3340,7 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`group cursor-pointer rounded-md overflow-hidden bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-none ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+      className="group cursor-pointer rounded-md overflow-hidden bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -3227,7 +3354,7 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
         {show.poster_url ? (
           <img
             src={show.poster_url}
-            alt={show.title}
+            alt={show.series_title}
             loading="lazy"
             className="w-full h-full object-cover"
             onError={(e) => {
@@ -3287,7 +3414,7 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <h4 className="font-semibold text-sm truncate">{show.title}</h4>
+        <h4 className="font-semibold text-sm truncate">{show.series_title}</h4>
         <p className="text-xs text-muted-foreground mt-0.5">
           {seasonCount} {seasonCount === 1 ? 'Season' : 'Seasons'} • {totalEpisodes} Episodes
         </p>
@@ -3330,26 +3457,16 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
 })
 
 // Episode row component with keyboard navigation
-const EpisodeRow = memo(({ episode, onClick, onRescan, focusIndex }: {
+const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
   episode: MediaItem
   onClick: () => void
   onRescan?: (episode: MediaItem) => Promise<void>
-  focusIndex?: number
+  onDismissUpgrade?: (episode: MediaItem) => void
 }) => {
   const cardRef = useRef<HTMLDivElement>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [isRescanning, setIsRescanning] = useState(false)
   const menuRef = useMenuClose({ isOpen: showMenu, onClose: useCallback(() => setShowMenu(false), []) })
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `content-episode-${episode.id}`
-  const isFocused = focusedId === focusId && isNavigationActive
-
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
 
   const handleRescan = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -3364,11 +3481,22 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, focusIndex }: {
     }
   }
 
+  const handleDismissUpgrade = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowMenu(false)
+    if (onDismissUpgrade) {
+      onDismissUpgrade(episode)
+    }
+  }
+
+  const needsUpgrade = episode.tier_quality === 'LOW' || !!episode.needs_upgrade
+  const showMenuButton = (onRescan && episode.file_path) || (onDismissUpgrade && needsUpgrade)
+
   return (
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`group flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-none ${isFocused ? 'bg-muted/40 ring-2 ring-primary ring-inset' : ''}`}
+      className="group flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -3394,7 +3522,7 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, focusIndex }: {
         )}
 
         {/* 3-dot menu button */}
-        {onRescan && episode.file_path && (
+        {showMenuButton && (
           <div ref={menuRef} className="absolute top-1 left-1 z-20">
             <button
               onClick={(e) => {
@@ -3412,13 +3540,24 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, focusIndex }: {
 
             {showMenu && !isRescanning && (
               <div className="absolute top-7 left-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[140px]">
-                <button
-                  onClick={handleRescan}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  Rescan File
-                </button>
+                {onRescan && episode.file_path && (
+                  <button
+                    onClick={handleRescan}
+                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Rescan File
+                  </button>
+                )}
+                {onDismissUpgrade && needsUpgrade && (
+                  <button
+                    onClick={handleDismissUpgrade}
+                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    Dismiss Upgrade
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -3462,6 +3601,8 @@ function TVShowsView({
   shows,
   selectedShow,
   selectedSeason,
+  selectedShowData,
+  selectedShowLoading,
   onSelectShow,
   onSelectSeason,
   onSelectEpisode,
@@ -3473,11 +3614,19 @@ function TVShowsView({
   showSourceBadge,
   onAnalyzeSeries,
   onFixMatch,
-  onRescanEpisode
+  onRescanEpisode,
+  onDismissUpgrade,
+  onDismissMissingEpisode,
+  onDismissMissingSeason,
+  totalShowCount,
+  showsLoading,
+  onLoadMoreShows,
 }: {
-  shows: [string, TVShow][]
+  shows: TVShowSummary[]
   selectedShow: string | null
   selectedSeason: number | null
+  selectedShowData: TVShow | null
+  selectedShowLoading: boolean
   onSelectShow: (show: string | null) => void
   onSelectSeason: (season: number | null) => void
   onSelectEpisode: (id: number) => void
@@ -3501,6 +3650,12 @@ function TVShowsView({
   onAnalyzeSeries: (seriesTitle: string) => void
   onFixMatch?: (title: string, sourceId: string, folderPath?: string) => void
   onRescanEpisode?: (episode: MediaItem) => Promise<void>
+  onDismissUpgrade?: (item: MediaItem) => void
+  onDismissMissingEpisode?: (episode: MissingEpisode, seriesTitle: string, tmdbId?: string) => void
+  onDismissMissingSeason?: (seasonNumber: number, seriesTitle: string, tmdbId?: string) => void
+  totalShowCount: number
+  showsLoading: boolean
+  onLoadMoreShows: () => void
 }) {
   // Breadcrumb navigation
   const handleBack = () => {
@@ -3511,7 +3666,17 @@ function TVShowsView({
     }
   }
 
-  const currentShow = selectedShow ? shows.find(([title]) => title === selectedShow)?.[1] : null
+  // IntersectionObserver for infinite scroll
+  const showSentinelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!showSentinelRef.current || selectedShow) return
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) onLoadMoreShows() },
+      { rootMargin: '400px' }
+    )
+    observer.observe(showSentinelRef.current)
+    return () => observer.disconnect()
+  }, [onLoadMoreShows, selectedShow])
 
   // Map scale to minimum poster width (same as movies)
   const posterMinWidth = useMemo(() => {
@@ -3529,7 +3694,7 @@ function TVShowsView({
 
   // Show list view (top level - all shows)
   if (!selectedShow) {
-    if (shows.length === 0) {
+    if (shows.length === 0 && !showsLoading) {
       return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
           <TvPlaceholder className="w-20 h-20 text-muted-foreground mb-4" />
@@ -3544,34 +3709,73 @@ function TVShowsView({
     // List view
     if (viewType === 'list') {
       return (
-        <div className="space-y-2">
-          {shows.map(([title, show], index) => {
-            const completeness = seriesCompleteness.get(title)
-            return <ShowListItem key={title} show={show} onClick={() => onSelectShow(title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={async () => { await onAnalyzeSeries(title) }} onFixMatch={onFixMatch ? (sourceId, folderPath) => onFixMatch(title, sourceId, folderPath) : undefined} focusIndex={index} />
-          })}
-        </div>
+        <>
+          <div className="space-y-2">
+            {shows.map((show) => {
+              const completeness = seriesCompleteness.get(show.series_title)
+              return <ShowListItem key={show.series_title} show={show} onClick={() => onSelectShow(show.series_title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={async () => { await onAnalyzeSeries(show.series_title) }} onFixMatch={onFixMatch ? (sourceId, folderPath) => onFixMatch(show.series_title, sourceId, folderPath) : undefined} />
+            })}
+          </div>
+          <div ref={showSentinelRef} className="h-1" />
+          {showsLoading && <div className="flex justify-center py-4"><RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" /></div>}
+          {totalShowCount > 0 && (
+            <div className="text-center text-sm text-muted-foreground py-2">
+              {shows.length} of {totalShowCount} TV shows
+            </div>
+          )}
+        </>
       )
     }
 
     // Grid view (default)
     return (
-      <div
-        className="grid gap-8"
-        style={{
-          gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
-        }}
-      >
-        {shows.map(([title, show], index) => {
-          const completeness = seriesCompleteness.get(title)
-          return <ShowCard key={title} show={show} onClick={() => onSelectShow(title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={() => onAnalyzeSeries(title)} onFixMatch={onFixMatch ? (sourceId, folderPath) => onFixMatch(title, sourceId, folderPath) : undefined} focusIndex={index} />
-        })}
-      </div>
+      <>
+        <div
+          className="grid gap-8"
+          style={{
+            gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
+          }}
+        >
+          {shows.map((show) => {
+            const completeness = seriesCompleteness.get(show.series_title)
+            return <ShowCard key={show.series_title} show={show} onClick={() => onSelectShow(show.series_title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={() => onAnalyzeSeries(show.series_title)} onFixMatch={onFixMatch ? (sourceId, folderPath) => onFixMatch(show.series_title, sourceId, folderPath) : undefined} />
+          })}
+        </div>
+        <div ref={showSentinelRef} className="h-1" />
+        {showsLoading && <div className="flex justify-center py-4"><RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" /></div>}
+        {totalShowCount > 0 && (
+          <div className="text-center text-sm text-muted-foreground py-2">
+            {shows.length} of {totalShowCount} TV shows
+          </div>
+        )}
+      </>
     )
   }
 
-  // Season list view
-  if (selectedShow && selectedSeason === null && currentShow) {
-    const ownedSeasons = Array.from(currentShow.seasons.values()).sort((a, b) => a.seasonNumber - b.seasonNumber)
+  // Season list view — use selectedShowData (loaded on demand)
+  if (selectedShow && selectedSeason === null) {
+    if (selectedShowLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[40vh]">
+          <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground mb-4" />
+          <p className="text-muted-foreground">Loading episodes...</p>
+        </div>
+      )
+    }
+
+    if (!selectedShowData) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[40vh] text-center">
+          <button onClick={handleBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Back to TV Shows
+          </button>
+          <p className="text-muted-foreground">No episodes found for this show</p>
+        </div>
+      )
+    }
+
+    const ownedSeasons = Array.from(selectedShowData.seasons.values()).sort((a, b) => a.seasonNumber - b.seasonNumber)
     const completenessData = seriesCompleteness.get(selectedShow)
 
     // Parse missing seasons from completeness data
@@ -3609,11 +3813,11 @@ function TVShowsView({
         </button>
 
         <div className="flex items-start gap-4 mb-6">
-          {currentShow.poster_url && (
+          {selectedShowData.poster_url && (
             <div className="w-32 aspect-[2/3] bg-muted rounded-lg overflow-hidden flex-shrink-0 shadow-lg shadow-black/30">
               <img
-                src={currentShow.poster_url}
-                alt={currentShow.title}
+                src={selectedShowData.poster_url}
+                alt={selectedShowData.title}
                 loading="lazy"
                 className="w-full h-full object-cover"
                 onError={(e) => {
@@ -3623,7 +3827,7 @@ function TVShowsView({
             </div>
           )}
           <div>
-            <h3 className="text-2xl font-bold mb-1">{currentShow.title}</h3>
+            <h3 className="text-2xl font-bold mb-1">{selectedShowData.title}</h3>
             {completenessData?.status && (
               <div className="mb-2">
                 <span className="inline-block px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
@@ -3653,32 +3857,31 @@ function TVShowsView({
             gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
           }}
         >
-          {allSeasonItems.map((item, index) => (
+          {allSeasonItems.map((item) => (
             item.type === 'owned' && item.season ? (
               <SeasonCard
                 key={item.seasonNumber}
                 season={item.season as SeasonInfo}
-                showTitle={currentShow.title}
+                showTitle={selectedShowData.title}
                 onClick={() => onSelectSeason(item.seasonNumber)}
-                focusIndex={index}
-              />
+                             />
             ) : (
               <MissingSeasonCardWithArtwork
                 key={`missing-${item.seasonNumber}`}
                 seasonNumber={item.seasonNumber}
-                showTitle={currentShow.title}
+                showTitle={selectedShowData.title}
                 tmdbId={completenessData?.tmdb_id}
-                fallbackPosterUrl={completenessData?.poster_url || currentShow.poster_url}
+                fallbackPosterUrl={completenessData?.poster_url || selectedShowData.poster_url}
                 onClick={() => onMissingItemClick({
                   type: 'season',
                   title: formatSeasonLabel(item.seasonNumber),
                   seasonNumber: item.seasonNumber,
-                  posterUrl: completenessData?.poster_url || currentShow.poster_url,
+                  posterUrl: completenessData?.poster_url || selectedShowData.poster_url,
                   tmdbId: completenessData?.tmdb_id,
-                  seriesTitle: currentShow.title
+                  seriesTitle: selectedShowData.title
                 })}
-                focusIndex={index}
-              />
+                onDismiss={onDismissMissingSeason ? () => onDismissMissingSeason(item.seasonNumber, selectedShowData.title, completenessData?.tmdb_id) : undefined}
+                             />
             )
           ))}
         </div>
@@ -3687,8 +3890,8 @@ function TVShowsView({
   }
 
   // Episode list view
-  if (selectedShow && selectedSeason !== null && currentShow) {
-    const season = currentShow.seasons.get(selectedSeason)
+  if (selectedShow && selectedSeason !== null && selectedShowData) {
+    const season = selectedShowData.seasons.get(selectedSeason)
     const completenessData = seriesCompleteness.get(selectedShow)
 
     // Get owned episodes for this season
@@ -3709,7 +3912,7 @@ function TVShowsView({
     }
 
     // Get fallback poster for missing episodes (season poster > series poster)
-    const missingEpisodePoster = season?.posterUrl || completenessData?.poster_url || currentShow.poster_url
+    const missingEpisodePoster = season?.posterUrl || completenessData?.poster_url || selectedShowData.poster_url
 
     // Build combined list sorted by episode number
     type EpisodeItem = { type: 'owned'; episode: MediaItem } | { type: 'missing'; missing: MissingEpisode }
@@ -3732,12 +3935,12 @@ function TVShowsView({
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          Back to {currentShow.title}
+          Back to {selectedShowData.title}
         </button>
 
         <div className="flex items-center gap-4">
           <h3 className="text-xl font-bold">
-            {currentShow.title} - {formatSeasonLabel(selectedSeason!)}
+            {selectedShowData.title} - {formatSeasonLabel(selectedSeason!)}
           </h3>
           {missingEpisodesForSeason.length > 0 && (
             <span className="text-sm text-orange-500">
@@ -3747,15 +3950,15 @@ function TVShowsView({
         </div>
 
         <div className="divide-y divide-border/50">
-          {allEpisodeItems.map((item, index) => (
+          {allEpisodeItems.map((item) => (
             item.type === 'owned' ? (
               <EpisodeRow
                 key={item.episode.id}
                 episode={item.episode}
                 onClick={() => onSelectEpisode(item.episode.id)}
                 onRescan={onRescanEpisode}
-                focusIndex={index}
-              />
+                onDismissUpgrade={onDismissUpgrade}
+                             />
             ) : (
               <MissingEpisodeRowWithArtwork
                 key={`missing-${item.missing.season_number}-${item.missing.episode_number}`}
@@ -3770,10 +3973,10 @@ function TVShowsView({
                   episodeNumber: item.missing.episode_number,
                   posterUrl: missingEpisodePoster,
                   tmdbId: completenessData?.tmdb_id,
-                  seriesTitle: currentShow.title
+                  seriesTitle: selectedShowData.title
                 })}
-                focusIndex={index}
-              />
+                onDismiss={onDismissMissingEpisode ? () => onDismissMissingEpisode(item.missing, selectedShowData.title, completenessData?.tmdb_id) : undefined}
+                             />
             )
           ))}
         </div>
@@ -3784,44 +3987,16 @@ function TVShowsView({
   return null
 }
 
-const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAnalyzeSeries, onFixMatch, focusIndex }: { show: TVShow; onClick: () => void; completenessData?: SeriesCompletenessData; showSourceBadge?: boolean; onAnalyzeSeries?: () => void; onFixMatch?: (sourceId: string, folderPath?: string) => void; focusIndex?: number }) => {
+const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAnalyzeSeries, onFixMatch }: { show: TVShowSummary; onClick: () => void; completenessData?: SeriesCompletenessData; showSourceBadge?: boolean; onAnalyzeSeries?: () => void; onFixMatch?: (sourceId: string, folderPath?: string) => void }) => {
   const [showMenu, setShowMenu] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
   const menuRef = useMenuClose({ isOpen: showMenu, onClose: useCallback(() => setShowMenu(false), []) })
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `content-show-${show.title}`
-  const isFocused = focusedId === focusId && isNavigationActive
 
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
-
-  const totalEpisodes = Array.from(show.seasons.values()).reduce(
-    (sum, season) => sum + season.episodes.length,
-    0
-  )
-
-  // Get source type, source ID, and folder path from the first episode
-  const { sourceType, sourceId, folderPath } = useMemo(() => {
-    for (const season of show.seasons.values()) {
-      if (season.episodes.length > 0) {
-        const ep = season.episodes[0]
-        // Extract folder path from file path (remove filename)
-        const filePath = ep.file_path
-        const folder = filePath ? filePath.replace(/[/\\][^/\\]+$/, '') : undefined
-        return {
-          sourceType: ep.source_type,
-          sourceId: ep.source_id,
-          folderPath: folder
-        }
-      }
-    }
-    return { sourceType: undefined, sourceId: undefined, folderPath: undefined }
-  }, [show.seasons])
+  const totalEpisodes = show.episode_count
+  const sourceType = show.source_type as ProviderType | undefined
+  const sourceId = show.source_id
+  const folderPath: string | undefined = undefined
 
   const handleAnalyze = async (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -3845,7 +4020,7 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`focus-poster-only cursor-pointer hover-scale relative group outline-none ${isFocused ? 'active' : ''}`}
+      className="focus-poster-only cursor-pointer hover-scale relative group outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -3854,7 +4029,7 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
         }
       }}
     >
-      <div className={`aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30 ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
+      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {/* 3-dot menu button */}
         <div ref={menuRef} className="absolute top-2 left-2 z-20">
           <button
@@ -3907,7 +4082,7 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
         {show.poster_url ? (
           <img
             src={show.poster_url}
-            alt={show.title}
+            alt={show.series_title}
             loading="lazy"
             className="w-full h-full object-cover"
             onError={(e) => {
@@ -3922,9 +4097,9 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
       {/* Title and info below poster */}
       <div className="pt-2 flex gap-2 items-start">
         <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-sm truncate">{show.title}</h4>
+          <h4 className="font-medium text-sm truncate">{show.series_title}</h4>
           <p className="text-xs text-muted-foreground">
-            {show.seasons.size} {show.seasons.size === 1 ? 'Season' : 'Seasons'} • {totalEpisodes} Episodes
+            {show.season_count} {show.season_count === 1 ? 'Season' : 'Seasons'} • {totalEpisodes} Episodes
           </p>
         </div>
         {completenessData && (
@@ -3951,14 +4126,14 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
   )
 }, (prevProps, nextProps) => {
   // Compare all props that affect rendering
-  return prevProps.show.title === nextProps.show.title &&
+  return prevProps.show.series_title === nextProps.show.series_title &&
          prevProps.show.poster_url === nextProps.show.poster_url &&
-         prevProps.show.seasons === nextProps.show.seasons &&
+         prevProps.show.episode_count === nextProps.show.episode_count &&
+         prevProps.show.season_count === nextProps.show.season_count &&
          prevProps.showSourceBadge === nextProps.showSourceBadge &&
          prevProps.completenessData?.id === nextProps.completenessData?.id &&
          prevProps.completenessData?.completeness_percentage === nextProps.completenessData?.completeness_percentage &&
-         prevProps.onAnalyzeSeries === nextProps.onAnalyzeSeries &&
-         prevProps.focusIndex === nextProps.focusIndex
+         prevProps.onAnalyzeSeries === nextProps.onAnalyzeSeries
 })
 
 // Component to fetch and display missing season with actual TMDB artwork
@@ -3968,14 +4143,14 @@ const MissingSeasonCardWithArtwork = memo(({
   tmdbId,
   fallbackPosterUrl,
   onClick,
-  focusIndex
+  onDismiss
 }: {
   seasonNumber: number
   showTitle: string
   tmdbId?: string
   fallbackPosterUrl?: string
   onClick: () => void
-  focusIndex?: number
+  onDismiss?: () => void
 }) => {
   const [posterUrl, setPosterUrl] = useState<string | undefined>(fallbackPosterUrl)
 
@@ -3998,7 +4173,7 @@ const MissingSeasonCardWithArtwork = memo(({
       subtitle={showTitle}
       posterUrl={posterUrl}
       onClick={onClick}
-      focusIndex={focusIndex}
+      onDismiss={onDismiss}
       tmdbId={tmdbId}
       seriesTitle={showTitle}
       seasonNumber={seasonNumber}
@@ -4012,26 +4187,16 @@ const MissingEpisodeRowWithArtwork = memo(({
   tmdbId,
   fallbackPosterUrl,
   onClick,
-  focusIndex
+  onDismiss
 }: {
   episode: MissingEpisode
   tmdbId?: string
   fallbackPosterUrl?: string
   onClick: () => void
-  focusIndex?: number
+  onDismiss?: () => void
 }) => {
   const [stillUrl, setStillUrl] = useState<string | undefined>(fallbackPosterUrl)
   const cardRef = useRef<HTMLDivElement>(null)
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `content-missing-episode-${episode.season_number}-${episode.episode_number}`
-  const isFocused = focusedId === focusId && isNavigationActive
-
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
 
   useEffect(() => {
     if (tmdbId) {
@@ -4049,7 +4214,7 @@ const MissingEpisodeRowWithArtwork = memo(({
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-none ${isFocused ? 'bg-muted/40 ring-2 ring-primary ring-inset' : ''}`}
+      className="flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -4094,35 +4259,31 @@ const MissingEpisodeRowWithArtwork = memo(({
         )}
       </div>
 
-      {/* Missing indicator */}
-      <div
-        className="flex-shrink-0 flex items-center"
-        title="Missing episode"
-      >
+      {/* Missing indicator and dismiss */}
+      <div className="flex-shrink-0 flex items-center gap-2">
         <span className="text-orange-500 text-xs font-bold uppercase">Missing</span>
+        {onDismiss && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDismiss() }}
+            className="w-7 h-7 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+            title="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </div>
   )
 })
 
-const SeasonCard = memo(({ season, showTitle, onClick, focusIndex }: { season: SeasonInfo; showTitle: string; onClick: () => void; focusIndex?: number }) => {
+const SeasonCard = memo(({ season, showTitle, onClick }: { season: SeasonInfo; showTitle: string; onClick: () => void }) => {
   const cardRef = useRef<HTMLDivElement>(null)
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `content-season-${season.seasonNumber}`
-  const isFocused = focusedId === focusId && isNavigationActive
-
-  useEffect(() => {
-    if (cardRef.current && focusIndex !== undefined) {
-      registerFocusable(focusId, cardRef.current, 'content', focusIndex)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, focusIndex, registerFocusable, unregisterFocusable])
 
   return (
     <div
       ref={cardRef}
       tabIndex={0}
-      className={`focus-poster-only group cursor-pointer hover-scale outline-none ${isFocused ? 'active' : ''}`}
+      className="focus-poster-only group cursor-pointer hover-scale outline-none"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -4131,7 +4292,7 @@ const SeasonCard = memo(({ season, showTitle, onClick, focusIndex }: { season: S
         }
       }}
     >
-      <div className={`aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30 ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
+      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {season.posterUrl ? (
           <img
             src={season.posterUrl}
@@ -4161,8 +4322,7 @@ const SeasonCard = memo(({ season, showTitle, onClick, focusIndex }: { season: S
   return prevProps.season.seasonNumber === nextProps.season.seasonNumber &&
          prevProps.showTitle === nextProps.showTitle &&
          prevProps.season.posterUrl === nextProps.season.posterUrl &&
-         prevProps.season.episodes === nextProps.season.episodes &&
-         prevProps.focusIndex === nextProps.focusIndex
+         prevProps.season.episodes === nextProps.season.episodes
 })
 
 // ============================================================================

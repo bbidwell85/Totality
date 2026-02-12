@@ -6,8 +6,8 @@
  * and AudioCodecRanker for best audio track selection.
  */
 
-import type { MediaMetadata, AudioStreamInfo, ProviderType } from '../providers/base/MediaProvider'
-import type { MediaItem, AudioTrack } from '../types/database'
+import type { MediaMetadata, AudioStreamInfo, SubtitleStreamInfo, ProviderType } from '../providers/base/MediaProvider'
+import type { MediaItem, AudioTrack, SubtitleTrack } from '../types/database'
 import {
   normalizeVideoCodec,
   normalizeAudioCodec,
@@ -39,6 +39,7 @@ export class MediaConverter {
     // Process audio tracks and select the best one
     const audioTracks = MediaConverter.convertAudioTracks(metadata.audioTracks)
     const bestTrack = MediaConverter.selectBestAudioTrack(audioTracks, metadata)
+    const subtitleTracks = MediaConverter.convertSubtitleTracks(metadata.subtitleTracks)
 
     // Normalize resolution from dimensions if not provided
     const resolution = metadata.resolution ||
@@ -93,6 +94,9 @@ export class MediaConverter {
       // All audio tracks as JSON
       audio_tracks: audioTracks.length > 0 ? JSON.stringify(audioTracks) : undefined,
 
+      // All subtitle tracks as JSON
+      subtitle_tracks: subtitleTracks.length > 0 ? JSON.stringify(subtitleTracks) : undefined,
+
       // External IDs
       imdb_id: metadata.imdbId,
       tmdb_id: metadata.tmdbId?.toString(),
@@ -133,6 +137,24 @@ export class MediaConverter {
   }
 
   /**
+   * Convert provider subtitle stream info to database SubtitleTrack format
+   */
+  static convertSubtitleTracks(subtitleStreams?: SubtitleStreamInfo[]): SubtitleTrack[] {
+    if (!subtitleStreams || subtitleStreams.length === 0) {
+      return []
+    }
+
+    return subtitleStreams.map((stream, index) => ({
+      index,
+      codec: stream.codec || 'unknown',
+      language: stream.language,
+      title: stream.title,
+      isDefault: stream.isDefault || false,
+      isForced: stream.isForced || false,
+    }))
+  }
+
+  /**
    * Select the best audio track from a MediaMetadata's audio tracks
    */
   static selectBestAudioTrack(
@@ -161,6 +183,7 @@ export class MediaConverter {
       bitrate: track.bitrate,
       sampleRate: track.sampleRate,
       language: track.language,
+      title: track.title,
       hasObjectAudio: track.hasObjectAudio,
       isDefault: track.isDefault,
     }))

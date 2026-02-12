@@ -46,7 +46,7 @@ import type {
   PlexMusicTrack,
   PlexResource,
 } from '../../types/plex'
-import type { MediaItem, AudioTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
+import type { MediaItem, AudioTrack, SubtitleTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
 
 const PLEX_API_URL = 'https://plex.tv/api/v2'
 const PLEX_TV_URL = 'https://plex.tv'
@@ -583,7 +583,7 @@ export class PlexProvider implements MediaProvider {
       if (!isIncremental && libraryType && scannedProviderIds.size > 0) {
         // Full scan: use the IDs we just scanned
         const itemType = libraryType === 'show' ? 'episode' : 'movie'
-        const removedCount = await this.removeStaleItems(scannedProviderIds, itemType)
+        const removedCount = await this.removeStaleItems(scannedProviderIds, itemType, libraryId)
         result.itemsRemoved = removedCount
       } else if (isIncremental) {
         // Incremental scan: fetch all current IDs from Plex to detect changes
@@ -594,14 +594,14 @@ export class PlexProvider implements MediaProvider {
           const itemType = libType === 'show' ? 'episode' : 'movie'
 
           // Check for deletions (items in DB but not in Plex)
-          const removedCount = await this.removeStaleItems(currentPlexIds, itemType)
+          const removedCount = await this.removeStaleItems(currentPlexIds, itemType, libraryId)
           if (removedCount > 0) {
             console.log(`[PlexProvider ${this.sourceId}] Removed ${removedCount} deleted items`)
           }
           result.itemsRemoved = removedCount
 
           // Check for additions (items in Plex but not in DB)
-          const dbItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId }) as Array<{ plex_id?: string }>
+          const dbItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId }) as Array<{ plex_id?: string }>
           const dbIds = new Set(dbItems.map((item: typeof dbItems[0]) => item.plex_id))
           const missingIds: string[] = []
           for (const plexId of currentPlexIds) {
@@ -636,9 +636,9 @@ export class PlexProvider implements MediaProvider {
     }
   }
 
-  private async removeStaleItems(validIds: Set<string>, type: 'movie' | 'episode'): Promise<number> {
+  private async removeStaleItems(validIds: Set<string>, type: 'movie' | 'episode', libraryId: string): Promise<number> {
     const db = getDatabase()
-    const items = db.getMediaItems({ type, sourceId: this.sourceId })
+    const items = db.getMediaItems({ type, sourceId: this.sourceId, libraryId })
 
     console.log(`[PlexProvider ${this.sourceId}] Reconciling ${type}s: ${items.length} in DB, ${validIds.size} in Plex`)
 
@@ -973,7 +973,7 @@ export class PlexProvider implements MediaProvider {
       ),
       colorSpace: videoStream?.colorSpace,
       videoProfile: videoStream?.profile,
-      audioCodec: normalizeAudioCodec(media?.audioCodec),
+      audioCodec: normalizeAudioCodec(media?.audioCodec, audioStream?.profile),
       audioChannels: normalizeAudioChannels(media?.audioChannels, audioStream?.audioChannelLayout),
       audioBitrate: normalizeBitrate(audioStream?.bitrate, 'kbps'),
       audioSampleRate: normalizeSampleRate(audioStream?.samplingRate),
@@ -997,6 +997,7 @@ export class PlexProvider implements MediaProvider {
 
     const videoStream = part.Stream?.find((s) => s.streamType === 1)
     const audioStreams = part.Stream?.filter((s) => s.streamType === 2) || []
+    const subtitleStreams = part.Stream?.filter((s) => s.streamType === 3) || []
 
     if (!videoStream || audioStreams.length === 0) {
       const missing = !videoStream ? 'video stream' : 'audio tracks'
@@ -1007,11 +1008,11 @@ export class PlexProvider implements MediaProvider {
     // Build audio tracks array with normalized values
     const audioTracks: AudioTrack[] = audioStreams.map((stream, index) => ({
       index,
-      codec: normalizeAudioCodec(stream.codec),
+      codec: normalizeAudioCodec(stream.codec, stream.profile),
       channels: normalizeAudioChannels(stream.channels, stream.audioChannelLayout),
       bitrate: normalizeBitrate(stream.bitrate, 'kbps'),
       language: stream.language || stream.languageCode,
-      title: stream.displayTitle || stream.title,
+      title: stream.extendedDisplayTitle || stream.title,
       profile: stream.profile,
       sampleRate: normalizeSampleRate(stream.samplingRate),
       isDefault: stream.selected === true,
@@ -1021,6 +1022,16 @@ export class PlexProvider implements MediaProvider {
         stream.displayTitle || stream.title,
         stream.audioChannelLayout
       ),
+    }))
+
+    // Build subtitle tracks array
+    const subtitleTracks: SubtitleTrack[] = subtitleStreams.map((stream, index) => ({
+      index,
+      codec: stream.codec || 'unknown',
+      language: stream.language || stream.languageCode,
+      title: stream.displayTitle || stream.title,
+      isDefault: stream.selected === true,
+      isForced: (stream.displayTitle || stream.title || '').toLowerCase().includes('forced'),
     }))
 
     // Find best audio track using shared utility
@@ -1085,7 +1096,7 @@ export class PlexProvider implements MediaProvider {
       height,
       video_codec: normalizeVideoCodec(media.videoCodec),
       video_bitrate: normalizeBitrate(media.bitrate, 'kbps'),
-      audio_codec: normalizeAudioCodec(media.audioCodec),
+      audio_codec: normalizeAudioCodec(media.audioCodec, audioStream?.profile),
       audio_channels: normalizeAudioChannels(media.audioChannels, audioStream.audioChannelLayout),
       audio_bitrate: normalizeBitrate(audioStream.bitrate, 'kbps'),
       video_frame_rate: normalizeFrameRate(videoStream.frameRate),
@@ -1109,6 +1120,7 @@ export class PlexProvider implements MediaProvider {
         audioStream.audioChannelLayout
       ),
       audio_tracks: JSON.stringify(audioTracks),
+      subtitle_tracks: subtitleTracks.length > 0 ? JSON.stringify(subtitleTracks) : undefined,
       container: normalizeContainer(part.container || media.container),
       imdb_id: imdbId,
       tmdb_id: tmdbId,

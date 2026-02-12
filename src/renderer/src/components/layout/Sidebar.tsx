@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronRight, Loader2, RefreshCw, Plus, Film, Tv, Music, Folder, Trash2, Pencil, Info, Square, Server, HardDrive, Settings, Eye, EyeOff, Clock, PanelLeftClose, PanelLeft } from 'lucide-react'
 import { useSources, type ProviderType } from '../../contexts/SourceContext'
-import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
 import { AddSourceModal } from '../sources/AddSourceModal'
 import type { MediaSourceResponse, MediaLibraryResponse } from '../../../../preload/index'
 
@@ -99,27 +98,6 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
   const [taskQueueState, setTaskQueueState] = useState<TaskQueueState | null>(null)
   const addSourceButtonRef = useRef<HTMLButtonElement>(null)
   const aboutButtonRef = useRef<HTMLButtonElement>(null)
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const addSourceFocusId = 'sidebar-add-source'
-  const aboutFocusId = 'sidebar-about'
-  const isAddSourceFocused = focusedId === addSourceFocusId && isNavigationActive
-  const isAboutFocused = focusedId === aboutFocusId && isNavigationActive
-
-  useEffect(() => {
-    if (addSourceButtonRef.current && sources.length > 0) {
-      registerFocusable(addSourceFocusId, addSourceButtonRef.current, 'sidebar', sources.length)
-    }
-    return () => unregisterFocusable(addSourceFocusId)
-  }, [sources.length, registerFocusable, unregisterFocusable])
-
-  // Register About button (always last in sidebar)
-  useEffect(() => {
-    if (aboutButtonRef.current) {
-      registerFocusable(aboutFocusId, aboutButtonRef.current, 'sidebar', sources.length + 1)
-    }
-    return () => unregisterFocusable(aboutFocusId)
-  }, [sources.length, registerFocusable, unregisterFocusable])
-
   // Listen for library updates to refresh sidebar when libraries are toggled
   useEffect(() => {
     const cleanup = window.electronAPI.onLibraryUpdated?.((data: { type: string; sourceId?: string }) => {
@@ -443,7 +421,7 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
           </div>
         )}
 
-        {sources.map((source, index) => (
+        {sources.map((source) => (
           <SourceItem
             key={source.source_id}
             source={source}
@@ -484,7 +462,6 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
             onRename={(newName) => handleRenameSource(source.source_id, newName)}
             onCancelRename={() => setRenamingSourceId(null)}
             onStopScan={handleStopScan}
-            index={index}
             taskQueueState={taskQueueState}
             newItemCounts={newItemCounts}
             onClearNewItems={clearNewItems}
@@ -496,7 +473,7 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
           <button
             ref={addSourceButtonRef}
             onClick={() => setShowAddModal(true)}
-            className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${isAddSourceFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background text-foreground bg-muted/50' : ''}`}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
             aria-label="Add media source"
           >
             <Plus className="w-3.5 h-3.5" aria-hidden="true" />
@@ -512,7 +489,7 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
         <button
           ref={aboutButtonRef}
           onClick={onOpenAbout}
-          className={`w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${isAboutFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background text-foreground' : ''}`}
+          className="w-full flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
           aria-label="About Totality"
         >
           <Info className={isCollapsed ? 'w-5 h-5' : 'w-3.5 h-3.5'} aria-hidden="true" />
@@ -556,7 +533,6 @@ interface SourceItemProps {
   onRename: (newName: string) => Promise<void>
   onCancelRename: () => void
   onStopScan: () => void
-  index: number
   taskQueueState: TaskQueueState | null
   newItemCounts: Map<string, number>
   onClearNewItems: (libraryKey: string) => void
@@ -591,7 +567,6 @@ function SourceItem({
   onRename,
   onCancelRename,
   onStopScan,
-  index,
   taskQueueState,
   newItemCounts,
   onClearNewItems,
@@ -627,62 +602,10 @@ function SourceItem({
   const renameButtonRef = useRef<HTMLButtonElement>(null)
   const deleteButtonRef = useRef<HTMLButtonElement>(null)
   const libraryRefs = useRef<Map<string, HTMLDivElement>>(new Map())
-  const { registerFocusable, unregisterFocusable, focusedId, isNavigationActive } = useKeyboardNavigation()
-  const focusId = `sidebar-source-${source.source_id}`
-  const isFocused = focusedId === focusId && isNavigationActive
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [renameValue, setRenameValue] = useState(source.display_name)
   const confirmTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Register library items when expanded
-  useEffect(() => {
-    if (isExpanded && !isManaging && libraries.length > 0) {
-      libraries.forEach((library, libIndex) => {
-        const ref = libraryRefs.current.get(library.id)
-        if (ref) {
-          // Libraries start after the source button (index + 1 + libIndex)
-          registerFocusable(
-            `sidebar-lib-${source.source_id}-${library.id}`,
-            ref,
-            'sidebar',
-            index + 1 + libIndex
-          )
-        }
-      })
-    }
-    return () => {
-      libraries.forEach((library) => {
-        unregisterFocusable(`sidebar-lib-${source.source_id}-${library.id}`)
-      })
-    }
-  }, [isExpanded, isManaging, libraries, source.source_id, index, registerFocusable, unregisterFocusable])
-
-  // Register action buttons when expanded
-  useEffect(() => {
-    if (isExpanded) {
-      const baseIndex = index + 1 + libraries.length
-      if (manageButtonRef.current) {
-        registerFocusable(`sidebar-manage-${source.source_id}`, manageButtonRef.current, 'sidebar', baseIndex)
-      }
-      if (renameButtonRef.current) {
-        registerFocusable(`sidebar-rename-${source.source_id}`, renameButtonRef.current, 'sidebar', baseIndex + 1)
-      }
-      if (deleteButtonRef.current) {
-        registerFocusable(`sidebar-delete-${source.source_id}`, deleteButtonRef.current, 'sidebar', baseIndex + 2)
-      }
-    }
-    return () => {
-      unregisterFocusable(`sidebar-manage-${source.source_id}`)
-      unregisterFocusable(`sidebar-rename-${source.source_id}`)
-      unregisterFocusable(`sidebar-delete-${source.source_id}`)
-    }
-  }, [isExpanded, libraries.length, source.source_id, index, registerFocusable, unregisterFocusable])
-
-  // Check if action buttons are focused
-  const isManageFocused = focusedId === `sidebar-manage-${source.source_id}` && isNavigationActive
-  const isRenameFocused = focusedId === `sidebar-rename-${source.source_id}` && isNavigationActive
-  const isDeleteFocused = focusedId === `sidebar-delete-${source.source_id}` && isNavigationActive
 
   // Focus input when renaming starts
   useEffect(() => {
@@ -711,13 +634,6 @@ function SourceItem({
       onCancelRename()
     }
   }
-
-  useEffect(() => {
-    if (buttonRef.current) {
-      registerFocusable(focusId, buttonRef.current, 'sidebar', index)
-    }
-    return () => unregisterFocusable(focusId)
-  }, [focusId, index, registerFocusable, unregisterFocusable])
 
   // Clear confirm timeout on unmount
   useEffect(() => {
@@ -766,7 +682,7 @@ function SourceItem({
         aria-expanded={isExpanded}
         className={`w-full flex items-center gap-3 px-4 py-3 rounded-md font-medium transition-colors focus:outline-none ${
           isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50 text-foreground'
-        } ${isFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+        }`}
       >
         <div className={`w-5 h-5 ${color} rounded flex items-center justify-center text-white flex-shrink-0`} aria-hidden="true">
           {source.source_type === 'local' ? (
@@ -875,9 +791,6 @@ function SourceItem({
 
                 const libraryKey = `${source.source_id}:${library.id}`
                 const newItemCount = newItemCounts.get(libraryKey)
-                const libFocusId = `sidebar-lib-${source.source_id}-${library.id}`
-                const isLibFocused = focusedId === libFocusId && isNavigationActive
-
                 return (
                   <div
                     key={library.id}
@@ -902,7 +815,7 @@ function SourceItem({
                         }
                       }
                     }}
-                    className={`px-2 py-1.5 bg-muted/30 rounded group cursor-pointer hover:bg-muted/50 transition-colors focus:outline-none ${isLibFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+                    className="px-2 py-1.5 bg-muted/30 rounded group cursor-pointer hover:bg-muted/50 transition-colors focus:outline-none"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
@@ -1045,7 +958,7 @@ function SourceItem({
                 isManaging
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              } ${isManageFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+              }`}
               aria-label={isManaging ? 'Done managing libraries' : 'Manage libraries'}
               title={isManaging ? 'Done' : 'Libraries'}
             >
@@ -1054,7 +967,7 @@ function SourceItem({
             <button
               ref={renameButtonRef}
               onClick={(e) => { e.stopPropagation(); onStartRename() }}
-              className={`p-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-colors focus:outline-none ${isRenameFocused ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-colors focus:outline-none"
               aria-label={`Rename ${source.display_name}`}
               title="Rename"
             >
@@ -1068,7 +981,7 @@ function SourceItem({
                 confirmDelete
                   ? 'bg-red-500 text-white hover:bg-red-600'
                   : 'text-red-400 hover:text-red-300 hover:bg-red-500/10'
-              } ${isDeleteFocused ? 'ring-2 ring-red-500 ring-offset-2 ring-offset-background' : ''}`}
+              }`}
               aria-label={confirmDelete ? `Confirm remove ${source.display_name}` : `Remove ${source.display_name}`}
               title={confirmDelete ? 'Confirm?' : 'Remove'}
             >

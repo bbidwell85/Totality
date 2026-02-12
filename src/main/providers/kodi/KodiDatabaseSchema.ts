@@ -713,10 +713,19 @@ export function normalizeVideoCodec(codec: string | null): string {
 /**
  * Normalize audio codec name
  */
-export function normalizeAudioCodec(codec: string | null): string {
+export function normalizeAudioCodec(codec: string | null, profile?: string): string {
   if (!codec) return ''
 
   const codecLower = codec.toLowerCase()
+  const profileLower = (profile || '').toLowerCase()
+
+  // Plex/FFprobe sends DTS variants as codec 'dca'/'dts' + profile to distinguish
+  if (codecLower === 'dca' || (codecLower === 'dts' && profileLower)) {
+    if (profileLower === 'ma' || profileLower.includes('dts-hd ma')) return 'DTS-HD MA'
+    if (profileLower === 'hra' || profileLower.includes('dts-hd hra')) return 'DTS-HD'
+    if (profileLower.includes('dts:x') || profileLower.includes('dtsx')) return 'DTS:X'
+    if (codecLower === 'dca') return 'DTS'
+  }
 
   if (codecLower.includes('truehd')) {
     return 'TrueHD'

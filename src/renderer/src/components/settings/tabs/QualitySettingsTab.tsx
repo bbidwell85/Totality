@@ -119,10 +119,6 @@ export function QualitySettingsTab() {
   const [isReanalyzing, setIsReanalyzing] = useState(false)
   const [reanalyzeProgress, setReanalyzeProgress] = useState<{ current: number; total: number } | null>(null)
 
-  // Completeness settings (separate from numeric quality settings)
-  const [includeEps, setIncludeEps] = useState(true)
-  const [includeSingles, setIncludeSingles] = useState(true)
-
   // Expanded state for cards
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set(['video']))
 
@@ -171,14 +167,6 @@ export function QualitySettingsTab() {
 
       setSettings(loaded)
       setOriginalSettings(loaded)
-
-      // Load completeness toggle settings
-      const [epsVal, singlesVal] = await Promise.all([
-        window.electronAPI.getSetting('completeness_include_eps'),
-        window.electronAPI.getSetting('completeness_include_singles'),
-      ])
-      setIncludeEps(epsVal !== 'false')
-      setIncludeSingles(singlesVal !== 'false')
     } catch (error) {
       console.error('Failed to load settings:', error)
     } finally {
@@ -292,7 +280,7 @@ export function QualitySettingsTab() {
       {/* Header */}
       <div className="mb-4">
         <p className="text-xs text-muted-foreground">
-          Configure bitrate thresholds that determine LOW, MEDIUM, and HIGH quality ratings.
+          Configure bitrate thresholds for quality scoring. Video thresholds set the target range directly. Audio thresholds set the target for stereo codecs (AAC, MP3) and scale the bonus for surround codecs (AC3, EAC3, DTS).
         </p>
       </div>
 
@@ -344,7 +332,7 @@ export function QualitySettingsTab() {
               }}
             />
             <QualityThreshold
-              label="Audio Bitrate"
+              label="Audio Bitrate Target"
               mediumValue={settings[`quality_audio_${selectedTier}_medium` as keyof SettingsState] as number}
               highValue={settings[`quality_audio_${selectedTier}_high` as keyof SettingsState] as number}
               min={AUDIO_THRESHOLDS[selectedTier].min}
@@ -408,68 +396,6 @@ export function QualitySettingsTab() {
               onChange={(v) => updateSetting('quality_music_hires_bitdepth', v)}
               hint="Above this = Hi-Res"
             />
-          </div>
-        </div>
-      </SettingsCard>
-
-      {/* Music Completeness Card */}
-      <SettingsCard
-        title="Music Completeness"
-        description="Configure what counts toward artist discography completeness"
-        icon={<Music className="w-7 h-7" />}
-        expanded={expandedCards.has('completeness')}
-        onToggle={() => toggleCard('completeness')}
-      >
-        <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Choose which release types to include in artist completeness analysis.
-            Changes take effect on next completeness analysis run.
-          </p>
-          <div className="space-y-3">
-            <label className="flex items-center justify-between cursor-pointer">
-              <div>
-                <div className="text-sm font-medium">Include EPs</div>
-                <div className="text-xs text-muted-foreground">Count EPs toward completeness (weighted 2x)</div>
-              </div>
-              <button
-                role="switch"
-                aria-checked={includeEps}
-                onClick={async () => {
-                  const newVal = !includeEps
-                  setIncludeEps(newVal)
-                  await window.electronAPI.setSetting('completeness_include_eps', String(newVal))
-                }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
-                  includeEps ? 'bg-primary' : 'bg-muted'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  includeEps ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
-            </label>
-            <label className="flex items-center justify-between cursor-pointer">
-              <div>
-                <div className="text-sm font-medium">Include Singles</div>
-                <div className="text-xs text-muted-foreground">Count singles toward completeness (weighted 1x)</div>
-              </div>
-              <button
-                role="switch"
-                aria-checked={includeSingles}
-                onClick={async () => {
-                  const newVal = !includeSingles
-                  setIncludeSingles(newVal)
-                  await window.electronAPI.setSetting('completeness_include_singles', String(newVal))
-                }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
-                  includeSingles ? 'bg-primary' : 'bg-muted'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  includeSingles ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
-            </label>
           </div>
         </div>
       </SettingsCard>

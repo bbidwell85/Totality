@@ -266,15 +266,19 @@ export class QualityAnalyzer {
         return fallback
       }
 
+      // Filter out commentary tracks for best-track selection
+      const nonCommentary = tracks.filter(t => !t.title?.toLowerCase().includes('commentary'))
+      const candidates = nonCommentary.length > 0 ? nonCommentary : tracks
+
       // Find the track with the highest quality score
-      let bestTrack = tracks[0]
+      let bestTrack = candidates[0]
       let bestScore = this.calculateAudioTrackQualityScore(bestTrack)
 
-      for (let i = 1; i < tracks.length; i++) {
-        const score = this.calculateAudioTrackQualityScore(tracks[i])
+      for (let i = 1; i < candidates.length; i++) {
+        const score = this.calculateAudioTrackQualityScore(candidates[i])
         if (score > bestScore) {
           bestScore = score
-          bestTrack = tracks[i]
+          bestTrack = candidates[i]
         }
       }
 
@@ -308,30 +312,25 @@ export class QualityAnalyzer {
     bestAudio: { codec: string; channels: number; bitrate: number; hasObjectAudio: boolean },
     tier: QualityTier
   ): TierQuality {
-    // Object audio (Atmos, DTS:X) = automatic HIGH
-    if (bestAudio.hasObjectAudio) {
-      return 'HIGH'
-    }
+    // Object audio (Atmos, DTS:X) = HIGH
+    if (bestAudio.hasObjectAudio) return 'HIGH'
+    // Lossless codecs = HIGH
+    if (this.isLosslessAudio(bestAudio.codec)) return 'HIGH'
 
-    // Lossless codecs = automatic HIGH
-    if (this.isLosslessAudio(bestAudio.codec)) {
-      return 'HIGH'
-    }
-
-    // Premium lossy with good channels (5.1+) = HIGH
     const codecLower = bestAudio.codec.toLowerCase()
     const isPremiumLossy = codecLower.includes('eac3') || codecLower.includes('e-ac-3') ||
                            codecLower.includes('dd+') || codecLower.includes('dts')
-    if (isPremiumLossy && bestAudio.channels >= 6) {
-      return 'HIGH'
-    }
 
-    // Standard surround (AC3 5.1) = MEDIUM
-    if (codecLower.includes('ac3') && bestAudio.channels >= 6) {
-      return 'MEDIUM'
-    }
+    // Premium lossy (EAC3/DTS) with surround = HIGH
+    if (isPremiumLossy && bestAudio.channels >= 6) return 'HIGH'
+    // Standard surround (AC3 5.1+) = HIGH (score best available)
+    if (codecLower.includes('ac3') && bestAudio.channels >= 6) return 'HIGH'
+    // Any codec with surround channels = MEDIUM
+    if (bestAudio.channels >= 6) return 'MEDIUM'
+    // Stereo premium/standard lossy = MEDIUM
+    if (isPremiumLossy || codecLower.includes('ac3')) return 'MEDIUM'
 
-    // Fall back to bitrate-based scoring for everything else
+    // Fall back to bitrate-based for everything else (AAC stereo, MP3, etc.)
     const { medium, high } = this.audioThresholds[tier]
     if (bestAudio.bitrate >= high) return 'HIGH'
     if (bestAudio.bitrate >= medium) return 'MEDIUM'
@@ -339,24 +338,85 @@ export class QualityAnalyzer {
   }
 
   /**
-   * Combine video and audio quality - overall is the lower of the two
+   * Combine video and audio quality - audio can pull down at most one tier
+   * e.g., HIGH video + LOW audio = MEDIUM (not LOW)
    */
   private combineQuality(videoQuality: TierQuality, audioQuality: TierQuality): TierQuality {
     const qualityOrder: TierQuality[] = ['LOW', 'MEDIUM', 'HIGH']
     const videoIndex = qualityOrder.indexOf(videoQuality)
     const audioIndex = qualityOrder.indexOf(audioQuality)
-    return qualityOrder[Math.min(videoIndex, audioIndex)]
+    const combined = Math.max(Math.min(videoIndex, audioIndex), videoIndex - 1)
+    return qualityOrder[combined]
   }
 
   /**
-   * Convert tier quality to numeric score for legacy compatibility
+   * Calculate continuous video tier score (0-100) based on effective bitrate
+   * relative to the tier's medium/high thresholds
    */
-  private qualityToScore(quality: TierQuality): number {
-    switch (quality) {
-      case 'HIGH': return 85
-      case 'MEDIUM': return 60
-      case 'LOW': return 30
+  private calculateVideoTierScore(effectiveBitrate: number, tier: QualityTier): number {
+    if (effectiveBitrate <= 0) return 0
+    const { medium, high } = this.videoThresholds[tier]
+    if (effectiveBitrate < medium) {
+      return Math.round((effectiveBitrate / medium) * 40)
     }
+    if (effectiveBitrate < high) {
+      return 40 + Math.round(((effectiveBitrate - medium) / (high - medium)) * 35)
+    }
+    const ceiling = high * 2
+    return Math.min(100, 75 + Math.round(((effectiveBitrate - high) / (ceiling - high)) * 25))
+  }
+
+  /**
+   * Calculate continuous audio tier score (0-100) from audio characteristics
+   */
+  private calculateAudioTierScore(
+    bestAudio: { codec: string; channels: number; bitrate: number; hasObjectAudio: boolean },
+    tier: QualityTier
+  ): number {
+    // Object audio = perfect
+    if (bestAudio.hasObjectAudio) return 100
+    // Lossless = perfect
+    if (this.isLosslessAudio(bestAudio.codec)) return 100
+
+    const { medium, high } = this.audioThresholds[tier]
+
+    // Bitrate ratio: how well the track meets tier thresholds
+    // 0.0 = no bitrate, ~0.5 = at medium, 1.0 = at or above high
+    const bitrateRatio = bestAudio.bitrate > 0 && high > 0
+      ? Math.min(bestAudio.bitrate / high, 1.0)
+      : 0
+
+    const codecLower = bestAudio.codec.toLowerCase()
+    const isPremiumLossy = codecLower.includes('eac3') || codecLower.includes('e-ac-3') ||
+                           codecLower.includes('dd+') || codecLower.includes('dts')
+    const isAC3 = codecLower.includes('ac3')
+
+    // Premium lossy surround (EAC3/DTS 5.1+): floor 75, ceiling 95
+    if (isPremiumLossy && bestAudio.channels >= 6) {
+      return Math.round(75 + bitrateRatio * 20)
+    }
+    // Standard surround (AC3 5.1+): floor 65, ceiling 90
+    if (isAC3 && bestAudio.channels >= 6) {
+      return Math.round(65 + bitrateRatio * 25)
+    }
+    // Stereo premium lossy: floor 45, ceiling 70
+    if (isPremiumLossy) {
+      return Math.round(45 + bitrateRatio * 25)
+    }
+    // Stereo AC3: floor 35, ceiling 60
+    if (isAC3) {
+      return Math.round(35 + bitrateRatio * 25)
+    }
+
+    // Unknown codecs (AAC, MP3, etc.) — pure bitrate-based
+    if (bestAudio.bitrate <= 0) return 0
+    if (bestAudio.bitrate < medium) {
+      return Math.round((bestAudio.bitrate / medium) * 30)
+    }
+    if (bestAudio.bitrate < high) {
+      return 30 + Math.round(((bestAudio.bitrate - medium) / (high - medium)) * 30)
+    }
+    return 60
   }
 
   /**
@@ -392,10 +452,10 @@ export class QualityAnalyzer {
     // Overall quality is the lower of video and audio
     const tierQuality = this.combineQuality(videoQuality, audioQuality)
 
-    // Calculate scores for legacy compatibility
-    const tierScore = this.qualityToScore(tierQuality)
-    const bitrateTierScore = this.qualityToScore(videoQuality)
-    const audioTierScore = this.qualityToScore(audioQuality)
+    // Calculate continuous tier scores (0-100)
+    const bitrateTierScore = this.calculateVideoTierScore(effectiveBitrate, qualityTier)
+    const audioTierScore = this.calculateAudioTierScore(bestAudio, qualityTier)
+    const tierScore = Math.round(bitrateTierScore * 0.7 + audioTierScore * 0.3)
 
     // Legacy scoring (for backward compatibility) - also use best audio
     const resolutionScore = this.calculateResolutionScore(mediaItem.height)
@@ -425,12 +485,6 @@ export class QualityAnalyzer {
     if (['4K', '1080p'].includes(qualityTier) &&
         (!mediaItem.color_bit_depth || mediaItem.color_bit_depth < 10)) {
       issues.push('8-bit color (10-bit recommended)')
-    }
-
-    // Premium audio missing (check best audio track)
-    if (qualityTier === '4K' && !bestAudio.hasObjectAudio &&
-        !this.isLosslessAudio(bestAudio.codec)) {
-      issues.push('No premium audio')
     }
 
     // Audio issues (check best audio track)

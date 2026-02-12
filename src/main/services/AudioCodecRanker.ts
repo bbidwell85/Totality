@@ -19,6 +19,7 @@ export interface AudioTrackInfo {
   bitrate: number
   sampleRate?: number
   language?: string
+  title?: string
   hasObjectAudio?: boolean
   isDefault?: boolean
 }

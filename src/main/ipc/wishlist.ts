@@ -2,55 +2,10 @@ import { ipcMain, shell, dialog, BrowserWindow } from 'electron'
 import { promises as fs } from 'fs'
 import { getDatabase } from '../database/getDatabase'
 import { getStoreSearchService } from '../services/StoreSearchService'
-import type { WishlistItem, WishlistFilters } from '../types/database'
+import type { WishlistItem } from '../types/database'
 import type { StoreRegion } from '../services/StoreSearchService'
-
-// Valid enum values for validation
-const VALID_MEDIA_TYPES = ['movie', 'episode', 'season', 'album', 'track']
-const VALID_REASONS = ['missing', 'upgrade']
-
-/**
- * Validate a wishlist item before adding
- */
-function validateWishlistItem(item: Partial<WishlistItem>): void {
-  // Title is required and must be non-empty
-  if (!item.title || typeof item.title !== 'string' || item.title.trim() === '') {
-    throw new Error('Title is required and must be a non-empty string')
-  }
-
-  // Media type must be valid
-  if (!item.media_type || !VALID_MEDIA_TYPES.includes(item.media_type)) {
-    throw new Error(`Invalid media_type: must be one of ${VALID_MEDIA_TYPES.join(', ')}`)
-  }
-
-  // Priority must be 1-5 if provided
-  if (item.priority !== undefined && (typeof item.priority !== 'number' || item.priority < 1 || item.priority > 5)) {
-    throw new Error('Priority must be a number between 1 and 5')
-  }
-
-  // Reason must be valid if provided
-  if (item.reason && !VALID_REASONS.includes(item.reason)) {
-    throw new Error(`Invalid reason: must be one of ${VALID_REASONS.join(', ')}`)
-  }
-}
-
-/**
- * Sanitize a wishlist item (trim strings, etc.)
- */
-function sanitizeWishlistItem(item: Partial<WishlistItem>): Partial<WishlistItem> {
-  const sanitized = { ...item }
-
-  // Trim string fields
-  if (sanitized.title) sanitized.title = sanitized.title.trim()
-  if (sanitized.notes) sanitized.notes = sanitized.notes.trim()
-  if (sanitized.subtitle) sanitized.subtitle = sanitized.subtitle.trim()
-  if (sanitized.series_title) sanitized.series_title = sanitized.series_title.trim()
-  if (sanitized.artist_name) sanitized.artist_name = sanitized.artist_name.trim()
-  if (sanitized.album_title) sanitized.album_title = sanitized.album_title.trim()
-  if (sanitized.collection_name) sanitized.collection_name = sanitized.collection_name.trim()
-
-  return sanitized
-}
+import { validateInput, PositiveIntSchema, WishlistItemSchema, WishlistFiltersSchema, SafeUrlSchema, StoreRegionSchema } from '../validation/schemas'
+import { z } from 'zod'
 
 /**
  * Register all wishlist-related IPC handlers
@@ -66,15 +21,11 @@ export function registerWishlistHandlers() {
   /**
    * Add an item to the wishlist
    */
-  ipcMain.handle('wishlist:add', async (_event, item: Partial<WishlistItem>) => {
+  ipcMain.handle('wishlist:add', async (_event, item: unknown) => {
     try {
-      // Validate input
-      validateWishlistItem(item)
+      const validItem = validateInput(WishlistItemSchema, item, 'wishlist:add')
 
-      // Sanitize input
-      const sanitizedItem = sanitizeWishlistItem(item)
-
-      return await db.addWishlistItem(sanitizedItem)
+      return await db.addWishlistItem(validItem)
     } catch (error) {
       console.error('Error adding wishlist item:', error)
       throw error
@@ -84,9 +35,11 @@ export function registerWishlistHandlers() {
   /**
    * Update a wishlist item
    */
-  ipcMain.handle('wishlist:update', async (_event, id: number, updates: Partial<WishlistItem>) => {
+  ipcMain.handle('wishlist:update', async (_event, id: unknown, updates: unknown) => {
     try {
-      await db.updateWishlistItem(id, updates)
+      const validId = validateInput(PositiveIntSchema, id, 'wishlist:update')
+      const validUpdates = validateInput(WishlistItemSchema.partial(), updates, 'wishlist:update')
+      await db.updateWishlistItem(validId, validUpdates)
       return { success: true }
     } catch (error) {
       console.error('Error updating wishlist item:', error)
@@ -97,9 +50,10 @@ export function registerWishlistHandlers() {
   /**
    * Remove an item from the wishlist
    */
-  ipcMain.handle('wishlist:remove', async (_event, id: number) => {
+  ipcMain.handle('wishlist:remove', async (_event, id: unknown) => {
     try {
-      await db.removeWishlistItem(id)
+      const validId = validateInput(PositiveIntSchema, id, 'wishlist:remove')
+      await db.removeWishlistItem(validId)
       return { success: true }
     } catch (error) {
       console.error('Error removing wishlist item:', error)
@@ -110,9 +64,10 @@ export function registerWishlistHandlers() {
   /**
    * Get all wishlist items with optional filters
    */
-  ipcMain.handle('wishlist:getAll', async (_event, filters?: WishlistFilters) => {
+  ipcMain.handle('wishlist:getAll', async (_event, filters?: unknown) => {
     try {
-      return db.getWishlistItems(filters)
+      const validFilters = validateInput(WishlistFiltersSchema, filters, 'wishlist:getAll')
+      return db.getWishlistItems(validFilters)
     } catch (error) {
       console.error('Error getting wishlist items:', error)
       throw error
@@ -122,9 +77,10 @@ export function registerWishlistHandlers() {
   /**
    * Get a single wishlist item by ID
    */
-  ipcMain.handle('wishlist:getById', async (_event, id: number) => {
+  ipcMain.handle('wishlist:getById', async (_event, id: unknown) => {
     try {
-      return db.getWishlistItemById(id)
+      const validId = validateInput(PositiveIntSchema, id, 'wishlist:getById')
+      return db.getWishlistItemById(validId)
     } catch (error) {
       console.error('Error getting wishlist item:', error)
       throw error
@@ -146,9 +102,12 @@ export function registerWishlistHandlers() {
   /**
    * Check if an item already exists in the wishlist
    */
-  ipcMain.handle('wishlist:checkExists', async (_event, tmdbId?: string, musicbrainzId?: string, mediaItemId?: number) => {
+  ipcMain.handle('wishlist:checkExists', async (_event, tmdbId?: unknown, musicbrainzId?: unknown, mediaItemId?: unknown) => {
     try {
-      return db.wishlistItemExists(tmdbId, musicbrainzId, mediaItemId)
+      const validTmdbId = tmdbId !== undefined ? validateInput(z.string().max(20), tmdbId, 'wishlist:checkExists') : undefined
+      const validMusicbrainzId = musicbrainzId !== undefined ? validateInput(z.string().max(100), musicbrainzId, 'wishlist:checkExists') : undefined
+      const validMediaItemId = mediaItemId !== undefined ? validateInput(PositiveIntSchema, mediaItemId, 'wishlist:checkExists') : undefined
+      return db.wishlistItemExists(validTmdbId, validMusicbrainzId, validMediaItemId)
     } catch (error) {
       console.error('Error checking wishlist existence:', error)
       throw error
@@ -170,15 +129,11 @@ export function registerWishlistHandlers() {
   /**
    * Add multiple items to the wishlist (bulk operation)
    */
-  ipcMain.handle('wishlist:addBulk', async (_event, items: Partial<WishlistItem>[]) => {
+  ipcMain.handle('wishlist:addBulk', async (_event, items: unknown) => {
     try {
-      // Validate and sanitize all items
-      const sanitizedItems = items.map(item => {
-        validateWishlistItem(item)
-        return sanitizeWishlistItem(item)
-      })
+      const validItems = validateInput(z.array(WishlistItemSchema), items, 'wishlist:addBulk')
 
-      const added = await db.addWishlistItemsBulk(sanitizedItems)
+      const added = await db.addWishlistItemsBulk(validItems)
       return { success: true, added }
     } catch (error) {
       console.error('Error bulk adding wishlist items:', error)
@@ -193,9 +148,10 @@ export function registerWishlistHandlers() {
   /**
    * Get store search links for a wishlist item
    */
-  ipcMain.handle('wishlist:getStoreLinks', async (_event, item: WishlistItem) => {
+  ipcMain.handle('wishlist:getStoreLinks', async (_event, item: unknown) => {
     try {
-      return storeService.getStoreLinks(item)
+      const validItem = validateInput(WishlistItemSchema, item, 'wishlist:getStoreLinks')
+      return storeService.getStoreLinks(validItem as WishlistItem)
     } catch (error) {
       console.error('Error getting store links:', error)
       throw error
@@ -206,24 +162,11 @@ export function registerWishlistHandlers() {
    * Open a store link in the default browser
    * SECURITY: Only allows https:// and http:// URLs to prevent malicious schemes
    */
-  ipcMain.handle('wishlist:openStoreLink', async (_event, url: string) => {
+  ipcMain.handle('wishlist:openStoreLink', async (_event, url: unknown) => {
     try {
-      // Validate URL format and scheme
-      let parsedUrl: URL
-      try {
-        parsedUrl = new URL(url)
-      } catch {
-        throw new Error('Invalid URL format')
-      }
+      const validUrl = validateInput(SafeUrlSchema, url, 'wishlist:openStoreLink')
 
-      // Only allow safe URL schemes
-      const allowedSchemes = ['https:', 'http:']
-      if (!allowedSchemes.includes(parsedUrl.protocol)) {
-        console.warn('[Security] Blocked unsafe URL scheme:', parsedUrl.protocol)
-        throw new Error(`URL scheme not allowed: ${parsedUrl.protocol}`)
-      }
-
-      await shell.openExternal(parsedUrl.toString())
+      await shell.openExternal(validUrl)
       return { success: true }
     } catch (error) {
       console.error('Error opening store link:', error)
@@ -234,11 +177,12 @@ export function registerWishlistHandlers() {
   /**
    * Set the store region preference
    */
-  ipcMain.handle('wishlist:setRegion', async (_event, region: StoreRegion) => {
+  ipcMain.handle('wishlist:setRegion', async (_event, region: unknown) => {
     try {
-      storeService.setRegion(region)
+      const validRegion = validateInput(StoreRegionSchema, region, 'wishlist:setRegion')
+      storeService.setRegion(validRegion as StoreRegion)
       // Save to settings
-      await db.setSetting('store_region', region)
+      await db.setSetting('store_region', validRegion)
       return { success: true }
     } catch (error) {
       console.error('Error setting store region:', error)

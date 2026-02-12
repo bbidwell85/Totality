@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Search, Check, Star, Calendar, Loader2 } from 'lucide-react'
-import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 
 interface TMDBSearchResult {
@@ -69,19 +68,10 @@ export function MatchFixModal({
   const [isFixing, setIsFixing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null)
-  const { openModal, closeModal } = useKeyboardNavigation()
   const modalRef = useRef<HTMLDivElement>(null)
 
   // Focus trap
   useFocusTrap(isOpen, modalRef)
-
-  // Modal registration
-  useEffect(() => {
-    if (isOpen) {
-      openModal('match-fix-modal')
-      return () => closeModal()
-    }
-  }, [isOpen, openModal, closeModal])
 
   // Reset state when modal opens
   useEffect(() => {

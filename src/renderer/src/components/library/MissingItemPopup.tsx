@@ -18,6 +18,7 @@ interface MissingItemPopupProps {
   imdbId?: string
   seriesTitle?: string
   onClose: () => void
+  onDismiss?: () => void
 }
 
 export function MissingItemPopup({
@@ -31,7 +32,8 @@ export function MissingItemPopup({
   tmdbId,
   imdbId,
   seriesTitle,
-  onClose
+  onClose,
+  onDismiss
 }: MissingItemPopupProps) {
   // Format the subtitle based on type
   const getSubtitle = () => {
@@ -111,8 +113,8 @@ export function MissingItemPopup({
               This {type} is not in your library
             </p>
 
-            {/* Add to Wishlist */}
-            <div className="mt-4">
+            {/* Actions */}
+            <div className="mt-4 flex gap-2">
               <AddToWishlistButton
                 mediaType={type}
                 title={title}
@@ -124,6 +126,14 @@ export function MissingItemPopup({
                 episodeNumber={episodeNumber}
                 posterUrl={posterUrl}
               />
+              {onDismiss && (
+                <button
+                  onClick={() => { onDismiss(); onClose() }}
+                  className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-muted transition-colors text-muted-foreground"
+                >
+                  Dismiss
+                </button>
+              )}
             </div>
           </div>
         </div>

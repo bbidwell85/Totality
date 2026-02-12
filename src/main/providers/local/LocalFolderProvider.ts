@@ -654,7 +654,7 @@ export class LocalFolderProvider implements MediaProvider {
           percentage: 100,
         })
 
-        const existingItems = db.getMediaItems({ type: scanType, sourceId: this.sourceId })
+        const existingItems = db.getMediaItems({ type: scanType, sourceId: this.sourceId, libraryId })
         for (const item of existingItems) {
           if (!scannedFilePaths.has(item.file_path)) {
             if (item.id) {
@@ -1015,7 +1015,7 @@ export class LocalFolderProvider implements MediaProvider {
               if (analysis.success && analysis.audioTracks && analysis.audioTracks.length > 0) {
                 const primaryAudio = analysis.audioTracks[0]
                 audioInfo = {
-                  codec: normalizeAudioCodec(primaryAudio.codec),
+                  codec: normalizeAudioCodec(primaryAudio.codec, primaryAudio.profile),
                   bitrate: primaryAudio.bitrate,
                   sampleRate: primaryAudio.sampleRate,
                   bitDepth: primaryAudio.bitDepth,
@@ -1642,7 +1642,7 @@ export class LocalFolderProvider implements MediaProvider {
 
     if (analysis.audioTracks && analysis.audioTracks.length > 0) {
       enhanced.audioTracks = analysis.audioTracks.map((track: AnalyzedAudioStream) => ({
-        codec: normalizeAudioCodec(track.codec),
+        codec: normalizeAudioCodec(track.codec, track.profile),
         channels: track.channels,
         bitrate: track.bitrate,
         sampleRate: track.sampleRate,
@@ -1654,11 +1654,24 @@ export class LocalFolderProvider implements MediaProvider {
       // Select the best audio track for primary fields (not just first track)
       const primary = this.selectBestFFprobeAudioTrack(analysis.audioTracks)
       if (primary) {
-        enhanced.audioCodec = normalizeAudioCodec(primary.codec)
+        // Use profile from the matching raw AnalyzedAudioStream for proper DTS variant detection
+        const rawTrack = analysis.audioTracks.find(t => t.codec === primary.codec && t.channels === primary.channels)
+        enhanced.audioCodec = normalizeAudioCodec(primary.codec, rawTrack?.profile)
         enhanced.audioChannels = primary.channels
         enhanced.audioBitrate = primary.bitrate
         enhanced.hasObjectAudio = primary.hasObjectAudio
       }
+    }
+
+    // Subtitle tracks
+    if (analysis.subtitleTracks && analysis.subtitleTracks.length > 0) {
+      enhanced.subtitleTracks = analysis.subtitleTracks.map(track => ({
+        codec: track.codec,
+        language: track.language,
+        title: track.title,
+        isDefault: track.isDefault,
+        isForced: track.isForced,
+      }))
     }
 
     // Apply embedded metadata selectively
@@ -1835,6 +1848,16 @@ export class LocalFolderProvider implements MediaProvider {
       color_space: metadata.colorSpace,
       video_profile: metadata.videoProfile,
       audio_tracks: JSON.stringify(audioTracks),
+      subtitle_tracks: metadata.subtitleTracks && metadata.subtitleTracks.length > 0
+        ? JSON.stringify(metadata.subtitleTracks.map((t, i) => ({
+            index: i,
+            codec: t.codec || 'unknown',
+            language: t.language,
+            title: t.title,
+            isDefault: t.isDefault || false,
+            isForced: t.isForced || false,
+          })))
+        : undefined,
       imdb_id: metadata.imdbId,
       tmdb_id: metadata.tmdbId?.toString(),
       poster_url: metadata.posterUrl,
@@ -2126,7 +2149,7 @@ export class LocalFolderProvider implements MediaProvider {
               if (analysis?.success && analysis.audioTracks && analysis.audioTracks.length > 0) {
                 const primaryAudio = analysis.audioTracks[0]
                 audioInfo = {
-                  codec: normalizeAudioCodec(primaryAudio.codec),
+                  codec: normalizeAudioCodec(primaryAudio.codec, primaryAudio.profile),
                   bitrate: primaryAudio.bitrate,
                   sampleRate: primaryAudio.sampleRate,
                   bitDepth: primaryAudio.bitDepth,

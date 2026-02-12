@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS media_items (
   -- All audio tracks (JSON array)
   audio_tracks TEXT,
 
+  -- All subtitle tracks (JSON array)
+  subtitle_tracks TEXT,
+
   -- Container metadata
   container TEXT,
 

@@ -387,7 +387,11 @@ export class TaskQueueService {
     // Add to completed tasks
     this.completedTasks.unshift(task)
     if (this.completedTasks.length > TaskQueueService.MAX_COMPLETED_TASKS) {
+      const evicted = this.completedTasks.slice(TaskQueueService.MAX_COMPLETED_TASKS)
       this.completedTasks = this.completedTasks.slice(0, TaskQueueService.MAX_COMPLETED_TASKS)
+      // Remove history entries for evicted tasks to prevent memory leak
+      const evictedIds = new Set(evicted.map(t => t.id))
+      this.taskHistory = this.taskHistory.filter(entry => !entry.taskId || !evictedIds.has(entry.taskId))
     }
 
     this.currentTask = null

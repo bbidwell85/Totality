@@ -6,7 +6,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { X, Info, Heart, Scale } from 'lucide-react'
-import { useKeyboardNavigation } from '../../contexts/KeyboardNavigationContext'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import tmdbLogo from '../../assets/tmdb-logo.svg'
 import musicbrainzLogo from '../../assets/musicbrainz-logo.svg'
@@ -33,19 +32,10 @@ const tabs: Tab[] = [
 
 export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>('about')
-  const { openModal, closeModal } = useKeyboardNavigation()
   const modalRef = useRef<HTMLDivElement>(null)
 
   // Focus trap
   useFocusTrap(isOpen, modalRef)
-
-  // Modal registration
-  useEffect(() => {
-    if (isOpen) {
-      openModal('about-modal')
-      return () => closeModal()
-    }
-  }, [isOpen, openModal, closeModal])
 
   // Handle Escape key
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, net } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, net, dialog } from 'electron'
 import path from 'node:path'
 import * as fs from 'fs'
 
@@ -145,10 +145,13 @@ function createWindow() {
   }
 }
 
+// Guard against double database close from concurrent quit events
+let isClosing = false
+
 // Quit when all windows are closed, except on macOS
 app.on('window-all-closed', async () => {
-  if (process.platform !== 'darwin') {
-    // Close database before quitting
+  if (process.platform !== 'darwin' && !isClosing) {
+    isClosing = true
     const db = getDatabaseServiceSync()
     await db.close()
     app.quit()
@@ -158,7 +161,9 @@ app.on('window-all-closed', async () => {
 
 // Before quit, close database and cleanup services
 app.on('before-quit', async (event) => {
+  if (isClosing) return
   event.preventDefault()
+  isClosing = true
 
   // Cleanup auto-update timers
   getAutoUpdateService().cleanup()
@@ -291,6 +296,7 @@ app.whenReady().then(async () => {
 
   } catch (error) {
     console.error('Failed to initialize app:', error)
+    dialog.showErrorBox('Startup Error', `Totality failed to start:\n\n${error instanceof Error ? error.message : String(error)}`)
     app.quit()
   }
 })
