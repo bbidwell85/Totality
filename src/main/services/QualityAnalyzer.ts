@@ -324,11 +324,11 @@ export class QualityAnalyzer {
     // Premium lossy (EAC3/DTS) with surround = HIGH
     if (isPremiumLossy && bestAudio.channels >= 6) return 'HIGH'
     // Standard surround (AC3 5.1+) = HIGH (score best available)
-    if (codecLower.includes('ac3') && bestAudio.channels >= 6) return 'HIGH'
+    if ((codecLower.includes('ac3') || codecLower.includes('ac-3')) && bestAudio.channels >= 6) return 'HIGH'
     // Any codec with surround channels = MEDIUM
     if (bestAudio.channels >= 6) return 'MEDIUM'
     // Stereo premium/standard lossy = MEDIUM
-    if (isPremiumLossy || codecLower.includes('ac3')) return 'MEDIUM'
+    if (isPremiumLossy || codecLower.includes('ac3') || codecLower.includes('ac-3')) return 'MEDIUM'
 
     // Fall back to bitrate-based for everything else (AAC stereo, MP3, etc.)
     const { medium, high } = this.audioThresholds[tier]
@@ -389,7 +389,7 @@ export class QualityAnalyzer {
     const codecLower = bestAudio.codec.toLowerCase()
     const isPremiumLossy = codecLower.includes('eac3') || codecLower.includes('e-ac-3') ||
                            codecLower.includes('dd+') || codecLower.includes('dts')
-    const isAC3 = codecLower.includes('ac3')
+    const isAC3 = codecLower.includes('ac3') || codecLower.includes('ac-3')
 
     // Premium lossy surround (EAC3/DTS 5.1+): floor 75, ceiling 95
     if (isPremiumLossy && bestAudio.channels >= 6) {
