@@ -1,6 +1,6 @@
 {
   "name": "totality",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Analyze media library quality and recommend upgrades",
   "main": "dist-electron/main/index.cjs",
   "scripts": {

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.17](https://github.com/bbidwell85/totality/compare/v0.1.16...v0.1.17) (2026-02-13)
+
+
+### Bug Fixes
+
+* use explicit NSIS artifact name to prevent auto-update 404 ([e211634](https://github.com/bbidwell85/totality/commit/e211634272e55daf73a816e41a3a035826d121f3))
+
 ### [0.1.16](https://github.com/bbidwell85/totality/compare/v0.1.15...v0.1.16) (2026-02-13)
 
 
