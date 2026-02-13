@@ -36,6 +36,7 @@ win:
   icon: resources/icon.png
 
 nsis:
+  artifactName: "${productName}-Setup-${version}.${ext}"
   oneClick: false
   allowToChangeInstallationDirectory: true
   allowElevation: true
