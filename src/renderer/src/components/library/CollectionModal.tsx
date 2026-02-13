@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, memo, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { X, CircleFadingArrowUp, EyeOff } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { MissingItemPopup } from './MissingItemPopup'
@@ -125,7 +126,7 @@ export const CollectionModal = memo(function CollectionModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+      {createPortal(<div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
         {/* Backdrop */}
         <div
           className="absolute inset-0 bg-black/70"
@@ -226,7 +227,7 @@ export const CollectionModal = memo(function CollectionModal({
             </div>
           </div>
         </div>
-      </div>
+      </div>, document.body)}
 
       {/* Missing item popup */}
       {selectedMissing && (

@@ -356,6 +356,9 @@ export const MediaItemFiltersSchema = z.object({
   sortBy: z.enum(['title', 'year', 'updated_at', 'created_at', 'tier_score', 'overall_score']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
   includeDisabledLibraries: z.boolean().optional(),
+  alphabetFilter: z.string().max(1).optional(),
+  qualityTier: z.string().optional(),
+  tierQuality: z.string().optional(),
 })
 
 // ============================================================================

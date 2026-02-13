@@ -284,6 +284,7 @@ export function ServicesTab() {
     }
   }
 
+
   const handleInstallFFprobe = async () => {
     setIsInstalling(true)
     setFfprobeError(null)
@@ -454,6 +455,7 @@ export function ServicesTab() {
               </div>
             )}
           </div>
+
         </div>
       </ServiceCard>
 

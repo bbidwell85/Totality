@@ -2,7 +2,7 @@
  * LibrarySettingsTab - Settings tab for library preferences, monitoring, and exclusion management
  *
  * Uses collapsible card layout matching the Services tab pattern.
- * Two cards: Library Analysis (completeness + exclusions + recommendations) and Live Monitoring.
+ * Two cards: Library Analysis (completeness + exclusions) and Live Monitoring.
  */
 
 import { useState, useEffect, useCallback } from 'react'
@@ -350,7 +350,7 @@ export function LibrarySettingsTab() {
       {/* Library Analysis Card */}
       <SettingsCard
         title="Library Analysis"
-        description="Music completeness, dismissed items, and recommendations"
+        description="Music completeness and dismissed items"
         icon={<Library className="w-5 h-5" />}
         status="configured"
         statusText={
@@ -396,13 +396,6 @@ export function LibrarySettingsTab() {
                   }}
                 />
               </div>
-              <div className="flex items-center justify-between px-4 py-3 opacity-50">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-foreground">Similar Content Recommendations</span>
-                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">Coming soon</span>
-                </div>
-                <Toggle checked={false} onChange={() => {}} disabled={true} />
-              </div>
             </div>
           </div>
 
@@ -411,8 +404,8 @@ export function LibrarySettingsTab() {
             <p className="text-xs font-medium text-foreground">Managed Exclusions</p>
             <p className="text-xs text-muted-foreground">
               {totalExclusions === 0
-                ? 'Items you dismiss from recommendations will appear here.'
-                : `${totalExclusions} item${totalExclusions !== 1 ? 's' : ''} dismissed from recommendations. Remove items to see them again.`}
+                ? 'Items you dismiss will appear here.'
+                : `${totalExclusions} dismissed item${totalExclusions !== 1 ? 's' : ''}. Remove items to see them again.`}
             </p>
             <div className="bg-background/50 rounded-lg divide-y divide-border/30">
               {EXCLUSION_SECTIONS.map((section) => {

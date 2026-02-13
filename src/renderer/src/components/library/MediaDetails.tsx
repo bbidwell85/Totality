@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { MoreVertical, RefreshCw, Pencil, EyeOff } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import type { WishlistMediaType } from '../../contexts/WishlistContext'
@@ -403,17 +404,18 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   }
 
   if (loading) {
-    return (
+    return createPortal(
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]">
         <div className="bg-card rounded-xl p-8 shadow-2xl">
           <div className="text-muted-foreground">Loading...</div>
         </div>
-      </div>
+      </div>,
+      document.body
     )
   }
 
   if (error || !media) {
-    return (
+    return createPortal(
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]">
         <div className="bg-card rounded-xl p-8 shadow-2xl text-center">
           <div className="text-destructive mb-4">{error || 'Media not found'}</div>
@@ -421,7 +423,8 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
             Close
           </button>
         </div>
-      </div>
+      </div>,
+      document.body
     )
   }
 
@@ -431,7 +434,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   const issues = parseIssues(media.issues)
   const displayTitle = media.type === 'episode' && media.series_title ? media.series_title : media.title
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-6" onClick={onClose}>
       <div
         className="bg-card rounded-xl w-full max-w-4xl max-h-[calc(100vh-48px)] overflow-hidden flex flex-col shadow-2xl border border-border"
@@ -815,6 +818,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
           </details>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

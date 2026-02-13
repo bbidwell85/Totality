@@ -7,7 +7,7 @@ import {
   TMDBSearchResponse,
   TMDBMovieSearchResult,
   TMDBTVSearchResult,
-  TMDBConfiguration
+  TMDBConfiguration,
 } from '../types/tmdb'
 import { getDatabase } from '../database/getDatabase'
 import { RateLimiters, SlidingWindowRateLimiter } from './utils/RateLimiter'

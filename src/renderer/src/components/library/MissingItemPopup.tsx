@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 
@@ -52,7 +53,7 @@ export function MissingItemPopup({
   const subtitle = getSubtitle()
   const placeholderIcon = type === 'movie' ? '🎬' : type === 'season' ? '📁' : '📺'
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
@@ -138,6 +139,7 @@ export function MissingItemPopup({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

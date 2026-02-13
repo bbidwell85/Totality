@@ -185,6 +185,7 @@ export function MediaBrowser({
   const [detailRefreshKey, setDetailRefreshKey] = useState(0) // Increment to force detail view refresh
   const [viewType, setViewType] = useState<'grid' | 'list'>('grid')
   const [gridScale, setGridScale] = useState(4) // 1-7 scale for grid columns (4 = 50%)
+  const [collectionsOnly, setCollectionsOnly] = useState(false)
 
   // TV Show navigation
   const [selectedShow, setSelectedShow] = useState<string | null>(null)
@@ -1902,6 +1903,25 @@ export function MediaBrowser({
                     </div>
                   </div>
                 )}
+
+                {/* Collections Filter (movies only) */}
+                {view === 'movies' && movieCollections.length > 0 && (
+                  <>
+                    <div className="h-6 w-px bg-border/50" />
+                    <button
+                      onClick={() => setCollectionsOnly(!collectionsOnly)}
+                      className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-none flex items-center gap-1.5 ${
+                        collectionsOnly
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-card text-muted-foreground hover:bg-muted'
+                      }`}
+                      title="Show only collections"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      Collections
+                    </button>
+                  </>
+                )}
               </div>
 
               {/* Right side: Scale and View Toggle */}
@@ -1984,6 +2004,7 @@ export function MediaBrowser({
               totalMovieCount={totalMovieCount}
               moviesLoading={moviesLoading}
               onLoadMoreMovies={loadMoreMovies}
+              collectionsOnly={collectionsOnly}
             />
           ) : view === 'tv' ? (
           <TVShowsView
@@ -2282,7 +2303,8 @@ function MoviesView({
   onDismissUpgrade,
   totalMovieCount,
   moviesLoading,
-  onLoadMoreMovies
+  onLoadMoreMovies,
+  collectionsOnly = false
 }: {
   movies: MediaItem[]
   onSelectMovie: (id: number, movie: MediaItem) => void
@@ -2298,6 +2320,7 @@ function MoviesView({
   totalMovieCount: number
   moviesLoading: boolean
   onLoadMoreMovies: () => void
+  collectionsOnly?: boolean
 }) {
   // Map scale to minimum poster width (1=smallest, 7=largest)
   const posterMinWidth = useMemo(() => {
@@ -2359,10 +2382,12 @@ function MoviesView({
       }
     }
 
-    // Add individual movies not in any collection
-    for (const movie of movies) {
-      if (!moviesInCollections.has(movie.id)) {
-        items.push({ type: 'movie', movie })
+    // Add individual movies not in any collection (unless collections-only filter is active)
+    if (!collectionsOnly) {
+      for (const movie of movies) {
+        if (!moviesInCollections.has(movie.id)) {
+          items.push({ type: 'movie', movie })
+        }
       }
     }
 
@@ -2374,7 +2399,7 @@ function MoviesView({
     })
 
     return items
-  }, [movies, movieCollections, getCollectionForMovie])
+  }, [movies, movieCollections, getCollectionForMovie, collectionsOnly])
 
   if (displayItems.length === 0) {
     return (
