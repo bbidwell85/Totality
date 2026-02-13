@@ -418,7 +418,7 @@ export function CompletenessPanel({
               <select
                 value={selectedShowLibraryId}
                 onChange={(e) => setSelectedShowLibraryId(e.target.value)}
-                className="w-full px-3 py-1.5 bg-muted/50 border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-2.5 py-1 bg-card border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="">All Libraries</option>
                 {showLibraries.map(lib => (
@@ -515,7 +515,7 @@ export function CompletenessPanel({
               <select
                 value={selectedMovieLibraryId}
                 onChange={(e) => setSelectedMovieLibraryId(e.target.value)}
-                className="w-full px-3 py-1.5 bg-muted/50 border border-border rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-2.5 py-1 bg-card border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="">All Libraries</option>
                 {movieLibraries.map(lib => (
