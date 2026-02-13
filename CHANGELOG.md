@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.16](https://github.com/bbidwell85/totality/compare/v0.1.15...v0.1.16) (2026-02-13)
+
+
+### Features
+
+* add server-side pagination for movies/albums, dashboard improvements, and library enhancements ([3017f28](https://github.com/bbidwell85/totality/commit/3017f28d166de967b4662d18f0a1cdbeade3e20f))
+
+
+### Bug Fixes
+
+* add missing pagination filters and server-side artist pagination ([7a002d3](https://github.com/bbidwell85/totality/commit/7a002d3b38fb2fadd5e620f333533b7e37b2fe94))
+* allow auto-update checks in dev mode for testing ([f5f6389](https://github.com/bbidwell85/totality/commit/f5f6389a277a39f2423e8b665d87de3b468077c9))
+* handle hyphenated AC-3 codec in audio quality scoring ([61410eb](https://github.com/bbidwell85/totality/commit/61410ebc6acbaf066cc565ff548ae0999c9857f8))
+* modal overlay z-index, missing filter validation, collections filter, and cleanup ([40f38aa](https://github.com/bbidwell85/totality/commit/40f38aa44ded5d64a0607a24d781b42264dfc16d))
+
 ### [0.1.15](https://github.com/bbidwell85/totality/compare/v0.1.14...v0.1.15) (2026-02-11)
 
 
