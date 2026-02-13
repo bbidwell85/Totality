@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App lifecycle
   appReady: () => ipcRenderer.send('app:ready'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
 
   // ============================================================================
   // MEDIA SOURCES (Multi-Provider Support)
@@ -695,6 +696,7 @@ export interface ElectronAPI {
   // App lifecycle
   appReady: () => void
   getAppVersion: () => Promise<string>
+  openExternal: (url: string) => Promise<void>
 
   // ============================================================================
   // MEDIA SOURCES (Multi-Provider Support)

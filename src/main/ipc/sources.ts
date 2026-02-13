@@ -4,7 +4,7 @@
  * Handles all source-related IPC calls from the renderer process.
  */
 
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, shell } from 'electron'
 import fs from 'fs/promises'
 import path from 'path'
 import { getSourceManager } from '../services/SourceManager'
@@ -24,6 +24,7 @@ import {
   AddSourceSchema,
   UpdateSourceSchema,
   KodiMySQLConfigSchema,
+  SafeUrlSchema,
 } from '../validation/schemas'
 
 /**
@@ -31,6 +32,19 @@ import {
  */
 export function registerSourceHandlers(): void {
   const manager = getSourceManager()
+
+  // ============================================================================
+  // GENERAL
+  // ============================================================================
+
+  /**
+   * Open a URL in the default browser
+   * SECURITY: Only allows https:// and http:// URLs
+   */
+  ipcMain.handle('app:openExternal', async (_event, url: unknown) => {
+    const validUrl = validateInput(SafeUrlSchema, url, 'app:openExternal')
+    await shell.openExternal(validUrl)
+  })
 
   // ============================================================================
   // SOURCE CRUD

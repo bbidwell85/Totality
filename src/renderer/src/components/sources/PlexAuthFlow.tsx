@@ -56,8 +56,8 @@ export function PlexAuthFlow({ onSuccess, onBack }: PlexAuthFlowProps) {
       const { pinId, authUrl: url } = await plexStartAuth()
       setAuthUrl(url)
 
-      // Open auth URL in browser
-      window.open(url, '_blank')
+      // Open auth URL in default browser (for password managers / existing sessions)
+      window.electronAPI.openExternal(url)
 
       // Start polling for auth completion
       pollIntervalRef.current = setInterval(async () => {

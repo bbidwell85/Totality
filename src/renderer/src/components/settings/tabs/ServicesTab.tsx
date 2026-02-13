@@ -385,14 +385,13 @@ export function ServicesTab() {
           <p className="text-xs text-muted-foreground">
             Required for TV series and movie collection completeness analysis. Get a free API key
             at{' '}
-            <a
-              href="https://www.themoviedb.org/settings/api"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={() => window.electronAPI.openExternal('https://www.themoviedb.org/settings/api')}
               className="text-primary hover:underline"
             >
               themoviedb.org
-            </a>
+            </button>
           </p>
 
           <div className="space-y-2">
