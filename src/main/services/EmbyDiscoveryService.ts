@@ -10,6 +10,7 @@ import { getErrorMessage } from './utils/errorUtils'
  */
 
 import * as dgram from 'dgram'
+import axios from 'axios'
 
 export interface DiscoveredEmbyServer {
   id: string
@@ -118,7 +119,7 @@ export class EmbyDiscoveryService {
     error?: string
   }> {
     try {
-      const axios = (await import('axios')).default
+
       // Emby uses /emby prefix for API calls
       const response = await axios.get(`${url.replace(/\/$/, '')}/emby/System/Info/Public`, {
         timeout: 5000,
@@ -134,7 +135,7 @@ export class EmbyDiscoveryService {
     } catch (error: unknown) {
       // Fallback: try without /emby prefix (some Emby setups)
       try {
-        const axios = (await import('axios')).default
+  
         const response = await axios.get(`${url.replace(/\/$/, '')}/System/Info/Public`, {
           timeout: 5000,
           headers: { Accept: 'application/json' },

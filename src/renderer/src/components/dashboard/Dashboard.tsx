@@ -233,7 +233,7 @@ export function Dashboard({
           } catch { /* keep original */ }
           return c
         })
-        .filter(c => c.total_movies > 1 && c.completeness_percentage >= 50 && c.completeness_percentage < 100)
+        .filter(c => c.total_movies > 1 && c.completeness_percentage < 100)
         .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
       setCollections(filteredCollections)
 

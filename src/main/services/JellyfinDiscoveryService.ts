@@ -10,6 +10,7 @@ import { getErrorMessage } from './utils/errorUtils'
  */
 
 import * as dgram from 'dgram'
+import axios from 'axios'
 
 export interface DiscoveredServer {
   id: string
@@ -118,7 +119,6 @@ export class JellyfinDiscoveryService {
     error?: string
   }> {
     try {
-      const axios = (await import('axios')).default
       const response = await axios.get(`${url.replace(/\/$/, '')}/System/Info/Public`, {
         timeout: 5000,
         headers: { Accept: 'application/json' },
