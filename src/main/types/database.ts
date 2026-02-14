@@ -237,6 +237,8 @@ export interface MediaItemVersion {
   quality_tier?: string           // 'SD', '720p', '1080p', '4K'
   tier_quality?: string           // 'LOW', 'MEDIUM', 'HIGH'
   tier_score?: number
+  bitrate_tier_score?: number
+  audio_tier_score?: number
 
   // Best version flag
   is_best?: boolean

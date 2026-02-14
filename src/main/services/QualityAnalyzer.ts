@@ -26,6 +26,8 @@ export interface VersionQualityResult {
   quality_tier: string
   tier_quality: string
   tier_score: number
+  bitrate_tier_score: number
+  audio_tier_score: number
 }
 
 /**
@@ -486,11 +488,13 @@ export class QualityAnalyzer {
    * Used during scan and retroactive analysis to populate per-version quality data.
    */
   analyzeVersion(version: MediaItemVersion): VersionQualityResult {
-    const { qualityTier, tierQuality, tierScore } = this.scoreQuality(version)
+    const { qualityTier, tierQuality, tierScore, bitrateTierScore, audioTierScore } = this.scoreQuality(version)
     return {
       quality_tier: qualityTier,
       tier_quality: tierQuality,
       tier_score: tierScore,
+      bitrate_tier_score: bitrateTierScore,
+      audio_tier_score: audioTierScore,
     }
   }
 

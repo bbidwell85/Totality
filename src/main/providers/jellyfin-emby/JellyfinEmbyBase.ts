@@ -1180,7 +1180,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       // Extract edition from file path (e.g., "Director's Cut", "Extended")
       const filePath = mediaSource.Path || ''
       const parsed = filePath ? getFileNameParser().parse(filePath) : null
-      const edition = parsed?.edition || undefined
+      const edition = (parsed?.type === 'movie' ? parsed.edition : undefined) || undefined
 
       // Generate label: "4K Dolby Vision Director's Cut", "1080p Extended", etc.
       const labelParts = [resolution]

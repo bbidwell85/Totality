@@ -66,6 +66,8 @@ interface MediaVersion {
   quality_tier?: string
   tier_quality?: string
   tier_score?: number
+  bitrate_tier_score?: number
+  audio_tier_score?: number
   is_best?: boolean
 }
 
@@ -289,9 +291,9 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
     return formatThresholdRange(t.video.medium, t.video.high)
   }
 
-  const isVideoBitrateLow = (bitrate: number, tier?: string): boolean => {
+  const getAudioThresholdRange = (tier?: string): string => {
     const t = thresholds[tier || 'SD'] || DEFAULT_THRESHOLDS['SD']
-    return bitrate < t.video.medium
+    return formatThresholdRange(t.audio.medium, t.audio.high)
   }
 
   const isAudioBitrateLow = (track: AudioTrack, tier?: string): boolean => {
@@ -328,33 +330,6 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   )
 
   // Parse quality issues and return abbreviated badge labels
-  const getIssueBadges = (issuesJson?: string): { label: string; title: string }[] => {
-    if (!issuesJson) return []
-    try {
-      const issues = JSON.parse(issuesJson) as string[]
-      const badges: { label: string; title: string }[] = []
-      for (const issue of issues) {
-        const issueLower = issue.toLowerCase()
-        if (issueLower.includes('low bitrate')) {
-          badges.push({ label: 'Low BR', title: issue })
-        } else if (issueLower.includes('without hdr') || issueLower.includes('no hdr')) {
-          badges.push({ label: 'No HDR', title: issue })
-        } else if (issueLower.includes('8-bit')) {
-          badges.push({ label: '8-bit', title: issue })
-        } else if (issueLower.includes('mono audio')) {
-          badges.push({ label: 'Mono', title: issue })
-        } else if (issueLower.includes('no premium audio')) {
-          badges.push({ label: 'No Atmos', title: issue })
-        } else if (issueLower.includes('low audio')) {
-          badges.push({ label: 'Low Audio', title: issue })
-        }
-      }
-      return badges
-    } catch {
-      return []
-    }
-  }
-
   const tierRank = (tier?: string): number => {
     switch (tier) {
       case '4K': return 4
@@ -486,7 +461,6 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   const svAudioTracks = sv ? parseVersionAudioTracks(sv) : audioTracks
   const svSubtitleTracks = sv ? parseVersionSubtitleTracks(sv) : subtitleTracks
   const svBestTrackIdx = getBestTrackIndex(svAudioTracks)
-  const hasSplitScores = !sv || sv.is_best // parent's split scores only apply to best version
 
   return createPortal(
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-6" onClick={onClose}>
@@ -598,35 +572,11 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
             </div>
 
             {/* Quick Stats Row */}
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              {media.year && <span className="text-sm text-muted-foreground">{media.year}</span>}
-              <span className="text-muted-foreground/40">·</span>
-              <span className="text-sm text-muted-foreground">{formatDuration(media.duration)}</span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="text-sm text-muted-foreground">{formatFileSize(media.file_size)}</span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="px-2 py-0.5 text-xs font-medium bg-muted rounded">{media.resolution}</span>
-              {media.container && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span className="text-xs text-muted-foreground uppercase">{media.container}</span>
-                </>
-              )}
-              {/* Quality Issue Badges */}
-              {getIssueBadges(media.issues).length > 0 && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
-                  {getIssueBadges(media.issues).map((badge, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2 py-0.5 text-xs font-medium bg-muted rounded"
-                      title={badge.title}
-                    >
-                      {badge.label}
-                    </span>
-                  ))}
-                </>
-              )}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2 text-sm text-muted-foreground">
+              {media.year && <span>{media.year}</span>}
+              {(sv?.duration ?? media.duration) > 0 && <><span className="mx-0.5">·</span><span>{formatDuration(sv?.duration ?? media.duration)}</span></>}
+              {(sv?.file_size ?? media.file_size) > 0 && <><span className="mx-0.5">·</span><span>{formatFileSize(sv?.file_size ?? media.file_size)}</span></>}
+              {(sv?.container ?? media.container) && <><span className="mx-0.5">·</span><span className="uppercase">{sv?.container ?? media.container}</span></>}
             </div>
 
             {/* Version Selector Pills */}
@@ -686,65 +636,38 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                   </div>
 
                   {/* Score Bars */}
-                  {hasSplitScores && (media.bitrate_tier_score != null || media.audio_tier_score != null) ? (
+                  {((sv?.bitrate_tier_score ?? media.bitrate_tier_score) != null || (sv?.audio_tier_score ?? media.audio_tier_score) != null) && (
                     <div className="flex-1 max-w-sm space-y-2">
-                      {media.bitrate_tier_score != null && (
+                      {(sv?.bitrate_tier_score ?? media.bitrate_tier_score) != null && (
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-12">Video</span>
                             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(media.bitrate_tier_score, 100)}%` }} />
+                              <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv?.bitrate_tier_score ?? media.bitrate_tier_score ?? 0, 100)}%` }} />
                             </div>
-                            <span className="text-xs w-8 text-right tabular-nums">{Math.min(media.bitrate_tier_score, 100)}</span>
+                            <span className="text-xs w-8 text-right tabular-nums">{Math.min(sv?.bitrate_tier_score ?? media.bitrate_tier_score ?? 0, 100)}</span>
                           </div>
                           <div className="text-[0.625rem] text-muted-foreground ml-14 mt-0.5">
                             {formatBitrate(sv?.video_bitrate ?? media.video_bitrate)} · Target: {getVideoThresholdRange(sv?.quality_tier ?? media.quality_tier)}
                           </div>
                         </div>
                       )}
-                      {media.audio_tier_score != null && (
+                      {(sv?.audio_tier_score ?? media.audio_tier_score) != null && (
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-12">Audio</span>
                             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(media.audio_tier_score, 100)}%` }} />
+                              <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv?.audio_tier_score ?? media.audio_tier_score ?? 0, 100)}%` }} />
                             </div>
-                            <span className="text-xs w-8 text-right tabular-nums">{Math.min(media.audio_tier_score, 100)}</span>
+                            <span className="text-xs w-8 text-right tabular-nums">{Math.min(sv?.audio_tier_score ?? media.audio_tier_score ?? 0, 100)}</span>
+                          </div>
+                          <div className="text-[0.625rem] text-muted-foreground ml-14 mt-0.5">
+                            {formatBitrate(sv?.audio_bitrate ?? media.audio_bitrate)} · Target: {getAudioThresholdRange(sv?.quality_tier ?? media.quality_tier)}
                           </div>
                         </div>
                       )}
                     </div>
-                  ) : !hasSplitScores && sv?.tier_score != null ? (
-                    <div className="flex-1 max-w-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-12">Quality</span>
-                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv.tier_score, 100)}%` }} />
-                        </div>
-                        <span className="text-xs w-8 text-right tabular-nums">{Math.min(sv.tier_score, 100)}</span>
-                      </div>
-                      <div className="text-[0.625rem] text-muted-foreground ml-14 mt-0.5">
-                        {formatBitrate(sv.video_bitrate)} · Target: {getVideoThresholdRange(sv.quality_tier)}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {/* Premium Badges */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {(sv?.hdr_format ?? media.hdr_format) && (sv?.hdr_format ?? media.hdr_format) !== 'None' && (
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-                        (sv?.hdr_format ?? media.hdr_format) === 'Dolby Vision' ? 'bg-purple-500/20 text-purple-400' :
-                        (sv?.hdr_format ?? media.hdr_format) === 'HDR10' ? 'bg-orange-500/20 text-orange-400' :
-                        'bg-yellow-500/20 text-yellow-400'
-                      }`}>{sv?.hdr_format ?? media.hdr_format}</span>
-                    )}
-                    {(sv?.has_object_audio ?? media.has_object_audio) && (
-                      <span className="px-2 py-0.5 text-xs font-medium rounded bg-blue-500/20 text-blue-400">Atmos</span>
-                    )}
-                    {(sv?.color_bit_depth ?? media.color_bit_depth) != null && (sv?.color_bit_depth ?? media.color_bit_depth)! >= 10 && (
-                      <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-500/20 text-green-400">{sv?.color_bit_depth ?? media.color_bit_depth}-bit</span>
-                    )}
-                  </div>
+                  )}
                 </div>
               </>
             ) : (
@@ -773,32 +696,8 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
           <div className="grid grid-cols-2 gap-4">
             {/* Video */}
             <div className="bg-muted/30 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Video</h3>
-                {hasSplitScores && media.bitrate_tier_score != null ? (
-                  <>
-                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(media.bitrate_tier_score, 100)}%` }} />
-                    </div>
-                    <span className="text-sm font-bold tabular-nums">{Math.min(media.bitrate_tier_score, 100)}</span>
-                  </>
-                ) : !hasSplitScores && sv?.tier_score != null ? (
-                  <>
-                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv.tier_score, 100)}%` }} />
-                    </div>
-                    <span className="text-sm font-bold tabular-nums">{Math.min(sv.tier_score, 100)}</span>
-                  </>
-                ) : null}
-              </div>
-              <div className="text-xs text-muted-foreground mb-3">
-                {formatBitrate(sv?.video_bitrate ?? media.video_bitrate)} · Target: {getVideoThresholdRange(sv?.quality_tier ?? media.quality_tier)}
-              </div>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Video</h3>
               <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Resolution</span>
-                  <span className="font-medium">{sv?.resolution ?? media.resolution}</span>
-                </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Dimensions</span>
                   <span className="font-medium">{sv?.width ?? media.width}×{sv?.height ?? media.height}</span>
@@ -806,13 +705,6 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Codec</span>
                   <span className="font-medium">{sv?.video_codec ?? media.video_codec}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Bitrate</span>
-                  <span className="font-medium flex items-center">
-                    {formatBitrate(sv?.video_bitrate ?? media.video_bitrate)}
-                    {isVideoBitrateLow(sv?.video_bitrate ?? media.video_bitrate, sv?.quality_tier ?? media.quality_tier) && <LowIndicator />}
-                  </span>
                 </div>
                 {(sv?.video_frame_rate ?? media.video_frame_rate) != null && (
                   <div className="flex justify-between">
@@ -853,23 +745,9 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
 
             {/* Audio */}
             <div className="bg-muted/30 rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Audio{svAudioTracks.length > 0 ? ` (${svAudioTracks.length})` : ''}
-                </h3>
-                {hasSplitScores && media.audio_tier_score != null && (
-                  <>
-                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(media.audio_tier_score, 100)}%` }} />
-                    </div>
-                    <span className="text-sm font-bold tabular-nums">{Math.min(media.audio_tier_score, 100)}</span>
-                  </>
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground mb-3">
-                {(sv?.audio_codec ?? media.audio_codec)?.toUpperCase()} {formatChannels(sv?.audio_channels ?? media.audio_channels)} · {(sv?.audio_bitrate ?? media.audio_bitrate) > 0 ? formatBitrate(sv?.audio_bitrate ?? media.audio_bitrate) : 'VBR'}
-              </div>
-
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Audio{svAudioTracks.length > 0 ? ` (${svAudioTracks.length})` : ''}
+              </h3>
               {/* Audio Tracks */}
               {svAudioTracks.length > 0 ? (
                 <div className="space-y-2">
@@ -954,45 +832,33 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                   {sv?.file_path ?? media.file_path}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Size</span>
-                <span className="font-medium">{formatFileSize(sv?.file_size ?? media.file_size)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Duration</span>
-                <span className="font-medium">{formatDuration(sv?.duration ?? media.duration)}</span>
-              </div>
-              {(sv?.container ?? media.container) && (
+              {media.imdb_id && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Container</span>
-                  <span className="font-medium uppercase">{sv?.container ?? media.container}</span>
-                </div>
-              )}
-            </div>
-            {(media.imdb_id || media.tmdb_id) && (
-              <div className="flex gap-3 text-sm mt-3 pt-3 border-t border-border">
-                {media.imdb_id && (
+                  <span className="text-muted-foreground">IMDb</span>
                   <a
                     href={`https://www.imdb.com/title/${media.imdb_id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary hover:underline"
                   >
-                    IMDb: {media.imdb_id}
+                    {media.imdb_id}
                   </a>
-                )}
-                {media.tmdb_id && (
+                </div>
+              )}
+              {media.tmdb_id && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">TMDb</span>
                   <a
                     href={`https://www.themoviedb.org/${media.type === 'movie' ? 'movie' : 'tv'}/${media.tmdb_id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary hover:underline"
                   >
-                    TMDb: {media.tmdb_id}
+                    {media.tmdb_id}
                   </a>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

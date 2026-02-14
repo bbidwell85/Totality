@@ -195,6 +195,10 @@ export class BetterSQLiteService {
 
       // Multi-version support
       'ALTER TABLE media_items ADD COLUMN version_count INTEGER NOT NULL DEFAULT 1',
+
+      // Per-version split quality scores
+      'ALTER TABLE media_item_versions ADD COLUMN bitrate_tier_score INTEGER DEFAULT 0',
+      'ALTER TABLE media_item_versions ADD COLUMN audio_tier_score INTEGER DEFAULT 0',
     ]
 
     for (const statement of alterStatements) {
@@ -1065,11 +1069,11 @@ export class BetterSQLiteService {
   /**
    * Update only the quality scoring fields on a version row.
    */
-  updateMediaItemVersionQuality(versionId: number, scores: { quality_tier: string; tier_quality: string; tier_score: number }): void {
+  updateMediaItemVersionQuality(versionId: number, scores: { quality_tier: string; tier_quality: string; tier_score: number; bitrate_tier_score: number; audio_tier_score: number }): void {
     if (!this.db) throw new Error('Database not initialized')
     this.db.prepare(
-      `UPDATE media_item_versions SET quality_tier = ?, tier_quality = ?, tier_score = ?, updated_at = datetime('now') WHERE id = ?`
-    ).run(scores.quality_tier, scores.tier_quality, scores.tier_score, versionId)
+      `UPDATE media_item_versions SET quality_tier = ?, tier_quality = ?, tier_score = ?, bitrate_tier_score = ?, audio_tier_score = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(scores.quality_tier, scores.tier_quality, scores.tier_score, scores.bitrate_tier_score, scores.audio_tier_score, versionId)
   }
 
   /**

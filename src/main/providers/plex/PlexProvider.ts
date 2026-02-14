@@ -1074,7 +1074,7 @@ export class PlexProvider implements MediaProvider {
 
       // Extract edition from file path (e.g., "Director's Cut", "Extended")
       const parsed = getFileNameParser().parse(part.file)
-      const edition = parsed?.edition || item.editionTitle || undefined
+      const edition = (parsed?.type === 'movie' ? parsed.edition : undefined) || item.editionTitle || undefined
 
       // Generate label: "4K Dolby Vision Director's Cut", "1080p Extended", etc.
       const labelParts = [resolution]
