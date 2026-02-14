@@ -33,6 +33,7 @@ import type {
   WishlistFilters,
   TVShowSummary,
   TVShowFilters,
+  MediaItemVersion,
 } from '../types/database'
 
 export class DatabaseService {
@@ -614,6 +615,55 @@ export class DatabaseService {
         this.db.run('CREATE INDEX IF NOT EXISTS idx_exclusions_type_key ON exclusions(exclusion_type, reference_key, parent_key)')
       } catch (error: unknown) {
         console.log('[Database] Exclusions table migration:', getErrorMessage(error))
+      }
+
+      // Add version_count column to media_items for multi-version support
+      try {
+        this.db.run('ALTER TABLE media_items ADD COLUMN version_count INTEGER NOT NULL DEFAULT 1')
+        console.log('[Database] Added version_count column to media_items')
+      } catch (error: unknown) {
+        if (!getErrorMessage(error)?.includes('duplicate column name')) {
+          console.log(`[Database] ALTER TABLE error (may be expected): ${getErrorMessage(error)}`)
+        }
+      }
+
+      // Populate media_item_versions from existing media_items (one version per item)
+      try {
+        const versionCount = this.db.exec('SELECT COUNT(*) FROM media_item_versions')
+        const count = versionCount[0]?.values[0]?.[0] as number || 0
+        if (count === 0) {
+          const itemCount = this.db.exec('SELECT COUNT(*) FROM media_items')
+          const items = itemCount[0]?.values[0]?.[0] as number || 0
+          if (items > 0) {
+            console.log(`[Database] Migrating ${items} existing items to versions table...`)
+            this.db.run(`
+              INSERT INTO media_item_versions (
+                media_item_id, version_source, file_path, file_size, duration,
+                resolution, width, height, video_codec, video_bitrate,
+                audio_codec, audio_channels, audio_bitrate,
+                video_frame_rate, color_bit_depth, hdr_format, color_space,
+                video_profile, video_level, audio_profile, audio_sample_rate,
+                has_object_audio, audio_tracks, subtitle_tracks, container, file_mtime,
+                is_best, created_at, updated_at
+              )
+              SELECT
+                id, 'primary', file_path, file_size, duration,
+                resolution, width, height, video_codec, video_bitrate,
+                audio_codec, audio_channels, audio_bitrate,
+                video_frame_rate, color_bit_depth, hdr_format, color_space,
+                video_profile, video_level, audio_profile, audio_sample_rate,
+                has_object_audio, audio_tracks, subtitle_tracks, container, file_mtime,
+                1, created_at, updated_at
+              FROM media_items
+            `)
+            console.log(`[Database] Migrated ${items} items to versions table`)
+          }
+        }
+      } catch (error: unknown) {
+        const msg = getErrorMessage(error)
+        if (!msg?.includes('no such table')) {
+          console.error('[Database] Version migration error:', msg)
+        }
       }
 
       // Migrate existing plain-text credentials to encrypted format
@@ -1643,8 +1693,203 @@ export class DatabaseService {
   async deleteMediaItem(id: number): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
 
+    this.db.run('DELETE FROM media_item_versions WHERE media_item_id = ?', [id])
     this.db.run('DELETE FROM media_items WHERE id = ?', [id])
     await this.save()
+  }
+
+  // ============================================================================
+  // MEDIA ITEM VERSIONS
+  // ============================================================================
+
+  upsertMediaItemVersion(version: MediaItemVersion): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    // Check if version exists
+    const existing = this.db.exec(
+      'SELECT id FROM media_item_versions WHERE media_item_id = ? AND file_path = ?',
+      [version.media_item_id, version.file_path]
+    )
+
+    if (existing.length > 0 && existing[0].values.length > 0) {
+      const existingId = existing[0].values[0][0] as number
+      this.db.run(`
+        UPDATE media_item_versions SET
+          version_source = ?, edition = ?, label = ?,
+          file_size = ?, duration = ?,
+          resolution = ?, width = ?, height = ?, video_codec = ?, video_bitrate = ?,
+          audio_codec = ?, audio_channels = ?, audio_bitrate = ?,
+          video_frame_rate = ?, color_bit_depth = ?, hdr_format = ?, color_space = ?,
+          video_profile = ?, video_level = ?, audio_profile = ?, audio_sample_rate = ?,
+          has_object_audio = ?, audio_tracks = ?, subtitle_tracks = ?, container = ?, file_mtime = ?,
+          quality_tier = ?, tier_quality = ?, tier_score = ?, is_best = ?,
+          updated_at = datetime('now')
+        WHERE id = ?
+      `, [
+        version.version_source || 'primary', version.edition || null, version.label || null,
+        version.file_size, version.duration,
+        version.resolution, version.width, version.height, version.video_codec, version.video_bitrate,
+        version.audio_codec, version.audio_channels, version.audio_bitrate,
+        version.video_frame_rate || null, version.color_bit_depth || null,
+        version.hdr_format || null, version.color_space || null,
+        version.video_profile || null, version.video_level || null,
+        version.audio_profile || null, version.audio_sample_rate || null,
+        version.has_object_audio ? 1 : 0, version.audio_tracks || null,
+        version.subtitle_tracks || null, version.container || null, version.file_mtime || null,
+        version.quality_tier || null, version.tier_quality || null, version.tier_score || 0,
+        version.is_best ? 1 : 0,
+        existingId
+      ])
+      return existingId
+    }
+
+    this.db.run(`
+      INSERT INTO media_item_versions (
+        media_item_id, version_source, edition, label,
+        file_path, file_size, duration,
+        resolution, width, height, video_codec, video_bitrate,
+        audio_codec, audio_channels, audio_bitrate,
+        video_frame_rate, color_bit_depth, hdr_format, color_space,
+        video_profile, video_level, audio_profile, audio_sample_rate,
+        has_object_audio, audio_tracks, subtitle_tracks, container, file_mtime,
+        quality_tier, tier_quality, tier_score, is_best
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      version.media_item_id, version.version_source || 'primary',
+      version.edition || null, version.label || null,
+      version.file_path, version.file_size, version.duration,
+      version.resolution, version.width, version.height, version.video_codec, version.video_bitrate,
+      version.audio_codec, version.audio_channels, version.audio_bitrate,
+      version.video_frame_rate || null, version.color_bit_depth || null,
+      version.hdr_format || null, version.color_space || null,
+      version.video_profile || null, version.video_level || null,
+      version.audio_profile || null, version.audio_sample_rate || null,
+      version.has_object_audio ? 1 : 0, version.audio_tracks || null,
+      version.subtitle_tracks || null, version.container || null, version.file_mtime || null,
+      version.quality_tier || null, version.tier_quality || null, version.tier_score || 0,
+      version.is_best ? 1 : 0
+    ])
+
+    // Get last inserted ID
+    const result = this.db.exec('SELECT last_insert_rowid()')
+    return (result[0]?.values[0]?.[0] as number) || 0
+  }
+
+  getMediaItemVersions(mediaItemId: number): MediaItemVersion[] {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const result = this.db.exec(
+      'SELECT * FROM media_item_versions WHERE media_item_id = ? ORDER BY is_best DESC, tier_score DESC',
+      [mediaItemId]
+    )
+
+    if (!result.length || !result[0].values.length) return []
+
+    const columns = result[0].columns
+    return result[0].values.map(row => {
+      const obj: Record<string, unknown> = {}
+      columns.forEach((col, i) => { obj[col] = row[i] })
+      return {
+        id: obj.id as number,
+        media_item_id: obj.media_item_id as number,
+        version_source: obj.version_source as string,
+        edition: obj.edition as string | undefined,
+        label: obj.label as string | undefined,
+        file_path: obj.file_path as string,
+        file_size: obj.file_size as number,
+        duration: obj.duration as number,
+        resolution: obj.resolution as string,
+        width: obj.width as number,
+        height: obj.height as number,
+        video_codec: obj.video_codec as string,
+        video_bitrate: obj.video_bitrate as number,
+        audio_codec: obj.audio_codec as string,
+        audio_channels: obj.audio_channels as number,
+        audio_bitrate: obj.audio_bitrate as number,
+        video_frame_rate: obj.video_frame_rate as number | undefined,
+        color_bit_depth: obj.color_bit_depth as number | undefined,
+        hdr_format: obj.hdr_format as string | undefined,
+        color_space: obj.color_space as string | undefined,
+        video_profile: obj.video_profile as string | undefined,
+        video_level: obj.video_level as number | undefined,
+        audio_profile: obj.audio_profile as string | undefined,
+        audio_sample_rate: obj.audio_sample_rate as number | undefined,
+        has_object_audio: !!(obj.has_object_audio as number),
+        audio_tracks: obj.audio_tracks as string | undefined,
+        subtitle_tracks: obj.subtitle_tracks as string | undefined,
+        container: obj.container as string | undefined,
+        file_mtime: obj.file_mtime as number | undefined,
+        quality_tier: obj.quality_tier as string | undefined,
+        tier_quality: obj.tier_quality as string | undefined,
+        tier_score: obj.tier_score as number | undefined,
+        is_best: !!(obj.is_best as number),
+        created_at: obj.created_at as string,
+        updated_at: obj.updated_at as string,
+      }
+    })
+  }
+
+  deleteMediaItemVersions(mediaItemId: number): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.run('DELETE FROM media_item_versions WHERE media_item_id = ?', [mediaItemId])
+  }
+
+  updateBestVersion(mediaItemId: number): void {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const versions = this.getMediaItemVersions(mediaItemId)
+    if (versions.length === 0) return
+
+    const tierRank = (tier?: string): number => {
+      switch (tier) {
+        case '4K': return 4
+        case '1080p': return 3
+        case '720p': return 2
+        default: return 1
+      }
+    }
+
+    const sorted = [...versions].sort((a, b) => {
+      const rankDiff = tierRank(b.quality_tier) - tierRank(a.quality_tier)
+      if (rankDiff !== 0) return rankDiff
+      return (b.tier_score || 0) - (a.tier_score || 0)
+    })
+
+    const best = sorted[0]
+
+    this.db.run('UPDATE media_item_versions SET is_best = 0 WHERE media_item_id = ?', [mediaItemId])
+    if (best.id) {
+      this.db.run('UPDATE media_item_versions SET is_best = 1 WHERE id = ?', [best.id])
+    }
+
+    this.db.run(`
+      UPDATE media_items SET
+        file_path = ?, file_size = ?, duration = ?,
+        resolution = ?, width = ?, height = ?,
+        video_codec = ?, video_bitrate = ?,
+        audio_codec = ?, audio_channels = ?, audio_bitrate = ?,
+        video_frame_rate = ?, color_bit_depth = ?, hdr_format = ?, color_space = ?,
+        video_profile = ?, video_level = ?,
+        audio_profile = ?, audio_sample_rate = ?, has_object_audio = ?,
+        audio_tracks = ?, subtitle_tracks = ?, container = ?, file_mtime = ?,
+        version_count = ?,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `, [
+      best.file_path, best.file_size, best.duration,
+      best.resolution, best.width, best.height,
+      best.video_codec, best.video_bitrate,
+      best.audio_codec, best.audio_channels, best.audio_bitrate,
+      best.video_frame_rate || null, best.color_bit_depth || null,
+      best.hdr_format || null, best.color_space || null,
+      best.video_profile || null, best.video_level || null,
+      best.audio_profile || null, best.audio_sample_rate || null,
+      best.has_object_audio ? 1 : 0,
+      best.audio_tracks || null, best.subtitle_tracks || null,
+      best.container || null, best.file_mtime || null,
+      versions.length,
+      mediaItemId
+    ])
   }
 
   /**

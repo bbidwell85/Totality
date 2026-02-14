@@ -36,6 +36,7 @@ import type {
   WishlistFilters,
   TVShowSummary,
   TVShowFilters,
+  MediaItemVersion,
 } from '../types/database'
 import type {
   Notification,
@@ -191,6 +192,9 @@ export class BetterSQLiteService {
 
       // Library scans
       'ALTER TABLE library_scans ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1',
+
+      // Multi-version support
+      'ALTER TABLE media_items ADD COLUMN version_count INTEGER NOT NULL DEFAULT 1',
     ]
 
     for (const statement of alterStatements) {
@@ -205,7 +209,57 @@ export class BetterSQLiteService {
       }
     }
 
+    // Populate media_item_versions from existing media_items (one version per item)
+    this.migrateExistingItemsToVersions()
+
     console.log('[BetterSQLite] Migrations completed')
+  }
+
+  /**
+   * Migrate existing media_items into media_item_versions (one version per item).
+   * Only runs if versions table is empty but items exist.
+   */
+  private migrateExistingItemsToVersions(): void {
+    if (!this.db) return
+
+    try {
+      const countResult = this.db.prepare('SELECT COUNT(*) as count FROM media_item_versions').get() as { count: number }
+      if (countResult.count > 0) return // Already migrated
+
+      const itemCount = (this.db.prepare('SELECT COUNT(*) as count FROM media_items').get() as { count: number }).count
+      if (itemCount === 0) return // No items to migrate
+
+      console.log(`[BetterSQLite] Migrating ${itemCount} existing items to versions table...`)
+
+      this.db.exec(`
+        INSERT INTO media_item_versions (
+          media_item_id, version_source, file_path, file_size, duration,
+          resolution, width, height, video_codec, video_bitrate,
+          audio_codec, audio_channels, audio_bitrate,
+          video_frame_rate, color_bit_depth, hdr_format, color_space,
+          video_profile, video_level, audio_profile, audio_sample_rate,
+          has_object_audio, audio_tracks, subtitle_tracks, container, file_mtime,
+          is_best, created_at, updated_at
+        )
+        SELECT
+          id, 'primary', file_path, file_size, duration,
+          resolution, width, height, video_codec, video_bitrate,
+          audio_codec, audio_channels, audio_bitrate,
+          video_frame_rate, color_bit_depth, hdr_format, color_space,
+          video_profile, video_level, audio_profile, audio_sample_rate,
+          has_object_audio, audio_tracks, subtitle_tracks, container, file_mtime,
+          1, created_at, updated_at
+        FROM media_items
+      `)
+
+      console.log(`[BetterSQLite] Migrated ${itemCount} items to versions table`)
+    } catch (error: unknown) {
+      const msg = getErrorMessage(error)
+      // Table might not exist yet on first run - schema handles creation
+      if (!msg?.includes('no such table')) {
+        console.error('[BetterSQLite] Version migration error:', msg)
+      }
+    }
   }
 
   /**
@@ -837,7 +891,8 @@ export class BetterSQLiteService {
   deleteMediaItem(id: number): void {
     if (!this.db) throw new Error('Database not initialized')
 
-    // Delete associated quality score first
+    // Delete associated data first
+    this.db.prepare('DELETE FROM media_item_versions WHERE media_item_id = ?').run(id)
     this.db.prepare('DELETE FROM quality_scores WHERE media_item_id = ?').run(id)
     this.db.prepare('DELETE FROM media_items WHERE id = ?').run(id)
   }
@@ -848,7 +903,12 @@ export class BetterSQLiteService {
   deleteMediaItemsForSource(sourceId: string): void {
     if (!this.db) throw new Error('Database not initialized')
 
-    // Delete quality scores first
+    // Delete versions and quality scores first
+    this.db.prepare(`
+      DELETE FROM media_item_versions WHERE media_item_id IN (
+        SELECT id FROM media_items WHERE source_id = ?
+      )
+    `).run(sourceId)
     this.db.prepare(`
       DELETE FROM quality_scores WHERE media_item_id IN (
         SELECT id FROM media_items WHERE source_id = ?
@@ -856,6 +916,234 @@ export class BetterSQLiteService {
     `).run(sourceId)
 
     this.db.prepare('DELETE FROM media_items WHERE source_id = ?').run(sourceId)
+  }
+
+  // ============================================================================
+  // MEDIA ITEM VERSIONS
+  // ============================================================================
+
+  /**
+   * Upsert a version for a media item
+   */
+  upsertMediaItemVersion(version: MediaItemVersion): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const stmt = this.db.prepare(`
+      INSERT INTO media_item_versions (
+        media_item_id, version_source, edition, label,
+        file_path, file_size, duration,
+        resolution, width, height, video_codec, video_bitrate,
+        audio_codec, audio_channels, audio_bitrate,
+        video_frame_rate, color_bit_depth, hdr_format, color_space,
+        video_profile, video_level, audio_profile, audio_sample_rate,
+        has_object_audio, audio_tracks, subtitle_tracks, container, file_mtime,
+        quality_tier, tier_quality, tier_score, is_best
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      )
+      ON CONFLICT(media_item_id, file_path) DO UPDATE SET
+        version_source = excluded.version_source,
+        edition = excluded.edition,
+        label = excluded.label,
+        file_size = excluded.file_size,
+        duration = excluded.duration,
+        resolution = excluded.resolution,
+        width = excluded.width,
+        height = excluded.height,
+        video_codec = excluded.video_codec,
+        video_bitrate = excluded.video_bitrate,
+        audio_codec = excluded.audio_codec,
+        audio_channels = excluded.audio_channels,
+        audio_bitrate = excluded.audio_bitrate,
+        video_frame_rate = excluded.video_frame_rate,
+        color_bit_depth = excluded.color_bit_depth,
+        hdr_format = excluded.hdr_format,
+        color_space = excluded.color_space,
+        video_profile = excluded.video_profile,
+        video_level = excluded.video_level,
+        audio_profile = excluded.audio_profile,
+        audio_sample_rate = excluded.audio_sample_rate,
+        has_object_audio = excluded.has_object_audio,
+        audio_tracks = excluded.audio_tracks,
+        subtitle_tracks = excluded.subtitle_tracks,
+        container = excluded.container,
+        file_mtime = excluded.file_mtime,
+        quality_tier = excluded.quality_tier,
+        tier_quality = excluded.tier_quality,
+        tier_score = excluded.tier_score,
+        is_best = excluded.is_best,
+        updated_at = datetime('now')
+    `)
+
+    const result = stmt.run(
+      version.media_item_id,
+      version.version_source || 'primary',
+      version.edition || null,
+      version.label || null,
+      version.file_path,
+      version.file_size,
+      version.duration,
+      version.resolution,
+      version.width,
+      version.height,
+      version.video_codec,
+      version.video_bitrate,
+      version.audio_codec,
+      version.audio_channels,
+      version.audio_bitrate,
+      version.video_frame_rate || null,
+      version.color_bit_depth || null,
+      version.hdr_format || null,
+      version.color_space || null,
+      version.video_profile || null,
+      version.video_level || null,
+      version.audio_profile || null,
+      version.audio_sample_rate || null,
+      version.has_object_audio ? 1 : 0,
+      version.audio_tracks || null,
+      version.subtitle_tracks || null,
+      version.container || null,
+      version.file_mtime || null,
+      version.quality_tier || null,
+      version.tier_quality || null,
+      version.tier_score || 0,
+      version.is_best ? 1 : 0
+    )
+
+    return Number(result.lastInsertRowid)
+  }
+
+  /**
+   * Get all versions for a media item
+   */
+  getMediaItemVersions(mediaItemId: number): MediaItemVersion[] {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const rows = this.db.prepare(
+      'SELECT * FROM media_item_versions WHERE media_item_id = ? ORDER BY is_best DESC, tier_score DESC'
+    ).all(mediaItemId) as Record<string, unknown>[]
+
+    return rows.map(row => ({
+      id: row.id as number,
+      media_item_id: row.media_item_id as number,
+      version_source: row.version_source as string,
+      edition: row.edition as string | undefined,
+      label: row.label as string | undefined,
+      file_path: row.file_path as string,
+      file_size: row.file_size as number,
+      duration: row.duration as number,
+      resolution: row.resolution as string,
+      width: row.width as number,
+      height: row.height as number,
+      video_codec: row.video_codec as string,
+      video_bitrate: row.video_bitrate as number,
+      audio_codec: row.audio_codec as string,
+      audio_channels: row.audio_channels as number,
+      audio_bitrate: row.audio_bitrate as number,
+      video_frame_rate: row.video_frame_rate as number | undefined,
+      color_bit_depth: row.color_bit_depth as number | undefined,
+      hdr_format: row.hdr_format as string | undefined,
+      color_space: row.color_space as string | undefined,
+      video_profile: row.video_profile as string | undefined,
+      video_level: row.video_level as number | undefined,
+      audio_profile: row.audio_profile as string | undefined,
+      audio_sample_rate: row.audio_sample_rate as number | undefined,
+      has_object_audio: !!(row.has_object_audio as number),
+      audio_tracks: row.audio_tracks as string | undefined,
+      subtitle_tracks: row.subtitle_tracks as string | undefined,
+      container: row.container as string | undefined,
+      file_mtime: row.file_mtime as number | undefined,
+      quality_tier: row.quality_tier as string | undefined,
+      tier_quality: row.tier_quality as string | undefined,
+      tier_score: row.tier_score as number | undefined,
+      is_best: !!(row.is_best as number),
+      created_at: row.created_at as string,
+      updated_at: row.updated_at as string,
+    }))
+  }
+
+  /**
+   * Update only the quality scoring fields on a version row.
+   */
+  updateMediaItemVersionQuality(versionId: number, scores: { quality_tier: string; tier_quality: string; tier_score: number }): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.prepare(
+      `UPDATE media_item_versions SET quality_tier = ?, tier_quality = ?, tier_score = ?, updated_at = datetime('now') WHERE id = ?`
+    ).run(scores.quality_tier, scores.tier_quality, scores.tier_score, versionId)
+  }
+
+  /**
+   * Delete all versions for a media item (used before re-inserting during rescan)
+   */
+  deleteMediaItemVersions(mediaItemId: number): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.prepare('DELETE FROM media_item_versions WHERE media_item_id = ?').run(mediaItemId)
+  }
+
+  /**
+   * Update the best version flag and sync parent media_item fields.
+   * Picks the highest quality version and copies its data to the parent item.
+   */
+  updateBestVersion(mediaItemId: number): void {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const versions = this.getMediaItemVersions(mediaItemId)
+    if (versions.length === 0) return
+
+    // Rank versions: 4K=4, 1080p=3, 720p=2, SD=1, then by tier_score
+    const tierRank = (tier?: string): number => {
+      switch (tier) {
+        case '4K': return 4
+        case '1080p': return 3
+        case '720p': return 2
+        default: return 1
+      }
+    }
+
+    // Sort by tier rank desc, then tier_score desc
+    const sorted = [...versions].sort((a, b) => {
+      const rankDiff = tierRank(b.quality_tier) - tierRank(a.quality_tier)
+      if (rankDiff !== 0) return rankDiff
+      return (b.tier_score || 0) - (a.tier_score || 0)
+    })
+
+    const best = sorted[0]
+
+    // Clear all is_best flags, then set the best one
+    this.db.prepare('UPDATE media_item_versions SET is_best = 0 WHERE media_item_id = ?').run(mediaItemId)
+    if (best.id) {
+      this.db.prepare('UPDATE media_item_versions SET is_best = 1 WHERE id = ?').run(best.id)
+    }
+
+    // Sync best version's file/quality fields to parent media_item
+    this.db.prepare(`
+      UPDATE media_items SET
+        file_path = ?, file_size = ?, duration = ?,
+        resolution = ?, width = ?, height = ?,
+        video_codec = ?, video_bitrate = ?,
+        audio_codec = ?, audio_channels = ?, audio_bitrate = ?,
+        video_frame_rate = ?, color_bit_depth = ?, hdr_format = ?, color_space = ?,
+        video_profile = ?, video_level = ?,
+        audio_profile = ?, audio_sample_rate = ?, has_object_audio = ?,
+        audio_tracks = ?, subtitle_tracks = ?, container = ?, file_mtime = ?,
+        version_count = ?,
+        updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      best.file_path, best.file_size, best.duration,
+      best.resolution, best.width, best.height,
+      best.video_codec, best.video_bitrate,
+      best.audio_codec, best.audio_channels, best.audio_bitrate,
+      best.video_frame_rate || null, best.color_bit_depth || null,
+      best.hdr_format || null, best.color_space || null,
+      best.video_profile || null, best.video_level || null,
+      best.audio_profile || null, best.audio_sample_rate || null,
+      best.has_object_audio ? 1 : 0,
+      best.audio_tracks || null, best.subtitle_tracks || null,
+      best.container || null, best.file_mtime || null,
+      versions.length,
+      mediaItemId
+    )
   }
 
   // ============================================================================

@@ -177,9 +177,73 @@ export interface MediaItem {
   // User override flag (preserves user-selected metadata during rescans)
   user_fixed_match?: boolean
 
+  // Multi-version support
+  version_count?: number          // Cached count of versions (default 1)
+
   // Timestamps
   created_at: string
   updated_at: string
+}
+
+// Represents one file/version of a media item (e.g., 4K HDR vs 1080p theatrical)
+export interface MediaItemVersion {
+  id?: number
+  media_item_id: number
+
+  // Version identification
+  version_source: string          // 'primary', 'plex_media_1', 'jellyfin_source_abc', 'local_file'
+  edition?: string                // 'Extended', "Director's Cut", 'IMAX', 'Remastered', etc.
+  label?: string                  // Auto-generated: "4K HDR Dolby Vision", "1080p Extended"
+
+  // File information
+  file_path: string
+  file_size: number
+  duration: number
+
+  // Video quality
+  resolution: string
+  width: number
+  height: number
+  video_codec: string
+  video_bitrate: number
+
+  // Audio quality (best audio track)
+  audio_codec: string
+  audio_channels: number
+  audio_bitrate: number
+
+  // Enhanced video quality metadata
+  video_frame_rate?: number
+  color_bit_depth?: number
+  hdr_format?: string
+  color_space?: string
+  video_profile?: string
+  video_level?: number
+
+  // Enhanced audio quality metadata
+  audio_profile?: string
+  audio_sample_rate?: number
+  has_object_audio?: boolean
+
+  // All tracks (JSON strings)
+  audio_tracks?: string
+  subtitle_tracks?: string
+
+  // Container
+  container?: string
+  file_mtime?: number
+
+  // Quality scores (denormalized for fast access)
+  quality_tier?: string           // 'SD', '720p', '1080p', '4K'
+  tier_quality?: string           // 'LOW', 'MEDIUM', 'HIGH'
+  tier_score?: number
+
+  // Best version flag
+  is_best?: boolean
+
+  // Timestamps
+  created_at?: string
+  updated_at?: string
 }
 
 export interface QualityScore {

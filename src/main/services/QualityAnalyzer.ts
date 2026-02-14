@@ -1,5 +1,32 @@
 import { getDatabase } from '../database/getDatabase'
-import type { MediaItem, QualityScore, MusicAlbum, MusicTrack, MusicQualityScore, MusicQualityTier, AudioTrack } from '../types/database'
+import type { MediaItem, MediaItemVersion, QualityScore, MusicAlbum, MusicTrack, MusicQualityScore, MusicQualityTier, AudioTrack } from '../types/database'
+
+/**
+ * Shared input shape for quality scoring.
+ * Both MediaItem and MediaItemVersion have these fields.
+ */
+interface QualityScoringInput {
+  resolution: string
+  video_codec: string
+  video_bitrate: number
+  audio_codec: string
+  audio_channels: number
+  audio_bitrate: number
+  has_object_audio?: boolean
+  audio_tracks?: string
+  hdr_format?: string
+  color_bit_depth?: number
+  height?: number
+}
+
+/**
+ * Lightweight quality result for version scoring.
+ */
+export interface VersionQualityResult {
+  quality_tier: string
+  tier_quality: string
+  tier_score: number
+}
 
 /**
  * Legacy quality thresholds (kept for backward compatibility)
@@ -238,10 +265,10 @@ export class QualityAnalyzer {
   }
 
   /**
-   * Find the best audio track from the media item
-   * Returns the track with highest quality score, or fallback to primary audio fields
+   * Find the best audio track from media data.
+   * Returns the track with highest quality score, or fallback to primary audio fields.
    */
-  private getBestAudioTrack(mediaItem: MediaItem): {
+  private getBestAudioTrack(input: QualityScoringInput): {
     codec: string
     channels: number
     bitrate: number
@@ -249,19 +276,19 @@ export class QualityAnalyzer {
   } {
     // Default to the primary audio fields
     const fallback = {
-      codec: mediaItem.audio_codec || '',
-      channels: mediaItem.audio_channels || 2,
-      bitrate: mediaItem.audio_bitrate || 0,
-      hasObjectAudio: mediaItem.has_object_audio || false,
+      codec: input.audio_codec || '',
+      channels: input.audio_channels || 2,
+      bitrate: input.audio_bitrate || 0,
+      hasObjectAudio: input.has_object_audio || false,
     }
 
     // Try to parse audio_tracks
-    if (!mediaItem.audio_tracks) {
+    if (!input.audio_tracks) {
       return fallback
     }
 
     try {
-      const tracks: AudioTrack[] = JSON.parse(mediaItem.audio_tracks)
+      const tracks: AudioTrack[] = JSON.parse(input.audio_tracks)
       if (!Array.isArray(tracks) || tracks.length === 0) {
         return fallback
       }
@@ -430,32 +457,49 @@ export class QualityAnalyzer {
   }
 
   /**
-   * Analyze a single media item and calculate quality scores
+   * Core quality scoring logic shared by analyzeMediaItem and analyzeVersion.
    */
-  async analyzeMediaItem(mediaItem: MediaItem): Promise<QualityScore> {
-    // Classify into resolution tier
-    const qualityTier = this.classifyTier(mediaItem.resolution)
-
-    // Calculate effective bitrate with codec efficiency
-    const codecEfficiency = this.getCodecEfficiency(mediaItem.video_codec)
-    const effectiveBitrate = mediaItem.video_bitrate * codecEfficiency
-
-    // Determine video quality directly from thresholds
+  private scoreQuality(input: QualityScoringInput): {
+    qualityTier: QualityTier
+    tierQuality: TierQuality
+    tierScore: number
+    bitrateTierScore: number
+    audioTierScore: number
+    effectiveBitrate: number
+    bestAudio: { codec: string; channels: number; bitrate: number; hasObjectAudio: boolean }
+  } {
+    const qualityTier = this.classifyTier(input.resolution)
+    const codecEfficiency = this.getCodecEfficiency(input.video_codec)
+    const effectiveBitrate = input.video_bitrate * codecEfficiency
     const videoQuality = this.determineVideoQuality(effectiveBitrate, qualityTier)
-
-    // Get the BEST audio track for quality scoring (not the default track)
-    const bestAudio = this.getBestAudioTrack(mediaItem)
-
-    // Determine audio quality from the best audio track (considers codec quality, not just bitrate)
+    const bestAudio = this.getBestAudioTrack(input)
     const audioQuality = this.determineAudioQualityFromTrack(bestAudio, qualityTier)
-
-    // Overall quality is the lower of video and audio
     const tierQuality = this.combineQuality(videoQuality, audioQuality)
-
-    // Calculate continuous tier scores (0-100)
     const bitrateTierScore = this.calculateVideoTierScore(effectiveBitrate, qualityTier)
     const audioTierScore = this.calculateAudioTierScore(bestAudio, qualityTier)
     const tierScore = Math.round(bitrateTierScore * 0.7 + audioTierScore * 0.3)
+    return { qualityTier, tierQuality, tierScore, bitrateTierScore, audioTierScore, effectiveBitrate, bestAudio }
+  }
+
+  /**
+   * Analyze a media item version and return lightweight quality scores.
+   * Used during scan and retroactive analysis to populate per-version quality data.
+   */
+  analyzeVersion(version: MediaItemVersion): VersionQualityResult {
+    const { qualityTier, tierQuality, tierScore } = this.scoreQuality(version)
+    return {
+      quality_tier: qualityTier,
+      tier_quality: tierQuality,
+      tier_score: tierScore,
+    }
+  }
+
+  /**
+   * Analyze a single media item and calculate quality scores
+   */
+  async analyzeMediaItem(mediaItem: MediaItem): Promise<QualityScore> {
+    const { qualityTier, tierQuality, tierScore, bitrateTierScore, audioTierScore, effectiveBitrate, bestAudio } =
+      this.scoreQuality(mediaItem)
 
     // Legacy scoring (for backward compatibility) - also use best audio
     const resolutionScore = this.calculateResolutionScore(mediaItem.height)
@@ -467,6 +511,7 @@ export class QualityAnalyzer {
     const issues: string[] = []
     const { medium: mediumThreshold } = this.videoThresholds[qualityTier]
 
+    const codecEfficiency = this.getCodecEfficiency(mediaItem.video_codec)
     if (effectiveBitrate < mediumThreshold && mediaItem.video_bitrate > 0) {
       const codecName = codecEfficiency > 1.0 ? ` (${mediaItem.video_codec})` : ''
       issues.push(
@@ -620,6 +665,19 @@ export class QualityAnalyzer {
       try {
         const qualityScore = await this.analyzeMediaItem(item)
         await db.upsertQualityScore(qualityScore)
+
+        // Score individual versions and update best version selection
+        if (item.id && item.version_count && item.version_count > 1) {
+          const versions = db.getMediaItemVersions(item.id)
+          for (const version of versions) {
+            if (version.id) {
+              const vScore = this.analyzeVersion(version)
+              db.updateMediaItemVersionQuality(version.id, vScore)
+            }
+          }
+          db.updateBestVersion(item.id)
+        }
+
         analyzed++
 
         if (onProgress) {

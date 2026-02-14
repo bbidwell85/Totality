@@ -44,6 +44,7 @@ export interface PlexMediaItem {
   rating?: number
   audienceRating?: number
   year?: number
+  editionTitle?: string
   tagline?: string
   thumb?: string
   art?: string

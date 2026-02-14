@@ -290,6 +290,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMediaItemById: (id: number) => ipcRenderer.invoke('db:getMediaItemById', id),
   upsertMediaItem: (item: unknown) => ipcRenderer.invoke('db:upsertMediaItem', item),
   deleteMediaItem: (id: number) => ipcRenderer.invoke('db:deleteMediaItem', id),
+  getMediaItemVersions: (mediaItemId: number) => ipcRenderer.invoke('db:getMediaItemVersions', mediaItemId),
 
   // Database - Quality Scores
   getQualityScores: () => ipcRenderer.invoke('db:getQualityScores'),
@@ -1093,6 +1094,7 @@ export interface ElectronAPI {
   getMediaItemById: (id: number) => Promise<unknown | null>
   upsertMediaItem: (item: unknown) => Promise<number>
   deleteMediaItem: (id: number) => Promise<boolean>
+  getMediaItemVersions: (mediaItemId: number) => Promise<unknown[]>
 
   // Database - Quality Scores
   getQualityScores: () => Promise<unknown[]>

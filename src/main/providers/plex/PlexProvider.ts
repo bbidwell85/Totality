@@ -22,6 +22,8 @@ import {
   hasObjectAudio,
 } from '../../services/MediaNormalizer'
 import { selectBestAudioTrack } from '../utils/ProviderUtils'
+import { getFileNameParser } from '../../services/FileNameParser'
+import { extractVersionNames } from '../utils/VersionNaming'
 import type {
   MediaProvider,
   ProviderCredentials,
@@ -46,7 +48,7 @@ import type {
   PlexMusicTrack,
   PlexResource,
 } from '../../types/plex'
-import type { MediaItem, AudioTrack, SubtitleTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
+import type { MediaItem, MediaItemVersion, AudioTrack, SubtitleTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
 
 const PLEX_API_URL = 'https://plex.tv/api/v2'
 const PLEX_TV_URL = 'https://plex.tv'
@@ -536,9 +538,10 @@ export class PlexProvider implements MediaProvider {
               }
 
               const showTmdbId = (item as PlexMediaItem & { _showTmdbId?: string })._showTmdbId
-              const mediaItem = this.convertToMediaItem(detailed, showTmdbId)
+              const converted = this.convertToMediaItem(detailed, showTmdbId)
 
-              if (mediaItem) {
+              if (converted) {
+                const { mediaItem, versions } = converted
                 // Set source tracking fields
                 mediaItem.source_id = this.sourceId
                 mediaItem.source_type = 'plex'
@@ -547,7 +550,16 @@ export class PlexProvider implements MediaProvider {
                 const id = await db.upsertMediaItem(mediaItem)
                 scannedProviderIds.add(mediaItem.plex_id)
 
-                // Analyze quality
+                // Upsert all versions with per-version quality scoring
+                for (const version of versions) {
+                  const vScore = analyzer.analyzeVersion(version as MediaItemVersion)
+                  db.upsertMediaItemVersion({ ...version, media_item_id: id, ...vScore } as MediaItemVersion)
+                }
+                if (versions.length > 1) {
+                  db.updateBestVersion(id)
+                }
+
+                // Analyze quality (parent item)
                 mediaItem.id = id
                 const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
                 await db.upsertQualityScore(qualityScore)
@@ -734,18 +746,29 @@ export class PlexProvider implements MediaProvider {
 
         // Convert and add the item
         const itemType = libraryType === 'show' ? 'episode' : 'movie'
-        const mediaItem = this.convertToMediaItem(metadata)
-        if (mediaItem) {
+        const converted = this.convertToMediaItem(metadata)
+        if (converted) {
+          const { mediaItem, versions } = converted
           // Set source tracking fields (required for proper DB storage)
           mediaItem.source_id = this.sourceId
           mediaItem.source_type = 'plex'
           mediaItem.library_id = libraryId
 
           // Upsert will handle duplicates via unique constraint
-          db.upsertMediaItem(mediaItem)
+          const itemId = db.upsertMediaItem(mediaItem)
+
+          // Upsert all versions with per-version quality scoring
+          for (const version of versions) {
+            const vScore = analyzer.analyzeVersion(version as MediaItemVersion)
+            db.upsertMediaItemVersion({ ...version, media_item_id: itemId, ...vScore } as MediaItemVersion)
+          }
+          if (versions.length > 1) {
+            db.updateBestVersion(itemId)
+          }
 
           // Analyze quality
           try {
+            mediaItem.id = itemId
             const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
             if (qualityScore) {
               db.upsertQualityScore(qualityScore)
@@ -987,57 +1010,125 @@ export class PlexProvider implements MediaProvider {
     }
   }
 
-  private convertToMediaItem(item: PlexMediaItem, showTmdbId?: string): MediaItem | null {
-    const media = item.Media?.[0]
-    const part = media?.Part?.[0]
+  private convertToMediaItem(item: PlexMediaItem, showTmdbId?: string): { mediaItem: MediaItem; versions: Omit<MediaItemVersion, 'id' | 'media_item_id'>[] } | null {
+    const allMedia = item.Media || []
+    if (allMedia.length === 0) return null
 
-    if (!media || !part) {
+    // Build version data for each Media entry
+    type VersionData = Omit<MediaItemVersion, 'id' | 'media_item_id'>
+    const versions: VersionData[] = []
+
+    for (const media of allMedia) {
+      const part = media.Part?.[0]
+      if (!part) continue
+
+      const videoStream = part.Stream?.find((s) => s.streamType === 1)
+      const audioStreams = part.Stream?.filter((s) => s.streamType === 2) || []
+      const subtitleStreams = part.Stream?.filter((s) => s.streamType === 3) || []
+
+      if (!videoStream || audioStreams.length === 0) continue
+
+      // Build audio tracks array with normalized values
+      const audioTracks: AudioTrack[] = audioStreams.map((stream, index) => ({
+        index,
+        codec: normalizeAudioCodec(stream.codec, stream.profile),
+        channels: normalizeAudioChannels(stream.channels, stream.audioChannelLayout),
+        bitrate: normalizeBitrate(stream.bitrate, 'kbps'),
+        language: stream.language || stream.languageCode,
+        title: stream.extendedDisplayTitle || stream.title,
+        profile: stream.profile,
+        sampleRate: normalizeSampleRate(stream.samplingRate),
+        isDefault: stream.selected === true,
+        hasObjectAudio: hasObjectAudio(
+          stream.codec,
+          stream.profile,
+          stream.displayTitle || stream.title,
+          stream.audioChannelLayout
+        ),
+      }))
+
+      // Build subtitle tracks array
+      const subtitleTracks: SubtitleTrack[] = subtitleStreams.map((stream, index) => ({
+        index,
+        codec: stream.codec || 'unknown',
+        language: stream.language || stream.languageCode,
+        title: stream.displayTitle || stream.title,
+        isDefault: stream.selected === true,
+        isForced: (stream.displayTitle || stream.title || '').toLowerCase().includes('forced'),
+      }))
+
+      // Find best audio track using shared utility
+      const bestAudioTrack = selectBestAudioTrack(audioTracks) || audioTracks[0]
+      const audioStream = audioStreams[bestAudioTrack.index] || audioStreams[0]
+
+      const width = media.width || 0
+      const height = media.height || 0
+      const resolution = normalizeResolution(width, height)
+      const hdrFormat = normalizeHdrFormat(
+        undefined,
+        videoStream.colorTrc,
+        videoStream.colorPrimaries,
+        videoStream.bitDepth,
+        videoStream.profile
+      ) || 'None'
+
+      // Extract edition from file path (e.g., "Director's Cut", "Extended")
+      const parsed = getFileNameParser().parse(part.file)
+      const edition = parsed?.edition || item.editionTitle || undefined
+
+      // Generate label: "4K Dolby Vision Director's Cut", "1080p Extended", etc.
+      const labelParts = [resolution]
+      if (hdrFormat !== 'None') labelParts.push(hdrFormat)
+      if (edition) labelParts.push(edition)
+      const label = labelParts.join(' ')
+
+      versions.push({
+        version_source: `plex_media_${media.id}`,
+        edition,
+        label,
+        file_path: part.file,
+        file_size: part.size,
+        duration: item.duration,
+        resolution,
+        width,
+        height,
+        video_codec: normalizeVideoCodec(media.videoCodec),
+        video_bitrate: normalizeBitrate(media.bitrate, 'kbps'),
+        audio_codec: normalizeAudioCodec(media.audioCodec, audioStream?.profile),
+        audio_channels: normalizeAudioChannels(media.audioChannels, audioStream.audioChannelLayout),
+        audio_bitrate: normalizeBitrate(audioStream.bitrate, 'kbps'),
+        video_frame_rate: normalizeFrameRate(videoStream.frameRate),
+        color_bit_depth: videoStream.bitDepth,
+        hdr_format: hdrFormat,
+        color_space: videoStream.colorSpace,
+        video_profile: videoStream.profile,
+        video_level: videoStream.level,
+        audio_profile: audioStream.profile,
+        audio_sample_rate: normalizeSampleRate(audioStream.samplingRate),
+        has_object_audio: hasObjectAudio(
+          audioStream.codec,
+          audioStream.profile,
+          audioStream.displayTitle || audioStream.title,
+          audioStream.audioChannelLayout
+        ),
+        audio_tracks: JSON.stringify(audioTracks),
+        subtitle_tracks: subtitleTracks.length > 0 ? JSON.stringify(subtitleTracks) : undefined,
+        container: normalizeContainer(part.container || media.container),
+      })
+    }
+
+    if (versions.length === 0) {
+      console.warn(`[PlexProvider] Skipping ${item.title}: no valid media entries found`)
       return null
     }
 
-    const videoStream = part.Stream?.find((s) => s.streamType === 1)
-    const audioStreams = part.Stream?.filter((s) => s.streamType === 2) || []
-    const subtitleStreams = part.Stream?.filter((s) => s.streamType === 3) || []
-
-    if (!videoStream || audioStreams.length === 0) {
-      const missing = !videoStream ? 'video stream' : 'audio tracks'
-      console.warn(`[PlexProvider] Skipping ${item.title}: no ${missing} found`)
-      return null
+    // Post-process: compare filenames across versions to extract edition names
+    if (versions.length > 1) {
+      extractVersionNames(versions)
     }
 
-    // Build audio tracks array with normalized values
-    const audioTracks: AudioTrack[] = audioStreams.map((stream, index) => ({
-      index,
-      codec: normalizeAudioCodec(stream.codec, stream.profile),
-      channels: normalizeAudioChannels(stream.channels, stream.audioChannelLayout),
-      bitrate: normalizeBitrate(stream.bitrate, 'kbps'),
-      language: stream.language || stream.languageCode,
-      title: stream.extendedDisplayTitle || stream.title,
-      profile: stream.profile,
-      sampleRate: normalizeSampleRate(stream.samplingRate),
-      isDefault: stream.selected === true,
-      hasObjectAudio: hasObjectAudio(
-        stream.codec,
-        stream.profile,
-        stream.displayTitle || stream.title,
-        stream.audioChannelLayout
-      ),
-    }))
-
-    // Build subtitle tracks array
-    const subtitleTracks: SubtitleTrack[] = subtitleStreams.map((stream, index) => ({
-      index,
-      codec: stream.codec || 'unknown',
-      language: stream.language || stream.languageCode,
-      title: stream.displayTitle || stream.title,
-      isDefault: stream.selected === true,
-      isForced: (stream.displayTitle || stream.title || '').toLowerCase().includes('forced'),
-    }))
-
-    // Find best audio track using shared utility
-    const bestAudioTrack = selectBestAudioTrack(audioTracks) || audioTracks[0]
-
-    const audioStream = audioStreams[bestAudioTrack.index] || audioStreams[0]
+    // Pick the best version for parent MediaItem (highest resolution tier, then HDR, then bitrate)
+    const best = versions.reduce((a, b) => this.scoreVersion(b) > this.scoreVersion(a) ? b : a)
 
     // Extract external IDs
     let imdbId: string | undefined
@@ -1076,65 +1167,63 @@ export class PlexProvider implements MediaProvider {
       }
     }
 
-    // Normalize all video/audio properties
-    const width = media.width || 0
-    const height = media.height || 0
-
     return {
-      plex_id: item.ratingKey,
-      title: item.title,
-      year: item.year,
-      type: item.type as 'movie' | 'episode',
-      series_title: item.grandparentTitle,
-      season_number: item.parentIndex,
-      episode_number: item.index,
-      file_path: part.file,
-      file_size: part.size,
-      duration: item.duration,
-      resolution: normalizeResolution(width, height),
-      width,
-      height,
-      video_codec: normalizeVideoCodec(media.videoCodec),
-      video_bitrate: normalizeBitrate(media.bitrate, 'kbps'),
-      audio_codec: normalizeAudioCodec(media.audioCodec, audioStream?.profile),
-      audio_channels: normalizeAudioChannels(media.audioChannels, audioStream.audioChannelLayout),
-      audio_bitrate: normalizeBitrate(audioStream.bitrate, 'kbps'),
-      video_frame_rate: normalizeFrameRate(videoStream.frameRate),
-      color_bit_depth: videoStream.bitDepth,
-      hdr_format: normalizeHdrFormat(
-        undefined,
-        videoStream.colorTrc,
-        videoStream.colorPrimaries,
-        videoStream.bitDepth,
-        videoStream.profile
-      ) || 'None',
-      color_space: videoStream.colorSpace,
-      video_profile: videoStream.profile,
-      video_level: videoStream.level,
-      audio_profile: audioStream.profile,
-      audio_sample_rate: normalizeSampleRate(audioStream.samplingRate),
-      has_object_audio: hasObjectAudio(
-        audioStream.codec,
-        audioStream.profile,
-        audioStream.displayTitle || audioStream.title,
-        audioStream.audioChannelLayout
-      ),
-      audio_tracks: JSON.stringify(audioTracks),
-      subtitle_tracks: subtitleTracks.length > 0 ? JSON.stringify(subtitleTracks) : undefined,
-      container: normalizeContainer(part.container || media.container),
-      imdb_id: imdbId,
-      tmdb_id: tmdbId,
-      series_tmdb_id: showTmdbId,
-      poster_url: posterUrl,
-      episode_thumb_url: episodeThumbUrl,
-      season_poster_url: seasonPosterUrl,
-      created_at: item.addedAt && item.addedAt > 0
-        ? new Date(item.addedAt * 1000).toISOString()
-        : new Date().toISOString(),
-      updated_at: item.updatedAt && item.updatedAt > 0
-        ? new Date(item.updatedAt * 1000).toISOString()
-        : new Date().toISOString(),
+      mediaItem: {
+        plex_id: item.ratingKey,
+        title: item.title,
+        year: item.year,
+        type: item.type as 'movie' | 'episode',
+        series_title: item.grandparentTitle,
+        season_number: item.parentIndex,
+        episode_number: item.index,
+        file_path: best.file_path,
+        file_size: best.file_size,
+        duration: best.duration,
+        resolution: best.resolution,
+        width: best.width,
+        height: best.height,
+        video_codec: best.video_codec,
+        video_bitrate: best.video_bitrate,
+        audio_codec: best.audio_codec,
+        audio_channels: best.audio_channels,
+        audio_bitrate: best.audio_bitrate,
+        video_frame_rate: best.video_frame_rate,
+        color_bit_depth: best.color_bit_depth,
+        hdr_format: best.hdr_format,
+        color_space: best.color_space,
+        video_profile: best.video_profile,
+        video_level: best.video_level,
+        audio_profile: best.audio_profile,
+        audio_sample_rate: best.audio_sample_rate,
+        has_object_audio: best.has_object_audio,
+        audio_tracks: best.audio_tracks,
+        subtitle_tracks: best.subtitle_tracks,
+        container: best.container,
+        version_count: versions.length,
+        imdb_id: imdbId,
+        tmdb_id: tmdbId,
+        series_tmdb_id: showTmdbId,
+        poster_url: posterUrl,
+        episode_thumb_url: episodeThumbUrl,
+        season_poster_url: seasonPosterUrl,
+        created_at: item.addedAt && item.addedAt > 0
+          ? new Date(item.addedAt * 1000).toISOString()
+          : new Date().toISOString(),
+        updated_at: item.updatedAt && item.updatedAt > 0
+          ? new Date(item.updatedAt * 1000).toISOString()
+          : new Date().toISOString(),
+      },
+      versions,
     }
+  }
+
+  private scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
+    const tierRank = v.resolution.includes('2160') ? 4
+      : v.resolution.includes('1080') ? 3
+      : v.resolution.includes('720') ? 2
+      : 1
+    const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
+    return tierRank * 100000 + hdrBonus + v.video_bitrate
   }
 
   // ============================================================================

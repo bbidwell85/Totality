@@ -2,6 +2,12 @@ import { app, BrowserWindow, ipcMain, protocol, net, dialog } from 'electron'
 import path from 'node:path'
 import * as fs from 'fs'
 
+// Disable Chromium SUID sandbox on Linux — the AppImage can't set root ownership
+// on chrome-sandbox. Electron's contextIsolation still provides process security.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('no-sandbox')
+}
+
 // Disable hardware acceleration to prevent GPU process crashes on some systems
 // This uses software rendering instead, which is fine for a media library app
 app.disableHardwareAcceleration()

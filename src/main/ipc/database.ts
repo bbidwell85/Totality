@@ -93,6 +93,16 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  ipcMain.handle('db:getMediaItemVersions', async (_event, mediaItemId: unknown) => {
+    try {
+      const validId = validateInput(PositiveIntSchema, mediaItemId, 'db:getMediaItemVersions')
+      return db.getMediaItemVersions(validId)
+    } catch (error) {
+      console.error('Error getting media item versions:', error)
+      throw error
+    }
+  })
+
   ipcMain.handle('db:deleteMediaItem', async (_event, id: unknown) => {
     try {
       const validId = validateInput(PositiveIntSchema, id, 'db:deleteMediaItem')

@@ -124,6 +124,9 @@ export interface MediaItem {
   has_object_audio?: boolean
   video_frame_rate?: number
 
+  // Multi-version
+  version_count?: number
+
   // Source tracking
   source_id?: string
   source_type?: ProviderType

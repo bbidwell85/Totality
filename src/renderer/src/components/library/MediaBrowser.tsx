@@ -2733,6 +2733,16 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
           </div>
         )}
 
+        {/* Version Count Badge */}
+        {movie.version_count && movie.version_count > 1 && (
+          <div
+            className="absolute top-2 right-2 z-10 bg-primary text-primary-foreground text-[0.625rem] font-bold px-1.5 py-0.5 rounded shadow-md"
+            title={`${movie.version_count} versions available`}
+          >
+            {movie.version_count}x
+          </div>
+        )}
+
         {/* Source Badge - show which provider this item is from */}
         {showSourceBadge && movie.source_type && (
           <div
@@ -2797,6 +2807,7 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
          prevProps.movie.poster_url === nextProps.movie.poster_url &&
          prevProps.movie.quality_tier === nextProps.movie.quality_tier &&
          prevProps.movie.source_type === nextProps.movie.source_type &&
+         prevProps.movie.version_count === nextProps.movie.version_count &&
          prevProps.showSourceBadge === nextProps.showSourceBadge &&
          prevProps.collectionData?.id === nextProps.collectionData?.id &&
          prevProps.collectionData?.completeness_percentage === nextProps.collectionData?.completeness_percentage
@@ -2934,6 +2945,7 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
         <h4 className="font-semibold text-sm truncate">{movie.title}</h4>
         <p className="text-xs text-muted-foreground mt-0.5">
           {movie.year}{movie.year && movie.resolution ? ' • ' : ''}{movie.resolution}
+          {movie.version_count && movie.version_count > 1 && ` • ${movie.version_count} versions`}
         </p>
         <div className="mt-2 flex items-center gap-2 flex-wrap">
           {movie.quality_tier && movie.tier_quality && (
@@ -2978,6 +2990,7 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
          prevProps.movie.poster_url === nextProps.movie.poster_url &&
          prevProps.movie.quality_tier === nextProps.movie.quality_tier &&
          prevProps.movie.source_type === nextProps.movie.source_type &&
+         prevProps.movie.version_count === nextProps.movie.version_count &&
          prevProps.showSourceBadge === nextProps.showSourceBadge
 })
 

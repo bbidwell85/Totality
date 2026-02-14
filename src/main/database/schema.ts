@@ -99,6 +99,69 @@ CREATE TABLE IF NOT EXISTS media_items (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Multiple versions/editions per media item (e.g., 4K HDR + 1080p theatrical)
+CREATE TABLE IF NOT EXISTS media_item_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  media_item_id INTEGER NOT NULL,
+
+  -- Version identification
+  version_source TEXT NOT NULL DEFAULT 'primary',
+  edition TEXT,
+  label TEXT,
+
+  -- File information
+  file_path TEXT NOT NULL,
+  file_size INTEGER NOT NULL,
+  duration INTEGER NOT NULL,
+
+  -- Video quality
+  resolution TEXT NOT NULL,
+  width INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  video_codec TEXT NOT NULL,
+  video_bitrate INTEGER NOT NULL,
+
+  -- Audio quality (best audio track)
+  audio_codec TEXT NOT NULL,
+  audio_channels INTEGER NOT NULL,
+  audio_bitrate INTEGER NOT NULL,
+
+  -- Enhanced video quality metadata
+  video_frame_rate REAL,
+  color_bit_depth INTEGER,
+  hdr_format TEXT,
+  color_space TEXT,
+  video_profile TEXT,
+  video_level INTEGER,
+
+  -- Enhanced audio quality metadata
+  audio_profile TEXT,
+  audio_sample_rate INTEGER,
+  has_object_audio INTEGER DEFAULT 0,
+
+  -- All tracks (JSON arrays)
+  audio_tracks TEXT,
+  subtitle_tracks TEXT,
+
+  -- Container metadata
+  container TEXT,
+  file_mtime INTEGER,
+
+  -- Quality scores (denormalized for fast access)
+  quality_tier TEXT,
+  tier_quality TEXT,
+  tier_score INTEGER DEFAULT 0,
+
+  -- Best version flag (only one per media_item should be 1)
+  is_best INTEGER NOT NULL DEFAULT 0,
+
+  -- Timestamps
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+
+  FOREIGN KEY (media_item_id) REFERENCES media_items(id) ON DELETE CASCADE
+);
+
 -- Quality scores for each media item
 CREATE TABLE IF NOT EXISTS quality_scores (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -570,6 +633,9 @@ CREATE INDEX IF NOT EXISTS idx_media_items_source_type ON media_items(source_typ
 CREATE INDEX IF NOT EXISTS idx_media_items_library ON media_items(source_id, library_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_source_provider_id ON media_items(source_id, plex_id);
 CREATE INDEX IF NOT EXISTS idx_media_items_series ON media_items(series_title) WHERE type = 'episode';
+CREATE INDEX IF NOT EXISTS idx_versions_media_item ON media_item_versions(media_item_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_unique_file ON media_item_versions(media_item_id, file_path);
+CREATE INDEX IF NOT EXISTS idx_versions_best ON media_item_versions(media_item_id, is_best);
 CREATE INDEX IF NOT EXISTS idx_quality_scores_media ON quality_scores(media_item_id);
 CREATE INDEX IF NOT EXISTS idx_quality_scores_needs_upgrade ON quality_scores(needs_upgrade) WHERE needs_upgrade = 1;
 CREATE INDEX IF NOT EXISTS idx_quality_scores_tier ON quality_scores(quality_tier);

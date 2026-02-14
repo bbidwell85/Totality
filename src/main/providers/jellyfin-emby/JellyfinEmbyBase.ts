@@ -24,6 +24,8 @@ import {
   hasObjectAudio,
 } from '../../services/MediaNormalizer'
 import { selectBestAudioTrack } from '../utils/ProviderUtils'
+import { getFileNameParser } from '../../services/FileNameParser'
+import { extractVersionNames } from '../utils/VersionNaming'
 import type {
   MediaProvider,
   ProviderType,
@@ -36,7 +38,7 @@ import type {
   ScanOptions,
   SourceConfig,
 } from '../base/MediaProvider'
-import type { MediaItem, AudioTrack, SubtitleTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
+import type { MediaItem, MediaItemVersion, AudioTrack, SubtitleTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
 import {
   isLosslessCodec,
   isHiRes,
@@ -892,8 +894,9 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
               continue
             }
 
-            const mediaItem = await this.convertToMediaItem(item)
-            if (mediaItem) {
+            const converted = await this.convertToMediaItem(item)
+            if (converted) {
+              const { mediaItem, versions } = converted
               mediaItem.source_id = this.sourceId
               mediaItem.source_type = this.providerType
               mediaItem.library_id = libraryId
@@ -901,7 +904,16 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
               const id = await db.upsertMediaItem(mediaItem)
               scannedProviderIds.add(mediaItem.plex_id)
 
-              // Analyze quality
+              // Upsert all versions with per-version quality scoring
+              for (const version of versions) {
+                const vScore = analyzer.analyzeVersion(version as MediaItemVersion)
+                db.upsertMediaItemVersion({ ...version, media_item_id: id, ...vScore } as MediaItemVersion)
+              }
+              if (versions.length > 1) {
+                db.updateBestVersion(id)
+              }
+
+              // Analyze quality (parent item)
               mediaItem.id = id
               const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
               await db.upsertQualityScore(qualityScore)
@@ -1058,142 +1070,197 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
     }
   }
 
-  protected async convertToMediaItem(item: JellyfinMediaItem): Promise<MediaItem | null> {
-    const mediaSource = item.MediaSources?.[0]
-    if (!mediaSource) return null
+  protected async convertToMediaItem(item: JellyfinMediaItem): Promise<{ mediaItem: MediaItem; versions: Omit<MediaItemVersion, 'id' | 'media_item_id'>[] } | null> {
+    const allSources = item.MediaSources || []
+    if (allSources.length === 0) return null
 
-    const videoStream = mediaSource.MediaStreams?.find(s => s.Type === 'Video')
-    const audioStreams = mediaSource.MediaStreams?.filter(s => s.Type === 'Audio') || []
-    const subtitleStreams = mediaSource.MediaStreams?.filter(s => s.Type === 'Subtitle') || []
+    // Build version data for each MediaSource entry
+    type VersionData = Omit<MediaItemVersion, 'id' | 'media_item_id'>
+    const versions: VersionData[] = []
 
-    if (!videoStream || audioStreams.length === 0) {
-      return null
-    }
+    for (const mediaSource of allSources) {
+      const videoStream = mediaSource.MediaStreams?.find(s => s.Type === 'Video')
+      const audioStreams = mediaSource.MediaStreams?.filter(s => s.Type === 'Audio') || []
+      const subtitleStreams = mediaSource.MediaStreams?.filter(s => s.Type === 'Subtitle') || []
 
-    // Build audio tracks array with normalized values
-    // Note: Jellyfin returns BitRate in bps
-    // For advanced codecs (TrueHD, DTS-HD MA, Atmos), Jellyfin often doesn't report stream-level BitRate
-    const totalBitrate = mediaSource.Bitrate || 0
-    const videoBitrate = videoStream.BitRate || 0
+      if (!videoStream || audioStreams.length === 0) continue
 
-    // Check if any audio streams are missing bitrate - if so, try FFprobe first
-    const hasMissingBitrate = audioStreams.some(s => !s.BitRate)
-    let ffprobeBitrates: Map<number, number> | null = null
+      // Build audio tracks array with normalized values
+      // Note: Jellyfin returns BitRate in bps
+      // For advanced codecs (TrueHD, DTS-HD MA, Atmos), Jellyfin often doesn't report stream-level BitRate
+      const totalBitrate = mediaSource.Bitrate || 0
+      const videoBitrate = videoStream.BitRate || 0
 
-    if (hasMissingBitrate && mediaSource.Path) {
-      // Try FFprobe as backup for missing bitrates (works if file is locally accessible)
-      ffprobeBitrates = await this.getAudioBitratesViaFFprobe(mediaSource.Path)
-    }
+      // Check if any audio streams are missing bitrate - if so, try FFprobe first
+      const hasMissingBitrate = audioStreams.some(s => !s.BitRate)
+      let ffprobeBitrates: Map<number, number> | null = null
 
-    const audioTracks: AudioTrack[] = audioStreams.map((stream, index) => {
-      // Try stream BitRate first
-      let streamBitrate = stream.BitRate
-
-      // If missing, try FFprobe data
-      if (!streamBitrate && ffprobeBitrates) {
-        const ffprobeBitrate = ffprobeBitrates.get(stream.Index)
-        if (ffprobeBitrate) {
-          // FFprobe returns kbps, convert to bps for consistency with Jellyfin data
-          streamBitrate = ffprobeBitrate * 1000
-        }
+      if (hasMissingBitrate && mediaSource.Path) {
+        // Try FFprobe as backup for missing bitrates (works if file is locally accessible)
+        ffprobeBitrates = await this.getAudioBitratesViaFFprobe(mediaSource.Path)
       }
 
-      // If still missing, fall back to estimates
-      if (!streamBitrate && totalBitrate > videoBitrate && audioStreams.length === 1) {
-        // Single audio track: estimate as total minus video
-        streamBitrate = totalBitrate - videoBitrate
-      } else if (!streamBitrate && totalBitrate > videoBitrate && audioStreams.length > 1) {
-        // Multiple audio tracks: estimate based on codec type for lossless formats
-        const codecLower = (stream.Codec || '').toLowerCase()
-        const channels = stream.Channels || 6
-        if (codecLower.includes('truehd') || codecLower.includes('mlp')) {
-          // TrueHD: ~400-600 kbps per channel typical, convert to bps
-          streamBitrate = channels * 500 * 1000
-        } else if (codecLower.includes('dts') && (codecLower.includes('hd') || codecLower.includes('ma') || codecLower.includes('x'))) {
-          // DTS-HD MA / DTS:X: ~300-500 kbps per channel typical, convert to bps
-          streamBitrate = channels * 400 * 1000
-        } else if (codecLower === 'flac') {
-          // FLAC: ~150-300 kbps per channel typical, convert to bps
-          streamBitrate = channels * 200 * 1000
-        }
-      }
+      const audioTracks: AudioTrack[] = audioStreams.map((stream, index) => {
+        // Try stream BitRate first
+        let streamBitrate = stream.BitRate
 
-      return {
+        // If missing, try FFprobe data
+        if (!streamBitrate && ffprobeBitrates) {
+          const ffprobeBitrate = ffprobeBitrates.get(stream.Index)
+          if (ffprobeBitrate) {
+            // FFprobe returns kbps, convert to bps for consistency with Jellyfin data
+            streamBitrate = ffprobeBitrate * 1000
+          }
+        }
+
+        // If still missing, fall back to estimates
+        if (!streamBitrate && totalBitrate > videoBitrate && audioStreams.length === 1) {
+          // Single audio track: estimate as total minus video
+          streamBitrate = totalBitrate - videoBitrate
+        } else if (!streamBitrate && totalBitrate > videoBitrate && audioStreams.length > 1) {
+          // Multiple audio tracks: estimate based on codec type for lossless formats
+          const codecLower = (stream.Codec || '').toLowerCase()
+          const channels = stream.Channels || 6
+          if (codecLower.includes('truehd') || codecLower.includes('mlp')) {
+            // TrueHD: ~400-600 kbps per channel typical, convert to bps
+            streamBitrate = channels * 500 * 1000
+          } else if (codecLower.includes('dts') && (codecLower.includes('hd') || codecLower.includes('ma') || codecLower.includes('x'))) {
+            // DTS-HD MA / DTS:X: ~300-500 kbps per channel typical, convert to bps
+            streamBitrate = channels * 400 * 1000
+          } else if (codecLower === 'flac') {
+            // FLAC: ~150-300 kbps per channel typical, convert to bps
+            streamBitrate = channels * 200 * 1000
+          }
+        }
+
+        return {
+          index,
+          codec: normalizeAudioCodec(stream.Codec, stream.Profile),
+          channels: normalizeAudioChannels(stream.Channels, stream.ChannelLayout),
+          bitrate: normalizeBitrate(streamBitrate, 'bps'),
+          language: stream.Language,
+          title: stream.DisplayTitle || stream.Title,
+          profile: stream.Profile,
+          sampleRate: normalizeSampleRate(stream.SampleRate),
+          isDefault: stream.IsDefault,
+          hasObjectAudio: hasObjectAudio(
+            stream.Codec,
+            stream.Profile,
+            stream.DisplayTitle || stream.Title,
+            stream.ChannelLayout
+          ),
+        }
+      })
+
+      // Build subtitle tracks array
+      const subtitleTracks: SubtitleTrack[] = subtitleStreams.map((stream, index) => ({
         index,
-        codec: normalizeAudioCodec(stream.Codec, stream.Profile),
-        channels: normalizeAudioChannels(stream.Channels, stream.ChannelLayout),
-        bitrate: normalizeBitrate(streamBitrate, 'bps'),
+        codec: stream.Codec || 'unknown',
         language: stream.Language,
         title: stream.DisplayTitle || stream.Title,
-        profile: stream.Profile,
-        sampleRate: normalizeSampleRate(stream.SampleRate),
         isDefault: stream.IsDefault,
-        hasObjectAudio: hasObjectAudio(
-          stream.Codec,
-          stream.Profile,
-          stream.DisplayTitle || stream.Title,
-          stream.ChannelLayout
+        isForced: stream.IsForced,
+      }))
+
+      // Find best audio track using shared utility
+      const bestAudioTrack = selectBestAudioTrack(audioTracks) || audioTracks[0]
+      const audioStream = audioStreams[bestAudioTrack.index] || audioStreams[0]
+
+      const width = videoStream.Width || 0
+      const height = videoStream.Height || 0
+      const resolution = normalizeResolution(width, height)
+      const hdrFormat = normalizeHdrFormat(
+        videoStream.VideoRange,
+        undefined,
+        undefined,
+        videoStream.BitDepth,
+        videoStream.Profile
+      ) || 'None'
+
+      // Extract edition from file path (e.g., "Director's Cut", "Extended")
+      const filePath = mediaSource.Path || ''
+      const parsed = filePath ? getFileNameParser().parse(filePath) : null
+      const edition = parsed?.edition || undefined
+
+      // Generate label: "4K Dolby Vision Director's Cut", "1080p Extended", etc.
+      const labelParts = [resolution]
+      if (hdrFormat !== 'None') labelParts.push(hdrFormat)
+      if (edition) labelParts.push(edition)
+      const label = labelParts.join(' ')
+
+      versions.push({
+        version_source: `jellyfin_source_${mediaSource.Id}`,
+        edition,
+        label,
+        file_path: mediaSource.Path || '',
+        file_size: mediaSource.Size || 0,
+        duration: mediaSource.RunTimeTicks ? Math.floor(mediaSource.RunTimeTicks / 10000) : 0,
+        resolution,
+        width,
+        height,
+        video_codec: normalizeVideoCodec(videoStream.Codec),
+        video_bitrate: normalizeBitrate(mediaSource.Bitrate || videoStream.BitRate, 'bps'),
+        audio_codec: normalizeAudioCodec(audioStream.Codec, audioStream.Profile),
+        audio_channels: normalizeAudioChannels(audioStream.Channels, audioStream.ChannelLayout),
+        audio_bitrate: bestAudioTrack.bitrate,
+        video_frame_rate: normalizeFrameRate(videoStream.RealFrameRate),
+        color_bit_depth: videoStream.BitDepth,
+        hdr_format: hdrFormat,
+        color_space: videoStream.ColorSpace,
+        video_profile: videoStream.Profile,
+        video_level: videoStream.Level,
+        audio_profile: audioStream.Profile,
+        audio_sample_rate: normalizeSampleRate(audioStream.SampleRate),
+        has_object_audio: hasObjectAudio(
+          audioStream.Codec,
+          audioStream.Profile,
+          audioStream.DisplayTitle || audioStream.Title,
+          audioStream.ChannelLayout
         ),
-      }
-    })
+        audio_tracks: JSON.stringify(audioTracks),
+        subtitle_tracks: subtitleTracks.length > 0 ? JSON.stringify(subtitleTracks) : undefined,
+        container: normalizeContainer(mediaSource.Container),
+      })
+    }
 
-    // Build subtitle tracks array
-    const subtitleTracks: SubtitleTrack[] = subtitleStreams.map((stream, index) => ({
-      index,
-      codec: stream.Codec || 'unknown',
-      language: stream.Language,
-      title: stream.DisplayTitle || stream.Title,
-      isDefault: stream.IsDefault,
-      isForced: stream.IsForced,
-    }))
+    if (versions.length === 0) return null
 
-    // Find best audio track using shared utility
-    const bestAudioTrack = selectBestAudioTrack(audioTracks) || audioTracks[0]
+    // Post-process: compare filenames across versions to extract edition names
+    if (versions.length > 1) {
+      extractVersionNames(versions)
+    }
 
-    const audioStream = audioStreams[bestAudioTrack.index] || audioStreams[0]
+    // Pick the best version for parent MediaItem (highest resolution tier, then HDR, then bitrate)
+    const best = versions.reduce((a, b) => this.scoreVersion(b) > this.scoreVersion(a) ? b : a)
 
-    // Normalize video/audio properties
-    const width = videoStream.Width || 0
-    const height = videoStream.Height || 0
-    const resolution = normalizeResolution(width, height)
     const isEpisode = item.Type === 'Episode'
 
     // Build poster URL
-    // For movies: the movie's primary image
-    // For episodes: the series poster (show artwork)
     let posterUrl: string | undefined
     if (isEpisode) {
-      // Episodes always use series poster as main poster
       if (item.SeriesId && item.SeriesPrimaryImageTag) {
         posterUrl = this.buildImageUrl(item.SeriesId, 'Primary', item.SeriesPrimaryImageTag)
       } else if (item.SeriesId) {
-        // Try without tag if we have series ID
         posterUrl = this.buildImageUrl(item.SeriesId, 'Primary')
       }
     } else {
-      // Movies use their own primary image
       if (item.ImageTags?.Primary) {
         posterUrl = this.buildImageUrl(item.Id, 'Primary', item.ImageTags.Primary)
       }
     }
 
-    // Build episode thumbnail URL (episode's own thumb or primary image)
+    // Build episode thumbnail URL
     let episodeThumbUrl: string | undefined
     if (isEpisode) {
-      // Try episode's own Primary image first (Jellyfin often stores episode screenshots as Primary)
       if (item.ImageTags?.Primary) {
         episodeThumbUrl = this.buildImageUrl(item.Id, 'Primary', item.ImageTags.Primary)
       } else if (item.ImageTags?.Screenshot) {
-        // Try episode's Screenshot image
         episodeThumbUrl = this.buildImageUrl(item.Id, 'Screenshot', item.ImageTags.Screenshot)
       } else if (item.ImageTags?.Thumb) {
-        // Try episode's Thumb image
         episodeThumbUrl = this.buildImageUrl(item.Id, 'Thumb', item.ImageTags.Thumb)
       } else if (item.ParentThumbItemId && item.ParentThumbImageTag) {
-        // Fall back to parent thumb (usually from season)
         episodeThumbUrl = this.buildImageUrl(item.ParentThumbItemId, 'Thumb', item.ParentThumbImageTag)
       } else {
-        // Final fallback: try to get episode image without a tag
         episodeThumbUrl = this.buildImageUrl(item.Id, 'Primary')
       }
     }
@@ -1202,73 +1269,70 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
     let seasonPosterUrl: string | undefined
     if (isEpisode && item.SeasonId) {
       if (item.ParentPrimaryImageItemId && item.ParentPrimaryImageTag) {
-        // Use explicit parent primary image item ID with tag if available
         seasonPosterUrl = this.buildImageUrl(item.ParentPrimaryImageItemId, 'Primary', item.ParentPrimaryImageTag)
       } else if (item.ParentPrimaryImageTag) {
-        // Use season ID with parent image tag
         seasonPosterUrl = this.buildImageUrl(item.SeasonId, 'Primary', item.ParentPrimaryImageTag)
       } else {
-        // Try without tag using season ID
         seasonPosterUrl = this.buildImageUrl(item.SeasonId, 'Primary')
       }
     }
 
-    // Get series TMDB ID for episodes (from SeriesProviderIds if available, set during batch fetch)
+    // Get series TMDB ID for episodes
     const seriesTmdbId = isEpisode ? item.SeriesProviderIds?.Tmdb : undefined
 
     return {
-      plex_id: item.Id, // Use provider's item ID
-      title: item.Name,
-      year: item.ProductionYear,
-      type: isEpisode ? 'episode' : 'movie',
-      series_title: item.SeriesName,
-      season_number: item.ParentIndexNumber,
-      episode_number: item.IndexNumber,
-      file_path: mediaSource.Path || '',
-      file_size: mediaSource.Size || 0,
-      duration: mediaSource.RunTimeTicks ? Math.floor(mediaSource.RunTimeTicks / 10000) : 0,
-      resolution,
-      width,
-      height,
-      video_codec: normalizeVideoCodec(videoStream.Codec),
-      // Jellyfin returns BitRate in bps - prefer mediaSource.Bitrate (total) over videoStream.BitRate (video only)
-      video_bitrate: normalizeBitrate(mediaSource.Bitrate || videoStream.BitRate, 'bps'),
-      audio_codec: normalizeAudioCodec(audioStream.Codec, audioStream.Profile),
-      audio_channels: normalizeAudioChannels(audioStream.Channels, audioStream.ChannelLayout),
-      // Use the bitrate from bestAudioTrack which already has fallback logic for lossless codecs
-      audio_bitrate: bestAudioTrack.bitrate,
-      video_frame_rate: normalizeFrameRate(videoStream.RealFrameRate),
-      color_bit_depth: videoStream.BitDepth,
-      hdr_format: normalizeHdrFormat(
-        videoStream.VideoRange,
-        undefined,
-        undefined,
-        videoStream.BitDepth,
-        videoStream.Profile
-      ) || 'None',
-      color_space: videoStream.ColorSpace,
-      video_profile: videoStream.Profile,
-      video_level: videoStream.Level,
-      audio_profile: audioStream.Profile,
-      audio_sample_rate: normalizeSampleRate(audioStream.SampleRate),
-      has_object_audio: hasObjectAudio(
-        audioStream.Codec,
-        audioStream.Profile,
-        audioStream.DisplayTitle || audioStream.Title,
-        audioStream.ChannelLayout
-      ),
-      audio_tracks: JSON.stringify(audioTracks),
-      subtitle_tracks: subtitleTracks.length > 0 ? JSON.stringify(subtitleTracks) : undefined,
-      container: normalizeContainer(mediaSource.Container),
-      imdb_id: item.ProviderIds?.Imdb,
-      tmdb_id: item.ProviderIds?.Tmdb,
-      series_tmdb_id: seriesTmdbId,
-      poster_url: posterUrl,
-      episode_thumb_url: episodeThumbUrl,
-      season_poster_url: seasonPosterUrl,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      mediaItem: {
+        plex_id: item.Id,
+        title: item.Name,
+        year: item.ProductionYear,
+        type: isEpisode ? 'episode' : 'movie',
+        series_title: item.SeriesName,
+        season_number: item.ParentIndexNumber,
+        episode_number: item.IndexNumber,
+        file_path: best.file_path,
+        file_size: best.file_size,
+        duration: best.duration,
+        resolution: best.resolution,
+        width: best.width,
+        height: best.height,
+        video_codec: best.video_codec,
+        video_bitrate: best.video_bitrate,
+        audio_codec: best.audio_codec,
+        audio_channels: best.audio_channels,
+        audio_bitrate: best.audio_bitrate,
+        video_frame_rate: best.video_frame_rate,
+        color_bit_depth: best.color_bit_depth,
+        hdr_format: best.hdr_format,
+        color_space: best.color_space,
+        video_profile: best.video_profile,
+        video_level: best.video_level,
+        audio_profile: best.audio_profile,
+        audio_sample_rate: best.audio_sample_rate,
+        has_object_audio: best.has_object_audio,
+        audio_tracks: best.audio_tracks,
+        subtitle_tracks: best.subtitle_tracks,
+        container: best.container,
+        version_count: versions.length,
+        imdb_id: item.ProviderIds?.Imdb,
+        tmdb_id: item.ProviderIds?.Tmdb,
+        series_tmdb_id: seriesTmdbId,
+        poster_url: posterUrl,
+        episode_thumb_url: episodeThumbUrl,
+        season_poster_url: seasonPosterUrl,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      versions,
     }
+  }
+
+  private scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
+    const tierRank = v.resolution.includes('2160') ? 4
+      : v.resolution.includes('1080') ? 3
+      : v.resolution.includes('720') ? 2
+      : 1
+    const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
+    return tierRank * 100000 + hdrBonus + v.video_bitrate
   }
 
   // NOTE: normalizeResolution, detectHdrFormat, and detectObjectAudio are now
