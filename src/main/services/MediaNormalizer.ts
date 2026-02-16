@@ -549,7 +549,8 @@ export function normalizeSampleRate(
 export function normalizeContainer(container: string | null | undefined): string {
   if (!container) return ''
 
-  const containerLower = container.toLowerCase().trim()
+  // Emby may return comma-separated containers (e.g., "matroska,webm") — use the first
+  const containerLower = container.split(',')[0].toLowerCase().trim()
 
   // Common video containers
   if (containerLower === 'mkv' || containerLower === 'matroska') return 'MKV'

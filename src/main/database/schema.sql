@@ -215,4 +215,6 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('price_check_frequency', 'daily'),
   ('price_alert_threshold', '20'),
   ('preferred_retailers', '["Amazon", "Best Buy"]'),
-  ('theme', 'light');
+  ('theme', 'light'),
+  ('minimize_to_tray', 'false'),
+  ('start_minimized_to_tray', 'false');

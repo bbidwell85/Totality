@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, net, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, net, dialog, Tray, Menu, nativeImage } from 'electron'
 import path from 'node:path'
 import * as fs from 'fs'
 
@@ -106,6 +106,8 @@ process.env.DIST = DIST
 process.env.VITE_PUBLIC = VITE_PUBLIC
 
 let win: BrowserWindow | null = null
+let tray: Tray | null = null
+let isQuitting = false
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
 function createWindow() {
@@ -139,6 +141,19 @@ function createWindow() {
   // Disable default menu
   win.removeMenu()
 
+  // Minimize to tray: intercept close to hide instead of quit
+  win.on('close', (event) => {
+    if (isQuitting) return
+
+    const db = getDatabaseServiceSync()
+    const minimizeToTray = db.isInitialized ? db.getSetting('minimize_to_tray') : null
+
+    if (minimizeToTray === 'true') {
+      event.preventDefault()
+      win?.hide()
+    }
+  })
+
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
   } else {
@@ -149,6 +164,29 @@ function createWindow() {
   if (!app.isPackaged) {
     win.webContents.openDevTools({ mode: 'bottom' })
   }
+}
+
+function createTray() {
+  const iconPath = path.join(VITE_PUBLIC, 'icon.png')
+  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  tray = new Tray(trayIcon)
+  tray.setToolTip('Totality')
+
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Show Totality', click: () => { win?.show(); win?.focus() } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { isQuitting = true; app.quit() } },
+  ])
+  tray.setContextMenu(contextMenu)
+
+  tray.on('click', () => {
+    if (win?.isVisible()) {
+      win.hide()
+    } else {
+      win?.show()
+      win?.focus()
+    }
+  })
 }
 
 // Guard against double database close from concurrent quit events
@@ -167,6 +205,7 @@ app.on('window-all-closed', async () => {
 
 // Before quit, close database and cleanup services
 app.on('before-quit', async (event) => {
+  isQuitting = true
   if (isClosing) return
   event.preventDefault()
   isClosing = true
@@ -281,8 +320,15 @@ app.whenReady().then(async () => {
     const liveMonitoringService = getLiveMonitoringService()
     await liveMonitoringService.initialize()
 
-    // Create main window
+    // Create main window and system tray
     createWindow()
+    createTray()
+
+    // Handle "start minimized to tray" setting
+    const startMinimized = db.getSetting('start_minimized_to_tray')
+    if (startMinimized === 'true' && db.getSetting('minimize_to_tray') === 'true') {
+      win?.hide()
+    }
 
     // Initialize task queue service
     const taskQueueService = getTaskQueueService()

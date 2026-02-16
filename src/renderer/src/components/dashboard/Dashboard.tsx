@@ -945,8 +945,12 @@ export function Dashboard({
   const ArtistRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const artist = artists[index]
     if (!artist) return null
-    const totalReleases = artist.total_albums + artist.total_eps + artist.total_singles
-    const ownedReleases = artist.owned_albums + artist.owned_eps + artist.owned_singles
+    const totalReleases = artist.total_albums
+      + (includeEps ? artist.total_eps : 0)
+      + (includeSingles ? artist.total_singles : 0)
+    const ownedReleases = artist.owned_albums
+      + (includeEps ? artist.owned_eps : 0)
+      + (includeSingles ? artist.owned_singles : 0)
     const totalMissing = totalReleases - ownedReleases
     const isExpanded = expandedArtists.has(index)
     const allMissing = isExpanded ? parseMissingAlbums(artist) : []
@@ -1044,7 +1048,7 @@ export function Dashboard({
         )}
       </div>
     )
-  }, [artists, expandedArtists, parseMissingAlbums, toggleArtistExpand, dismissArtistAlbum])
+  }, [artists, expandedArtists, parseMissingAlbums, toggleArtistExpand, dismissArtistAlbum, includeEps, includeSingles])
 
   const hasMovieUpgrades = hasMovies && movieUpgrades.length > 0
   const hasTvUpgrades = hasTV && tvUpgrades.length > 0

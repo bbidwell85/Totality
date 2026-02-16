@@ -26,7 +26,8 @@ import type {
   SourceConfig,
   AudioStreamInfo,
 } from '../base/MediaProvider'
-import type { MediaItem, AudioTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
+import type { MediaItem, MediaItemVersion, AudioTrack, MusicArtist, MusicAlbum, MusicTrack } from '../../types/database'
+import { extractVersionNames } from '../utils/VersionNaming'
 import {
   isLosslessCodec,
   isHiRes,
@@ -575,55 +576,99 @@ export class KodiProvider implements MediaProvider {
       }
 
       try {
+        // Phase 1: Enhance items with FFprobe
         for (let i = 0; i < items.length; i++) {
-          let metadata = items[i]
-
           try {
-            // Enhance with FFprobe if available and file is locally accessible
-            if (ffprobeAvailable && this.needsFFprobeEnhancement(metadata)) {
+            if (ffprobeAvailable && this.needsFFprobeEnhancement(items[i])) {
               if (onProgress) {
-                onProgress({
-                  current: i + 1,
-                  total: totalItems,
-                  phase: 'analyzing',
-                  currentItem: metadata.title,
-                  percentage: ((i + 1) / totalItems) * 100,
-                })
+                onProgress({ current: i + 1, total: totalItems, phase: 'analyzing', currentItem: items[i].title, percentage: ((i + 1) / totalItems) * 100 })
               }
-              metadata = await this.enhanceWithFFprobe(metadata)
+              items[i] = await this.enhanceWithFFprobe(items[i])
+            }
+          } catch (error: unknown) {
+            result.errors.push(`Failed to analyze ${items[i].title}: ${getErrorMessage(error)}`)
+          }
+        }
+
+        // Phase 2: Group movies by TMDB/IMDB ID, process groups with versions
+        type VersionData = Omit<MediaItemVersion, 'id' | 'media_item_id'>
+        const isMovieLib = libraryId === 'movies'
+
+        const groups: MediaMetadata[][] = []
+        if (isMovieLib) {
+          const groupMap = new Map<string, MediaMetadata[]>()
+          for (const item of items) {
+            const groupKey = item.tmdbId ? `tmdb:${item.tmdbId}`
+              : item.imdbId ? `imdb:${item.imdbId}`
+              : `title:${this.normalizeGroupTitle(item.title || '')}|${item.year || ''}`
+
+            // Log grouping info for first 10 items or potential multi-versions
+            if (groupMap.size < 10 || groupMap.has(groupKey)) {
+              console.log(`[KodiProvider] Grouping "${item.title}" → key="${groupKey}" (tmdb=${item.tmdbId || 'none'}, imdb=${item.imdbId || 'none'})`)
             }
 
-            const mediaItem = this.convertMetadataToMediaItem(metadata)
+            if (!groupMap.has(groupKey)) groupMap.set(groupKey, [])
+            groupMap.get(groupKey)!.push(item)
+          }
+          groups.push(...groupMap.values())
+        } else {
+          for (const item of items) groups.push([item])
+        }
+
+        const multiVersionGroups = groups.filter(g => g.length > 1).length
+        if (multiVersionGroups > 0) {
+          console.log(`[KodiProvider ${this.sourceId}] Grouped ${items.length} items into ${groups.length} entries (${multiVersionGroups} with multiple versions)`)
+        }
+
+        let itemIndex = 0
+        for (const group of groups) {
+          try {
+            const versions: VersionData[] = group.map(m => this.convertMetadataToVersion(m))
+
+            if (versions.length > 1) {
+              extractVersionNames(versions)
+            }
+
+            const bestIdx = versions.reduce((bi, v, i) => this.scoreVersion(v) > this.scoreVersion(versions[bi]) ? i : bi, 0)
+            const bestMetadata = group[bestIdx]
+
+            const mediaItem = this.convertMetadataToMediaItem(bestMetadata)
             if (mediaItem) {
               mediaItem.source_id = this.sourceId
               mediaItem.source_type = 'kodi'
               mediaItem.library_id = libraryId
+              mediaItem.version_count = versions.length
+              mediaItem.plex_id = group[0].itemId
 
               const id = await db.upsertMediaItem(mediaItem)
               scannedProviderIds.add(mediaItem.plex_id)
 
-              // Analyze quality
+              for (const version of versions) {
+                const vScore = analyzer.analyzeVersion(version as MediaItemVersion)
+                db.upsertMediaItemVersion({ ...version, media_item_id: id, ...vScore } as MediaItemVersion)
+              }
+              if (versions.length > 1) {
+                db.updateBestVersion(id)
+              }
+
               mediaItem.id = id
               const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
               await db.upsertQualityScore(qualityScore)
 
               result.itemsScanned++
             }
-
-            if (onProgress) {
-              onProgress({
-                current: i + 1,
-                total: totalItems,
-                phase: 'processing',
-                currentItem: metadata.title,
-                percentage: ((i + 1) / totalItems) * 100,
-              })
-            }
           } catch (error: unknown) {
-            result.errors.push(`Failed to process ${metadata.title}: ${getErrorMessage(error)}`)
+            const names = group.map(g => g.title).join(', ')
+            result.errors.push(`Failed to process ${names}: ${getErrorMessage(error)}`)
           }
 
-          // Periodic checkpoint
+          for (const item of group) {
+            itemIndex++
+            if (onProgress) {
+              onProgress({ current: itemIndex, total: totalItems, phase: 'processing', currentItem: item.title, percentage: (itemIndex / totalItems) * 100 })
+            }
+          }
+
           if (result.itemsScanned % 50 === 0 && result.itemsScanned > 0) {
             await db.forceSave()
           }
@@ -966,6 +1011,65 @@ export class KodiProvider implements MediaProvider {
       season_poster_url: metadata.seasonPosterUrl,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+    }
+  }
+
+  private scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
+    const tierRank = v.resolution.includes('2160') ? 4
+      : v.resolution.includes('1080') ? 3
+      : v.resolution.includes('720') ? 2 : 1
+    const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
+    return tierRank * 100000 + hdrBonus + v.video_bitrate
+  }
+
+  private normalizeGroupTitle(title: string): string {
+    return title
+      .toLowerCase()
+      .trim()
+      .replace(/\s*[-:(]\s*(director'?s?\s*cut|extended|unrated|theatrical|imax|remastered|special\s*edition|ultimate\s*edition|collector'?s?\s*edition)\s*[):]?\s*$/i, '')
+      .replace(/\s*\(\s*\)\s*$/, '')
+      .trim()
+  }
+
+  private convertMetadataToVersion(metadata: MediaMetadata): Omit<MediaItemVersion, 'id' | 'media_item_id'> {
+    const audioTracks: AudioTrack[] = []
+    if (metadata.audioTracks?.length) {
+      metadata.audioTracks.forEach((track, index) => {
+        audioTracks.push({ index, codec: track.codec || 'Unknown', channels: track.channels || 2, bitrate: track.bitrate || 0, language: track.language, hasObjectAudio: track.hasObjectAudio || false })
+      })
+    } else if (metadata.audioCodec) {
+      audioTracks.push({ index: 0, codec: metadata.audioCodec, channels: metadata.audioChannels || 2, bitrate: metadata.audioBitrate || 0, hasObjectAudio: metadata.hasObjectAudio || false })
+    }
+
+    const resolution = metadata.resolution || 'SD'
+    const hdrFormat = metadata.hdrFormat || 'None'
+    const labelParts = [resolution]
+    if (hdrFormat !== 'None') labelParts.push(hdrFormat)
+
+    return {
+      version_source: `kodi_${metadata.itemId}`,
+      label: labelParts.join(' '),
+      file_path: metadata.filePath || '',
+      file_size: metadata.fileSize || 0,
+      duration: metadata.duration || 0,
+      resolution,
+      width: metadata.width || 0,
+      height: metadata.height || 0,
+      video_codec: metadata.videoCodec || '',
+      video_bitrate: metadata.videoBitrate || 0,
+      audio_codec: metadata.audioCodec || '',
+      audio_channels: metadata.audioChannels || 2,
+      audio_bitrate: metadata.audioBitrate || 0,
+      video_frame_rate: metadata.videoFrameRate,
+      color_bit_depth: metadata.colorBitDepth,
+      hdr_format: hdrFormat === 'None' ? undefined : hdrFormat,
+      color_space: metadata.colorSpace,
+      video_profile: metadata.videoProfile,
+      audio_profile: metadata.audioProfile,
+      audio_sample_rate: metadata.audioSampleRate,
+      has_object_audio: metadata.hasObjectAudio,
+      audio_tracks: JSON.stringify(audioTracks),
+      container: metadata.container,
     }
   }
 

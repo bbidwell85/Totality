@@ -837,5 +837,9 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('quality_music_low_bitrate', '192'),
   ('quality_music_high_bitrate', '256'),
   ('quality_music_hires_samplerate', '44100'),
-  ('quality_music_hires_bitdepth', '16');
+  ('quality_music_hires_bitdepth', '16'),
+
+  -- Window behavior
+  ('minimize_to_tray', 'false'),
+  ('start_minimized_to_tray', 'false');
 `

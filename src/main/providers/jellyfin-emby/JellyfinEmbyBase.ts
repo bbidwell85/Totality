@@ -613,6 +613,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
               id: lib.Id,
               name: lib.Name,
               type: this.mapLibraryType(lib.CollectionType),
+              collectionType: (lib.CollectionType || '').toLowerCase(),
               itemCount: lib.ItemCount,
             }))
 
@@ -646,6 +647,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
           id: lib.ItemId || lib.Id, // VirtualFolders uses ItemId
           name: lib.Name,
           type: this.mapLibraryType(lib.CollectionType),
+          collectionType: (lib.CollectionType || '').toLowerCase(),
           itemCount: lib.ItemCount,
         }))
     } catch (error: unknown) {
@@ -760,52 +762,147 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       const libraries = await this.getLibraries()
       const library = libraries.find(l => l.id === libraryId)
       const libraryType = library?.type || 'movie'
+      const isBoxsets = library?.collectionType === 'boxsets'
 
       // Get all items in library
       const allItems: JellyfinMediaItem[] = []
-      let offset = 0
       const batchSize = 100
-      let hasMoreItems = true
 
       // Log incremental scan info
       if (isIncremental) {
         console.log(`[${this.providerType}Provider ${this.sourceId}] Incremental scan: fetching items modified after ${sinceTimestamp!.toISOString()}`)
       }
 
-      // Fetch all items with pagination
-      while (hasMoreItems) {
-        // Build params with optional timestamp filter for incremental scan
-        const params: Record<string, unknown> = {
-          ParentId: libraryId,
-          Recursive: true,
-          IncludeItemTypes: libraryType === 'show' ? 'Episode' : 'Movie',
-          // Request all needed fields including images and parent info
-          Fields: 'Path,MediaSources,ProviderIds,DateCreated,PremiereDate,ParentId,SeriesId,SeasonId,ImageTags,SeriesPrimaryImageTag,ParentPrimaryImageItemId,ParentPrimaryImageTag,ParentThumbItemId,ParentThumbImageTag,ParentBackdropItemId,ParentBackdropImageTags',
-          EnableImageTypes: 'Primary,Thumb,Screenshot,Banner,Backdrop',
-          EnableTotalRecordCount: true,
-          StartIndex: offset,
-          Limit: batchSize,
-        }
+      const fieldsParam = 'Path,MediaSources,ProviderIds,DateCreated,PremiereDate,ParentId,SeriesId,SeasonId,ImageTags,SeriesPrimaryImageTag,ParentPrimaryImageItemId,ParentPrimaryImageTag,ParentThumbItemId,ParentThumbImageTag,ParentBackdropItemId,ParentBackdropImageTags'
 
-        // Add timestamp filter for incremental scans
-        if (isIncremental && sinceTimestamp) {
-          params.MinDateLastSaved = sinceTimestamp.toISOString()
-        }
+      if (isBoxsets) {
+        // Two-phase scan for BoxSets/Collections libraries
+        console.log(`[${this.providerType}Provider ${this.sourceId}] Scanning BoxSets/Collections library...`)
 
-        const response = await this.api.get<{ Items: JellyfinMediaItem[]; TotalRecordCount: number }>(
-          `${this.serverUrl}/Items`,
-          {
-            headers: this.getAuthHeaders(),
-            params,
+        // Phase 1: Fetch all BoxSet containers from the library
+        const boxsets: JellyfinMediaItem[] = []
+        let boxsetOffset = 0
+        let hasMoreBoxsets = true
+
+        while (hasMoreBoxsets) {
+          const boxsetResponse = await this.api.get<{ Items: JellyfinMediaItem[]; TotalRecordCount: number }>(
+            `${this.serverUrl}/Items`,
+            {
+              headers: this.getAuthHeaders(),
+              params: {
+                ParentId: libraryId,
+                Recursive: true,
+                IncludeItemTypes: 'BoxSet',
+                Fields: 'ProviderIds,ImageTags',
+                EnableTotalRecordCount: true,
+                StartIndex: boxsetOffset,
+                Limit: batchSize,
+              },
+            }
+          )
+          boxsets.push(...boxsetResponse.data.Items)
+          if (boxsets.length >= boxsetResponse.data.TotalRecordCount || boxsetResponse.data.Items.length === 0) {
+            hasMoreBoxsets = false
+          } else {
+            boxsetOffset += batchSize
           }
-        )
+        }
 
-        allItems.push(...response.data.Items)
+        console.log(`[${this.providerType}Provider ${this.sourceId}] Found ${boxsets.length} BoxSets in collections library`)
 
-        if (allItems.length >= response.data.TotalRecordCount || response.data.Items.length === 0) {
-          hasMoreItems = false
-        } else {
-          offset += batchSize
+        // Phase 2: For each BoxSet, fetch its child movies
+        for (const boxset of boxsets) {
+          const movieResponse = await this.api.get<{ Items: JellyfinMediaItem[]; TotalRecordCount: number }>(
+            `${this.serverUrl}/Items`,
+            {
+              headers: this.getAuthHeaders(),
+              params: {
+                ParentId: boxset.Id,
+                Recursive: true,
+                IncludeItemTypes: 'Movie',
+                Fields: fieldsParam,
+                EnableImageTypes: 'Primary,Thumb,Screenshot,Banner,Backdrop',
+                EnableTotalRecordCount: true,
+                StartIndex: 0,
+                Limit: 1000, // BoxSets typically have <50 movies
+              },
+            }
+          )
+          allItems.push(...movieResponse.data.Items)
+
+          // Create a collection entry for this BoxSet
+          const ownedTmdbIds = movieResponse.data.Items
+            .map(m => m.ProviderIds?.Tmdb)
+            .filter(Boolean) as string[]
+
+          if (ownedTmdbIds.length > 0) {
+            const tmdbCollectionId = boxset.ProviderIds?.Tmdb
+              || `${this.providerType}-boxset-${boxset.Id}`
+
+            const posterUrl = boxset.ImageTags?.Primary
+              ? this.buildImageUrl(boxset.Id, 'Primary', boxset.ImageTags.Primary)
+              : undefined
+
+            const db = getDatabase()
+            await db.upsertMovieCollection({
+              tmdb_collection_id: tmdbCollectionId,
+              collection_name: boxset.Name,
+              source_id: this.sourceId,
+              library_id: libraryId,
+              total_movies: ownedTmdbIds.length,
+              owned_movies: ownedTmdbIds.length,
+              missing_movies: JSON.stringify([]),
+              owned_movie_ids: JSON.stringify(ownedTmdbIds),
+              completeness_percentage: 100,
+              poster_url: posterUrl,
+              backdrop_url: undefined,
+            })
+          }
+
+          if (onProgress) {
+            onProgress({ current: allItems.length, total: 0, phase: 'fetching', percentage: 0 })
+          }
+        }
+
+        console.log(`[${this.providerType}Provider ${this.sourceId}] Found ${allItems.length} movies across ${boxsets.length} BoxSets, created ${boxsets.length} collection(s)`)
+      } else {
+        // Standard fetch with pagination for normal libraries
+        let offset = 0
+        let hasMoreItems = true
+
+        while (hasMoreItems) {
+          // Build params with optional timestamp filter for incremental scan
+          const params: Record<string, unknown> = {
+            ParentId: libraryId,
+            Recursive: true,
+            IncludeItemTypes: libraryType === 'show' ? 'Episode' : 'Movie',
+            Fields: fieldsParam,
+            EnableImageTypes: 'Primary,Thumb,Screenshot,Banner,Backdrop',
+            EnableTotalRecordCount: true,
+            StartIndex: offset,
+            Limit: batchSize,
+          }
+
+          // Add timestamp filter for incremental scans
+          if (isIncremental && sinceTimestamp) {
+            params.MinDateLastSaved = sinceTimestamp.toISOString()
+          }
+
+          const response = await this.api.get<{ Items: JellyfinMediaItem[]; TotalRecordCount: number }>(
+            `${this.serverUrl}/Items`,
+            {
+              headers: this.getAuthHeaders(),
+              params,
+            }
+          )
+
+          allItems.push(...response.data.Items)
+
+          if (allItems.length >= response.data.TotalRecordCount || response.data.Items.length === 0) {
+            hasMoreItems = false
+          } else {
+            offset += batchSize
+          }
         }
       }
 
@@ -883,55 +980,112 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       // Start batch mode
       db.startBatch()
 
-      try {
-        for (let i = 0; i < allItems.length; i++) {
-          const item = allItems[i]
+      // Group movie items by TMDB ID so multiple versions of the same movie
+      // (e.g. colorized vs B&W) become one media_items record with multiple versions.
+      const groups = this.groupMovieVersions(allItems, libraryType)
+      const multiVersionGroups = groups.filter(g => g.length > 1).length
+      if (multiVersionGroups > 0) {
+        console.log(`[${this.providerType}Provider ${this.sourceId}] Grouped ${totalItems} items into ${groups.length} entries (${multiVersionGroups} with multiple versions)`)
+      }
 
+      try {
+        type VersionData = Omit<MediaItemVersion, 'id' | 'media_item_id'>
+        let itemIndex = 0
+
+        for (const group of groups) {
           try {
-            // Skip items without media sources
-            if (!item.MediaSources || item.MediaSources.length === 0) {
-              console.warn(`[${this.providerType}Provider ${this.sourceId}] Skipping ${item.Name}: no media sources`)
-              continue
+            // Convert each item in the group, collecting all versions
+            const allVersions: VersionData[] = []
+            let canonicalItem: MediaItem | null = null
+
+            for (const item of group) {
+              if (!item.MediaSources || item.MediaSources.length === 0) {
+                console.warn(`[${this.providerType}Provider ${this.sourceId}] Skipping ${item.Name}: no media sources`)
+                continue
+              }
+
+              const converted = await this.convertToMediaItem(item)
+              if (!converted) continue
+
+              if (!canonicalItem) {
+                canonicalItem = converted.mediaItem
+              }
+              allVersions.push(...converted.versions)
             }
 
-            const converted = await this.convertToMediaItem(item)
-            if (converted) {
-              const { mediaItem, versions } = converted
-              mediaItem.source_id = this.sourceId
-              mediaItem.source_type = this.providerType
-              mediaItem.library_id = libraryId
+            if (canonicalItem && allVersions.length > 0) {
+              // Re-run version naming across all merged versions
+              if (allVersions.length > 1) {
+                extractVersionNames(allVersions)
 
-              const id = await db.upsertMediaItem(mediaItem)
-              scannedProviderIds.add(mediaItem.plex_id)
+                // Pick best version for parent item fields
+                const best = allVersions.reduce((a, b) => this.scoreVersion(b) > this.scoreVersion(a) ? b : a)
+                canonicalItem.file_path = best.file_path
+                canonicalItem.file_size = best.file_size
+                canonicalItem.duration = best.duration
+                canonicalItem.resolution = best.resolution
+                canonicalItem.width = best.width
+                canonicalItem.height = best.height
+                canonicalItem.video_codec = best.video_codec
+                canonicalItem.video_bitrate = best.video_bitrate
+                canonicalItem.audio_codec = best.audio_codec
+                canonicalItem.audio_channels = best.audio_channels
+                canonicalItem.audio_bitrate = best.audio_bitrate
+                canonicalItem.video_frame_rate = best.video_frame_rate
+                canonicalItem.color_bit_depth = best.color_bit_depth
+                canonicalItem.hdr_format = best.hdr_format
+                canonicalItem.color_space = best.color_space
+                canonicalItem.video_profile = best.video_profile
+                canonicalItem.video_level = best.video_level
+                canonicalItem.audio_profile = best.audio_profile
+                canonicalItem.audio_sample_rate = best.audio_sample_rate
+                canonicalItem.has_object_audio = best.has_object_audio
+                canonicalItem.audio_tracks = best.audio_tracks
+                canonicalItem.subtitle_tracks = best.subtitle_tracks
+                canonicalItem.container = best.container
+              }
+              canonicalItem.version_count = allVersions.length
+
+              canonicalItem.source_id = this.sourceId
+              canonicalItem.source_type = this.providerType
+              canonicalItem.library_id = libraryId
+
+              const id = await db.upsertMediaItem(canonicalItem)
+              scannedProviderIds.add(canonicalItem.plex_id)
 
               // Upsert all versions with per-version quality scoring
-              for (const version of versions) {
+              for (const version of allVersions) {
                 const vScore = analyzer.analyzeVersion(version as MediaItemVersion)
                 db.upsertMediaItemVersion({ ...version, media_item_id: id, ...vScore } as MediaItemVersion)
               }
-              if (versions.length > 1) {
+              if (allVersions.length > 1) {
                 db.updateBestVersion(id)
               }
 
               // Analyze quality (parent item)
-              mediaItem.id = id
-              const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
+              canonicalItem.id = id
+              const qualityScore = await analyzer.analyzeMediaItem(canonicalItem)
               await db.upsertQualityScore(qualityScore)
 
               result.itemsScanned++
             }
+          } catch (error: unknown) {
+            const names = group.map(g => g.Name).join(', ')
+            result.errors.push(`Failed to process ${names}: ${getErrorMessage(error)}`)
+          }
 
+          // Report progress for each item in the group
+          for (const item of group) {
+            itemIndex++
             if (onProgress) {
               onProgress({
-                current: i + 1,
+                current: itemIndex,
                 total: totalItems,
                 phase: 'processing',
                 currentItem: item.Name,
-                percentage: ((i + 1) / totalItems) * 100,
+                percentage: (itemIndex / totalItems) * 100,
               })
             }
-          } catch (error: unknown) {
-            result.errors.push(`Failed to process ${item.Name}: ${getErrorMessage(error)}`)
           }
 
           // Periodic checkpoint
@@ -1162,6 +1316,45 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         isForced: stream.IsForced,
       }))
 
+      // Detect external subtitle files that Emby's bulk API may not include in MediaStreams
+      if (mediaSource.Path) {
+        try {
+          const videoDir = path.dirname(mediaSource.Path)
+          const videoBaseName = path.basename(mediaSource.Path, path.extname(mediaSource.Path))
+          const dirFiles = fs.readdirSync(videoDir)
+          const subExtensions = ['.srt', '.sub', '.ass', '.ssa', '.vtt', '.sup']
+
+          for (const file of dirFiles) {
+            const ext = path.extname(file).toLowerCase()
+            if (!subExtensions.includes(ext)) continue
+            if (!file.startsWith(videoBaseName)) continue
+
+            // Extract language from filename: "Movie.sv.srt" → "sv"
+            const stripped = path.basename(file, ext)
+            const parts = stripped.substring(videoBaseName.length).split('.')
+            const langCode = parts.filter(p => p.length >= 2 && p.length <= 3).pop()
+
+            // Skip if already present from API-provided subtitles
+            const codec = ext.slice(1)
+            const alreadyPresent = subtitleTracks.some(t =>
+              t.language === langCode && t.codec === codec
+            )
+            if (!alreadyPresent) {
+              subtitleTracks.push({
+                index: subtitleTracks.length,
+                codec,
+                language: langCode,
+                title: file,
+                isDefault: false,
+                isForced: file.toLowerCase().includes('.forced.'),
+              })
+            }
+          }
+        } catch {
+          // Path not accessible (remote server) — skip external subtitle detection
+        }
+      }
+
       // Find best audio track using shared utility
       const bestAudioTrack = selectBestAudioTrack(audioTracks) || audioTracks[0]
       const audioStream = audioStreams[bestAudioTrack.index] || audioStreams[0]
@@ -1333,6 +1526,43 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       : 1
     const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
     return tierRank * 100000 + hdrBonus + v.video_bitrate
+  }
+
+  private normalizeGroupTitle(title: string): string {
+    return title
+      .toLowerCase()
+      .trim()
+      .replace(/\s*[-:(]\s*(director'?s?\s*cut|extended|unrated|theatrical|imax|remastered|special\s*edition|ultimate\s*edition|collector'?s?\s*edition)\s*[):]?\s*$/i, '')
+      .replace(/\s*\(\s*\)\s*$/, '')
+      .trim()
+  }
+
+  /**
+   * Group movie items by TMDB ID (or title+year fallback) so that multiple
+   * versions of the same movie (e.g. colorized vs B&W, Director's Cut vs Theatrical)
+   * become a single media_items record with multiple versions.
+   * Episodes are never grouped — each episode remains its own item.
+   */
+  private groupMovieVersions(items: JellyfinMediaItem[], libraryType: string): JellyfinMediaItem[][] {
+    if (libraryType === 'show') {
+      return items.map(item => [item])
+    }
+
+    const groups = new Map<string, JellyfinMediaItem[]>()
+
+    for (const item of items) {
+      const tmdbId = item.ProviderIds?.Tmdb
+      const groupKey = tmdbId
+        ? `tmdb:${tmdbId}`
+        : `title:${this.normalizeGroupTitle(item.Name || '')}|${item.ProductionYear || ''}`
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, [])
+      }
+      groups.get(groupKey)!.push(item)
+    }
+
+    return Array.from(groups.values())
   }
 
   // NOTE: normalizeResolution, detectHdrFormat, and detectObjectAudio are now

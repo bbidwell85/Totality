@@ -486,7 +486,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <h2 className="text-xl font-bold truncate">{displayTitle}</h2>
+                <h2 className="text-xl font-medium truncate">{displayTitle}</h2>
                 {media.type === 'episode' && (
                   <p className="text-sm text-muted-foreground">S{media.season_number}E{media.episode_number} · {media.title}</p>
                 )}
@@ -584,20 +584,20 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
               <div className="flex gap-1.5 mt-2 overflow-x-auto">
                 {versions.map((v) => {
                   const isSelected = selectedVersionId === v.id
-                  const qualityColor = v.tier_quality === 'HIGH' ? 'border-green-500/40 bg-green-500/10' :
-                    v.tier_quality === 'LOW' ? 'border-red-500/40 bg-red-500/10' : ''
+                  const qualityColor = v.tier_quality === 'HIGH' ? 'bg-green-500/15 hover:bg-green-500/25' :
+                    v.tier_quality === 'LOW' ? 'bg-red-500/15 hover:bg-red-500/25' : ''
                   return (
                     <button
                       key={v.id}
                       onClick={() => setSelectedVersionId(v.id)}
-                      className={`flex-shrink-0 px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                      className={`flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                         isSelected
-                          ? 'border-primary bg-primary/15 text-foreground'
-                          : `${qualityColor || 'border-border bg-muted/30'} text-muted-foreground hover:text-foreground hover:bg-muted/50`
+                          ? 'bg-primary text-primary-foreground'
+                          : `${qualityColor || 'bg-muted/50'} text-muted-foreground hover:text-foreground hover:bg-muted`
                       }`}
                     >
                       {v.edition || v.label || `${v.resolution} ${v.video_codec}`}
-                      {v.tier_score != null && <span className="ml-1.5 opacity-70">· {v.tier_score}</span>}
+                      {v.tier_score != null && <span className={`ml-1.5 ${isSelected ? 'text-primary-foreground/70' : 'opacity-70'}`}>· {v.tier_score}</span>}
                     </button>
                   )
                 })}
@@ -642,12 +642,12 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-12">Video</span>
-                            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
                               <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv?.bitrate_tier_score ?? media.bitrate_tier_score ?? 0, 100)}%` }} />
                             </div>
                             <span className="text-xs w-8 text-right tabular-nums">{Math.min(sv?.bitrate_tier_score ?? media.bitrate_tier_score ?? 0, 100)}</span>
                           </div>
-                          <div className="text-[0.625rem] text-muted-foreground ml-14 mt-0.5">
+                          <div className="text-xs text-muted-foreground ml-14 mt-0.5">
                             {formatBitrate(sv?.video_bitrate ?? media.video_bitrate)} · Target: {getVideoThresholdRange(sv?.quality_tier ?? media.quality_tier)}
                           </div>
                         </div>
@@ -656,12 +656,12 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-12">Audio</span>
-                            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
                               <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv?.audio_tier_score ?? media.audio_tier_score ?? 0, 100)}%` }} />
                             </div>
                             <span className="text-xs w-8 text-right tabular-nums">{Math.min(sv?.audio_tier_score ?? media.audio_tier_score ?? 0, 100)}</span>
                           </div>
-                          <div className="text-[0.625rem] text-muted-foreground ml-14 mt-0.5">
+                          <div className="text-xs text-muted-foreground ml-14 mt-0.5">
                             {formatBitrate(sv?.audio_bitrate ?? media.audio_bitrate)} · Target: {getAudioThresholdRange(sv?.quality_tier ?? media.quality_tier)}
                           </div>
                         </div>
@@ -683,7 +683,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
             if (!insight) return null
             return (
               <div className={`text-sm px-3 py-2 rounded-lg ${
-                insight.type === 'redundant' ? 'bg-amber-500/10 text-amber-400' : 'bg-yellow-500/10 text-yellow-400'
+                insight.type === 'redundant' ? 'bg-amber-500/10 border border-amber-500/20 text-amber-500' : 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-500'
               }`}>
                 {insight.type === 'redundant'
                   ? 'A better version exists \u2014 this copy may be safe to remove.'
@@ -696,7 +696,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
           <div className="grid grid-cols-2 gap-4">
             {/* Video */}
             <div className="bg-muted/30 rounded-lg p-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Video</h3>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Video</h3>
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Dimensions</span>
@@ -745,7 +745,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
 
             {/* Audio */}
             <div className="bg-muted/30 rounded-lg p-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 Audio{svAudioTracks.length > 0 ? ` (${svAudioTracks.length})` : ''}
               </h3>
               {/* Audio Tracks */}
@@ -759,13 +759,13 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{track.codec?.toUpperCase()} {formatChannels(track.channels)}</span>
                           {track.hasObjectAudio && (
-                            <span className="px-1.5 py-0.5 text-[0.625rem] bg-blue-500/20 text-blue-300 rounded">Atmos</span>
+                            <span className="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded">Atmos</span>
                           )}
                           {isPrimary && (
-                            <span className="px-1.5 py-0.5 text-[0.625rem] bg-primary/20 text-primary rounded">Primary</span>
+                            <span className="px-1.5 py-0.5 text-xs bg-primary/20 text-primary rounded">Primary</span>
                           )}
                           {commentary && (
-                            <span className="px-1.5 py-0.5 text-[0.625rem] bg-amber-500/20 text-amber-300 rounded">Commentary</span>
+                            <span className="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-300 rounded">Commentary</span>
                           )}
                         </div>
                         {track.title && (
@@ -798,7 +798,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
           {/* Subtitles */}
           {svSubtitleTracks.length > 0 && (
             <div className="bg-muted/30 rounded-lg p-3">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                 Subtitles ({svSubtitleTracks.length})
               </h3>
               <div className="flex flex-wrap gap-1.5">
@@ -811,10 +811,10 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                     <span className="font-medium">{track.language?.toUpperCase() || 'UND'}</span>
                     <span className="text-muted-foreground">{track.codec}</span>
                     {track.isForced && (
-                      <span className="px-1.5 py-0.5 text-[0.625rem] bg-foreground/10 text-foreground/70 rounded leading-none">Forced</span>
+                      <span className="px-1.5 py-0.5 text-xs bg-muted text-muted-foreground rounded leading-none">Forced</span>
                     )}
                     {track.isDefault && (
-                      <span className="px-1.5 py-0.5 text-[0.625rem] bg-foreground/10 text-foreground/70 rounded leading-none">Default</span>
+                      <span className="px-1.5 py-0.5 text-xs bg-muted text-muted-foreground rounded leading-none">Default</span>
                     )}
                   </div>
                 ))}
@@ -824,7 +824,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
 
           {/* File Info & IDs */}
           <div className="bg-muted/30 rounded-lg p-3">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">File Information</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">File Information</h3>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground flex-shrink-0">Path</span>

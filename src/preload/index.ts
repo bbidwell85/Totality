@@ -670,6 +670,7 @@ export interface MediaLibraryResponse {
   id: string
   name: string
   type: 'movie' | 'show' | 'music' | 'unknown'
+  collectionType?: string
   itemCount?: number
   scannedAt?: string
 }

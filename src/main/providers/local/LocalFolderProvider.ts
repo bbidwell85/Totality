@@ -31,7 +31,8 @@ import type {
   ProviderType,
   AudioStreamInfo,
 } from '../base/MediaProvider'
-import type { MediaItem, AudioTrack } from '../../types/database'
+import type { MediaItem, MediaItemVersion, AudioTrack } from '../../types/database'
+import { extractVersionNames } from '../utils/VersionNaming'
 
 export interface LocalFolderConfig {
   folderPath: string
@@ -499,6 +500,14 @@ export class LocalFolderProvider implements MediaProvider {
         metadata: MediaMetadata
       }
 
+      // Collected processed items for grouping before DB save
+      interface ProcessedItem {
+        metadata: MediaMetadata
+        parsed: ParsedMovieInfo | ParsedEpisodeInfo
+        fileMtime: number
+      }
+      const processedItems: ProcessedItem[] = []
+
       try {
         // Process in batches for parallel FFprobe analysis
         const useParallelFFprobe = ffprobeAvailable && ffprobeParallelEnabled && ffprobeBatchSize > 1
@@ -593,9 +602,9 @@ export class LocalFolderProvider implements MediaProvider {
             }
           }
 
-          // Phase 2c: Apply FFprobe results and save
+          // Phase 2c: Apply FFprobe results and collect for grouping
           for (const fileInfo of filesToProcess) {
-            const { filePath, fileMtime } = fileInfo
+            const { filePath, fileMtime, parsed } = fileInfo
             let { metadata } = fileInfo
 
             try {
@@ -611,32 +620,88 @@ export class LocalFolderProvider implements MediaProvider {
                 }
               }
 
-              // Convert to MediaItem and save
-              const mediaItem = this.convertMetadataToMediaItem(metadata)
-              if (mediaItem) {
-                mediaItem.source_id = this.sourceId
-                mediaItem.source_type = 'local'
-                mediaItem.library_id = libraryId
-                mediaItem.file_mtime = fileMtime
-
-                const id = await db.upsertMediaItem(mediaItem)
-                scannedFilePaths.add(filePath)
-
-                // Analyze quality
-                mediaItem.id = id
-                const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
-                await db.upsertQualityScore(qualityScore)
-
-                result.itemsScanned++
-              }
+              processedItems.push({ metadata, parsed, fileMtime })
+              scannedFilePaths.add(filePath)
             } catch (error: unknown) {
-              result.errors.push(`Failed to save ${path.basename(filePath)}: ${getErrorMessage(error)}`)
+              result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
             }
           }
+        }
 
-          // Checkpoint after each batch
-          if (result.itemsScanned > 0) {
-            await db.forceSave()
+        // Phase 2d: Group movies by TMDB ID, then save to DB with versions
+        type VersionData = Omit<MediaItemVersion, 'id' | 'media_item_id'>
+
+        const groups: ProcessedItem[][] = []
+        if (scanType === 'movie') {
+          const groupMap = new Map<string, ProcessedItem[]>()
+          for (const item of processedItems) {
+            const tmdbId = item.metadata.tmdbId
+            const groupKey = tmdbId
+              ? `tmdb:${tmdbId}`
+              : `title:${this.normalizeGroupTitle(item.metadata.title || '')}|${item.metadata.year || ''}`
+            if (!groupMap.has(groupKey)) groupMap.set(groupKey, [])
+            groupMap.get(groupKey)!.push(item)
+          }
+          groups.push(...groupMap.values())
+        } else {
+          for (const item of processedItems) {
+            groups.push([item])
+          }
+        }
+
+        const multiVersionGroups = groups.filter(g => g.length > 1).length
+        if (multiVersionGroups > 0) {
+          console.log(`[LocalFolderProvider ${this.sourceId}] Grouped ${processedItems.length} items into ${groups.length} entries (${multiVersionGroups} with multiple versions)`)
+        }
+
+        for (const group of groups) {
+          try {
+            const versions: VersionData[] = group.map(item =>
+              this.convertMetadataToVersion(item.metadata, item.parsed, item.fileMtime)
+            )
+
+            if (versions.length > 1) {
+              extractVersionNames(versions)
+            }
+
+            // Pick best version for parent item
+            const bestIdx = versions.reduce((bi, v, i) =>
+              this.scoreVersion(v) > this.scoreVersion(versions[bi]) ? i : bi, 0)
+            const bestItem = group[bestIdx]
+
+            const mediaItem = this.convertMetadataToMediaItem(bestItem.metadata)
+            if (!mediaItem) continue
+
+            mediaItem.source_id = this.sourceId
+            mediaItem.source_type = 'local'
+            mediaItem.library_id = libraryId
+            mediaItem.file_mtime = bestItem.fileMtime
+            mediaItem.version_count = versions.length
+            // Use first item's plex_id as canonical (stable across rescans)
+            mediaItem.plex_id = group[0].metadata.itemId
+
+            const id = await db.upsertMediaItem(mediaItem)
+
+            for (const version of versions) {
+              const vScore = analyzer.analyzeVersion(version as MediaItemVersion)
+              db.upsertMediaItemVersion({ ...version, media_item_id: id, ...vScore } as MediaItemVersion)
+            }
+            if (versions.length > 1) {
+              db.updateBestVersion(id)
+            }
+
+            mediaItem.id = id
+            const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
+            await db.upsertQualityScore(qualityScore)
+
+            result.itemsScanned++
+
+            if (result.itemsScanned % 50 === 0) {
+              await db.forceSave()
+            }
+          } catch (error: unknown) {
+            const names = group.map(g => path.basename(g.metadata.filePath || '')).join(', ')
+            result.errors.push(`Failed to save ${names}: ${getErrorMessage(error)}`)
           }
         }
       } finally {
@@ -852,6 +917,11 @@ export class LocalFolderProvider implements MediaProvider {
               mediaItem.file_mtime = fileMtime
 
               const id = await db.upsertMediaItem(mediaItem)
+
+              // Create version record
+              const version = this.convertMetadataToVersion(metadata, parsed as ParsedMovieInfo | ParsedEpisodeInfo, fileMtime)
+              const vScore = analyzer.analyzeVersion(version as MediaItemVersion)
+              db.upsertMediaItemVersion({ ...version, media_item_id: id, ...vScore } as MediaItemVersion)
 
               // Analyze quality
               mediaItem.id = id
@@ -1798,6 +1868,80 @@ export class LocalFolderProvider implements MediaProvider {
       hash = hash & hash // Convert to 32-bit integer
     }
     return Math.abs(hash).toString(36)
+  }
+
+  private scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
+    const tierRank = v.resolution.includes('2160') ? 4
+      : v.resolution.includes('1080') ? 3
+      : v.resolution.includes('720') ? 2 : 1
+    const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
+    return tierRank * 100000 + hdrBonus + v.video_bitrate
+  }
+
+  private normalizeGroupTitle(title: string): string {
+    return title
+      .toLowerCase()
+      .trim()
+      .replace(/\s*[-:(]\s*(director'?s?\s*cut|extended|unrated|theatrical|imax|remastered|special\s*edition|ultimate\s*edition|collector'?s?\s*edition)\s*[):]?\s*$/i, '')
+      .replace(/\s*\(\s*\)\s*$/, '')
+      .trim()
+  }
+
+  private convertMetadataToVersion(metadata: MediaMetadata, parsed: ParsedMovieInfo | ParsedEpisodeInfo, fileMtime: number): Omit<MediaItemVersion, 'id' | 'media_item_id'> {
+    const audioTracks: AudioTrack[] = []
+    if (metadata.audioTracks?.length) {
+      metadata.audioTracks.forEach((track, index) => {
+        audioTracks.push({
+          index,
+          codec: track.codec || 'Unknown',
+          channels: track.channels || 2,
+          bitrate: track.bitrate || 0,
+          language: track.language,
+          hasObjectAudio: track.hasObjectAudio || false,
+        })
+      })
+    } else if (metadata.audioCodec) {
+      audioTracks.push({ index: 0, codec: metadata.audioCodec, channels: metadata.audioChannels || 2, bitrate: metadata.audioBitrate || 0, hasObjectAudio: false })
+    }
+
+    const resolution = metadata.resolution || 'SD'
+    const hdrFormat = metadata.hdrFormat || 'None'
+    const edition = (parsed.type === 'movie' ? (parsed as ParsedMovieInfo).edition : undefined) || undefined
+
+    const labelParts = [resolution]
+    if (hdrFormat !== 'None') labelParts.push(hdrFormat)
+    if (edition) labelParts.push(edition)
+
+    return {
+      version_source: `local_file_${this.simpleHash(metadata.filePath || '')}`,
+      edition,
+      label: labelParts.join(' '),
+      file_path: metadata.filePath || '',
+      file_size: metadata.fileSize || 0,
+      duration: metadata.duration || 0,
+      resolution,
+      width: metadata.width || 0,
+      height: metadata.height || 0,
+      video_codec: metadata.videoCodec || '',
+      video_bitrate: metadata.videoBitrate || 0,
+      audio_codec: metadata.audioCodec || '',
+      audio_channels: metadata.audioChannels || 2,
+      audio_bitrate: metadata.audioBitrate || 0,
+      video_frame_rate: metadata.videoFrameRate,
+      color_bit_depth: metadata.colorBitDepth,
+      hdr_format: hdrFormat === 'None' ? undefined : hdrFormat,
+      color_space: metadata.colorSpace,
+      video_profile: metadata.videoProfile,
+      audio_profile: metadata.audioProfile,
+      audio_sample_rate: metadata.audioSampleRate,
+      has_object_audio: metadata.hasObjectAudio,
+      audio_tracks: JSON.stringify(audioTracks),
+      subtitle_tracks: metadata.subtitleTracks?.length
+        ? JSON.stringify(metadata.subtitleTracks.map((t, i) => ({ index: i, codec: t.codec || 'unknown', language: t.language, title: t.title, isDefault: t.isDefault || false, isForced: t.isForced || false })))
+        : undefined,
+      container: metadata.container,
+      file_mtime: fileMtime,
+    }
   }
 
   private convertMetadataToMediaItem(metadata: MediaMetadata): MediaItem | null {

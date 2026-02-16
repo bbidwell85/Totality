@@ -7,6 +7,7 @@
  * - 9 base themes, each with dark and light variants
  */
 
+import { useState, useEffect } from 'react'
 import { Sun, Moon, Monitor } from 'lucide-react'
 import { useTheme, type BaseTheme, type ThemeMode } from '../../../contexts/ThemeContext'
 
@@ -272,6 +273,18 @@ function ThemePreview({ colors }: { colors: ThemeConfig['darkColors'] }) {
 
 export function AppearanceTab() {
   const { theme, mode, setTheme, setMode, effectiveIsDark } = useTheme()
+  const [minimizeToTray, setMinimizeToTray] = useState(false)
+  const [startMinimized, setStartMinimized] = useState(false)
+
+  useEffect(() => {
+    const load = async () => {
+      const val = await window.electronAPI.getSetting('minimize_to_tray')
+      setMinimizeToTray(val === 'true')
+      const startVal = await window.electronAPI.getSetting('start_minimized_to_tray')
+      setStartMinimized(startVal === 'true')
+    }
+    load()
+  }, [])
 
   return (
     <div className="p-6 space-y-5 overflow-y-auto">
@@ -333,6 +346,60 @@ export function AppearanceTab() {
               )
             })}
           </div>
+        </div>
+      </div>
+
+      {/* Window Behavior */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-foreground">Window Behavior</h3>
+        <div className="bg-muted/30 rounded-lg border border-border/40 p-4 space-y-3">
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <p className="text-sm font-medium text-foreground">Minimize to tray on close</p>
+              <p className="text-xs text-muted-foreground">Closing the window hides the app to the system tray instead of quitting</p>
+            </div>
+            <button
+              onClick={async () => {
+                const newVal = !minimizeToTray
+                setMinimizeToTray(newVal)
+                await window.electronAPI.setSetting('minimize_to_tray', String(newVal))
+                if (!newVal) {
+                  setStartMinimized(false)
+                  await window.electronAPI.setSetting('start_minimized_to_tray', 'false')
+                }
+              }}
+              className={`relative w-10 h-5 rounded-full transition-colors ${
+                minimizeToTray ? 'bg-primary' : 'bg-muted'
+              }`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                minimizeToTray ? 'translate-x-5' : ''
+              }`} />
+            </button>
+          </label>
+
+          {minimizeToTray && (
+            <label className="flex items-center justify-between cursor-pointer pl-4 border-l-2 border-border/40">
+              <div>
+                <p className="text-sm font-medium text-foreground">Start minimized to tray</p>
+                <p className="text-xs text-muted-foreground">Launch the app hidden in the system tray</p>
+              </div>
+              <button
+                onClick={async () => {
+                  const newVal = !startMinimized
+                  setStartMinimized(newVal)
+                  await window.electronAPI.setSetting('start_minimized_to_tray', String(newVal))
+                }}
+                className={`relative w-10 h-5 rounded-full transition-colors ${
+                  startMinimized ? 'bg-primary' : 'bg-muted'
+                }`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                  startMinimized ? 'translate-x-5' : ''
+                }`} />
+              </button>
+            </label>
+          )}
         </div>
       </div>
     </div>

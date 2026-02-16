@@ -530,8 +530,8 @@ export class QualityAnalyzer {
       issues.push('4K content without HDR')
     }
 
-    // 8-bit for premium content
-    if (['4K', '1080p'].includes(qualityTier) &&
+    // 8-bit for 4K content
+    if (qualityTier === '4K' &&
         (!mediaItem.color_bit_depth || mediaItem.color_bit_depth < 10)) {
       issues.push('8-bit color (10-bit recommended)')
     }
