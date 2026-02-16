@@ -1,8 +1,7 @@
 /**
- * LibrarySettingsTab - Settings tab for library preferences, monitoring, and exclusion management
+ * LibrarySettingsTab - Settings tab for library preferences and exclusion management
  *
  * Uses collapsible card layout matching the Services tab pattern.
- * Two cards: Library Analysis (completeness + exclusions) and Live Monitoring.
  */
 
 import { useState, useEffect, useCallback } from 'react'
@@ -15,7 +14,6 @@ import {
   ChevronRight,
   X,
   Loader2,
-  Activity,
   Library,
   CheckCircle,
   Circle,
@@ -31,47 +29,12 @@ interface ExclusionRecord {
   created_at: string
 }
 
-interface MonitoringConfig {
-  enabled: boolean
-  startOnLaunch: boolean
-  pauseDuringManualScan: boolean
-  pollingIntervals: Record<string, number>
-}
-
-interface MediaSource {
-  source_id: string
-  source_type: string
-  display_name: string
-  is_enabled: boolean
-}
-
 const EXCLUSION_SECTIONS = [
   { type: 'media_upgrade', label: 'Dismissed Upgrades', icon: CircleFadingArrowUp },
   { type: 'collection_movie', label: 'Dismissed Collection Movies', icon: Film },
   { type: 'series_episode', label: 'Dismissed Episodes', icon: Tv },
   { type: 'artist_album', label: 'Dismissed Albums', icon: Music },
 ] as const
-
-const PROVIDERS: Array<{
-  key: string
-  name: string
-  method: 'polling' | 'file-watching'
-}> = [
-  { key: 'plex', name: 'Plex', method: 'polling' },
-  { key: 'jellyfin', name: 'Jellyfin', method: 'polling' },
-  { key: 'emby', name: 'Emby', method: 'polling' },
-  { key: 'kodi', name: 'Kodi', method: 'polling' },
-  { key: 'local', name: 'Local Folders', method: 'file-watching' },
-]
-
-const INTERVAL_OPTIONS = [
-  { label: '1 min', value: 60000 },
-  { label: '2 min', value: 120000 },
-  { label: '5 min', value: 300000 },
-  { label: '10 min', value: 600000 },
-  { label: '15 min', value: 900000 },
-  { label: '30 min', value: 1800000 },
-]
 
 // Collapsible card matching Services tab design
 interface SettingsCardProps {
@@ -170,21 +133,6 @@ export function LibrarySettingsTab() {
   const [includeEps, setIncludeEps] = useState(true)
   const [includeSingles, setIncludeSingles] = useState(true)
 
-  // Monitoring config
-  const [monitoringConfig, setMonitoringConfig] = useState<MonitoringConfig>({
-    enabled: false,
-    startOnLaunch: true,
-    pauseDuringManualScan: true,
-    pollingIntervals: {
-      plex: 300000,
-      jellyfin: 300000,
-      emby: 300000,
-      kodi: 300000,
-    },
-  })
-  const [configuredProviders, setConfiguredProviders] = useState<Set<string>>(new Set())
-  const [isSaving, setIsSaving] = useState(false)
-
   // Exclusions
   const [exclusions, setExclusions] = useState<Record<string, ExclusionRecord[]>>({
     media_upgrade: [],
@@ -214,8 +162,6 @@ export function LibrarySettingsTab() {
           collectionMovie,
           seriesEpisode,
           artistAlbum,
-          mConfig,
-          sources,
         ] = await Promise.all([
           window.electronAPI.getSetting('completeness_include_eps'),
           window.electronAPI.getSetting('completeness_include_singles'),
@@ -223,8 +169,6 @@ export function LibrarySettingsTab() {
           window.electronAPI.getExclusions('collection_movie'),
           window.electronAPI.getExclusions('series_episode'),
           window.electronAPI.getExclusions('artist_album'),
-          window.electronAPI.monitoringGetConfig(),
-          window.electronAPI.sourcesList(),
         ])
 
         setIncludeEps((epsVal as string) !== 'false')
@@ -235,16 +179,6 @@ export function LibrarySettingsTab() {
           series_episode: seriesEpisode as ExclusionRecord[],
           artist_album: artistAlbum as ExclusionRecord[],
         })
-        setMonitoringConfig(mConfig)
-
-        const providerTypes = new Set<string>()
-        ;(sources as MediaSource[]).forEach((source) => {
-          if (source.is_enabled) {
-            const type = source.source_type.startsWith('kodi') ? 'kodi' : source.source_type
-            providerTypes.add(type)
-          }
-        })
-        setConfiguredProviders(providerTypes)
       } catch (error) {
         console.error('Failed to load library settings:', error)
       } finally {
@@ -253,21 +187,6 @@ export function LibrarySettingsTab() {
     }
     loadData()
   }, [])
-
-  const saveMonitoringConfig = useCallback(
-    async (config: Partial<MonitoringConfig>) => {
-      setIsSaving(true)
-      try {
-        await window.electronAPI.monitoringSetConfig(config)
-        setMonitoringConfig((prev) => ({ ...prev, ...config }))
-      } catch (error) {
-        console.error('Failed to save monitoring config:', error)
-      } finally {
-        setIsSaving(false)
-      }
-    },
-    []
-  )
 
   const reloadExclusions = useCallback(async () => {
     try {
@@ -343,7 +262,7 @@ export function LibrarySettingsTab() {
       {/* Header */}
       <div className="mb-4">
         <p className="text-xs text-muted-foreground">
-          Configure library analysis preferences, exclusions, and live monitoring.
+          Configure library analysis preferences and exclusions.
         </p>
       </div>
 
@@ -484,108 +403,6 @@ export function LibrarySettingsTab() {
           </div>        </div>
       </SettingsCard>
 
-      {/* Live Monitoring Card */}
-      <SettingsCard
-        title="Live Monitoring"
-        description="Automatically detect new content from your sources"
-        icon={<Activity className="w-5 h-5" />}
-        status={monitoringConfig.enabled ? 'configured' : 'not-configured'}
-        statusText={monitoringConfig.enabled ? 'Active' : 'Disabled'}
-        expanded={expandedCards.has('monitoring')}
-        onToggle={() => toggleCard('monitoring')}
-      >
-        <div className="space-y-4">
-          {/* Enable toggle */}
-          <div className="flex items-center justify-between p-3 bg-background/50 rounded-lg">
-            <div>
-              <span className="text-sm font-medium">Enable monitoring</span>
-              <p className="text-xs text-muted-foreground">
-                {monitoringConfig.enabled
-                  ? 'Automatically detecting new content'
-                  : 'Enable to detect new content automatically'}
-              </p>
-            </div>
-            <Toggle
-              checked={monitoringConfig.enabled}
-              onChange={(enabled) => saveMonitoringConfig({ enabled })}
-              disabled={isSaving}
-            />
-          </div>
-
-          {/* Source Detection */}
-          <div
-            className={`space-y-2 transition-opacity ${!monitoringConfig.enabled ? 'opacity-50 pointer-events-none' : ''}`}
-          >
-            <p className="text-xs font-medium text-foreground">Source Detection</p>
-            <div className="bg-background/50 rounded-lg divide-y divide-border/30">
-              {PROVIDERS.map((provider) => {
-                const isConfigured = configuredProviders.has(provider.key)
-                return (
-                  <div
-                    key={provider.key}
-                    className={`flex items-center justify-between px-4 py-2.5 ${
-                      !isConfigured ? 'opacity-40' : ''
-                    }`}
-                  >
-                    <span className="text-sm text-foreground">{provider.name}</span>
-                    {provider.method === 'polling' ? (
-                      <select
-                        value={monitoringConfig.pollingIntervals[provider.key] || 300000}
-                        onChange={(e) => {
-                          const newIntervals = {
-                            ...monitoringConfig.pollingIntervals,
-                            [provider.key]: parseInt(e.target.value, 10),
-                          }
-                          saveMonitoringConfig({ pollingIntervals: newIntervals })
-                        }}
-                        disabled={isSaving || !monitoringConfig.enabled || !isConfigured}
-                        className="bg-background text-foreground text-xs rounded-md px-2.5 py-1.5 border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary min-w-[90px] disabled:opacity-50"
-                      >
-                        {INTERVAL_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="bg-background text-foreground text-xs rounded-md px-2.5 py-1.5 border border-border/50 min-w-[90px] text-center">
-                        File Watching
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Behavior */}
-          <div
-            className={`space-y-2 transition-opacity ${!monitoringConfig.enabled ? 'opacity-50 pointer-events-none' : ''}`}
-          >
-            <p className="text-xs font-medium text-foreground">Behavior</p>
-            <div className="bg-background/50 rounded-lg divide-y divide-border/30">
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm text-foreground">Start on app launch</span>
-                <Toggle
-                  checked={monitoringConfig.startOnLaunch}
-                  onChange={(startOnLaunch) => saveMonitoringConfig({ startOnLaunch })}
-                  disabled={isSaving || !monitoringConfig.enabled}
-                />
-              </div>
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm text-foreground">Pause during manual scans</span>
-                <Toggle
-                  checked={monitoringConfig.pauseDuringManualScan}
-                  onChange={(pauseDuringManualScan) =>
-                    saveMonitoringConfig({ pauseDuringManualScan })
-                  }
-                  disabled={isSaving || !monitoringConfig.enabled}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </SettingsCard>
     </div>
   )
 }

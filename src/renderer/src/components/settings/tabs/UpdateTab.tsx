@@ -1,5 +1,5 @@
 /**
- * UpdateTab - Settings tab for application auto-update
+ * UpdateTab - Settings tab for application updates
  *
  * Features:
  * - Current version display
@@ -8,7 +8,7 @@
  * - Download and install updates
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { ArrowUpCircle, RefreshCw, CheckCircle2, AlertCircle, Download } from 'lucide-react'
 
 interface UpdateState {
@@ -25,7 +25,6 @@ interface UpdateState {
   lastChecked?: string
 }
 
-// Toggle switch component (same as MonitoringTab)
 function Toggle({
   checked,
   onChange,
@@ -96,22 +95,17 @@ export function UpdateTab() {
     return cleanup
   }, [])
 
-  const handleToggleAutoUpdate = useCallback(async (enabled: boolean) => {
-    setAutoUpdateEnabled(enabled)
-    await window.electronAPI.setSetting('auto_update_enabled', enabled ? 'true' : 'false')
-  }, [])
-
-  const handleCheckForUpdates = useCallback(async () => {
+  const handleCheckForUpdates = async () => {
     await window.electronAPI.autoUpdateCheckForUpdates()
-  }, [])
+  }
 
-  const handleDownloadUpdate = useCallback(async () => {
+  const handleDownloadUpdate = async () => {
     await window.electronAPI.autoUpdateDownloadUpdate()
-  }, [])
+  }
 
-  const handleInstallUpdate = useCallback(async () => {
+  const handleInstallUpdate = async () => {
     await window.electronAPI.autoUpdateInstallUpdate()
-  }, [])
+  }
 
   if (isLoading) {
     return (
@@ -142,14 +136,17 @@ export function UpdateTab() {
         <div className="bg-muted/30 rounded-lg border border-border/40">
           <div className="flex items-center justify-between px-4 py-3">
             <div>
-              <span className="text-sm text-foreground">Check for updates automatically</span>
+              <p className="text-sm font-medium text-foreground">Check for updates automatically</p>
               <p className="text-xs text-muted-foreground">
                 Periodically checks GitHub for new releases
               </p>
             </div>
             <Toggle
               checked={autoUpdateEnabled}
-              onChange={handleToggleAutoUpdate}
+              onChange={async (checked) => {
+                setAutoUpdateEnabled(checked)
+                await window.electronAPI.setSetting('auto_update_enabled', checked ? 'true' : 'false')
+              }}
             />
           </div>
         </div>

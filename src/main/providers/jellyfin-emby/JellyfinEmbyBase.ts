@@ -1197,8 +1197,8 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       width,
       height,
       videoCodec: normalizeVideoCodec(videoStream?.Codec),
-      // Jellyfin returns BitRate in bps - prefer mediaSource.Bitrate (total) over videoStream.BitRate (video only)
-      videoBitrate: normalizeBitrate(mediaSource?.Bitrate || videoStream?.BitRate, 'bps'),
+      // Jellyfin returns BitRate in bps - prefer videoStream.BitRate (video only) over mediaSource.Bitrate (container total)
+      videoBitrate: normalizeBitrate(videoStream?.BitRate || mediaSource?.Bitrate, 'bps'),
       videoFrameRate: normalizeFrameRate(videoStream?.RealFrameRate),
       colorBitDepth: videoStream?.BitDepth,
       hdrFormat: normalizeHdrFormat(
@@ -1392,7 +1392,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         width,
         height,
         video_codec: normalizeVideoCodec(videoStream.Codec),
-        video_bitrate: normalizeBitrate(mediaSource.Bitrate || videoStream.BitRate, 'bps'),
+        video_bitrate: normalizeBitrate(videoStream.BitRate || mediaSource.Bitrate, 'bps'),
         audio_codec: normalizeAudioCodec(audioStream.Codec, audioStream.Profile),
         audio_channels: normalizeAudioChannels(audioStream.Channels, audioStream.ChannelLayout),
         audio_bitrate: bestAudioTrack.bitrate,

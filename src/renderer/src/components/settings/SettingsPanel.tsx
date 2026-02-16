@@ -1,6 +1,7 @@
 import { useState, useCallback, useId, useRef, useEffect } from 'react'
-import { X, Sliders, Wrench, Palette, Database, Bug, ArrowUpCircle, Library } from 'lucide-react'
+import { X, Settings, Sliders, Wrench, Palette, Database, Bug, ArrowUpCircle, Library } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { GeneralTab } from './tabs/GeneralTab'
 import { QualitySettingsTab } from './tabs/QualitySettingsTab'
 import { ServicesTab } from './tabs/ServicesTab'
 import { AppearanceTab } from './tabs/AppearanceTab'
@@ -9,7 +10,7 @@ import { TroubleshootTab } from './tabs/TroubleshootTab'
 import { UpdateTab } from './tabs/UpdateTab'
 import { LibrarySettingsTab } from './tabs/LibrarySettingsTab'
 
-type TabId = 'library' | 'quality' | 'services' | 'appearance' | 'data' | 'update' | 'troubleshoot'
+type TabId = 'general' | 'library' | 'quality' | 'services' | 'appearance' | 'data' | 'update' | 'troubleshoot'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -24,6 +25,7 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
+  { id: 'general', label: 'General', icon: Settings },
   { id: 'library', label: 'Library', icon: Library },
   { id: 'quality', label: 'Quality', icon: Sliders },
   { id: 'services', label: 'Services', icon: Wrench },
@@ -34,7 +36,7 @@ const TABS: Tab[] = [
 ]
 
 export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab || 'library')
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab || 'general')
   const titleId = useId()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const tabListRef = useRef<HTMLDivElement>(null)
@@ -46,7 +48,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
   // Focus close button when modal opens, and set initial tab
   useEffect(() => {
     if (isOpen) {
-      setActiveTab(initialTab || 'library')
+      setActiveTab(initialTab || 'general')
       setTimeout(() => {
         closeButtonRef.current?.focus()
       }, 100)
@@ -100,10 +102,12 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
 
   // Ensure activeTab is always valid
   const validTabIds = TABS.map(t => t.id)
-  const currentTab = validTabIds.includes(activeTab) ? activeTab : 'library'
+  const currentTab = validTabIds.includes(activeTab) ? activeTab : 'general'
 
   const renderTabContent = () => {
     switch (currentTab) {
+      case 'general':
+        return <GeneralTab />
       case 'library':
         return <LibrarySettingsTab />
       case 'quality':
@@ -119,7 +123,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
       case 'troubleshoot':
         return <TroubleshootTab />
       default:
-        return <LibrarySettingsTab />
+        return <GeneralTab />
     }
   }
 

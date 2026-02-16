@@ -945,6 +945,7 @@ export class PlexProvider implements MediaProvider {
     const part = media?.Part?.[0]
     const videoStream = part?.Stream?.find((s) => s.streamType === 1)
     const audioStream = part?.Stream?.find((s) => s.streamType === 2)
+    const audioStreams = part?.Stream?.filter((s) => s.streamType === 2) || []
 
     // Extract external IDs
     let imdbId: string | undefined
@@ -984,7 +985,10 @@ export class PlexProvider implements MediaProvider {
       width,
       height,
       videoCodec: normalizeVideoCodec(media?.videoCodec),
-      videoBitrate: normalizeBitrate(media?.bitrate, 'kbps'),
+      videoBitrate: normalizeBitrate(
+        videoStream?.bitrate || Math.max(0, (media?.bitrate || 0) - audioStreams.reduce((sum, s) => sum + (s.bitrate || 0), 0)),
+        'kbps'
+      ),
       videoFrameRate: normalizeFrameRate(videoStream?.frameRate),
       colorBitDepth: videoStream?.bitDepth,
       hdrFormat: normalizeHdrFormat(
@@ -1093,7 +1097,10 @@ export class PlexProvider implements MediaProvider {
         width,
         height,
         video_codec: normalizeVideoCodec(media.videoCodec),
-        video_bitrate: normalizeBitrate(media.bitrate, 'kbps'),
+        video_bitrate: normalizeBitrate(
+          videoStream.bitrate || Math.max(0, (media.bitrate || 0) - audioStreams.reduce((sum, s) => sum + (s.bitrate || 0), 0)),
+          'kbps'
+        ),
         audio_codec: normalizeAudioCodec(media.audioCodec, audioStream?.profile),
         audio_channels: normalizeAudioChannels(media.audioChannels, audioStream.audioChannelLayout),
         audio_bitrate: normalizeBitrate(audioStream.bitrate, 'kbps'),
