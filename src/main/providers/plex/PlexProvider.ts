@@ -986,7 +986,7 @@ export class PlexProvider implements MediaProvider {
       height,
       videoCodec: normalizeVideoCodec(media?.videoCodec),
       videoBitrate: normalizeBitrate(
-        videoStream?.bitrate || Math.max(0, (media?.bitrate || 0) - audioStreams.reduce((sum, s) => sum + (s.bitrate || 0), 0)),
+        videoStream?.bitrate || Math.max(0, (media?.bitrate || 0) - audioStreams.reduce((sum, s) => sum + (s.bitrate || 0), 0)) || media?.bitrate || 0,
         'kbps'
       ),
       videoFrameRate: normalizeFrameRate(videoStream?.frameRate),
@@ -1076,19 +1076,25 @@ export class PlexProvider implements MediaProvider {
         videoStream.profile
       ) || 'None'
 
-      // Extract edition from file path (e.g., "Director's Cut", "Extended")
+      // Extract edition and source type from file path
       const parsed = getFileNameParser().parse(part.file)
       const edition = (parsed?.type === 'movie' ? parsed.edition : undefined) || item.editionTitle || undefined
+      const source = parsed?.type !== 'music' ? parsed?.source : undefined
+      const sourceType = source && /remux/i.test(source) ? 'REMUX'
+        : source && /web-dl|webdl/i.test(source) ? 'WEB-DL'
+        : undefined
 
-      // Generate label: "4K Dolby Vision Director's Cut", "1080p Extended", etc.
+      // Generate label: "4K Dolby Vision REMUX", "1080p WEB-DL", etc.
       const labelParts = [resolution]
       if (hdrFormat !== 'None') labelParts.push(hdrFormat)
+      if (sourceType) labelParts.push(sourceType)
       if (edition) labelParts.push(edition)
       const label = labelParts.join(' ')
 
       versions.push({
         version_source: `plex_media_${media.id}`,
         edition,
+        source_type: sourceType,
         label,
         file_path: part.file,
         file_size: part.size,
@@ -1098,7 +1104,7 @@ export class PlexProvider implements MediaProvider {
         height,
         video_codec: normalizeVideoCodec(media.videoCodec),
         video_bitrate: normalizeBitrate(
-          videoStream.bitrate || Math.max(0, (media.bitrate || 0) - audioStreams.reduce((sum, s) => sum + (s.bitrate || 0), 0)),
+          videoStream.bitrate || Math.max(0, (media.bitrate || 0) - audioStreams.reduce((sum, s) => sum + (s.bitrate || 0), 0)) || media.bitrate || 0,
           'kbps'
         ),
         audio_codec: normalizeAudioCodec(media.audioCodec, audioStream?.profile),

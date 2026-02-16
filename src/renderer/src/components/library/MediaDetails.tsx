@@ -706,6 +706,12 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                   <span className="text-muted-foreground">Codec</span>
                   <span className="font-medium">{sv?.video_codec ?? media.video_codec}</span>
                 </div>
+                {(sv?.video_bitrate ?? media.video_bitrate) > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Bitrate</span>
+                    <span className="font-medium">{formatBitrate(sv?.video_bitrate ?? media.video_bitrate)}</span>
+                  </div>
+                )}
                 {(sv?.video_frame_rate ?? media.video_frame_rate) != null && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Frame Rate</span>

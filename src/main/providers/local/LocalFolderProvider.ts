@@ -1907,14 +1907,20 @@ export class LocalFolderProvider implements MediaProvider {
     const resolution = metadata.resolution || 'SD'
     const hdrFormat = metadata.hdrFormat || 'None'
     const edition = (parsed.type === 'movie' ? (parsed as ParsedMovieInfo).edition : undefined) || undefined
+    const source = parsed.type !== 'music' ? parsed.source : undefined
+    const sourceType = source && /remux/i.test(source) ? 'REMUX'
+      : source && /web-dl|webdl/i.test(source) ? 'WEB-DL'
+      : undefined
 
     const labelParts = [resolution]
     if (hdrFormat !== 'None') labelParts.push(hdrFormat)
+    if (sourceType) labelParts.push(sourceType)
     if (edition) labelParts.push(edition)
 
     return {
       version_source: `local_file_${this.simpleHash(metadata.filePath || '')}`,
       edition,
+      source_type: sourceType,
       label: labelParts.join(' '),
       file_path: metadata.filePath || '',
       file_size: metadata.fileSize || 0,

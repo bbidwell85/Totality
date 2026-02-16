@@ -194,6 +194,7 @@ export interface MediaItemVersion {
   version_source: string          // 'primary', 'plex_media_1', 'jellyfin_source_abc', 'local_file'
   edition?: string                // 'Extended', "Director's Cut", 'IMAX', 'Remastered', etc.
   label?: string                  // Auto-generated: "4K HDR Dolby Vision", "1080p Extended"
+  source_type?: string            // 'REMUX', 'WEB-DL' — used for label generation, not persisted
 
   // File information
   file_path: string

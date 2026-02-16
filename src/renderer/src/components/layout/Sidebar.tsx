@@ -260,6 +260,51 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
     setManagingSourceId(managingSourceId === sourceId ? null : sourceId)
   }
 
+  const handleScanAllLibraries = async (sourceId: string) => {
+    try {
+      const source = sources.find(s => s.source_id === sourceId)
+      const libraries = sourceLibraries.get(sourceId) || []
+      const sourceName = source?.display_name || sourceId
+
+      // Queue scan tasks for every enabled library in this source
+      for (const library of libraries) {
+        const taskType = library.type === 'music' ? 'music-scan' : 'library-scan'
+        await window.electronAPI.taskQueueAddTask({
+          type: taskType,
+          label: `Scan ${library.name} (${sourceName})`,
+          sourceId,
+          libraryId: library.id,
+        })
+      }
+
+      // Queue analysis tasks for this source based on library types present
+      const libraryTypes = new Set(libraries.map(l => l.type))
+      if (libraryTypes.has('show')) {
+        await window.electronAPI.taskQueueAddTask({
+          type: 'series-completeness',
+          label: `Analyze TV Series (${sourceName})`,
+          sourceId,
+        })
+      }
+      if (libraryTypes.has('movie')) {
+        await window.electronAPI.taskQueueAddTask({
+          type: 'collection-completeness',
+          label: `Analyze Collections (${sourceName})`,
+          sourceId,
+        })
+      }
+      if (libraryTypes.has('music')) {
+        await window.electronAPI.taskQueueAddTask({
+          type: 'music-completeness',
+          label: `Analyze Music (${sourceName})`,
+          sourceId,
+        })
+      }
+    } catch (err) {
+      console.error('Failed to queue full rescan:', err)
+    }
+  }
+
   const handleScanLibrary = async (sourceId: string, libraryId: string, libraryType: string) => {
     try {
       // Find the source and library names for the task label
@@ -462,6 +507,7 @@ export function Sidebar({ onOpenAbout, isCollapsed, onToggleCollapse }: SidebarP
             onRename={(newName) => handleRenameSource(source.source_id, newName)}
             onCancelRename={() => setRenamingSourceId(null)}
             onStopScan={handleStopScan}
+            onScanAll={() => handleScanAllLibraries(source.source_id)}
             taskQueueState={taskQueueState}
             newItemCounts={newItemCounts}
             onClearNewItems={clearNewItems}
@@ -533,6 +579,7 @@ interface SourceItemProps {
   onRename: (newName: string) => Promise<void>
   onCancelRename: () => void
   onStopScan: () => void
+  onScanAll: () => void
   taskQueueState: TaskQueueState | null
   newItemCounts: Map<string, number>
   onClearNewItems: (libraryKey: string) => void
@@ -567,6 +614,7 @@ function SourceItem({
   onRename,
   onCancelRename,
   onStopScan,
+  onScanAll,
   taskQueueState,
   newItemCounts,
   onClearNewItems,
@@ -951,6 +999,15 @@ function SourceItem({
 
           {/* Action Buttons */}
           <div className="flex gap-1 mt-2 justify-end">
+            <button
+              onClick={(e) => { e.stopPropagation(); onScanAll() }}
+              disabled={libraries.length === 0}
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Scan & Analyze All Libraries"
+              aria-label="Scan and analyze all libraries"
+            >
+              <RefreshCw className="w-4 h-4" aria-hidden="true" />
+            </button>
             <button
               ref={manageButtonRef}
               onClick={(e) => { e.stopPropagation(); onManageLibraries() }}

@@ -13,6 +13,8 @@ interface VersionInput {
   label?: string
   resolution: string
   hdr_format?: string
+  source_type?: string
+  video_codec?: string
 }
 
 // Plex {edition-X} tag format
@@ -222,8 +224,20 @@ export function extractVersionNames<T extends VersionInput>(versions: T[]): T[] 
   for (const v of versions) {
     const parts = [v.resolution]
     if (v.hdr_format && v.hdr_format !== 'None') parts.push(v.hdr_format)
+    if (v.source_type) parts.push(v.source_type)
     if (v.edition) parts.push(v.edition)
     v.label = parts.join(' ')
+  }
+
+  // Phase 4: Deduplicate labels by appending video codec when collisions exist
+  const labelCounts = new Map<string, number>()
+  for (const v of versions) {
+    labelCounts.set(v.label || '', (labelCounts.get(v.label || '') || 0) + 1)
+  }
+  for (const v of versions) {
+    if ((labelCounts.get(v.label || '') || 0) > 1 && v.video_codec) {
+      v.label = `${v.label} ${v.video_codec}`
+    }
   }
 
   return versions

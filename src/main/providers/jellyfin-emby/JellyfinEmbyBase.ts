@@ -1370,20 +1370,26 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         videoStream.Profile
       ) || 'None'
 
-      // Extract edition from file path (e.g., "Director's Cut", "Extended")
+      // Extract edition and source type from file path
       const filePath = mediaSource.Path || ''
       const parsed = filePath ? getFileNameParser().parse(filePath) : null
       const edition = (parsed?.type === 'movie' ? parsed.edition : undefined) || undefined
+      const source = parsed?.type !== 'music' ? parsed?.source : undefined
+      const sourceType = source && /remux/i.test(source) ? 'REMUX'
+        : source && /web-dl|webdl/i.test(source) ? 'WEB-DL'
+        : undefined
 
-      // Generate label: "4K Dolby Vision Director's Cut", "1080p Extended", etc.
+      // Generate label: "4K Dolby Vision REMUX", "1080p WEB-DL", etc.
       const labelParts = [resolution]
       if (hdrFormat !== 'None') labelParts.push(hdrFormat)
+      if (sourceType) labelParts.push(sourceType)
       if (edition) labelParts.push(edition)
       const label = labelParts.join(' ')
 
       versions.push({
         version_source: `jellyfin_source_${mediaSource.Id}`,
         edition,
+        source_type: sourceType,
         label,
         file_path: mediaSource.Path || '',
         file_size: mediaSource.Size || 0,

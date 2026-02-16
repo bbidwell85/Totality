@@ -43,6 +43,7 @@ import {
   calculateAudioBitrateFromFile,
   isEstimatedBitrate,
 } from '../utils/ProviderUtils'
+import { getFileNameParser } from '../../services/FileNameParser'
 
 // Kodi JSON-RPC types
 interface KodiRpcResponse<T> {
@@ -1043,11 +1044,21 @@ export class KodiProvider implements MediaProvider {
 
     const resolution = metadata.resolution || 'SD'
     const hdrFormat = metadata.hdrFormat || 'None'
+
+    // Extract source type from filename
+    const parsed = metadata.filePath ? getFileNameParser().parse(metadata.filePath) : null
+    const source = parsed?.type !== 'music' ? parsed?.source : undefined
+    const sourceType = source && /remux/i.test(source) ? 'REMUX'
+      : source && /web-dl|webdl/i.test(source) ? 'WEB-DL'
+      : undefined
+
     const labelParts = [resolution]
     if (hdrFormat !== 'None') labelParts.push(hdrFormat)
+    if (sourceType) labelParts.push(sourceType)
 
     return {
       version_source: `kodi_${metadata.itemId}`,
+      source_type: sourceType,
       label: labelParts.join(' '),
       file_path: metadata.filePath || '',
       file_size: metadata.fileSize || 0,
