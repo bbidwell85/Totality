@@ -1907,7 +1907,7 @@ export class LocalFolderProvider implements MediaProvider {
     const resolution = metadata.resolution || 'SD'
     const hdrFormat = metadata.hdrFormat || 'None'
     const edition = (parsed.type === 'movie' ? (parsed as ParsedMovieInfo).edition : undefined) || undefined
-    const source = parsed.type !== 'music' ? parsed.source : undefined
+    const source = parsed.source
     const sourceType = source && /remux/i.test(source) ? 'REMUX'
       : source && /web-dl|webdl/i.test(source) ? 'WEB-DL'
       : undefined
