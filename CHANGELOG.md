@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.18](https://github.com/bbidwell85/totality/compare/v0.1.17...v0.1.18) (2026-02-16)
+
+
+### Features
+
+* add source type and codec dedup to version labels, per-source scan button, and video bitrate display ([bc667e8](https://github.com/bbidwell85/totality/commit/bc667e8c2d14637f03eb32c678f89701e2d034f5))
+* log multi-select with copy, consistent icons, and external link handling ([897c33a](https://github.com/bbidwell85/totality/commit/897c33ada6e37c13ab55e580fd70bf945e56b460))
+* multi-version grouping for Kodi/local providers, minimize to tray, and quality fixes ([ba4edf3](https://github.com/bbidwell85/totality/commit/ba4edf312d14189a9df72cd8fcc4216e83528be3))
+* multi-version tracking with smart edition naming and Linux sandbox fix ([b35108c](https://github.com/bbidwell85/totality/commit/b35108cf9bdf9c096f8d36af50d56042905e01a0))
+* open Plex login and TMDB link in default browser ([e860b82](https://github.com/bbidwell85/totality/commit/e860b827c2e7cf6432f34a4a3edf154a57614e8f))
+* per-version split scores, deduplicate MediaDetails modal, and UI polish ([cd608d7](https://github.com/bbidwell85/totality/commit/cd608d7e1935478b6778bc84fdf299c65112c83f))
+
+
+### Bug Fixes
+
+* match completeness panel dropdowns to app-wide select styling ([ece74fa](https://github.com/bbidwell85/totality/commit/ece74faceac79892b3b82422f5c200d4aa845b2d))
+* resolve TypeScript error in LocalFolderProvider source type check ([8aa600a](https://github.com/bbidwell85/totality/commit/8aa600a6a7eda8c5af8636b814e4b63b684ee6c3))
+* static axios imports and dashboard collections threshold ([4c3402e](https://github.com/bbidwell85/totality/commit/4c3402e603844808692a9af1392cb034420d035d))
+* use video-only bitrate instead of container bitrate and add General settings tab ([5113b4a](https://github.com/bbidwell85/totality/commit/5113b4ae1256aac9c4b095aca44d18b0a3b9f1c1))
+
 ### [0.1.17](https://github.com/bbidwell85/totality/compare/v0.1.16...v0.1.17) (2026-02-13)
 
 
