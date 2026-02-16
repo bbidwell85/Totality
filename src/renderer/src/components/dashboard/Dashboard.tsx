@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { FixedSizeList as VirtualList, VariableSizeList } from 'react-window'
-import { Sparkles, Library, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus, X } from 'lucide-react'
+import { Sparkles, Library, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus, EyeOff } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { MediaDetails } from '../library/MediaDetails'
 import { useSources } from '../../contexts/SourceContext'
@@ -640,10 +640,10 @@ export function Dashboard({
           />
           <button
             onClick={() => dismissMovieUpgrade(index)}
-            className="opacity-0 group-hover/row:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+            className="opacity-0 group-hover/row:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
             title="Dismiss"
           >
-            <X className="w-3.5 h-3.5" />
+            <EyeOff className="w-3.5 h-3.5" />
           </button>
         </div>
         </div>
@@ -697,10 +697,10 @@ export function Dashboard({
           />
           <button
             onClick={() => dismissTvUpgrade(index)}
-            className="opacity-0 group-hover/row:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+            className="opacity-0 group-hover/row:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
             title="Dismiss"
           >
-            <X className="w-3.5 h-3.5" />
+            <EyeOff className="w-3.5 h-3.5" />
           </button>
         </div>
         </div>
@@ -745,10 +745,10 @@ export function Dashboard({
             />
             <button
               onClick={() => dismissMusicUpgrade(index)}
-              className="opacity-0 group-hover/row:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+              className="opacity-0 group-hover/row:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
               title="Dismiss"
             >
-              <X className="w-3.5 h-3.5" />
+              <EyeOff className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -828,10 +828,10 @@ export function Dashboard({
                 />
                 <button
                   onClick={(e) => { e.stopPropagation(); dismissCollectionMovie(index, movie) }}
-                  className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                  className="opacity-0 group-hover/item:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
                   title="Dismiss"
                 >
-                  <X className="w-3 h-3" />
+                  <EyeOff className="w-3 h-3" />
                 </button>
               </div>
             ))}
@@ -928,10 +928,10 @@ export function Dashboard({
                     e.stopPropagation()
                     group.missingEpisodes.forEach(ep => dismissSeriesEpisode(index, ep))
                   }}
-                  className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                  className="opacity-0 group-hover/item:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
                   title="Dismiss season"
                 >
-                  <X className="w-3 h-3" />
+                  <EyeOff className="w-3 h-3" />
                 </button>
               </div>
             ))}
@@ -1034,10 +1034,10 @@ export function Dashboard({
                       />
                       <button
                         onClick={(e) => { e.stopPropagation(); dismissArtistAlbum(index, item) }}
-                        className="opacity-0 group-hover/item:opacity-100 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
+                        className="opacity-0 group-hover/item:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
                         title="Dismiss"
                       >
-                        <X className="w-3 h-3" />
+                        <EyeOff className="w-3 h-3" />
                       </button>
                     </div>
                   ))}

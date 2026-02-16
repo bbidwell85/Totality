@@ -147,23 +147,13 @@ function AboutTab() {
 
       {/* Links */}
       <div className="flex justify-center gap-4 text-sm">
-        <a
-          href="https://github.com/bbidwell85/totality"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-accent hover:underline"
-        >
+        <ExtLink href="https://github.com/bbidwell85/totality">
           GitHub
-        </a>
+        </ExtLink>
         <span className="text-muted-foreground/30">•</span>
-        <a
-          href="https://github.com/bbidwell85/totality/issues"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-accent hover:underline"
-        >
+        <ExtLink href="https://github.com/bbidwell85/totality/issues">
           Report Issue
-        </a>
+        </ExtLink>
       </div>
     </div>
   )
@@ -186,9 +176,9 @@ function CreditsTab() {
             <p className="font-medium text-foreground mb-1">The Movie Database (TMDB)</p>
             <p>
               This product uses the{' '}
-              <a href="https://www.themoviedb.org" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              <ExtLink href="https://www.themoviedb.org">
                 TMDB API
-              </a>
+              </ExtLink>
               {' '}but is not endorsed or certified by TMDB. Movie and TV metadata, images, and collection information provided by TMDB.
             </p>
           </div>
@@ -201,17 +191,17 @@ function CreditsTab() {
             <p className="font-medium text-foreground mb-1">MusicBrainz</p>
             <p>
               Music metadata provided by{' '}
-              <a href="https://musicbrainz.org" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              <ExtLink href="https://musicbrainz.org">
                 MusicBrainz
-              </a>
+              </ExtLink>
               , licensed under{' '}
-              <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              <ExtLink href="https://creativecommons.org/publicdomain/zero/1.0/">
                 CC0 1.0
-              </a>
+              </ExtLink>
               {' '}(public domain). Cover art from{' '}
-              <a href="https://coverartarchive.org" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              <ExtLink href="https://coverartarchive.org">
                 Cover Art Archive
-              </a>
+              </ExtLink>
               .
             </p>
           </div>
@@ -228,18 +218,18 @@ function CreditsTab() {
             <p className="font-medium text-foreground mb-1">FFmpeg / FFprobe</p>
             <p>
               Media file analysis powered by{' '}
-              <a href="https://ffmpeg.org" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              <ExtLink href="https://ffmpeg.org">
                 FFmpeg
-              </a>
+              </ExtLink>
               , a complete, cross-platform solution for recording, converting, and streaming audio and video.
               FFmpeg is free software licensed under the{' '}
-              <a href="https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              <ExtLink href="https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html">
                 LGPL v2.1
-              </a>
+              </ExtLink>
               {' '}or later, with some optional components under{' '}
-              <a href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.html" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              <ExtLink href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.html">
                 GPL
-              </a>
+              </ExtLink>
               . FFmpeg is a trademark of Fabrice Bellard. Totality does not bundle FFmpeg; it uses separately installed copies.
             </p>
           </div>
@@ -352,14 +342,9 @@ function LegalTab() {
         <div className="p-3 bg-muted/30 rounded-lg">
           <p className="text-center">
             Totality is open source software licensed under the{' '}
-            <a
-              href="https://opensource.org/licenses/MIT"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent hover:underline"
-            >
+            <ExtLink href="https://opensource.org/licenses/MIT">
               MIT License
-            </a>
+            </ExtLink>
             .
           </p>
           <p className="text-center mt-3 text-muted-foreground/70">
@@ -371,13 +356,26 @@ function LegalTab() {
   )
 }
 
+/** External link component - opens in default browser */
+function ExtLink({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) {
+  return (
+    <a
+      href={href}
+      onClick={(e) => { e.preventDefault(); window.electronAPI.openExternal(href) }}
+      className={className ?? 'text-accent hover:underline'}
+    >
+      {children}
+    </a>
+  )
+}
+
 /** Technology link component */
 function TechLink({ name, url, license }: { name: string; url: string; license: string }) {
   return (
     <div className="p-2 bg-muted/30 rounded">
-      <a href={url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline font-medium">
+      <ExtLink href={url} className="text-accent hover:underline font-medium">
         {name}
-      </a>
+      </ExtLink>
       <span className="text-muted-foreground/60 ml-1">({license})</span>
     </div>
   )

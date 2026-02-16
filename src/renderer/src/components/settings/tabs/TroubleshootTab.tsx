@@ -6,6 +6,7 @@
  * - Filter by log level
  * - Auto-scroll (disables on manual scroll up, "Jump to latest" to re-enable)
  * - Export logs to file
+ * - Multi-select with shift-click range and copy to clipboard
  * - Clear logs
  * - Details panel for selected log
  */
@@ -23,6 +24,8 @@ import {
   ChevronsDown,
   Bug,
   MessageSquareText,
+  Copy,
+  CheckSquare,
 } from 'lucide-react'
 
 interface LogEntry {
@@ -45,11 +48,15 @@ export function TroubleshootTab() {
   const [filter, setFilter] = useState<LogFilter>('all')
   const [searchText, setSearchText] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
-  const [selectedLogId, setSelectedLogId] = useState<string | null>(null)
+  const [detailLogId, setDetailLogId] = useState<string | null>(null)
   const [listHeight, setListHeight] = useState(300)
   const [verboseEnabled, setVerboseEnabled] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [copyFeedback, setCopyFeedback] = useState(false)
+  const lastClickedIndex = useRef<number | null>(null)
   const listRef = useRef<VirtualList>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const logViewerRef = useRef<HTMLDivElement>(null)
   const lastScrollOffset = useRef(0)
   const isAutoScrolling = useRef(false)
 
@@ -146,6 +153,32 @@ export function TroubleshootTab() {
     return () => observer.disconnect()
   }, [isLoading])
 
+  // Keyboard shortcuts for selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle when log viewer area is focused or contains focus
+      if (!logViewerRef.current?.contains(document.activeElement) && document.activeElement !== logViewerRef.current) return
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault()
+        setSelectedIds(new Set(filteredLogs.map(l => l.id)))
+      }
+
+      if (e.key === 'Escape') {
+        if (selectedIds.size > 0) {
+          e.preventDefault()
+          setSelectedIds(new Set())
+        } else if (detailLogId) {
+          e.preventDefault()
+          setDetailLogId(null)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [filteredLogs, selectedIds.size, detailLogId])
+
   const loadLogs = async () => {
     try {
       const [entries, isVerbose] = await Promise.all([
@@ -164,7 +197,8 @@ export function TroubleshootTab() {
   const handleClear = async () => {
     await window.electronAPI.clearLogs()
     setLogs([])
-    setSelectedLogId(null)
+    setDetailLogId(null)
+    setSelectedIds(new Set())
   }
 
   const handleExport = async () => {
@@ -184,11 +218,72 @@ export function TroubleshootTab() {
     await window.electronAPI.setVerboseLogging(newValue)
   }
 
-  // Get selected log entry
-  const selectedLog = useMemo(() => {
-    if (!selectedLogId) return null
-    return filteredLogs.find((l) => l.id === selectedLogId) || null
-  }, [selectedLogId, filteredLogs])
+  // Toggle selection for a single entry, with shift-click range support
+  const handleToggleSelect = useCallback((index: number, shiftKey: boolean) => {
+    const entry = filteredLogs[index]
+    if (!entry) return
+
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+
+      if (shiftKey && lastClickedIndex.current !== null) {
+        // Range select: select all between last clicked and current
+        const start = Math.min(lastClickedIndex.current, index)
+        const end = Math.max(lastClickedIndex.current, index)
+        for (let i = start; i <= end; i++) {
+          const id = filteredLogs[i]?.id
+          if (id) next.add(id)
+        }
+      } else {
+        // Single toggle
+        if (next.has(entry.id)) {
+          next.delete(entry.id)
+        } else {
+          next.add(entry.id)
+        }
+      }
+
+      return next
+    })
+
+    lastClickedIndex.current = index
+  }, [filteredLogs])
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(filteredLogs.map(l => l.id)))
+  }, [filteredLogs])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+    lastClickedIndex.current = null
+  }, [])
+
+  const handleCopySelected = useCallback(() => {
+    // Build ordered text from selected entries (preserve display order)
+    const selectedEntries = filteredLogs.filter(l => selectedIds.has(l.id))
+    const lines = selectedEntries.map(entry => {
+      const time = new Date(entry.timestamp).toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+      let line = `[${time}] [${entry.level.toUpperCase()}] [${entry.source}] ${entry.message}`
+      if (entry.details) {
+        line += '\n  ' + entry.details.replace(/\n/g, '\n  ')
+      }
+      return line
+    })
+    navigator.clipboard.writeText(lines.join('\n'))
+    setCopyFeedback(true)
+    setTimeout(() => setCopyFeedback(false), 1500)
+  }, [filteredLogs, selectedIds])
+
+  // Get detail log entry
+  const detailLog = useMemo(() => {
+    if (!detailLogId) return null
+    return filteredLogs.find((l) => l.id === detailLogId) || null
+  }, [detailLogId, filteredLogs])
 
   const getLevelIcon = useCallback((level: string) => {
     switch (level) {
@@ -222,16 +317,34 @@ export function TroubleshootTab() {
       const entry = filteredLogs[index]
       if (!entry) return null
 
-      const isSelected = entry.id === selectedLogId
+      const isDetailTarget = entry.id === detailLogId
+      const isChecked = selectedIds.has(entry.id)
 
       return (
         <div style={style} className="px-2 py-0.5">
           <div
             className={`rounded h-full flex items-center gap-2 px-2 ${
               entry.details ? 'cursor-pointer hover:bg-white/5' : ''
-            } ${isSelected ? 'ring-1 ring-primary' : ''}`}
-            onClick={() => entry.details && setSelectedLogId(isSelected ? null : entry.id)}
+            } ${isDetailTarget ? 'ring-1 ring-primary' : ''} ${isChecked ? 'bg-primary/10' : ''}`}
+            onClick={() => entry.details && setDetailLogId(isDetailTarget ? null : entry.id)}
           >
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                handleToggleSelect(index, e.shiftKey)
+              }}
+              className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors shrink-0 ${
+                isChecked
+                  ? 'bg-primary border-primary'
+                  : 'border-muted-foreground hover:border-primary/50'
+              }`}
+            >
+              {isChecked && (
+                <svg className="w-2.5 h-2.5 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
             {getLevelIcon(entry.level)}
             <span className="text-muted-foreground shrink-0 text-xs">
               {formatTime(entry.timestamp)}
@@ -242,14 +355,14 @@ export function TroubleshootTab() {
             <span className="text-foreground flex-1 truncate text-xs">{entry.message}</span>
             {entry.details && (
               <span className="text-muted-foreground text-[10px] shrink-0">
-                {isSelected ? '▼' : '▶'}
+                {isDetailTarget ? '▼' : '▶'}
               </span>
             )}
           </div>
         </div>
       )
     },
-    [filteredLogs, selectedLogId, getLevelIcon, formatTime]
+    [filteredLogs, detailLogId, selectedIds, getLevelIcon, formatTime, handleToggleSelect]
   )
 
   if (isLoading) {
@@ -291,15 +404,22 @@ export function TroubleshootTab() {
           </select>
 
           {/* Verbose mode toggle */}
-          <label className="flex items-center gap-2 cursor-pointer" title="Enable verbose logging for detailed operational logs">
-            <input
-              type="checkbox"
-              checked={verboseEnabled}
-              onChange={handleVerboseToggle}
-              className="w-4 h-4 rounded border-border bg-muted text-primary focus:ring-primary focus:ring-offset-0"
-            />
+          <div className="flex items-center gap-2 cursor-pointer" title="Enable verbose logging for detailed operational logs" onClick={handleVerboseToggle}>
+            <button
+              className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors shrink-0 ${
+                verboseEnabled
+                  ? 'bg-primary border-primary'
+                  : 'border-muted-foreground hover:border-primary/50'
+              }`}
+            >
+              {verboseEnabled && (
+                <svg className="w-2.5 h-2.5 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
             <span className="text-sm text-muted-foreground">Verbose</span>
-          </label>
+          </div>
 
           {/* Clear button */}
           <button
@@ -326,8 +446,37 @@ export function TroubleshootTab() {
         </div>
       </div>
 
+      {/* Selection toolbar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center justify-between mb-2 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-md shrink-0">
+          <div className="flex items-center gap-3 text-xs">
+            <span className="font-medium">{selectedIds.size} selected</span>
+            <button
+              onClick={handleSelectAll}
+              className="flex items-center gap-1 text-primary hover:text-primary/80 transition-colors"
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
+              Select All ({filteredLogs.length})
+            </button>
+            <button
+              onClick={handleClearSelection}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+          <button
+            onClick={handleCopySelected}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            {copyFeedback ? 'Copied!' : 'Copy Selected'}
+          </button>
+        </div>
+      )}
+
       {/* Log viewer with virtualization - min-h-0 is critical for flex shrinking */}
-      <div className="flex-1 min-h-0 bg-muted rounded-lg border border-border/30 font-mono overflow-hidden relative">
+      <div ref={logViewerRef} tabIndex={-1} className="flex-1 min-h-0 bg-muted rounded-lg border border-border/30 font-mono overflow-hidden relative outline-none">
         {filteredLogs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             No logs to display
@@ -362,19 +511,19 @@ export function TroubleshootTab() {
             )}
 
             {/* Details panel - overlay at bottom */}
-            {selectedLog?.details && (
+            {detailLog?.details && (
               <div className="absolute bottom-0 left-0 right-0 z-20 border-t border-border/30 bg-muted h-[120px] overflow-y-auto">
                 <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/20 sticky top-0 bg-muted">
                   <span className="text-xs text-muted-foreground font-medium">Details</span>
                   <button
-                    onClick={() => setSelectedLogId(null)}
+                    onClick={() => setDetailLogId(null)}
                     className="p-0.5 rounded hover:bg-white/10"
                   >
                     <X className="w-3.5 h-3.5 text-muted-foreground" />
                   </button>
                 </div>
                 <pre className="px-3 py-2 text-xs text-muted-foreground whitespace-pre-wrap break-all">
-                  {selectedLog.details}
+                  {detailLog.details}
                 </pre>
               </div>
             )}

@@ -1,5 +1,5 @@
 import { memo, useRef } from 'react'
-import { Tv, X } from 'lucide-react'
+import { Tv, EyeOff } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import type { WishlistMediaType } from '../../contexts/WishlistContext'
 
@@ -80,10 +80,10 @@ export const MissingItemCard = memo(function MissingItemCard({
           {onDismiss && (
             <button
               onClick={onDismiss}
-              className="w-7 h-7 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
               title="Dismiss"
             >
-              <X className="w-4 h-4" />
+              <EyeOff className="w-4 h-4" />
             </button>
           )}
           <AddToWishlistButton

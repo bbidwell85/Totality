@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { ShoppingCart, ExternalLink, ChevronDown } from 'lucide-react'
+import { Star, ExternalLink, ChevronDown } from 'lucide-react'
 import type { StoreLink } from '../../contexts/WishlistContext'
 
 interface StoreLinksMenuProps {
@@ -61,7 +61,7 @@ export function StoreLinksMenu({ storeLinks, onOpenLink, isLoading }: StoreLinks
         disabled={isLoading}
         className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
       >
-        <ShoppingCart className="w-3.5 h-3.5" />
+        <Star className="w-3.5 h-3.5" />
         <span>Shop</span>
         <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>

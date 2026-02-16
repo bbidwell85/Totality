@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { ShoppingBag, Check, Loader2 } from 'lucide-react'
+import { Star, Check, Loader2 } from 'lucide-react'
 import { useWishlist, WishlistMediaType, WishlistReason } from '../../contexts/WishlistContext'
 
 interface AddToWishlistButtonProps {
@@ -144,7 +144,7 @@ export function AddToWishlistButton({
     currentQualityTier, currentQualityLevel, currentResolution, currentVideoCodec, currentAudioCodec
   ])
 
-  const ButtonIcon = ShoppingBag
+  const ButtonIcon = Star
   // Indicate that the whole season will be added when adding an episode
   const buttonLabel = isEpisode
     ? `Add Season ${seasonNumber ?? ''} to Wishlist`
