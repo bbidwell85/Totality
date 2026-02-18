@@ -372,7 +372,7 @@ export class TaskQueueService {
       }
     } catch (error: unknown) {
       const errorMsg = getErrorMessage(error) || 'Unknown error'
-      const isCancellation = this.cancelRequested || /cancel/i.test(errorMsg)
+      const isCancellation = this.cancelRequested || errorMsg === 'Task cancelled'
 
       if (isCancellation) {
         task.status = 'cancelled'

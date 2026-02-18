@@ -24,6 +24,7 @@ export class TMDBService {
   private static readonly CACHE_DURATION = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
   private static readonly MAX_CONCURRENT = 10 // Max concurrent requests
   private static readonly REQUEST_TIMEOUT = 30000 // 30 second timeout for API requests
+  private static readonly MAX_CACHE_SIZE = 5000 // Max cache entries to prevent unbounded memory growth
 
   private apiKey: string | null = null
   private cache: Map<string, { data: unknown; timestamp: number }> = new Map()
@@ -136,6 +137,18 @@ export class TMDBService {
    * Cache management: Store in cache
    */
   private setCache(key: string, data: unknown): void {
+    // Evict oldest entries when cache exceeds max size
+    if (this.cache.size >= TMDBService.MAX_CACHE_SIZE) {
+      let oldest: string | null = null
+      let oldestTime = Infinity
+      for (const [k, v] of this.cache) {
+        if (v.timestamp < oldestTime) {
+          oldestTime = v.timestamp
+          oldest = k
+        }
+      }
+      if (oldest) this.cache.delete(oldest)
+    }
     this.cache.set(key, {
       data,
       timestamp: Date.now()

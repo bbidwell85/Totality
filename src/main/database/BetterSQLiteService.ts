@@ -90,6 +90,7 @@ export class BetterSQLiteService {
       this.db.pragma('cache_size = -64000') // 64MB cache
       this.db.pragma('foreign_keys = ON')
       this.db.pragma('temp_store = MEMORY')
+      this.db.pragma('busy_timeout = 5000') // Wait up to 5s for locked database
 
       if (dbExists) {
         console.log('[BetterSQLite] Database loaded from:', path.basename(this.dbPath))

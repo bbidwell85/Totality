@@ -646,6 +646,8 @@ CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
 CREATE INDEX IF NOT EXISTS idx_series_completeness_title ON series_completeness(series_title);
 CREATE INDEX IF NOT EXISTS idx_series_completeness_library ON series_completeness(source_id, library_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_series_completeness_unique ON series_completeness(series_title, source_id, library_id);
+CREATE INDEX IF NOT EXISTS idx_series_completeness_title_pct ON series_completeness(series_title, completeness_percentage);
+CREATE INDEX IF NOT EXISTS idx_series_completeness_incomplete ON series_completeness(completeness_percentage) WHERE tmdb_id IS NOT NULL AND completeness_percentage < 100;
 CREATE INDEX IF NOT EXISTS idx_movie_collections_tmdb_id ON movie_collections(tmdb_collection_id);
 CREATE INDEX IF NOT EXISTS idx_movie_collections_library ON movie_collections(source_id, library_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_movie_collections_unique ON movie_collections(tmdb_collection_id, source_id, library_id);

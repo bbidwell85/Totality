@@ -90,10 +90,10 @@ export class CredentialEncryptionService {
       const encryptedBuffer = Buffer.from(encryptedBase64, 'base64')
       return safeStorage.decryptString(encryptedBuffer)
     } catch (error) {
-      console.error('[CredentialEncryption] Failed to decrypt value:', error)
-      // Return the original value if decryption fails
-      // This could happen if encryption was done on a different machine
-      return value
+      console.error('[CredentialEncryption] Failed to decrypt value — credential may need to be re-entered:', error)
+      // Return empty string on failure to force re-authentication,
+      // rather than returning the encrypted blob which would be used as a raw credential
+      return ''
     }
   }
 
