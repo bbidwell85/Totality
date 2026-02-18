@@ -554,10 +554,6 @@ export function MediaBrowser({
       if (alphabetFilter) filters.alphabetFilter = alphabetFilter
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
       if (selectedArtist) filters.artistId = selectedArtist.id
-      const excludeTypes: string[] = []
-      if (!includeEps) excludeTypes.push('ep')
-      if (!includeSingles) excludeTypes.push('single')
-      if (excludeTypes.length > 0) filters.excludeAlbumTypes = excludeTypes
 
       const [albums, count] = await Promise.all([
         window.electronAPI.musicGetAlbums(filters),
@@ -577,7 +573,7 @@ export function MediaBrowser({
     } finally {
       setAlbumsLoading(false)
     }
-  }, [activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist, includeEps, includeSingles])
+  }, [activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
 
   // Load more albums (infinite scroll callback)
   const loadMoreAlbums = useCallback(() => {
@@ -600,7 +596,7 @@ export function MediaBrowser({
       loadPaginatedAlbums(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, selectedArtist, includeEps, includeSingles])
+  }, [view, musicViewMode, activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, selectedArtist])
 
   // Load paginated movies from server with current filters/sorting
   const loadPaginatedMovies = useCallback(async (reset = true) => {
@@ -888,6 +884,16 @@ export function MediaBrowser({
     if (selectedShow) loadSelectedShowEpisodes(selectedShow)
   }, [loadPaginatedMovies, loadPaginatedShows, selectedShow, loadSelectedShowEpisodes])
 
+  // Load EP/Singles inclusion settings
+  const loadEpSingleSettings = useCallback(async () => {
+    const [epsVal, singlesVal] = await Promise.all([
+      window.electronAPI.getSetting('completeness_include_eps'),
+      window.electronAPI.getSetting('completeness_include_singles'),
+    ])
+    setIncludeEps((epsVal as string) !== 'false')
+    setIncludeSingles((singlesVal as string) !== 'false')
+  }, [])
+
   // Event listeners: analysis progress, library updates, auto-refresh, task queue, scan completion (extracted hook)
   useLibraryEventListeners({
     activeSourceId,
@@ -898,20 +904,11 @@ export function MediaBrowser({
     loadMusicData,
     loadMusicCompletenessData,
     loadActiveSourceLibraries,
+    loadEpSingleSettings,
     setIsAnalyzing, setAnalysisType, setAnalysisProgress,
     setTmdbApiKeySet, setIsAutoRefreshing,
     setActiveSource, markLibraryAsNew, addToast,
   })
-
-  // Load EP/Singles inclusion settings
-  const loadEpSingleSettings = async () => {
-    const [epsVal, singlesVal] = await Promise.all([
-      window.electronAPI.getSetting('completeness_include_eps'),
-      window.electronAPI.getSetting('completeness_include_singles'),
-    ])
-    setIncludeEps((epsVal as string) !== 'false')
-    setIncludeSingles((singlesVal as string) !== 'false')
-  }
 
   // Initial data load + reload on source change
   useEffect(() => {
@@ -4378,16 +4375,8 @@ function MusicView({
       })
     }
 
-    // Filter by album type based on EP/Singles settings
-    if (!includeEps) {
-      filtered = filtered.filter(a => a.album_type !== 'ep')
-    }
-    if (!includeSingles) {
-      filtered = filtered.filter(a => a.album_type !== 'single')
-    }
-
     return filtered.sort((a, b) => (a.year || 0) - (b.year || 0))
-  }, [albums, selectedArtist, searchQuery, alphabetFilter, includeEps, includeSingles])
+  }, [albums, selectedArtist, searchQuery, alphabetFilter])
 
   // Albums are now filtered/sorted server-side via loadPaginatedAlbums
   const allFilteredAlbums = albums
@@ -5047,7 +5036,11 @@ function MusicView({
             missingSingles = JSON.parse(completeness.missing_singles || '[]')
           } catch { /* ignore */ }
 
-          const allMissing = [...missingAlbums, ...missingEps, ...missingSingles]
+          const allMissing = [
+            ...missingAlbums,
+            ...(includeEps ? missingEps : []),
+            ...(includeSingles ? missingSingles : []),
+          ]
           if (allMissing.length === 0) return null
 
           return (

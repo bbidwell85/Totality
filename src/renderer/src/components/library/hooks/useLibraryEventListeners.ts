@@ -10,6 +10,7 @@ interface UseLibraryEventListenersOptions {
   loadMusicData: () => Promise<void>
   loadMusicCompletenessData: () => Promise<void>
   loadActiveSourceLibraries: () => Promise<void>
+  loadEpSingleSettings: () => Promise<void>
   setIsAnalyzing: (analyzing: boolean) => void
   setAnalysisType: (type: 'series' | 'collections' | 'music' | null) => void
   setAnalysisProgress: (progress: AnalysisProgress | null) => void
@@ -42,6 +43,7 @@ export function useLibraryEventListeners({
   loadMusicData,
   loadMusicCompletenessData,
   loadActiveSourceLibraries,
+  loadEpSingleSettings,
   setIsAnalyzing,
   setAnalysisType,
   setAnalysisProgress,
@@ -182,6 +184,11 @@ export function useLibraryEventListeners({
       if (data.key === 'tmdb_api_key') {
         setTmdbApiKeySet(data.hasValue)
       }
+      if (data.key === 'completeness_include_eps' || data.key === 'completeness_include_singles') {
+        loadEpSingleSettings()
+        loadMusicData()
+        loadMusicCompletenessData()
+      }
     })
 
     // Listen for wishlist auto-completion
@@ -264,7 +271,9 @@ export function useLibraryEventListeners({
     setAnalysisProgress,
     setTmdbApiKeySet,
     setIsAutoRefreshing,
+    loadEpSingleSettings,
     loadCompletenessData,
     loadMusicCompletenessData,
+    loadMusicData,
   ])
 }
