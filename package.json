@@ -32,6 +32,7 @@
   ],
   "author": "",
   "license": "MIT",
+  "sideEffects": false,
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
@@ -42,24 +43,20 @@
     "chokidar": "^3.6.0",
     "electron-updater": "^6.7.3",
     "lucide-react": "^0.562.0",
-    "node-cron": "^3.0.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-virtualized-auto-sizer": "^2.0.2",
     "react-window": "^1.8.10",
-    "sql.js": "^1.10.3",
     "zod": "^4.3.6"
   },
   "optionalDependencies": {
-    "mysql2": "^3.16.2"
+    "mysql2": "^3.16.2",
+    "sql.js": "^1.10.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.10.5",
-    "@types/node-cron": "^3.0.11",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
-    "@types/react-virtualized-auto-sizer": "^1.0.4",
     "@types/react-window": "^1.8.8",
     "@types/sql.js": "^1.4.9",
     "@typescript-eslint/eslint-plugin": "^6.14.0",
@@ -69,6 +66,7 @@
     "@vitest/ui": "^4.0.18",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
+    "cssnano": "^7.1.2",
     "electron": "^27.1.2",
     "electron-builder": "^24.9.1",
     "eslint": "^8.55.0",

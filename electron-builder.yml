@@ -14,11 +14,20 @@ files:
   - package.json
   - "!**/*.map"
   - "!**/*.d.ts"
+  - "!node_modules/sql.js/**/*"
+  - "!**/node_modules/**/{test,tests,__tests__,__mocks__}/**/*"
+  - "!**/node_modules/**/*.md"
+  - "!**/node_modules/**/{.eslintrc*,.prettierrc*,tsconfig*.json}"
+  - "!**/node_modules/**/CHANGELOG*"
+  - "!**/node_modules/**/LICENSE*"
+  - "!**/node_modules/**/{example,examples,doc,docs}/**/*"
+  - "!**/node_modules/**/*.{ts,tsx}"
+  - "!**/node_modules/**/.github/**/*"
 
 # Native module configuration for better-sqlite3
 asar: true
 asarUnpack:
-  - "node_modules/better-sqlite3/**/*"
+  - "**/*.node"
 
 # Rebuild native modules for Electron
 npmRebuild: true

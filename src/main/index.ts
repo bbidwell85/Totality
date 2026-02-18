@@ -122,6 +122,8 @@ function createWindow() {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      spellcheck: false,
+      enableWebSQL: false,
     },
     titleBarStyle: 'default',
     frame: true,

@@ -31,6 +31,10 @@ export default defineConfig({
                 entryFileNames: 'index.cjs'
               }
             }
+          },
+          esbuild: {
+            drop: ['debugger'],
+            pure: ['console.log', 'console.debug', 'console.info'],
           }
         }
       },
@@ -53,6 +57,10 @@ export default defineConfig({
                 entryFileNames: 'ffprobe-worker.cjs'
               }
             }
+          },
+          esbuild: {
+            drop: ['debugger'],
+            pure: ['console.log', 'console.debug', 'console.info'],
           }
         }
       },
@@ -78,6 +86,10 @@ export default defineConfig({
                 entryFileNames: 'index.cjs'
               }
             }
+          },
+          esbuild: {
+            drop: ['debugger'],
+            pure: ['console.log', 'console.debug', 'console.info'],
           }
         }
       }
@@ -99,11 +111,15 @@ export default defineConfig({
     outDir: '../../dist',
     minify: 'esbuild',
     sourcemap: false,
+    esbuild: {
+      drop: ['debugger'],
+      pure: ['console.log', 'console.debug', 'console.info'],
+    },
     rollupOptions: {
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          ui: ['react-window', 'react-virtualized-auto-sizer']
+          ui: ['react-window']
         }
       }
     }
