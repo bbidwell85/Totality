@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useId } from 'react'
-import { RotateCcw, Save, Loader2, RefreshCw, ChevronDown, Film, Music, Clapperboard } from 'lucide-react'
+import { RotateCcw, Save, Loader2, RefreshCw, ChevronDown, Film, Music, Clapperboard, Copy, Check } from 'lucide-react'
 
 // Default values for all quality settings
 const DEFAULT_SETTINGS = {
@@ -886,17 +886,7 @@ function HandbrakeGuide({
       </div>
 
       {/* Advanced Options */}
-      <div className="space-y-2">
-        <h4 className="text-xs font-medium text-foreground">Extra Options (Advanced)</h4>
-        <div className="bg-background/50 rounded-lg p-3">
-          <code className="text-[10px] text-muted-foreground break-all leading-relaxed block">
-            {codecPreset.extraOptions}
-          </code>
-        </div>
-        <p className="text-[10px] text-muted-foreground">
-          Paste into Handbrake's "Extra Options" field under the Video tab.
-        </p>
-      </div>
+      <ExtraOptionsCopyable extraOptions={codecPreset.extraOptions} />
 
       {/* Audio Settings */}
       <div className="space-y-2">
@@ -953,6 +943,41 @@ function HandbrakeGuide({
       <p className="text-[10px] text-muted-foreground italic">
         Based on HandBrake 1.10.2. Lower RF = higher quality/larger file. These settings prioritize
         visual transparency over file size.
+      </p>
+    </div>
+  )
+}
+
+function ExtraOptionsCopyable({ extraOptions }: { extraOptions: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(extraOptions)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-medium text-foreground">Extra Options (Advanced)</h4>
+      <div className="bg-background/50 rounded-lg p-3 flex items-start gap-2">
+        <code className="text-[10px] text-muted-foreground break-all leading-relaxed block flex-1 select-all">
+          {extraOptions}
+        </code>
+        <button
+          onClick={handleCopy}
+          className="flex-shrink-0 p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+          title="Copy to clipboard"
+        >
+          {copied ? (
+            <Check className="w-3.5 h-3.5 text-green-500" />
+          ) : (
+            <Copy className="w-3.5 h-3.5" />
+          )}
+        </button>
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Paste into Handbrake's "Extra Options" field under the Video tab.
       </p>
     </div>
   )
