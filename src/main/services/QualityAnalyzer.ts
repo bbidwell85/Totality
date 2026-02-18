@@ -87,7 +87,7 @@ type TierQuality = 'LOW' | 'MEDIUM' | 'HIGH'
 const DEFAULT_CODEC_EFFICIENCY = {
   'h264': 1.0, 'avc': 1.0, 'x264': 1.0,
   'h265': 2.0, 'hevc': 2.0, 'x265': 2.0,
-  'av1': 3.0,
+  'av1': 2.5,
   'vp9': 1.8
 }
 

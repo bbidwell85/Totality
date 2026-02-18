@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useId } from 'react'
-import { RotateCcw, Save, Loader2, RefreshCw, ChevronDown, Film, Music, Clapperboard, Copy, Check } from 'lucide-react'
+import { RotateCcw, Save, Loader2, RefreshCw, ChevronDown, Film, Music, Clapperboard, Copy, Check, Gauge } from 'lucide-react'
 
 // Default values for all quality settings
 const DEFAULT_SETTINGS = {
@@ -33,6 +33,10 @@ const DEFAULT_SETTINGS = {
   quality_music_high_bitrate: 256,
   quality_music_hires_samplerate: 44100,
   quality_music_hires_bitdepth: 16,
+  quality_codec_h264: 1.0,
+  quality_codec_h265: 2.0,
+  quality_codec_av1: 2.5,
+  quality_codec_vp9: 1.8,
 }
 
 type SettingsState = typeof DEFAULT_SETTINGS
@@ -106,6 +110,14 @@ function SettingsCard({
       )}
     </div>
   )
+}
+
+function formatEffectiveThreshold(thresholdKbps: number, multiplier: number): string {
+  const neededKbps = thresholdKbps / multiplier
+  if (neededKbps >= 1000) {
+    return `${(neededKbps / 1000).toFixed(1)} Mbps`
+  }
+  return `${Math.round(neededKbps)} kbps`
 }
 
 export function QualitySettingsTab() {
@@ -280,7 +292,7 @@ export function QualitySettingsTab() {
       {/* Header */}
       <div className="mb-4">
         <p className="text-xs text-muted-foreground">
-          Configure bitrate thresholds for quality scoring. Video thresholds set the target range directly. Audio thresholds set the target for stereo codecs (AAC, MP3) and scale the bonus for surround codecs (AC3, EAC3, DTS).
+          Configure bitrate thresholds for quality scoring. Newer codecs like HEVC and AV1 look just as good at lower bitrates, so scores are adjusted automatically — see Codec Efficiency below. Audio thresholds target stereo codecs (AAC, MP3) and scale for surround formats (AC3, EAC3, DTS).
         </p>
       </div>
 
@@ -345,6 +357,72 @@ export function QualitySettingsTab() {
               }}
             />
           </div>
+        </div>
+      </SettingsCard>
+
+      {/* Codec Efficiency Card */}
+      <SettingsCard
+        title="Codec Efficiency"
+        description="How much credit each codec gets for using lower bitrates"
+        icon={<Gauge className="w-7 h-7" />}
+        expanded={expandedCards.has('codec')}
+        onToggle={() => toggleCard('codec')}
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Newer codecs like HEVC and AV1 deliver the same picture quality at much lower bitrates
+            than H.264. To score them fairly, Totality gives newer codecs credit for their
+            efficiency — an HEVC file doesn't need as high a bitrate to earn the same score.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            A value of 2.0x means the codec is twice as efficient as H.264, so it only needs half
+            the bitrate to score the same. Higher values = more credit for efficiency.
+          </p>
+
+          <div className="grid grid-cols-2 gap-4">
+            <NumberInput
+              label="H.264 (baseline)"
+              value={settings.quality_codec_h264}
+              min={0.5}
+              max={5.0}
+              step={0.1}
+              onChange={(v) => updateSetting('quality_codec_h264', v)}
+              hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_h264)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
+            />
+            <NumberInput
+              label="HEVC / H.265"
+              value={settings.quality_codec_h265}
+              min={0.5}
+              max={5.0}
+              step={0.1}
+              onChange={(v) => updateSetting('quality_codec_h265', v)}
+              hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_h265)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
+            />
+            <NumberInput
+              label="AV1"
+              value={settings.quality_codec_av1}
+              min={0.5}
+              max={5.0}
+              step={0.1}
+              onChange={(v) => updateSetting('quality_codec_av1', v)}
+              hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_av1)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
+            />
+            <NumberInput
+              label="VP9"
+              value={settings.quality_codec_vp9}
+              min={0.5}
+              max={5.0}
+              step={0.1}
+              onChange={(v) => updateSetting('quality_codec_vp9', v)}
+              hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_vp9)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
+            />
+          </div>
+
+          <p className="text-[10px] text-muted-foreground italic">
+            Most users won't need to change these. Adjust if your HEVC or AV1 files are scoring
+            higher or lower than they look — lower the value if scores seem too generous, raise it
+            if scores seem too harsh.
+          </p>
         </div>
       </SettingsCard>
 
@@ -782,8 +860,11 @@ function HandbrakeGuide({
   const videoHigh = settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number
   const audioHigh = settings[`quality_audio_${selectedTier}_high` as keyof SettingsState] as number
 
-  // H.265 is 2x more efficient
-  const h265VideoHigh = Math.round(videoHigh / 2)
+  // Adjust target bitrate based on codec efficiency multiplier
+  const codecMultiplier = selectedCodec === 'x265'
+    ? settings.quality_codec_h265
+    : settings.quality_codec_h264
+  const adjustedVideoHigh = Math.round(videoHigh / codecMultiplier)
 
   const preset = HANDBRAKE_DETAILED_PRESETS[selectedTier]
   const codecPreset = preset[selectedCodec]
@@ -847,7 +928,7 @@ function HandbrakeGuide({
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-foreground">Target for HIGH Quality</span>
           <span className="text-sm font-mono text-foreground">
-            {selectedCodec === 'x265' ? formatBitrate(h265VideoHigh) : formatBitrate(videoHigh)}+ video / {audioHigh}+ kbps audio
+            {formatBitrate(adjustedVideoHigh)}+ video / {audioHigh}+ kbps audio
           </span>
         </div>
       </div>

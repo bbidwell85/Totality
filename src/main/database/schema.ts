@@ -868,7 +868,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   -- Codec efficiency multipliers (effective bitrate = actual * multiplier)
   ('quality_codec_h264', '1.0'),
   ('quality_codec_h265', '2.0'),
-  ('quality_codec_av1', '3.0'),
+  ('quality_codec_av1', '2.5'),
   ('quality_codec_vp9', '1.8'),
 
   -- Music quality thresholds
