@@ -7,7 +7,7 @@ import { invalidateNfsMappingsCache } from '../providers/kodi/KodiDatabaseSchema
 import { getErrorMessage, isNodeError } from './utils'
 import fs from 'fs/promises'
 import type { MediaItem } from '../types/database'
-import { validateInput, PositiveIntSchema, NonEmptyStringSchema, SettingKeySchema, SettingValueSchema, MediaItemFiltersSchema, TVShowFiltersSchema, MediaItemSchema, QualityScoreSchema, NfsMappingsSchema, ExportCSVOptionsSchema, AddExclusionSchema, OptionalSourceIdSchema } from '../validation/schemas'
+import { validateInput, PositiveIntSchema, NonEmptyStringSchema, SettingKeySchema, SettingValueSchema, MediaItemFiltersSchema, TVShowFiltersSchema, MediaItemSchema, QualityScoreSchema, NfsMappingsSchema, ExportCSVOptionsSchema, AddExclusionSchema, OptionalSourceIdSchema, FilePathSchema } from '../validation/schemas'
 
 /**
  * Register all database-related IPC handlers
@@ -217,8 +217,9 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  ipcMain.handle('settings:testNfsMapping', async (_event, _nfsPath: unknown, localPath: unknown) => {
-    const validLocalPath = validateInput(NonEmptyStringSchema, localPath, 'settings:testNfsMapping')
+  ipcMain.handle('settings:testNfsMapping', async (_event, nfsPath: unknown, localPath: unknown) => {
+    validateInput(NonEmptyStringSchema, nfsPath, 'settings:testNfsMapping')
+    const validLocalPath = validateInput(FilePathSchema, localPath, 'settings:testNfsMapping')
     try {
       const stats = await fs.stat(validLocalPath)
       if (!stats.isDirectory()) {

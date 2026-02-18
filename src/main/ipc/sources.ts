@@ -25,6 +25,10 @@ import {
   UpdateSourceSchema,
   KodiMySQLConfigSchema,
   SafeUrlSchema,
+  SourceIdSchema,
+  BooleanSchema,
+  FilePathSchema,
+  OptionalProviderTypeSchema,
 } from '../validation/schemas'
 
 /**
@@ -68,11 +72,9 @@ export function registerSourceHandlers(): void {
    */
   ipcMain.handle('sources:update', async (_event, sourceId: unknown, updates: unknown) => {
     try {
-      if (typeof sourceId !== 'string' || !sourceId) {
-        throw new Error('Invalid source ID')
-      }
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:update')
       const validatedUpdates = validateInput(UpdateSourceSchema, updates, 'sources:update')
-      await manager.updateSource(sourceId, validatedUpdates)
+      await manager.updateSource(validSourceId, validatedUpdates)
     } catch (error: unknown) {
       console.error('Error updating source:', error)
       throw error
@@ -82,9 +84,10 @@ export function registerSourceHandlers(): void {
   /**
    * Remove a media source
    */
-  ipcMain.handle('sources:remove', async (_event, sourceId: string) => {
+  ipcMain.handle('sources:remove', async (_event, sourceId: unknown) => {
     try {
-      await manager.removeSource(sourceId)
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:remove')
+      await manager.removeSource(validSourceId)
     } catch (error: unknown) {
       console.error('Error removing source:', error)
       throw error
@@ -94,9 +97,10 @@ export function registerSourceHandlers(): void {
   /**
    * Get all sources (optionally filtered by type)
    */
-  ipcMain.handle('sources:list', async (_event, type?: ProviderType) => {
+  ipcMain.handle('sources:list', async (_event, type?: unknown) => {
     try {
-      return await manager.getSources(type)
+      const validType = type !== undefined ? validateInput(OptionalProviderTypeSchema, type, 'sources:list') : undefined
+      return await manager.getSources(validType)
     } catch (error: unknown) {
       console.error('Error listing sources:', error)
       throw error
@@ -106,9 +110,10 @@ export function registerSourceHandlers(): void {
   /**
    * Get a single source by ID
    */
-  ipcMain.handle('sources:get', async (_event, sourceId: string) => {
+  ipcMain.handle('sources:get', async (_event, sourceId: unknown) => {
     try {
-      return await manager.getSource(sourceId)
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:get')
+      return await manager.getSource(validSourceId)
     } catch (error: unknown) {
       console.error('Error getting source:', error)
       throw error
@@ -130,9 +135,11 @@ export function registerSourceHandlers(): void {
   /**
    * Toggle source enabled status
    */
-  ipcMain.handle('sources:toggle', async (_event, sourceId: string, enabled: boolean) => {
+  ipcMain.handle('sources:toggle', async (_event, sourceId: unknown, enabled: unknown) => {
     try {
-      await manager.toggleSource(sourceId, enabled)
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:toggle')
+      const validEnabled = validateInput(BooleanSchema, enabled, 'sources:toggle')
+      await manager.toggleSource(validSourceId, validEnabled)
     } catch (error: unknown) {
       console.error('Error toggling source:', error)
       throw error
@@ -146,9 +153,10 @@ export function registerSourceHandlers(): void {
   /**
    * Test connection for a source
    */
-  ipcMain.handle('sources:testConnection', async (_event, sourceId: string) => {
+  ipcMain.handle('sources:testConnection', async (_event, sourceId: unknown) => {
     try {
-      return await manager.testConnection(sourceId)
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:testConnection')
+      return await manager.testConnection(validSourceId)
     } catch (error: unknown) {
       console.error('Error testing connection:', error)
       throw error
@@ -263,9 +271,10 @@ export function registerSourceHandlers(): void {
   /**
    * Get libraries for a source
    */
-  ipcMain.handle('sources:getLibraries', async (_event, sourceId: string) => {
+  ipcMain.handle('sources:getLibraries', async (_event, sourceId: unknown) => {
     try {
-      return await manager.getLibraries(sourceId)
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:getLibraries')
+      return await manager.getLibraries(validSourceId)
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error)
       console.warn(`[IPC] sources:getLibraries failed for ${sourceId}: ${msg}`)
@@ -276,16 +285,17 @@ export function registerSourceHandlers(): void {
   /**
    * Get libraries for a source with enabled status from database
    */
-  ipcMain.handle('sources:getLibrariesWithStatus', async (_event, sourceId: string) => {
+  ipcMain.handle('sources:getLibrariesWithStatus', async (_event, sourceId: unknown) => {
     try {
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:getLibrariesWithStatus')
       const db = getDatabase()
       const manager = getSourceManager()
 
       // Get libraries from the provider
-      const libraries = await manager.getLibraries(sourceId)
+      const libraries = await manager.getLibraries(validSourceId)
 
       // Get stored library settings from database
-      const storedLibraries = db.getSourceLibraries(sourceId) as Array<{
+      const storedLibraries = db.getSourceLibraries(validSourceId) as Array<{
         libraryId: string
         libraryName: string
         libraryType: string
@@ -315,14 +325,17 @@ export function registerSourceHandlers(): void {
   /**
    * Toggle a library's enabled status
    */
-  ipcMain.handle('sources:toggleLibrary', async (event, sourceId: string, libraryId: string, enabled: boolean) => {
+  ipcMain.handle('sources:toggleLibrary', async (event, sourceId: unknown, libraryId: unknown, enabled: unknown) => {
     try {
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:toggleLibrary')
+      const validLibraryId = validateInput(SourceIdSchema, libraryId, 'sources:toggleLibrary')
+      const validEnabled = validateInput(BooleanSchema, enabled, 'sources:toggleLibrary')
       const db = getDatabase()
-      await db.toggleLibrary(sourceId, libraryId, enabled)
+      await db.toggleLibrary(validSourceId, validLibraryId, validEnabled)
 
       // Notify renderer that library settings changed
       const win = getWindowFromEvent(event)
-      safeSend(win, 'library:updated', { type: 'libraryToggle', sourceId, libraryId, enabled })
+      safeSend(win, 'library:updated', { type: 'libraryToggle', sourceId: validSourceId, libraryId: validLibraryId, enabled: validEnabled })
 
       return { success: true }
     } catch (error: unknown) {
@@ -334,15 +347,16 @@ export function registerSourceHandlers(): void {
   /**
    * Set multiple libraries' enabled status at once (used during source setup)
    */
-  ipcMain.handle('sources:setLibrariesEnabled', async (_event, sourceId: string, libraries: Array<{
+  ipcMain.handle('sources:setLibrariesEnabled', async (_event, sourceId: unknown, libraries: Array<{
     id: string
     name: string
     type: string
     enabled: boolean
   }>) => {
     try {
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:setLibrariesEnabled')
       const db = getDatabase()
-      await db.setLibrariesEnabled(sourceId, libraries)
+      await db.setLibrariesEnabled(validSourceId, libraries)
       return { success: true }
     } catch (error: unknown) {
       console.error('Error setting libraries enabled:', error)
@@ -353,10 +367,11 @@ export function registerSourceHandlers(): void {
   /**
    * Get only enabled library IDs for a source
    */
-  ipcMain.handle('sources:getEnabledLibraryIds', async (_event, sourceId: string) => {
+  ipcMain.handle('sources:getEnabledLibraryIds', async (_event, sourceId: unknown) => {
     try {
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:getEnabledLibraryIds')
       const db = getDatabase()
-      return db.getEnabledLibraryIds(sourceId)
+      return db.getEnabledLibraryIds(validSourceId)
     } catch (error: unknown) {
       console.error('Error getting enabled library IDs:', error)
       throw error
@@ -380,19 +395,21 @@ export function registerSourceHandlers(): void {
   /**
    * Scan a library
    */
-  ipcMain.handle('sources:scanLibrary', async (event, sourceId: string, libraryId: string) => {
+  ipcMain.handle('sources:scanLibrary', async (event, sourceId: unknown, libraryId: unknown) => {
+    const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:scanLibrary')
+    const validLibraryId = validateInput(SourceIdSchema, libraryId, 'sources:scanLibrary')
     const win = getWindowFromEvent(event)
-    console.log(`[IPC sources:scanLibrary] Starting scan for ${sourceId}/${libraryId}, win exists: ${!!win}`)
+    console.log(`[IPC sources:scanLibrary] Starting scan for ${validSourceId}/${validLibraryId}, win exists: ${!!win}`)
     const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
     let progressCount = 0
 
     try {
-      const result = await manager.scanLibrary(sourceId, libraryId, (progress) => {
+      const result = await manager.scanLibrary(validSourceId, validLibraryId, (progress) => {
         progressCount++
         if (progressCount <= 3 || progressCount % 50 === 0) {
           console.log(`[IPC sources:scanLibrary] Progress #${progressCount}: ${progress.percentage?.toFixed(1)}% - ${progress.currentItem}`)
         }
-        onProgress(progress, { sourceId, libraryId })
+        onProgress(progress, { sourceId: validSourceId, libraryId: validLibraryId })
       })
 
       console.log(`[IPC sources:scanLibrary] Scan complete, sent ${progressCount} progress events`)
@@ -438,15 +455,18 @@ export function registerSourceHandlers(): void {
    * Scan a single media item by file path
    * If libraryId is not provided, attempts to auto-detect from file path
    */
-  ipcMain.handle('sources:scanItem', async (event, sourceId: string, libraryId: string | null, filePath: string) => {
+  ipcMain.handle('sources:scanItem', async (event, sourceId: unknown, libraryId: unknown, filePath: unknown) => {
+    const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:scanItem')
+    const validLibraryId = libraryId != null ? validateInput(SourceIdSchema, libraryId, 'sources:scanItem') : null
+    const validFilePath = validateInput(FilePathSchema, filePath, 'sources:scanItem')
     const win = getWindowFromEvent(event)
-    console.log(`[IPC sources:scanItem] Starting single item scan for ${path.basename(filePath)}`)
+    console.log(`[IPC sources:scanItem] Starting single item scan for ${path.basename(validFilePath)}`)
 
     // If libraryId not provided, determine the appropriate default based on provider type
-    let resolvedLibraryId = libraryId
+    let resolvedLibraryId = validLibraryId
     if (!resolvedLibraryId) {
       // Get the provider to determine its type
-      const provider = manager.getProvider(sourceId)
+      const provider = manager.getProvider(validSourceId)
       if (provider?.providerType === 'kodi-local' || provider?.providerType === 'kodi-mysql') {
         // Kodi uses 'movies' and 'tvshows' as library IDs
         resolvedLibraryId = 'movies'
@@ -460,8 +480,8 @@ export function registerSourceHandlers(): void {
     const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
 
     try {
-      const result = await manager.scanTargetedFiles(sourceId, resolvedLibraryId, [filePath], (progress) => {
-        onProgress(progress, { sourceId, libraryId: resolvedLibraryId })
+      const result = await manager.scanTargetedFiles(validSourceId, resolvedLibraryId, [validFilePath], (progress) => {
+        onProgress(progress, { sourceId: validSourceId, libraryId: resolvedLibraryId })
       })
 
       console.log(`[IPC sources:scanItem] Scan complete: ${result.itemsScanned} items`)
@@ -477,14 +497,16 @@ export function registerSourceHandlers(): void {
   /**
    * Incremental scan of a single library (only new/changed items since last scan)
    */
-  ipcMain.handle('sources:scanLibraryIncremental', async (event, sourceId: string, libraryId: string) => {
+  ipcMain.handle('sources:scanLibraryIncremental', async (event, sourceId: unknown, libraryId: unknown) => {
+    const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:scanLibraryIncremental')
+    const validLibraryId = validateInput(SourceIdSchema, libraryId, 'sources:scanLibraryIncremental')
     const win = getWindowFromEvent(event)
-    console.log(`[IPC sources:scanLibraryIncremental] Starting incremental scan for ${sourceId}/${libraryId}`)
+    console.log(`[IPC sources:scanLibraryIncremental] Starting incremental scan for ${validSourceId}/${validLibraryId}`)
     const { onProgress, flush } = createProgressUpdater(win, 'sources:scanProgress', 'media')
 
     try {
-      const result = await manager.scanLibraryIncremental(sourceId, libraryId, (progress) => {
-        onProgress(progress, { sourceId, libraryId })
+      const result = await manager.scanLibraryIncremental(validSourceId, validLibraryId, (progress) => {
+        onProgress(progress, { sourceId: validSourceId, libraryId: validLibraryId })
       })
 
       console.log(`[IPC sources:scanLibraryIncremental] Scan complete: ${result.itemsScanned} items`)
@@ -587,8 +609,9 @@ export function registerSourceHandlers(): void {
   /**
    * Import collections from Kodi local database
    */
-  ipcMain.handle('kodi:importCollections', async (event, sourceId: string) => {
-    const provider = manager.getProvider(sourceId)
+  ipcMain.handle('kodi:importCollections', async (event, sourceId: unknown) => {
+    const validSourceId = validateInput(SourceIdSchema, sourceId, 'kodi:importCollections')
+    const provider = manager.getProvider(validSourceId)
     if (!provider) {
       throw new Error(`Source not found: ${sourceId}`)
     }
@@ -620,9 +643,10 @@ export function registerSourceHandlers(): void {
   /**
    * Get collections from Kodi local database (without importing)
    */
-  ipcMain.handle('kodi:getCollections', async (_event, sourceId: string) => {
+  ipcMain.handle('kodi:getCollections', async (_event, sourceId: unknown) => {
     try {
-      const provider = manager.getProvider(sourceId)
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'kodi:getCollections')
+      const provider = manager.getProvider(validSourceId)
       if (!provider) {
         throw new Error(`Source not found: ${sourceId}`)
       }
@@ -795,10 +819,11 @@ export function registerSourceHandlers(): void {
   /**
    * Analyze a media file with FFprobe
    */
-  ipcMain.handle('ffprobe:analyzeFile', async (_event, filePath: string) => {
+  ipcMain.handle('ffprobe:analyzeFile', async (_event, filePath: unknown) => {
     try {
+      const validFilePath = validateInput(FilePathSchema, filePath, 'ffprobe:analyzeFile')
       const analyzer = getMediaFileAnalyzer()
-      return await analyzer.analyzeFile(filePath)
+      return await analyzer.analyzeFile(validFilePath)
     } catch (error: unknown) {
       console.error('Error analyzing file:', error)
       return {
@@ -814,9 +839,11 @@ export function registerSourceHandlers(): void {
   /**
    * Enable/disable FFprobe analysis for a Kodi source
    */
-  ipcMain.handle('ffprobe:setEnabled', async (_event, sourceId: string, enabled: boolean) => {
+  ipcMain.handle('ffprobe:setEnabled', async (_event, sourceId: unknown, enabled: unknown) => {
     try {
-      const provider = manager.getProvider(sourceId)
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'ffprobe:setEnabled')
+      const validEnabled = validateInput(BooleanSchema, enabled, 'ffprobe:setEnabled')
+      const provider = manager.getProvider(validSourceId)
       if (!provider) {
         throw new Error(`Source not found: ${sourceId}`)
       }
@@ -826,8 +853,8 @@ export function registerSourceHandlers(): void {
       }
 
       const kodiProvider = provider as KodiLocalProvider
-      kodiProvider.setFFprobeAnalysis(enabled)
-      return { success: true, enabled }
+      kodiProvider.setFFprobeAnalysis(validEnabled)
+      return { success: true, enabled: validEnabled }
     } catch (error: unknown) {
       console.error('Error setting FFprobe analysis:', error)
       throw error
@@ -837,9 +864,10 @@ export function registerSourceHandlers(): void {
   /**
    * Check if FFprobe analysis is enabled for a source
    */
-  ipcMain.handle('ffprobe:isEnabled', async (_event, sourceId: string) => {
+  ipcMain.handle('ffprobe:isEnabled', async (_event, sourceId: unknown) => {
     try {
-      const provider = manager.getProvider(sourceId)
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'ffprobe:isEnabled')
+      const provider = manager.getProvider(validSourceId)
       if (!provider) {
         return false
       }
@@ -860,9 +888,10 @@ export function registerSourceHandlers(): void {
    * Check if FFprobe is available for a specific Kodi source
    * (combines system check with provider support)
    */
-  ipcMain.handle('ffprobe:isAvailableForSource', async (_event, sourceId: string) => {
+  ipcMain.handle('ffprobe:isAvailableForSource', async (_event, sourceId: unknown) => {
     try {
-      const provider = manager.getProvider(sourceId)
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'ffprobe:isAvailableForSource')
+      const provider = manager.getProvider(validSourceId)
       if (!provider || provider.providerType !== 'kodi-local') {
         return { available: false, reason: 'Source is not a Kodi local source' }
       }
@@ -1000,9 +1029,10 @@ export function registerSourceHandlers(): void {
   /**
    * Detect subfolders in a local folder and guess their media type
    */
-  ipcMain.handle('local:detectSubfolders', async (_event, folderPath: string) => {
+  ipcMain.handle('local:detectSubfolders', async (_event, folderPath: unknown) => {
     try {
-      const entries = await fs.readdir(folderPath, { withFileTypes: true })
+      const validFolderPath = validateInput(FilePathSchema, folderPath, 'local:detectSubfolders')
+      const entries = await fs.readdir(validFolderPath, { withFileTypes: true })
       const subfolders: Array<{
         name: string
         path: string
@@ -1038,7 +1068,7 @@ export function registerSourceHandlers(): void {
 
         subfolders.push({
           name: entry.name,
-          path: path.join(folderPath, entry.name),
+          path: path.join(validFolderPath, entry.name),
           suggestedType,
         })
       }
