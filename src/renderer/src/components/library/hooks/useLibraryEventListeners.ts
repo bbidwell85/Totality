@@ -8,7 +8,7 @@ interface UseLibraryEventListenersOptions {
   loadStats: (sourceId?: string) => Promise<void>
   loadCompletenessData: () => Promise<void>
   loadMusicData: () => Promise<void>
-  loadMusicCompletenessData: () => Promise<void>
+  loadMusicCompletenessData: (overrideEps?: boolean, overrideSingles?: boolean) => Promise<void>
   loadActiveSourceLibraries: () => Promise<void>
   loadEpSingleSettings: () => Promise<void>
   setIsAnalyzing: (analyzing: boolean) => void
@@ -180,14 +180,21 @@ export function useLibraryEventListeners({
     })
 
     // Listen for settings changes (e.g., API key added/removed in Settings)
-    const cleanupSettingsChanged = window.electronAPI.onSettingsChanged?.((data) => {
+    const cleanupSettingsChanged = window.electronAPI.onSettingsChanged?.(async (data) => {
       if (data.key === 'tmdb_api_key') {
         setTmdbApiKeySet(data.hasValue)
       }
       if (data.key === 'completeness_include_eps' || data.key === 'completeness_include_singles') {
+        // Read fresh settings to avoid stale state race condition
+        const [epsVal, singlesVal] = await Promise.all([
+          window.electronAPI.getSetting('completeness_include_eps'),
+          window.electronAPI.getSetting('completeness_include_singles'),
+        ])
+        const freshEps = (epsVal as string) !== 'false'
+        const freshSingles = (singlesVal as string) !== 'false'
         loadEpSingleSettings()
         loadMusicData()
-        loadMusicCompletenessData()
+        loadMusicCompletenessData(freshEps, freshSingles)
       }
     })
 

@@ -348,7 +348,7 @@ export function MediaBrowser({
   // Load completeness data (non-blocking background load)
   const loadCompletenessData = async () => {
     try {
-      const [seriesData, collectionsData, sStats, cStats, collectionExclusions, seriesExclusions] = await Promise.all([
+      const [seriesData, collectionsData, sStats, , collectionExclusions, seriesExclusions] = await Promise.all([
         window.electronAPI.seriesGetAll(),
         window.electronAPI.collectionsGetAll(),
         window.electronAPI.seriesGetStats(),
@@ -401,8 +401,32 @@ export function MediaBrowser({
       })
       setSeriesCompleteness(seriesMap)
 
-      setSeriesStats(sStats as SeriesStats)
-      setCollectionStats(cStats as CollectionStats)
+      // Compute stats from filtered data so dismissed items are excluded
+      const seriesEntries = Array.from(seriesMap.values())
+      setSeriesStats({
+        totalSeries: seriesEntries.length,
+        completeSeries: seriesEntries.filter(s => {
+          try { return JSON.parse(s.missing_episodes || '[]').length === 0 } catch { return true }
+        }).length,
+        incompleteSeries: seriesEntries.filter(s => {
+          try { return JSON.parse(s.missing_episodes || '[]').length > 0 } catch { return false }
+        }).length,
+        totalMissingEpisodes: seriesEntries.reduce((sum, s) => {
+          try { return sum + JSON.parse(s.missing_episodes || '[]').length } catch { return sum }
+        }, 0),
+        averageCompleteness: (sStats as SeriesStats).averageCompleteness,
+      })
+      setCollectionStats({
+        total: filteredCollections.length,
+        complete: filteredCollections.filter(c => c.completeness_percentage >= 100).length,
+        incomplete: filteredCollections.filter(c => c.completeness_percentage < 100).length,
+        totalMissing: filteredCollections.reduce((sum, c) => {
+          try { return sum + JSON.parse(c.missing_movies || '[]').length } catch { return sum }
+        }, 0),
+        avgCompleteness: filteredCollections.length > 0
+          ? Math.round(filteredCollections.reduce((sum, c) => sum + c.completeness_percentage, 0) / filteredCollections.length)
+          : 0,
+      })
     } catch (err) {
       console.warn('Failed to load completeness data:', err)
     }
@@ -804,7 +828,8 @@ export function MediaBrowser({
   })
 
   // Load music completeness data
-  const loadMusicCompletenessData = async () => {
+  // Optional overrides allow callers to pass fresh EP/Singles values to avoid stale state
+  const loadMusicCompletenessData = async (overrideEps?: boolean, overrideSingles?: boolean) => {
     try {
       const completenessData = await window.electronAPI.musicGetAllArtistCompleteness() as ArtistCompletenessData[]
 
@@ -824,6 +849,8 @@ export function MediaBrowser({
       setAllAlbumCompleteness(albumCompletenessMap)
 
       // Calculate stats with real-time EP/Singles filtering
+      const effectiveEps = overrideEps ?? includeEps
+      const effectiveSingles = overrideSingles ?? includeSingles
       const totalArtists = musicStats?.totalArtists ?? musicArtists.length
       const analyzedArtists = completenessData.length
 
@@ -833,18 +860,18 @@ export function MediaBrowser({
       let totalPctSum = 0
       for (const c of completenessData) {
         const totalItems = (c.total_albums || 0) * 3
-          + (includeEps ? (c.total_eps || 0) * 2 : 0)
-          + (includeSingles ? (c.total_singles || 0) : 0)
+          + (effectiveEps ? (c.total_eps || 0) * 2 : 0)
+          + (effectiveSingles ? (c.total_singles || 0) : 0)
         const ownedItems = (c.owned_albums || 0) * 3
-          + (includeEps ? (c.owned_eps || 0) * 2 : 0)
-          + (includeSingles ? (c.owned_singles || 0) : 0)
+          + (effectiveEps ? (c.owned_eps || 0) * 2 : 0)
+          + (effectiveSingles ? (c.owned_singles || 0) : 0)
         const pct = totalItems > 0 ? Math.round((ownedItems / totalItems) * 100) : 100
         totalPctSum += pct
         if (pct >= 100) completeArtists++
 
         const missingAlbumCount = Math.max(0, (c.total_albums || 0) - (c.owned_albums || 0))
-        const missingEpCount = includeEps ? Math.max(0, (c.total_eps || 0) - (c.owned_eps || 0)) : 0
-        const missingSingleCount = includeSingles ? Math.max(0, (c.total_singles || 0) - (c.owned_singles || 0)) : 0
+        const missingEpCount = effectiveEps ? Math.max(0, (c.total_eps || 0) - (c.owned_eps || 0)) : 0
+        const missingSingleCount = effectiveSingles ? Math.max(0, (c.total_singles || 0) - (c.owned_singles || 0)) : 0
         totalMissingAlbums += missingAlbumCount + missingEpCount + missingSingleCount
       }
       const incompleteArtists = analyzedArtists - completeArtists
