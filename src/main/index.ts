@@ -43,6 +43,7 @@ import { getLiveMonitoringService } from './services/LiveMonitoringService'
 import { getTaskQueueService } from './services/TaskQueueService'
 import { getLoggingService } from './services/LoggingService'
 import { getAutoUpdateService } from './services/AutoUpdateService'
+import { getWishlistCompletionService } from './services/WishlistCompletionService'
 
 // __dirname is provided by CommonJS/Node
 declare const __dirname: string
@@ -344,6 +345,7 @@ app.whenReady().then(async () => {
       taskQueueService.setMainWindow(win)
       getLoggingService().setMainWindow(win)
       autoUpdateService.setMainWindow(win)
+      getWishlistCompletionService().setMainWindow(win)
     }
 
   } catch (error) {

@@ -643,6 +643,8 @@ export interface MusicFilters {
   sortOrder?: 'asc' | 'desc'
   // Alphabet filter
   alphabetFilter?: string
+  // Album type exclusion filter
+  excludeAlbumTypes?: string[]
 }
 
 // ============================================================================

@@ -213,6 +213,13 @@ export class BetterSQLiteService {
       }
     }
 
+    // Create indexes for performance
+    try {
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_items_tmdb_id ON media_items(tmdb_id) WHERE tmdb_id IS NOT NULL')
+    } catch {
+      // Index may already exist
+    }
+
     // Populate media_item_versions from existing media_items (one version per item)
     this.migrateExistingItemsToVersions()
 
@@ -1954,6 +1961,11 @@ export class BetterSQLiteService {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
       else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
     }
+    if (filters?.excludeAlbumTypes?.length) {
+      const placeholders = filters.excludeAlbumTypes.map(() => '?').join(',')
+      sql += ` AND (album_type IS NULL OR album_type NOT IN (${placeholders}))`
+      params.push(...filters.excludeAlbumTypes)
+    }
 
     const albumSortMap: Record<string, string> = { 'title': 'title', 'artist': 'artist_name', 'year': 'year', 'added_at': 'created_at' }
     const sortCol = albumSortMap[filters?.sortBy || ''] || 'artist_name'
@@ -1987,6 +1999,11 @@ export class BetterSQLiteService {
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
       else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
+    }
+    if (filters?.excludeAlbumTypes?.length) {
+      const placeholders = filters.excludeAlbumTypes.map(() => '?').join(',')
+      sql += ` AND (album_type IS NULL OR album_type NOT IN (${placeholders}))`
+      params.push(...filters.excludeAlbumTypes)
     }
     const stmt = this.db.prepare(sql)
     const row = stmt.get(...params) as { count: number } | undefined
@@ -3923,5 +3940,103 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       return !!this.db.prepare(sql).get(...params)
     }
     return false
+  }
+
+  // ============================================================================
+  // WISHLIST COMPLETION HELPERS
+  // ============================================================================
+
+  /**
+   * Get all active wishlist items (status = 'active')
+   */
+  getActiveWishlistItems(): WishlistItem[] {
+    return this.getWishlistItems({ status: 'active' })
+  }
+
+  /**
+   * Batch lookup media items by TMDB IDs
+   * Returns a Map of tmdb_id → MediaItem
+   */
+  getMediaItemsByTmdbIds(tmdbIds: string[]): Map<string, MediaItem> {
+    if (!this.db) throw new Error('Database not initialized')
+    const result = new Map<string, MediaItem>()
+    if (tmdbIds.length === 0) return result
+
+    // Process in batches of 500 to avoid SQLite variable limit
+    const batchSize = 500
+    for (let i = 0; i < tmdbIds.length; i += batchSize) {
+      const batch = tmdbIds.slice(i, i + batchSize)
+      const placeholders = batch.map(() => '?').join(',')
+      const stmt = this.db.prepare(`SELECT * FROM media_items WHERE tmdb_id IN (${placeholders})`)
+      const rows = stmt.all(...batch) as MediaItem[]
+      for (const row of rows) {
+        if (row.tmdb_id) result.set(row.tmdb_id, row)
+      }
+    }
+    return result
+  }
+
+  /**
+   * Check if any episodes exist for a given series title + season number
+   */
+  getEpisodeCountForSeason(seriesTitle: string, seasonNumber: number): number {
+    if (!this.db) throw new Error('Database not initialized')
+    const stmt = this.db.prepare(
+      "SELECT COUNT(*) as count FROM media_items WHERE type = 'episode' AND series_title = ? AND season_number = ?"
+    )
+    return (stmt.get(seriesTitle, seasonNumber) as { count: number }).count
+  }
+
+  /**
+   * Batch lookup music albums by MusicBrainz IDs
+   * Returns a Map of musicbrainz_id → MusicAlbum
+   */
+  getMusicAlbumsByMusicbrainzIds(ids: string[]): Map<string, MusicAlbum> {
+    if (!this.db) throw new Error('Database not initialized')
+    const result = new Map<string, MusicAlbum>()
+    if (ids.length === 0) return result
+
+    const batchSize = 500
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const batch = ids.slice(i, i + batchSize)
+      const placeholders = batch.map(() => '?').join(',')
+      const stmt = this.db.prepare(`SELECT * FROM music_albums WHERE musicbrainz_id IN (${placeholders})`)
+      const rows = stmt.all(...batch) as MusicAlbum[]
+      for (const row of rows) {
+        if (row.musicbrainz_id) result.set(row.musicbrainz_id, row)
+      }
+    }
+    return result
+  }
+
+  /**
+   * Lookup a single music track by MusicBrainz ID
+   */
+  getMusicTrackByMusicbrainzId(id: string): MusicTrack | null {
+    if (!this.db) throw new Error('Database not initialized')
+    const stmt = this.db.prepare('SELECT * FROM music_tracks WHERE musicbrainz_id = ? LIMIT 1')
+    return (stmt.get(id) as MusicTrack) || null
+  }
+
+  /**
+   * Batch lookup quality scores by media item IDs
+   * Returns a Map of media_item_id → QualityScore
+   */
+  getQualityScoresByMediaItemIds(ids: number[]): Map<number, QualityScore> {
+    if (!this.db) throw new Error('Database not initialized')
+    const result = new Map<number, QualityScore>()
+    if (ids.length === 0) return result
+
+    const batchSize = 500
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const batch = ids.slice(i, i + batchSize)
+      const placeholders = batch.map(() => '?').join(',')
+      const stmt = this.db.prepare(`SELECT * FROM quality_scores WHERE media_item_id IN (${placeholders})`)
+      const rows = stmt.all(...batch) as QualityScore[]
+      for (const row of rows) {
+        result.set(row.media_item_id, row)
+      }
+    }
+    return result
   }
 }

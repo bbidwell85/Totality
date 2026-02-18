@@ -589,6 +589,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('taskQueue:historyUpdated', handler)
     return () => ipcRenderer.removeListener('taskQueue:historyUpdated', handler)
   },
+  onWishlistAutoCompleted: (callback: (items: Array<{ id: number; title: string; reason: string; media_type: string }>) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, items: Array<{ id: number; title: string; reason: string; media_type: string }>) => callback(items)
+    ipcRenderer.on('wishlist:autoCompleted', handler)
+    return () => ipcRenderer.removeListener('wishlist:autoCompleted', handler)
+  },
 
   // General
   onMessage: (callback: (message: string) => void) => {
@@ -1701,6 +1706,7 @@ export interface ElectronAPI {
       taskType?: string
     }>
   }) => void) => () => void
+  onWishlistAutoCompleted: (callback: (items: Array<{ id: number; title: string; reason: string; media_type: string }>) => void) => () => void
 
   // General
   onMessage: (callback: (message: string) => void) => () => void

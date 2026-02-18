@@ -678,6 +678,15 @@ export class LiveMonitoringService {
       hasChanges: events.length > 0,
     })
 
+    // Check wishlist for auto-completion after items were added or updated
+    if (events.some((e) => e.changeType === 'added' || e.changeType === 'updated' || e.changeType === 'mixed')) {
+      import('./WishlistCompletionService').then(({ getWishlistCompletionService }) => {
+        getWishlistCompletionService().checkAndComplete().catch((err) => {
+          console.error('[LiveMonitoring] Wishlist completion check failed:', getErrorMessage(err))
+        })
+      })
+    }
+
     return events
   }
 
@@ -865,6 +874,15 @@ export class LiveMonitoringService {
       sourceId,
       hasChanges: events.length > 0,
     })
+
+    // Check wishlist for auto-completion after items were added or updated
+    if (events.some((e) => e.changeType === 'added' || e.changeType === 'updated' || e.changeType === 'mixed')) {
+      import('./WishlistCompletionService').then(({ getWishlistCompletionService }) => {
+        getWishlistCompletionService().checkAndComplete().catch((err) => {
+          console.error('[LiveMonitoring] Wishlist completion check failed:', getErrorMessage(err))
+        })
+      })
+    }
 
     return events
   }

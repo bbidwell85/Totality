@@ -184,6 +184,23 @@ export function useLibraryEventListeners({
       }
     })
 
+    // Listen for wishlist auto-completion
+    const cleanupWishlistAutoCompleted = window.electronAPI.onWishlistAutoCompleted?.((items) => {
+      if (items.length === 1) {
+        addToast({
+          type: 'success',
+          title: 'Wishlist item completed',
+          message: `"${items[0].title}" has been fulfilled`,
+        })
+      } else if (items.length > 1) {
+        addToast({
+          type: 'success',
+          title: `${items.length} wishlist items completed`,
+          message: items.map((i) => i.title).join(', '),
+        })
+      }
+    })
+
     // Listen for scan completion to show toast notification
     const cleanupScanCompleted = window.electronAPI.onScanCompleted?.((data) => {
       // Show toast notification
@@ -234,6 +251,7 @@ export function useLibraryEventListeners({
       cleanupTaskComplete?.()
       cleanupTaskQueueUpdated?.()
       cleanupSettingsChanged?.()
+      cleanupWishlistAutoCompleted?.()
       cleanupScanCompleted?.()
     }
   }, [

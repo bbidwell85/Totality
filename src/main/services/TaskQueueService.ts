@@ -25,6 +25,7 @@ import { KodiProvider } from '../providers/kodi/KodiProvider'
 import { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
 import { LocalFolderProvider } from '../providers/local/LocalFolderProvider'
 import type { ScanResult } from '../providers/base/MediaProvider'
+import { getWishlistCompletionService } from './WishlistCompletionService'
 
 // ============================================================================
 // Types
@@ -709,6 +710,13 @@ export class TaskQueueService {
         itemsScanned: task.result?.itemsScanned || 0,
         isFirstScan: task.result?.isFirstScan || false,
       })
+
+      // Check wishlist for auto-completion after items were added or updated
+      if ((task.result?.itemsAdded || 0) > 0 || (task.result?.itemsUpdated || 0) > 0) {
+        getWishlistCompletionService().checkAndComplete().catch((err) => {
+          console.error('[TaskQueue] Wishlist completion check failed:', getErrorMessage(err))
+        })
+      }
     }
   }
 

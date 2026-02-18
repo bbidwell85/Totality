@@ -94,24 +94,51 @@ function AppContent() {
     }
   }, [])
 
-  // Load music completeness stats
+  // Load music completeness stats with real-time EP/Singles filtering
   const loadMusicCompletenessData = useCallback(async () => {
     try {
-      const artistsData = await window.electronAPI.musicGetAllArtistCompleteness()
+      const [artistsData, epsVal, singlesVal] = await Promise.all([
+        window.electronAPI.musicGetAllArtistCompleteness(),
+        window.electronAPI.getSetting('completeness_include_eps'),
+        window.electronAPI.getSetting('completeness_include_singles'),
+      ])
       const artists = artistsData as Array<{
         completeness_percentage: number
         total_albums: number
         owned_albums: number
+        total_eps: number
+        owned_eps: number
+        total_singles: number
+        owned_singles: number
       }>
+      const epsEnabled = (epsVal as string) !== 'false'
+      const singlesEnabled = (singlesVal as string) !== 'false'
 
-      // Calculate music stats from artist data
+      // Recalculate stats from raw counts using current settings
       const totalArtists = artists.length
-      const completeArtists = artists.filter(a => a.completeness_percentage >= 100).length
+      let completeArtists = 0
+      let totalMissingAlbums = 0
+      let totalPctSum = 0
+      for (const a of artists) {
+        const totalItems = (a.total_albums || 0) * 3
+          + (epsEnabled ? (a.total_eps || 0) * 2 : 0)
+          + (singlesEnabled ? (a.total_singles || 0) : 0)
+        const ownedItems = (a.owned_albums || 0) * 3
+          + (epsEnabled ? (a.owned_eps || 0) * 2 : 0)
+          + (singlesEnabled ? (a.owned_singles || 0) : 0)
+        const pct = totalItems > 0 ? Math.round((ownedItems / totalItems) * 100) : 100
+        totalPctSum += pct
+        if (pct >= 100) completeArtists++
+
+        const missingAlbumCount = Math.max(0, (a.total_albums || 0) - (a.owned_albums || 0))
+        const missingEpCount = epsEnabled ? Math.max(0, (a.total_eps || 0) - (a.owned_eps || 0)) : 0
+        const missingSingleCount = singlesEnabled ? Math.max(0, (a.total_singles || 0) - (a.owned_singles || 0)) : 0
+        totalMissingAlbums += missingAlbumCount + missingEpCount + missingSingleCount
+      }
       const incompleteArtists = totalArtists - completeArtists
       const avgCompleteness = totalArtists > 0
-        ? artists.reduce((sum, a) => sum + a.completeness_percentage, 0) / totalArtists
+        ? Math.round(totalPctSum / totalArtists)
         : 0
-      const totalMissingAlbums = artists.reduce((sum, a) => sum + (a.total_albums - a.owned_albums), 0)
 
       setMusicCompletenessStats({
         totalArtists,

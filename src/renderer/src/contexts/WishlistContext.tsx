@@ -163,6 +163,14 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     loadWishlist()
   }, [loadWishlist])
 
+  // Listen for wishlist auto-completion events and refresh
+  useEffect(() => {
+    const cleanup = window.electronAPI.onWishlistAutoCompleted?.(() => {
+      loadWishlist()
+    })
+    return () => cleanup?.()
+  }, [loadWishlist])
+
   // Load region on mount
   useEffect(() => {
     loadRegion()

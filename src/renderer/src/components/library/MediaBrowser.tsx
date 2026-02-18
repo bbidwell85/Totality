@@ -199,6 +199,9 @@ export function MediaBrowser({
   const [musicCompletenessStats, setMusicCompletenessStats] = useState<MusicCompletenessStats | null>(null)
   const [artistCompleteness, setArtistCompleteness] = useState<Map<string, ArtistCompletenessData>>(new Map())
   const [allAlbumCompleteness, setAllAlbumCompleteness] = useState<Map<number, AlbumCompletenessData>>(new Map())
+  // EP/Singles inclusion settings (for real-time filtering)
+  const [includeEps, setIncludeEps] = useState(true)
+  const [includeSingles, setIncludeSingles] = useState(true)
   // isAnalyzing, analysisProgress, analysisType, tmdbApiKeySet, analysis handlers: see useAnalysisManager hook below
 
   // Collection modal state + helpers (extracted hook)
@@ -551,6 +554,10 @@ export function MediaBrowser({
       if (alphabetFilter) filters.alphabetFilter = alphabetFilter
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
       if (selectedArtist) filters.artistId = selectedArtist.id
+      const excludeTypes: string[] = []
+      if (!includeEps) excludeTypes.push('ep')
+      if (!includeSingles) excludeTypes.push('single')
+      if (excludeTypes.length > 0) filters.excludeAlbumTypes = excludeTypes
 
       const [albums, count] = await Promise.all([
         window.electronAPI.musicGetAlbums(filters),
@@ -570,7 +577,7 @@ export function MediaBrowser({
     } finally {
       setAlbumsLoading(false)
     }
-  }, [activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
+  }, [activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist, includeEps, includeSingles])
 
   // Load more albums (infinite scroll callback)
   const loadMoreAlbums = useCallback(() => {
@@ -593,7 +600,7 @@ export function MediaBrowser({
       loadPaginatedAlbums(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, selectedArtist])
+  }, [view, musicViewMode, activeSourceId, activeLibraryId, alphabetFilter, searchQuery, albumSortColumn, albumSortDirection, selectedArtist, includeEps, includeSingles])
 
   // Load paginated movies from server with current filters/sorting
   const loadPaginatedMovies = useCallback(async (reset = true) => {
@@ -831,23 +838,34 @@ export function MediaBrowser({
       })
       setAllAlbumCompleteness(albumCompletenessMap)
 
-      // Calculate stats
+      // Calculate stats with real-time EP/Singles filtering
       const totalArtists = musicStats?.totalArtists ?? musicArtists.length
       const analyzedArtists = completenessData.length
-      const completeArtists = completenessData.filter(c => c.completeness_percentage >= 100).length
+
+      // Recalculate completeness from raw counts using current settings
+      let completeArtists = 0
+      let totalMissingAlbums = 0
+      let totalPctSum = 0
+      for (const c of completenessData) {
+        const totalItems = (c.total_albums || 0) * 3
+          + (includeEps ? (c.total_eps || 0) * 2 : 0)
+          + (includeSingles ? (c.total_singles || 0) : 0)
+        const ownedItems = (c.owned_albums || 0) * 3
+          + (includeEps ? (c.owned_eps || 0) * 2 : 0)
+          + (includeSingles ? (c.owned_singles || 0) : 0)
+        const pct = totalItems > 0 ? Math.round((ownedItems / totalItems) * 100) : 100
+        totalPctSum += pct
+        if (pct >= 100) completeArtists++
+
+        const missingAlbumCount = Math.max(0, (c.total_albums || 0) - (c.owned_albums || 0))
+        const missingEpCount = includeEps ? Math.max(0, (c.total_eps || 0) - (c.owned_eps || 0)) : 0
+        const missingSingleCount = includeSingles ? Math.max(0, (c.total_singles || 0) - (c.owned_singles || 0)) : 0
+        totalMissingAlbums += missingAlbumCount + missingEpCount + missingSingleCount
+      }
       const incompleteArtists = analyzedArtists - completeArtists
 
-      // Count total missing albums
-      let totalMissingAlbums = 0
-      for (const c of completenessData) {
-        try {
-          const missingAlbums = JSON.parse(c.missing_albums || '[]')
-          totalMissingAlbums += missingAlbums.length
-        } catch { /* ignore */ }
-      }
-
       const avgCompleteness = analyzedArtists > 0
-        ? Math.round(completenessData.reduce((sum, c) => sum + c.completeness_percentage, 0) / analyzedArtists)
+        ? Math.round(totalPctSum / analyzedArtists)
         : 0
 
       setMusicCompletenessStats({
@@ -885,6 +903,16 @@ export function MediaBrowser({
     setActiveSource, markLibraryAsNew, addToast,
   })
 
+  // Load EP/Singles inclusion settings
+  const loadEpSingleSettings = async () => {
+    const [epsVal, singlesVal] = await Promise.all([
+      window.electronAPI.getSetting('completeness_include_eps'),
+      window.electronAPI.getSetting('completeness_include_singles'),
+    ])
+    setIncludeEps((epsVal as string) !== 'false')
+    setIncludeSingles((singlesVal as string) !== 'false')
+  }
+
   // Initial data load + reload on source change
   useEffect(() => {
     loadStats(activeSourceId || undefined).then(() => {
@@ -894,6 +922,7 @@ export function MediaBrowser({
     loadCompletenessData()
     loadMusicData()
     loadMusicCompletenessData()
+    loadEpSingleSettings()
     checkTmdbApiKey()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSourceId])
@@ -2100,6 +2129,8 @@ export function MediaBrowser({
                 await handleRescanItem(0, track.source_id, track.library_id || null, track.file_path)
               }
             }}
+            includeEps={includeEps}
+            includeSingles={includeSingles}
           />
         ))}
           </div>
@@ -2202,6 +2233,7 @@ export function MediaBrowser({
         analysisProgress={analysisProgress}
         analysisType={analysisType}
         onDataRefresh={() => {
+          loadEpSingleSettings()
           loadCompletenessData()
           loadMusicCompletenessData()
         }}
@@ -4065,7 +4097,9 @@ function MusicView({
   onArtistCompletenessUpdated,
   onFixArtistMatch,
   onFixAlbumMatch,
-  onRescanTrack
+  onRescanTrack,
+  includeEps,
+  includeSingles
 }: {
   artists: MusicArtist[]
   totalArtistCount: number
@@ -4108,6 +4142,8 @@ function MusicView({
   onFixArtistMatch?: (artistId: number, artistName: string) => void
   onFixAlbumMatch?: (albumId: number, albumTitle: string, artistName: string) => void
   onRescanTrack?: (track: MusicTrack) => Promise<void>
+  includeEps: boolean
+  includeSingles: boolean
 }) {
   const [isAnalyzingAlbum, setIsAnalyzingAlbum] = useState(false)
   const [isAnalyzingArtist, setIsAnalyzingArtist] = useState(false)
@@ -4342,8 +4378,16 @@ function MusicView({
       })
     }
 
+    // Filter by album type based on EP/Singles settings
+    if (!includeEps) {
+      filtered = filtered.filter(a => a.album_type !== 'ep')
+    }
+    if (!includeSingles) {
+      filtered = filtered.filter(a => a.album_type !== 'single')
+    }
+
     return filtered.sort((a, b) => (a.year || 0) - (b.year || 0))
-  }, [albums, selectedArtist, searchQuery, alphabetFilter])
+  }, [albums, selectedArtist, searchQuery, alphabetFilter, includeEps, includeSingles])
 
   // Albums are now filtered/sorted server-side via loadPaginatedAlbums
   const allFilteredAlbums = albums
