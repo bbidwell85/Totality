@@ -15,6 +15,7 @@ import { BrowserWindow } from 'electron'
 import * as chokidar from 'chokidar'
 import * as path from 'path'
 import * as fs from 'fs'
+import { execSync } from 'child_process'
 import { getDatabase } from '../database/getDatabase'
 import { getSourceManager } from './SourceManager'
 import { safeSend } from '../ipc/utils/safeSend'
@@ -35,16 +36,51 @@ const MEDIA_EXTENSIONS = new Set([
 ])
 
 /**
- * Detect if a path is likely a network/NAS path where native watchers are unreliable
+ * Cache of Windows network drive letters, detected once at startup via wmic.
+ * DriveType 4 = "Network Drive" in Win32_LogicalDisk.
+ */
+let networkDriveLetters: Set<string> | null = null
+
+function detectWindowsNetworkDrives(): Set<string> {
+  if (networkDriveLetters) return networkDriveLetters
+  networkDriveLetters = new Set()
+  if (process.platform !== 'win32') return networkDriveLetters
+  try {
+    const output = execSync('wmic logicaldisk get DeviceID,DriveType', {
+      encoding: 'utf-8',
+      timeout: 5000,
+      windowsHide: true,
+    })
+    // Output looks like:
+    // DeviceID  DriveType
+    // C:        3
+    // Z:        4
+    for (const line of output.split('\n')) {
+      const match = line.match(/^([A-Z]):?\s+(\d+)/)
+      if (match && match[2] === '4') {
+        networkDriveLetters.add(match[1])
+      }
+    }
+  } catch {
+    // wmic unavailable or timed out — fall back to empty set (treat all drives as local)
+  }
+  return networkDriveLetters
+}
+
+/**
+ * Detect if a path is likely a network/NAS path where native watchers are unreliable.
+ * On Windows, uses wmic to detect actual mapped network drives instead of guessing by letter.
  */
 function isNetworkPath(filePath: string): boolean {
   // Windows UNC paths: \\server\share
   if (filePath.startsWith('\\\\')) return true
 
-  // Windows mapped drives - treat non-C/D drives as potentially network
-  const driveLetter = filePath.match(/^([A-Za-z]):/)?.[1]?.toUpperCase()
-  if (driveLetter && !['C', 'D'].includes(driveLetter)) {
-    return true
+  // Windows mapped drives — check actual drive type via wmic
+  if (process.platform === 'win32') {
+    const driveLetter = filePath.match(/^([A-Za-z]):/)?.[1]?.toUpperCase()
+    if (driveLetter && detectWindowsNetworkDrives().has(driveLetter)) {
+      return true
+    }
   }
 
   // Linux/Mac network mounts
