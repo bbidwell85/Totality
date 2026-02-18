@@ -2032,10 +2032,10 @@ export class BetterSQLiteService {
   /**
    * Get music albums by artist name
    */
-  getMusicAlbumsByArtistName(artistName: string): MusicAlbum[] {
+  getMusicAlbumsByArtistName(artistName: string, limit = 500): MusicAlbum[] {
     if (!this.db) throw new Error('Database not initialized')
-    const stmt = this.db.prepare('SELECT * FROM music_albums WHERE artist_name = ?')
-    return stmt.all(artistName) as MusicAlbum[]
+    const stmt = this.db.prepare('SELECT * FROM music_albums WHERE artist_name = ? LIMIT ?')
+    return stmt.all(artistName, limit) as MusicAlbum[]
   }
 
   /**

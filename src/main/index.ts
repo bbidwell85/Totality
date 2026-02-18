@@ -296,7 +296,15 @@ app.whenReady().then(async () => {
       const filePath = path.resolve(artworkBasePath, normalizedPath)
 
       // Ensure resolved path is within the artwork directory
-      if (!filePath.startsWith(artworkBasePath + path.sep) && filePath !== artworkBasePath) {
+      // Use realpathSync to resolve symlinks before comparison
+      let realFilePath: string
+      try {
+        realFilePath = fs.existsSync(filePath) ? fs.realpathSync(filePath) : filePath
+      } catch {
+        return new Response('Forbidden', { status: 403 })
+      }
+      const realBasePath = fs.existsSync(artworkBasePath) ? fs.realpathSync(artworkBasePath) : artworkBasePath
+      if (!realFilePath.startsWith(realBasePath + path.sep) && realFilePath !== realBasePath) {
         console.warn('[Security] Blocked path escape attempt:', urlPath)
         return new Response('Forbidden', { status: 403 })
       }
