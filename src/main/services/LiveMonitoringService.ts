@@ -80,6 +80,7 @@ export class LiveMonitoringService {
   private static readonly WRITE_STABILITY_THRESHOLD_MS = 2000 // Wait for file writes to stabilize
   private static readonly CHOKIDAR_POLL_INTERVAL_MS = 500 // Poll interval for chokidar awaitWriteFinish
   private static readonly MAX_REASONABLE_CHANGES = 50 // Max file changes to process at once
+  private static readonly POLL_TIMEOUT_MS = 120000 // 2-minute timeout for polling a source
 
   /**
    * Initialize the monitoring service
@@ -102,10 +103,13 @@ export class LiveMonitoringService {
     for (const provider of providerTypes) {
       const interval = db.getSetting(`monitoring_interval_${provider}`)
       if (interval) {
-        this.config.pollingIntervals[provider] = Math.max(
-          parseInt(interval, 10),
-          LiveMonitoringService.MIN_POLL_INTERVAL_MS
-        )
+        const parsed = parseInt(interval, 10)
+        if (!Number.isNaN(parsed)) {
+          this.config.pollingIntervals[provider] = Math.max(
+            parsed,
+            LiveMonitoringService.MIN_POLL_INTERVAL_MS
+          )
+        }
       }
     }
 
@@ -726,7 +730,12 @@ export class LiveMonitoringService {
       this.emitDebugEvent('poll', `Polling: ${sourceName}`)
       this.lastCheckTimes.set(sourceId, new Date())
 
-      await this.checkSource(sourceId)
+      await Promise.race([
+        this.checkSource(sourceId),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Poll timed out for ${sourceName}`)), LiveMonitoringService.POLL_TIMEOUT_MS)
+        ),
+      ])
     } catch (error) {
       console.error(`[LiveMonitoring] Error polling ${sourceId}:`, error)
       this.emitDebugEvent('error', `Polling error: ${sourceId}`)

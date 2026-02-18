@@ -167,11 +167,17 @@ function runFFprobe(filePath: string): Promise<FFprobeOutput> {
 
     const proc = spawn(ffprobePath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 60000,
     })
 
     let stdout = ''
     let stderr = ''
+    let killed = false
+
+    // Explicit timeout to kill hung FFprobe processes (spawn timeout is unreliable)
+    const killTimer = setTimeout(() => {
+      killed = true
+      proc.kill('SIGKILL')
+    }, 60000)
 
     proc.stdout.on('data', (data) => {
       stdout += data.toString()
@@ -182,6 +188,11 @@ function runFFprobe(filePath: string): Promise<FFprobeOutput> {
     })
 
     proc.on('close', (code) => {
+      clearTimeout(killTimer)
+      if (killed) {
+        reject(new Error('FFprobe timed out after 60 seconds'))
+        return
+      }
       if (code === 0 && stdout) {
         try {
           const output = JSON.parse(stdout) as FFprobeOutput
@@ -195,6 +206,7 @@ function runFFprobe(filePath: string): Promise<FFprobeOutput> {
     })
 
     proc.on('error', (error) => {
+      clearTimeout(killTimer)
       reject(new Error(`Failed to run FFprobe: ${error.message}`))
     })
   })

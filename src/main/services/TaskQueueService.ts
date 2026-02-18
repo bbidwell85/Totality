@@ -108,9 +108,12 @@ export class TaskQueueService {
   private monitoringHistory: ActivityLogEntry[] = []
   private cancelRequested = false
   private monitoringWasPausedByUs = false // Track if we paused monitoring
+  private progressThrottleTimer: NodeJS.Timeout | null = null
+  private progressUpdatePending = false
 
   private static readonly MAX_COMPLETED_TASKS = 50
   private static readonly MAX_HISTORY_ENTRIES = 100
+  private static readonly PROGRESS_THROTTLE_MS = 250 // Max ~4 progress events/second
 
   /**
    * Set the main window reference for IPC events
@@ -427,7 +430,7 @@ export class TaskQueueService {
         phase: progress.phase ?? 'processing',
         currentItem: progress.currentItem,
       }
-      this.emitQueueUpdate()
+      this.emitProgressUpdate()
     }
 
     switch (task.type) {
@@ -694,6 +697,25 @@ export class TaskQueueService {
 
   private emitQueueUpdate(): void {
     this.sendToRenderer('taskQueue:updated', this.getQueueState())
+  }
+
+  /**
+   * Throttled version of emitQueueUpdate for progress events.
+   * Limits IPC sends to avoid flooding the renderer during large scans.
+   */
+  private emitProgressUpdate(): void {
+    if (this.progressThrottleTimer) {
+      this.progressUpdatePending = true
+      return
+    }
+    this.emitQueueUpdate()
+    this.progressThrottleTimer = setTimeout(() => {
+      this.progressThrottleTimer = null
+      if (this.progressUpdatePending) {
+        this.progressUpdatePending = false
+        this.emitQueueUpdate()
+      }
+    }, TaskQueueService.PROGRESS_THROTTLE_MS)
   }
 
   private emitTaskComplete(task: QueuedTask): void {

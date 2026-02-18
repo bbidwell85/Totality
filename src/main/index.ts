@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, net, dialog, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, net, dialog, Tray, Menu, nativeImage, session } from 'electron'
 import path from 'node:path'
 import * as fs from 'fs'
 
@@ -153,6 +153,28 @@ function createWindow() {
       event.preventDefault()
       win?.hide()
     }
+  })
+
+  // Content Security Policy — defense-in-depth against XSS
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const isDev = !!VITE_DEV_SERVER_URL
+    const csp = [
+      "default-src 'self'",
+      // unsafe-inline needed for Tailwind; unsafe-eval needed for Vite HMR in dev
+      `style-src 'self' 'unsafe-inline'`,
+      `script-src 'self'${isDev ? " 'unsafe-inline' 'unsafe-eval'" : ''}`,
+      // TMDB posters, provider artwork, local-artwork protocol, data URIs
+      "img-src 'self' https: local-artwork: data:",
+      // API calls to Plex, Jellyfin, Emby, TMDB, MusicBrainz; ws: for Vite HMR in dev
+      `connect-src 'self' https: http:${isDev ? ' ws:' : ''}`,
+      "font-src 'self' data:",
+    ]
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp.join('; ')],
+      },
+    })
   })
 
   if (VITE_DEV_SERVER_URL) {

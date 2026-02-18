@@ -9,12 +9,13 @@ import { getErrorMessage } from './utils/errorUtils'
  */
 
 import { spawn } from 'child_process'
+import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as http from 'http'
 import * as https from 'https'
 import { app } from 'electron'
-import { createWriteStream, mkdirSync } from 'fs'
+import { createWriteStream, mkdirSync, readFileSync } from 'fs'
 import { pipeline } from 'stream/promises'
 
 // FFprobe JSON output types
@@ -483,10 +484,20 @@ export class MediaFileAnalyzer {
 
       onProgress?.({ stage: 'Verifying installation...', percent: 90 })
 
-      // Verify it works
-      const works = await this.testFFprobe(finalPath)
+      // Compute and log SHA-256 hash of extracted binary for audit
+      const binaryHash = this.computeFileHash(finalPath)
+      console.log(`[MediaFileAnalyzer] FFprobe binary SHA-256: ${binaryHash}`)
+
+      // Verify minimum binary size (real FFprobe is at least 1MB)
+      const binarySize = fs.statSync(finalPath).size
+      if (binarySize < 1_000_000) {
+        throw new Error(`FFprobe binary is suspiciously small (${binarySize} bytes)`)
+      }
+
+      // Verify it runs and identifies itself as ffprobe
+      const works = await this.verifyFFprobeBinary(finalPath)
       if (!works) {
-        throw new Error('FFprobe was installed but failed verification')
+        throw new Error('FFprobe was installed but failed verification — binary may be corrupted or tampered')
       }
 
       // Update our cached path
@@ -926,6 +937,39 @@ export class MediaFileAnalyzer {
 
       proc.on('close', (code) => {
         resolve(code === 0)
+      })
+
+      proc.on('error', () => {
+        resolve(false)
+      })
+    })
+  }
+
+  /**
+   * Compute SHA-256 hash of a file (for audit logging)
+   */
+  private computeFileHash(filePath: string): string {
+    const data = readFileSync(filePath)
+    return crypto.createHash('sha256').update(data).digest('hex')
+  }
+
+  /**
+   * Stricter verification: run ffprobe -version and check output contains "ffprobe"
+   */
+  private async verifyFFprobeBinary(probePath: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const proc = spawn(probePath, ['-version'], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 5000,
+      })
+
+      let stdout = ''
+      proc.stdout.on('data', (data) => {
+        stdout += data.toString()
+      })
+
+      proc.on('close', (code) => {
+        resolve(code === 0 && stdout.toLowerCase().includes('ffprobe'))
       })
 
       proc.on('error', () => {
