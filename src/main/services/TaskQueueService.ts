@@ -39,7 +39,7 @@ export type TaskType =
   | 'music-completeness'
   | 'music-scan'
 
-export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
 
 export interface TaskProgress {
   current: number
@@ -87,7 +87,7 @@ export interface QueueState {
 export interface ActivityLogEntry {
   id: string
   timestamp: string
-  type: 'task-complete' | 'task-failed' | 'task-cancelled' | 'monitoring'
+  type: 'task-complete' | 'task-failed' | 'task-cancelled' | 'task-interrupted' | 'monitoring'
   message: string
   taskId?: string
   taskType?: TaskType
@@ -277,6 +277,14 @@ export class TaskQueueService {
       this.monitoringHistory = this.monitoringHistory.slice(0, TaskQueueService.MAX_HISTORY_ENTRIES)
     }
 
+    // Persist to database
+    try {
+      const db = getDatabase()
+      db.saveActivityLogEntry({ entryType: 'monitoring', message })
+    } catch (err) {
+      console.error('[TaskQueue] Failed to persist monitoring event:', getErrorMessage(err))
+    }
+
     this.emitHistoryUpdate()
   }
 
@@ -286,6 +294,7 @@ export class TaskQueueService {
   clearTaskHistory(): void {
     this.taskHistory = []
     this.completedTasks = []
+    try { getDatabase().clearTaskHistory() } catch { /* silent */ }
     this.emitHistoryUpdate()
     this.emitQueueUpdate()
   }
@@ -295,7 +304,93 @@ export class TaskQueueService {
    */
   clearMonitoringHistory(): void {
     this.monitoringHistory = []
+    try { getDatabase().clearActivityLog('monitoring') } catch { /* silent */ }
     this.emitHistoryUpdate()
+  }
+
+  /**
+   * Load persisted task history from database on startup
+   */
+  loadPersistedHistory(): void {
+    try {
+      const db = getDatabase()
+
+      const dbTasks = db.getTaskHistory(TaskQueueService.MAX_COMPLETED_TASKS)
+      this.completedTasks = dbTasks.map((row: { taskId: string; type: string; label: string; sourceId: string | null; libraryId: string | null; status: string; error: string | null; result: string | null; createdAt: string; startedAt: string | null; completedAt: string | null }) => ({
+        id: row.taskId,
+        type: row.type as TaskType,
+        label: row.label,
+        sourceId: row.sourceId || undefined,
+        libraryId: row.libraryId || undefined,
+        status: row.status as TaskStatus,
+        error: row.error || undefined,
+        result: row.result ? JSON.parse(row.result) : undefined,
+        createdAt: row.createdAt,
+        startedAt: row.startedAt || undefined,
+        completedAt: row.completedAt || undefined,
+      }))
+
+      const taskEntries = db.getActivityLog('task', TaskQueueService.MAX_HISTORY_ENTRIES)
+      this.taskHistory = taskEntries.map((row: { id: number; entryType: string; message: string; taskId: string | null; taskType: string | null; createdAt: string }) => ({
+        id: `db_${row.id}`,
+        timestamp: row.createdAt,
+        type: row.entryType as ActivityLogEntry['type'],
+        message: row.message,
+        taskId: row.taskId || undefined,
+        taskType: (row.taskType as TaskType) || undefined,
+      }))
+
+      const monEntries = db.getActivityLog('monitoring', TaskQueueService.MAX_HISTORY_ENTRIES)
+      this.monitoringHistory = monEntries.map((row: { id: number; entryType: string; message: string; createdAt: string }) => ({
+        id: `db_${row.id}`,
+        timestamp: row.createdAt,
+        type: 'monitoring' as const,
+        message: row.message,
+      }))
+
+      console.log(`[TaskQueue] Loaded ${this.completedTasks.length} tasks, ${this.taskHistory.length} task events, ${this.monitoringHistory.length} monitoring events from DB`)
+    } catch (err) {
+      console.error('[TaskQueue] Failed to load persisted history:', getErrorMessage(err))
+    }
+  }
+
+  /**
+   * Persist any in-flight or queued tasks as interrupted on app shutdown
+   */
+  persistInterruptedTasks(): void {
+    const now = new Date().toISOString()
+    try {
+      const db = getDatabase()
+
+      if (this.currentTask) {
+        db.saveTaskHistory({
+          taskId: this.currentTask.id, type: this.currentTask.type, label: this.currentTask.label,
+          sourceId: this.currentTask.sourceId, libraryId: this.currentTask.libraryId,
+          status: 'interrupted', createdAt: this.currentTask.createdAt,
+          startedAt: this.currentTask.startedAt, completedAt: now,
+        })
+        db.saveActivityLogEntry({
+          entryType: 'task-interrupted',
+          message: `Interrupted (app quit): ${this.currentTask.label}`,
+          taskId: this.currentTask.id, taskType: this.currentTask.type,
+        })
+      }
+
+      for (const task of this.queue) {
+        db.saveTaskHistory({
+          taskId: task.id, type: task.type, label: task.label,
+          sourceId: task.sourceId, libraryId: task.libraryId,
+          status: 'interrupted', createdAt: task.createdAt, completedAt: now,
+        })
+        db.saveActivityLogEntry({
+          entryType: 'task-interrupted',
+          message: `Interrupted (app quit, was queued): ${task.label}`,
+          taskId: task.id, taskType: task.type,
+        })
+      }
+    } catch (err) {
+      console.error('[TaskQueue] Failed to persist interrupted tasks:', getErrorMessage(err))
+    }
   }
 
   /**
@@ -387,6 +482,21 @@ export class TaskQueueService {
     }
 
     task.completedAt = new Date().toISOString()
+
+    // Persist completed task to database
+    try {
+      const db = getDatabase()
+      db.saveTaskHistory({
+        taskId: task.id, type: task.type, label: task.label,
+        sourceId: task.sourceId, libraryId: task.libraryId,
+        status: task.status, error: task.error,
+        result: task.result as Record<string, unknown> | undefined,
+        createdAt: task.createdAt, startedAt: task.startedAt,
+        completedAt: task.completedAt,
+      })
+    } catch (err) {
+      console.error('[TaskQueue] Failed to persist task history:', getErrorMessage(err))
+    }
 
     // Add to completed tasks
     this.completedTasks.unshift(task)
@@ -686,6 +796,14 @@ export class TaskQueueService {
     this.taskHistory.unshift(entry)
     if (this.taskHistory.length > TaskQueueService.MAX_HISTORY_ENTRIES) {
       this.taskHistory = this.taskHistory.slice(0, TaskQueueService.MAX_HISTORY_ENTRIES)
+    }
+
+    // Persist to database
+    try {
+      const db = getDatabase()
+      db.saveActivityLogEntry({ entryType: type, message, taskId: task.id, taskType: task.type })
+    } catch (err) {
+      console.error('[TaskQueue] Failed to persist activity log entry:', getErrorMessage(err))
     }
 
     this.emitHistoryUpdate()

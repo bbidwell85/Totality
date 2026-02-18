@@ -13,7 +13,14 @@ import { getLiveMonitoringService } from '../services/LiveMonitoringService'
 import { getDatabase } from '../database/getDatabase'
 import { getErrorMessage } from './utils'
 import { validateInput, BooleanSchema } from '../validation/schemas'
+import type { LogLevel } from '../services/LoggingService'
 import { z } from 'zod'
+
+const FileLoggingSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  minLevel: z.enum(['verbose', 'debug', 'info', 'warn', 'error']).optional(),
+  retentionDays: z.number().int().min(1).max(365).optional(),
+})
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -116,6 +123,25 @@ export function registerLoggingHandlers(): void {
 
   ipcMain.handle('logs:isVerbose', async () => {
     return getLoggingService().isVerboseEnabled()
+  })
+
+  ipcMain.handle('logs:getFileLoggingSettings', async () => {
+    const db = getDatabase()
+    return {
+      enabled: db.getSetting('file_logging_enabled') !== 'false',
+      minLevel: (db.getSetting('file_logging_min_level') || 'info') as LogLevel,
+      retentionDays: parseInt(db.getSetting('log_retention_days') || '7', 10),
+    }
+  })
+
+  ipcMain.handle('logs:setFileLoggingSettings', async (_event, settings: unknown) => {
+    const valid = validateInput(FileLoggingSettingsSchema, settings, 'logs:setFileLoggingSettings')
+    const db = getDatabase()
+    if (valid.enabled !== undefined) db.saveSetting('file_logging_enabled', String(valid.enabled))
+    if (valid.minLevel !== undefined) db.saveSetting('file_logging_min_level', valid.minLevel)
+    if (valid.retentionDays !== undefined) db.saveSetting('log_retention_days', String(valid.retentionDays))
+    getLoggingService().updateFileLoggingSettings(valid)
+    return { success: true }
   })
 
   ipcMain.handle('logs:export', async () => {

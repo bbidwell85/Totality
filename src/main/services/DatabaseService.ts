@@ -4740,6 +4740,127 @@ export class DatabaseService {
 
     return false
   }
+
+  // ============================================================================
+  // TASK QUEUE HISTORY
+  // ============================================================================
+
+  saveTaskHistory(task: {
+    taskId: string
+    type: string
+    label: string
+    sourceId?: string
+    libraryId?: string
+    status: string
+    error?: string
+    result?: Record<string, unknown>
+    createdAt: string
+    startedAt?: string
+    completedAt?: string
+  }): void {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const durationMs = task.startedAt && task.completedAt
+      ? new Date(task.completedAt).getTime() - new Date(task.startedAt).getTime()
+      : null
+
+    this.db.run(
+      `INSERT INTO task_history (task_id, type, label, source_id, library_id, status, error, result, created_at, started_at, completed_at, duration_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [task.taskId, task.type, task.label,
+       task.sourceId || null, task.libraryId || null,
+       task.status, task.error || null,
+       task.result ? JSON.stringify(task.result) : null,
+       task.createdAt, task.startedAt || null,
+       task.completedAt || null, durationMs]
+    )
+
+    this.db.run(`
+      DELETE FROM task_history WHERE id NOT IN (
+        SELECT id FROM task_history ORDER BY recorded_at DESC LIMIT 200
+      )
+    `)
+    this.save()
+  }
+
+  getTaskHistory(limit = 50, offset = 0): Array<{
+    taskId: string; type: string; label: string; sourceId: string | null
+    libraryId: string | null; status: string; error: string | null
+    result: string | null; createdAt: string; startedAt: string | null
+    completedAt: string | null; durationMs: number | null
+  }> {
+    if (!this.db) throw new Error('Database not initialized')
+    const result = this.db.exec(
+      'SELECT task_id, type, label, source_id, library_id, status, error, result, created_at, started_at, completed_at, duration_ms FROM task_history ORDER BY recorded_at DESC LIMIT ? OFFSET ?',
+      [limit, offset]
+    )
+    if (!result.length) return []
+    return result[0].values.map((r: unknown[]) => ({
+      taskId: r[0] as string, type: r[1] as string, label: r[2] as string,
+      sourceId: r[3] as string | null, libraryId: r[4] as string | null,
+      status: r[5] as string, error: r[6] as string | null, result: r[7] as string | null,
+      createdAt: r[8] as string, startedAt: r[9] as string | null,
+      completedAt: r[10] as string | null, durationMs: r[11] as number | null,
+    }))
+  }
+
+  saveActivityLogEntry(entry: {
+    entryType: string
+    message: string
+    taskId?: string
+    taskType?: string
+  }): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.run(
+      'INSERT INTO activity_log (entry_type, message, task_id, task_type) VALUES (?, ?, ?, ?)',
+      [entry.entryType, entry.message, entry.taskId || null, entry.taskType || null]
+    )
+    this.db.run(`
+      DELETE FROM activity_log WHERE id NOT IN (
+        SELECT id FROM activity_log ORDER BY created_at DESC LIMIT 500
+      )
+    `)
+    this.save()
+  }
+
+  getActivityLog(entryType?: string, limit = 100, offset = 0): Array<{
+    id: number; entryType: string; message: string
+    taskId: string | null; taskType: string | null; createdAt: string
+  }> {
+    if (!this.db) throw new Error('Database not initialized')
+    let sql = 'SELECT id, entry_type, message, task_id, task_type, created_at FROM activity_log'
+    const params: (string | number | null)[] = []
+    if (entryType) {
+      sql += ' WHERE entry_type LIKE ?'
+      params.push(entryType + '%')
+    }
+    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    params.push(limit, offset)
+    const result = this.db.exec(sql, params)
+    if (!result.length) return []
+    return result[0].values.map((r: unknown[]) => ({
+      id: r[0] as number, entryType: r[1] as string, message: r[2] as string,
+      taskId: r[3] as string | null, taskType: r[4] as string | null,
+      createdAt: r[5] as string,
+    }))
+  }
+
+  clearTaskHistory(): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.run('DELETE FROM task_history')
+    this.db.run("DELETE FROM activity_log WHERE entry_type LIKE 'task-%'")
+    this.save()
+  }
+
+  clearActivityLog(entryType?: string): void {
+    if (!this.db) throw new Error('Database not initialized')
+    if (entryType) {
+      this.db.run('DELETE FROM activity_log WHERE entry_type LIKE ?', [entryType + '%'])
+    } else {
+      this.db.run('DELETE FROM activity_log')
+    }
+    this.save()
+  }
 }
 
 // Export singleton instance

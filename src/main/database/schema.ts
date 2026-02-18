@@ -622,6 +622,42 @@ CREATE TABLE IF NOT EXISTS exclusions (
 CREATE INDEX IF NOT EXISTS idx_exclusions_type_ref ON exclusions(exclusion_type, reference_id);
 CREATE INDEX IF NOT EXISTS idx_exclusions_type_key ON exclusions(exclusion_type, reference_key, parent_key);
 
+-- ============================================================================
+-- TASK QUEUE HISTORY
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS task_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  label TEXT NOT NULL,
+  source_id TEXT,
+  library_id TEXT,
+  status TEXT NOT NULL CHECK(status IN ('completed', 'failed', 'cancelled', 'interrupted')),
+  error TEXT,
+  result TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  completed_at TEXT,
+  duration_ms INTEGER,
+  recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS activity_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entry_type TEXT NOT NULL,
+  message TEXT NOT NULL,
+  task_id TEXT,
+  task_type TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_history_status ON task_history(status);
+CREATE INDEX IF NOT EXISTS idx_task_history_recorded ON task_history(recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_task_history_source ON task_history(source_id);
+CREATE INDEX IF NOT EXISTS idx_activity_log_type ON activity_log(entry_type);
+CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at DESC);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_library_scans_source ON library_scans(source_id);
 CREATE INDEX IF NOT EXISTS idx_library_scans_lookup ON library_scans(source_id, library_id);
@@ -843,5 +879,10 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
 
   -- Window behavior
   ('minimize_to_tray', 'false'),
-  ('start_minimized_to_tray', 'false');
+  ('start_minimized_to_tray', 'false'),
+
+  -- File logging
+  ('file_logging_enabled', 'true'),
+  ('file_logging_min_level', 'info'),
+  ('log_retention_days', '7');
 `

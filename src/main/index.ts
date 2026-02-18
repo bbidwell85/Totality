@@ -236,6 +236,12 @@ app.on('before-quit', async (event) => {
   // Cleanup auto-update timers
   getAutoUpdateService().cleanup()
 
+  // Flush log buffer to disk
+  await getLoggingService().shutdown()
+
+  // Persist any in-flight tasks as interrupted
+  getTaskQueueService().persistInterruptedTasks()
+
   // Close database
   const db = getDatabaseServiceSync()
   await db.close()
@@ -328,6 +334,9 @@ app.whenReady().then(async () => {
     await db.initialize()
     console.log(`Database initialized successfully (backend: ${getDatabaseBackend()})`)
 
+    // Initialize file-based logging (requires database for settings)
+    await getLoggingService().initializeFileLogging()
+
     // Initialize source manager (loads providers from database)
     const sourceManager = getSourceManager()
     await sourceManager.initialize()
@@ -361,8 +370,9 @@ app.whenReady().then(async () => {
       win?.hide()
     }
 
-    // Initialize task queue service
+    // Initialize task queue service and load persisted history
     const taskQueueService = getTaskQueueService()
+    taskQueueService.loadPersistedHistory()
     console.log('Task queue service initialized')
 
     // Initialize auto-update service

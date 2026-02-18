@@ -11,6 +11,7 @@
 import { BrowserWindow, app } from 'electron'
 import { safeSend } from '../ipc/utils/safeSend'
 import * as fs from 'fs/promises'
+import * as path from 'path'
 import * as os from 'os'
 
 export type LogLevel = 'verbose' | 'debug' | 'info' | 'warn' | 'error'
@@ -55,6 +56,22 @@ class LoggingService {
     info: typeof console.info
     debug: typeof console.debug
   }
+
+  // File logging
+  private fileLoggingEnabled = false // Starts false until initializeFileLogging()
+  private fileLoggingMinLevel: LogLevel = 'info'
+  private logRetentionDays = 7
+  private logDir = ''
+  private writeBuffer: string[] = []
+  private flushTimer: NodeJS.Timeout | null = null
+  private isWriting = false
+  private currentLogDate = ''
+
+  private static readonly LEVEL_PRIORITY: Record<LogLevel, number> = {
+    verbose: 0, debug: 1, info: 2, warn: 3, error: 4,
+  }
+  private static readonly FLUSH_INTERVAL_MS = 5000
+  private static readonly FLUSH_BUFFER_SIZE = 50
 
   constructor() {
     // Store original console methods
@@ -166,6 +183,9 @@ class LoggingService {
     if (this.mainWindow) {
       safeSend(this.mainWindow, 'logs:new', entry)
     }
+
+    // Append to file buffer
+    this.appendToFileBuffer(entry)
   }
 
   // Getter to merge both buffers sorted by timestamp
@@ -239,6 +259,140 @@ class LoggingService {
     }
 
     await fs.writeFile(filePath, JSON.stringify(exportData, null, 2), 'utf-8')
+  }
+
+  // ============================================================================
+  // File Logging
+  // ============================================================================
+
+  /**
+   * Initialize file-based logging. Call after database is ready.
+   */
+  async initializeFileLogging(): Promise<void> {
+    try {
+      this.logDir = path.join(app.getPath('userData'), 'logs')
+      this.loadFileLoggingSettings()
+
+      if (!this.fileLoggingEnabled) {
+        this.originalConsole.log('[LoggingService] File logging disabled')
+        return
+      }
+
+      await fs.mkdir(this.logDir, { recursive: true })
+      this.rotateLogFiles().catch(() => {})
+      this.flushTimer = setInterval(() => this.flushBuffer(), LoggingService.FLUSH_INTERVAL_MS)
+
+      this.originalConsole.log(`[LoggingService] File logging initialized: ${this.logDir}`)
+    } catch (err) {
+      this.originalConsole.error('[LoggingService] Failed to initialize file logging:', err)
+      this.fileLoggingEnabled = false
+    }
+  }
+
+  private loadFileLoggingSettings(): void {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getDatabase } = require('../database/getDatabase')
+      const db = getDatabase()
+      const enabled = db.getSetting('file_logging_enabled')
+      const minLevel = db.getSetting('file_logging_min_level')
+      const retention = db.getSetting('log_retention_days')
+
+      if (enabled !== null) this.fileLoggingEnabled = enabled !== 'false'
+      if (minLevel && minLevel in LoggingService.LEVEL_PRIORITY) {
+        this.fileLoggingMinLevel = minLevel as LogLevel
+      }
+      if (retention) this.logRetentionDays = parseInt(retention, 10) || 7
+    } catch {
+      // DB may not be ready; use defaults (file logging stays disabled)
+    }
+  }
+
+  private appendToFileBuffer(entry: LogEntry): void {
+    if (!this.fileLoggingEnabled || !this.logDir) return
+
+    if (LoggingService.LEVEL_PRIORITY[entry.level] < LoggingService.LEVEL_PRIORITY[this.fileLoggingMinLevel]) {
+      return
+    }
+
+    const level = entry.level.toUpperCase().padEnd(7)
+    let line = `${entry.timestamp} [${level}] ${entry.source} ${entry.message}`
+    if (entry.details) {
+      line += `\n  ${entry.details.replace(/\n/g, '\n  ')}`
+    }
+    this.writeBuffer.push(line + '\n')
+
+    if (this.writeBuffer.length >= LoggingService.FLUSH_BUFFER_SIZE) {
+      this.flushBuffer()
+    }
+  }
+
+  private async flushBuffer(): Promise<void> {
+    if (this.writeBuffer.length === 0 || this.isWriting) return
+
+    this.isWriting = true
+    const lines = this.writeBuffer.splice(0)
+
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const logFile = path.join(this.logDir, `totality-${today}.log`)
+
+      if (today !== this.currentLogDate) {
+        this.currentLogDate = today
+        this.rotateLogFiles().catch(() => {})
+      }
+
+      await fs.appendFile(logFile, lines.join(''), 'utf-8')
+    } catch (err) {
+      this.originalConsole.error('[LoggingService] Failed to write log file:', err)
+    } finally {
+      this.isWriting = false
+    }
+  }
+
+  private async rotateLogFiles(): Promise<void> {
+    try {
+      const files = await fs.readdir(this.logDir)
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - this.logRetentionDays)
+
+      for (const file of files) {
+        if (!file.startsWith('totality-') || !file.endsWith('.log')) continue
+        const dateStr = file.replace('totality-', '').replace('.log', '')
+        const fileDate = new Date(dateStr + 'T00:00:00Z')
+        if (isNaN(fileDate.getTime())) continue
+        if (fileDate < cutoff) {
+          await fs.unlink(path.join(this.logDir, file))
+          this.originalConsole.log(`[LoggingService] Deleted old log file: ${file}`)
+        }
+      }
+    } catch (err) {
+      this.originalConsole.error('[LoggingService] Failed to rotate log files:', err)
+    }
+  }
+
+  /**
+   * Flush buffer and stop file logging (for shutdown)
+   */
+  async shutdown(): Promise<void> {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer)
+      this.flushTimer = null
+    }
+    await this.flushBuffer()
+  }
+
+  /**
+   * Update file logging settings at runtime
+   */
+  updateFileLoggingSettings(settings: {
+    enabled?: boolean
+    minLevel?: LogLevel
+    retentionDays?: number
+  }): void {
+    if (settings.enabled !== undefined) this.fileLoggingEnabled = settings.enabled
+    if (settings.minLevel !== undefined) this.fileLoggingMinLevel = settings.minLevel
+    if (settings.retentionDays !== undefined) this.logRetentionDays = settings.retentionDays
   }
 
   // For plain text export (more readable)

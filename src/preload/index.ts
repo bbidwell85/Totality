@@ -637,6 +637,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportLogs: () => ipcRenderer.invoke('logs:export'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('logs:setVerbose', enabled),
   isVerboseLogging: () => ipcRenderer.invoke('logs:isVerbose'),
+  getFileLoggingSettings: () => ipcRenderer.invoke('logs:getFileLoggingSettings'),
+  setFileLoggingSettings: (settings: { enabled?: boolean; minLevel?: string; retentionDays?: number }) =>
+    ipcRenderer.invoke('logs:setFileLoggingSettings', settings),
   onNewLog: (callback: (entry: { id: string; timestamp: string; level: 'verbose' | 'debug' | 'info' | 'warn' | 'error'; source: string; message: string; details?: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, entry: { id: string; timestamp: string; level: 'verbose' | 'debug' | 'info' | 'warn' | 'error'; source: string; message: string; details?: string }) => callback(entry)
     ipcRenderer.on('logs:new', handler)
@@ -1747,6 +1750,8 @@ export interface ElectronAPI {
   }>
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>
   isVerboseLogging: () => Promise<boolean>
+  getFileLoggingSettings: () => Promise<{ enabled: boolean; minLevel: string; retentionDays: number }>
+  setFileLoggingSettings: (settings: { enabled?: boolean; minLevel?: string; retentionDays?: number }) => Promise<{ success: boolean }>
   onNewLog?: (callback: (entry: { id: string; timestamp: string; level: 'verbose' | 'debug' | 'info' | 'warn' | 'error'; source: string; message: string; details?: string }) => void) => () => void
 }
 
