@@ -284,6 +284,16 @@ export function Dashboard({
     loadDashboardData()
   }, [loadDashboardData])
 
+  // Reload dashboard when EP/Singles settings change
+  useEffect(() => {
+    const cleanup = window.electronAPI.onSettingsChanged?.((data) => {
+      if (data.key === 'completeness_include_eps' || data.key === 'completeness_include_singles') {
+        loadDashboardData()
+      }
+    })
+    return () => cleanup?.()
+  }, [loadDashboardData])
+
   // Parse functions for missing items with basic validation
   const parseMissingMovies = useCallback((collection: MovieCollectionData): MissingMovie[] => {
     if (!collection.missing_movies) return []

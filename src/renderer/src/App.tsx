@@ -190,11 +190,19 @@ function AppContent() {
       }
     })
 
+    // Listen for EP/Singles settings changes to refresh music stats
+    const cleanupSettingsChanged = window.electronAPI.onSettingsChanged?.((data) => {
+      if (data.key === 'completeness_include_eps' || data.key === 'completeness_include_singles') {
+        loadMusicCompletenessData()
+      }
+    })
+
     return () => {
       cleanupSeriesProgress()
       cleanupCollectionsProgress()
       cleanupMusicProgress()
       cleanupTaskQueue()
+      cleanupSettingsChanged?.()
     }
   }, [loadCompletenessData, loadMusicCompletenessData])
 
