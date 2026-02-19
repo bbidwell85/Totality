@@ -1433,6 +1433,24 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       if (edition) labelParts.push(edition)
       const label = labelParts.join(' ')
 
+      // Emby/Jellyfin videoStream.BitRate often reports the container bitrate
+      // (video + audio) rather than the video-only bitrate. Detect this by
+      // comparing against mediaSource.Bitrate and subtract audio when needed.
+      const containerBps = mediaSource.Bitrate || 0
+      const streamVideoBps = videoStream.BitRate || 0
+      const totalAudioBps = audioTracks.reduce((sum, t) => sum + ((t.bitrate || 0) * 1000), 0)
+
+      let videoBps: number
+      if (streamVideoBps > 0 && containerBps > 0 && streamVideoBps < containerBps * 0.85) {
+        // Stream bitrate is well below container — it's the actual video bitrate
+        videoBps = streamVideoBps
+      } else if (containerBps > 0 && totalAudioBps > 0) {
+        // Stream bitrate matches container or is missing — subtract audio
+        videoBps = Math.max(0, (streamVideoBps || containerBps) - totalAudioBps)
+      } else {
+        videoBps = streamVideoBps || containerBps
+      }
+
       versions.push({
         version_source: `jellyfin_source_${mediaSource.Id}`,
         edition,
@@ -1445,7 +1463,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         width,
         height,
         video_codec: normalizeVideoCodec(videoStream.Codec),
-        video_bitrate: normalizeBitrate(videoStream.BitRate || mediaSource.Bitrate, 'bps'),
+        video_bitrate: normalizeBitrate(videoBps, 'bps'),
         audio_codec: normalizeAudioCodec(audioStream.Codec, audioStream.Profile),
         audio_channels: normalizeAudioChannels(audioStream.Channels, audioStream.ChannelLayout),
         audio_bitrate: bestAudioTrack.bitrate,
