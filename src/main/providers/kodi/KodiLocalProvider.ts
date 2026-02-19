@@ -1550,6 +1550,7 @@ export class KodiLocalProvider implements MediaProvider {
       providerType: 'kodi-local' as ProviderType,
       itemId: `movie_${movie.idMovie}`,
       title: movie.title,
+      sortTitle: movie.sortTitle || undefined,
       type: 'movie',
       year: extractedYear,
       imdbId: movie.imdbId || undefined,
@@ -1618,6 +1619,7 @@ export class KodiLocalProvider implements MediaProvider {
       providerType: 'kodi-local' as ProviderType,
       itemId: `episode_${episode.idEpisode}`,
       title: episode.title,
+      sortTitle: episode.showSortTitle || undefined,
       type: 'episode',
       seriesTitle: episode.showTitle,
       seasonNumber: episode.seasonNumber || undefined,
@@ -1672,6 +1674,7 @@ export class KodiLocalProvider implements MediaProvider {
     return {
       plex_id: metadata.itemId,
       title: metadata.title,
+      sort_title: metadata.sortTitle,
       year: metadata.year,
       type: metadata.type,
       series_title: metadata.seriesTitle,

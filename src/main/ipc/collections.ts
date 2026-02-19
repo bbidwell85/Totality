@@ -42,9 +42,10 @@ export function registerCollectionHandlers() {
   })
 
   // Get all collections
-  ipcMain.handle('collections:getAll', async () => {
+  ipcMain.handle('collections:getAll', async (_event, sourceId?: unknown) => {
+    const validSourceId = sourceId !== undefined ? validateInput(OptionalSourceIdSchema, sourceId, 'collections:getAll.sourceId') : undefined
     try {
-      return service.getCollections()
+      return service.getCollections(validSourceId)
     } catch (error) {
       console.error('Error getting collections:', error)
       throw error

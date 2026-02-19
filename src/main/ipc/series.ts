@@ -76,10 +76,11 @@ export function registerSeriesHandlers() {
   /**
    * Get all series completeness records
    */
-  ipcMain.handle('series:getAll', async () => {
+  ipcMain.handle('series:getAll', async (_event, sourceId?: unknown) => {
+    const validSourceId = sourceId !== undefined ? validateInput(OptionalSourceIdSchema, sourceId, 'series:getAll.sourceId') : undefined
     try {
       const db = getDatabase()
-      return db.getSeriesCompleteness()
+      return db.getSeriesCompleteness(validSourceId)
     } catch (error) {
       console.error('Error getting series completeness:', error)
       throw error

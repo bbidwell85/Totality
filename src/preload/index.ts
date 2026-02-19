@@ -330,7 +330,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Series Completeness
   seriesAnalyzeAll: (sourceId?: string, libraryId?: string) => ipcRenderer.invoke('series:analyzeAll', sourceId, libraryId),
   seriesAnalyze: (seriesTitle: string) => ipcRenderer.invoke('series:analyze', seriesTitle),
-  seriesGetAll: () => ipcRenderer.invoke('series:getAll'),
+  seriesGetAll: (sourceId?: string) => ipcRenderer.invoke('series:getAll', sourceId),
   seriesGetIncomplete: (sourceId?: string) => ipcRenderer.invoke('series:getIncomplete', sourceId),
   seriesGetStats: () => ipcRenderer.invoke('series:getStats'),
   seriesGetEpisodes: (seriesTitle: string, sourceId?: string) => ipcRenderer.invoke('series:getEpisodes', seriesTitle, sourceId),
@@ -358,7 +358,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Movie Collections
   collectionsAnalyzeAll: (sourceId?: string, libraryId?: string) => ipcRenderer.invoke('collections:analyzeAll', sourceId, libraryId),
-  collectionsGetAll: () => ipcRenderer.invoke('collections:getAll'),
+  collectionsGetAll: (sourceId?: string) => ipcRenderer.invoke('collections:getAll', sourceId),
   collectionsGetIncomplete: (sourceId?: string) => ipcRenderer.invoke('collections:getIncomplete', sourceId),
   collectionsGetStats: () => ipcRenderer.invoke('collections:getStats'),
   collectionsDelete: (id: number) => ipcRenderer.invoke('collections:delete', id),
@@ -1144,7 +1144,7 @@ export interface ElectronAPI {
   // Series Completeness
   seriesAnalyzeAll: (sourceId?: string, libraryId?: string) => Promise<{ completed: boolean; analyzed: number }>
   seriesAnalyze: (seriesTitle: string) => Promise<unknown | null>
-  seriesGetAll: () => Promise<unknown[]>
+  seriesGetAll: (sourceId?: string) => Promise<unknown[]>
   seriesGetIncomplete: (sourceId?: string) => Promise<unknown[]>
   seriesGetStats: () => Promise<{
     totalSeries: number
@@ -1193,7 +1193,7 @@ export interface ElectronAPI {
 
   // Movie Collections
   collectionsAnalyzeAll: (sourceId?: string, libraryId?: string) => Promise<{ success: boolean; completed: boolean; analyzed: number }>
-  collectionsGetAll: () => Promise<unknown[]>
+  collectionsGetAll: (sourceId?: string) => Promise<unknown[]>
   collectionsGetIncomplete: (sourceId?: string) => Promise<unknown[]>
   collectionsGetStats: () => Promise<{
     total: number

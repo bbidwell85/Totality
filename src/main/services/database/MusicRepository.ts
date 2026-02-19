@@ -462,7 +462,7 @@ export class MusicRepository {
 
     // Dynamic sorting
     const albumSortMap: Record<string, string> = {
-      'title': 'title',
+      'title': 'COALESCE(sort_title, title)',
       'artist': 'artist_name',
       'year': 'year',
       'added_at': 'created_at',

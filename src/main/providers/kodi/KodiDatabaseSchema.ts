@@ -228,6 +228,7 @@ export interface KodiMovieWithDetails {
   idMovie: number
   idFile: number
   title: string
+  sortTitle: string | null
   year: number | null
   imdbId: string | null
   tmdbId: string | null   // TMDB ID from uniqueid table
@@ -265,6 +266,7 @@ export interface KodiEpisodeWithDetails {
   seasonNumber: number
   episodeNumber: number
   showTitle: string
+  showSortTitle: string | null
   showImdbId: string | null
   showId: number
   filename: string
@@ -300,6 +302,7 @@ SELECT
   m.idMovie,
   m.idFile,
   m.c00 AS title,
+  NULLIF(m.c10, '') AS sortTitle,
   COALESCE(CAST(NULLIF(m.c07, '') AS INTEGER), CAST(SUBSTR(m.premiered, 1, 4) AS INTEGER)) AS year,
   m.c07 AS c07_raw,
   m.premiered AS premiered_raw,
@@ -352,6 +355,7 @@ SELECT
   CAST(NULLIF(e.c12, '') AS INTEGER) AS seasonNumber,
   CAST(NULLIF(e.c13, '') AS INTEGER) AS episodeNumber,
   s.c00 AS showTitle,
+  NULLIF(s.c15, '') AS showSortTitle,
   NULLIF(s.c21, '') AS showImdbId,
   s.idShow AS showId,
   f.strFilename AS filename,
@@ -393,6 +397,7 @@ SELECT
   m.idMovie,
   m.idFile,
   m.c00 AS title,
+  NULLIF(m.c10, '') AS sortTitle,
   COALESCE(CAST(NULLIF(m.c07, '') AS INTEGER), CAST(SUBSTR(m.premiered, 1, 4) AS INTEGER)) AS year,
   m.c07 AS c07_raw,
   m.premiered AS premiered_raw,
@@ -497,6 +502,7 @@ SELECT
   m.idMovie,
   m.idFile,
   m.c00 AS title,
+  NULLIF(m.c10, '') AS sortTitle,
   COALESCE(CAST(NULLIF(m.c07, '') AS INTEGER), CAST(SUBSTR(m.premiered, 1, 4) AS INTEGER)) AS year,
   m.c07 AS c07_raw,
   m.premiered AS premiered_raw,

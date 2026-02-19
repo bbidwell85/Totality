@@ -194,6 +194,9 @@ export class BetterSQLiteService {
       // Library scans
       'ALTER TABLE library_scans ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1',
 
+      // Sort title support
+      'ALTER TABLE media_items ADD COLUMN sort_title TEXT',
+
       // Multi-version support
       'ALTER TABLE media_items ADD COLUMN version_count INTEGER NOT NULL DEFAULT 1',
 
@@ -669,14 +672,14 @@ export class BetterSQLiteService {
 
     // Dynamic sorting with validated column names (prevent SQL injection)
     const sortColumnMap: Record<string, string> = {
-      'title': 'm.title',
+      'title': 'COALESCE(m.sort_title, m.title)',
       'year': 'm.year',
       'updated_at': 'm.updated_at',
       'created_at': 'm.created_at',
       'tier_score': 'q.tier_score',
       'overall_score': 'q.overall_score'
     }
-    const sortColumn = sortColumnMap[filters?.sortBy || 'title'] || 'm.title'
+    const sortColumn = sortColumnMap[filters?.sortBy || 'title'] || 'COALESCE(m.sort_title, m.title)'
     const sortOrder = filters?.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
     sql += ` ORDER BY ${sortColumn} ${sortOrder}`
 
@@ -811,7 +814,7 @@ export class BetterSQLiteService {
 
     const stmt = this.db.prepare(`
       INSERT INTO media_items (
-        source_id, source_type, library_id, plex_id, title, year, type,
+        source_id, source_type, library_id, plex_id, title, sort_title, year, type,
         series_title, season_number, episode_number, file_path, file_size,
         duration, resolution, width, height, video_codec, video_bitrate,
         audio_codec, audio_channels, audio_bitrate, video_frame_rate,
@@ -823,11 +826,12 @@ export class BetterSQLiteService {
         created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
       )
       ON CONFLICT(source_id, plex_id) DO UPDATE SET
         library_id = excluded.library_id,
         title = excluded.title,
+        sort_title = excluded.sort_title,
         year = excluded.year,
         type = excluded.type,
         series_title = excluded.series_title,
@@ -873,6 +877,7 @@ export class BetterSQLiteService {
       item.library_id || null,
       item.plex_id,
       item.title,
+      item.sort_title || null,
       item.year || null,
       item.type,
       item.series_title || null,
@@ -1992,7 +1997,7 @@ export class BetterSQLiteService {
       params.push(...filters.excludeAlbumTypes)
     }
 
-    const albumSortMap: Record<string, string> = { 'title': 'title', 'artist': 'artist_name', 'year': 'year', 'added_at': 'created_at' }
+    const albumSortMap: Record<string, string> = { 'title': 'COALESCE(sort_title, title)', 'artist': 'artist_name', 'year': 'year', 'added_at': 'created_at' }
     const sortCol = albumSortMap[filters?.sortBy || ''] || 'artist_name'
     const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
     if (!filters?.sortBy || filters.sortBy === 'artist') {
@@ -2311,8 +2316,11 @@ export class BetterSQLiteService {
   /**
    * Get series completeness (deduplicated by series_title)
    */
-  getSeriesCompleteness(): SeriesCompleteness[] {
+  getSeriesCompleteness(sourceId?: string): SeriesCompleteness[] {
     if (!this.db) throw new Error('Database not initialized')
+
+    const sourceFilter = sourceId ? ' AND source_id = ?' : ''
+    const params: unknown[] = sourceId ? [sourceId] : []
 
     const stmt = this.db.prepare(`
       SELECT sc.*
@@ -2320,12 +2328,15 @@ export class BetterSQLiteService {
       INNER JOIN (
         SELECT series_title, MAX(completeness_percentage) as max_pct
         FROM series_completeness
+        WHERE 1=1${sourceFilter}
         GROUP BY series_title
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
+      WHERE 1=1${sourceFilter}
       GROUP BY sc.series_title
       ORDER BY sc.series_title ASC
     `)
-    return stmt.all() as SeriesCompleteness[]
+    const allParams = sourceId ? [...params, ...params] : []
+    return stmt.all(...allParams) as SeriesCompleteness[]
   }
 
   /**
@@ -2423,6 +2434,7 @@ export class BetterSQLiteService {
     let sql = `
       SELECT
         COALESCE(m.series_title, 'Unknown Series') as series_title,
+        MIN(m.sort_title) as sort_title,
         COUNT(*) as episode_count,
         COUNT(DISTINCT m.season_number) as season_count,
         MAX(m.poster_url) as poster_url,
@@ -2469,7 +2481,7 @@ export class BetterSQLiteService {
         sql += ` ORDER BY season_count ${sortOrder}`
         break
       default:
-        sql += ` ORDER BY series_title ${sortOrder}`
+        sql += ` ORDER BY COALESCE(sort_title, series_title) ${sortOrder}`
     }
 
     // Pagination
@@ -2705,8 +2717,12 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   /**
    * Get all movie collections
    */
-  getMovieCollections(): MovieCollection[] {
+  getMovieCollections(sourceId?: string): MovieCollection[] {
     if (!this.db) throw new Error('Database not initialized')
+    if (sourceId) {
+      const stmt = this.db.prepare('SELECT * FROM movie_collections WHERE source_id = ? ORDER BY collection_name ASC')
+      return stmt.all(sourceId) as MovieCollection[]
+    }
     const stmt = this.db.prepare('SELECT * FROM movie_collections ORDER BY collection_name ASC')
     return stmt.all() as MovieCollection[]
   }
@@ -2752,10 +2768,15 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   /**
    * Clear all movie collections
    */
-  clearMovieCollections(): void {
+  clearMovieCollections(sourceId?: string): void {
     if (!this.db) throw new Error('Database not initialized')
-    this.db.prepare('DELETE FROM movie_collections').run()
-    console.log('[BetterSQLite] Cleared all movie collections')
+    if (sourceId) {
+      this.db.prepare('DELETE FROM movie_collections WHERE source_id = ?').run(sourceId)
+      console.log(`[BetterSQLite] Cleared movie collections for source ${sourceId}`)
+    } else {
+      this.db.prepare('DELETE FROM movie_collections').run()
+      console.log('[BetterSQLite] Cleared all movie collections')
+    }
   }
 
   /**

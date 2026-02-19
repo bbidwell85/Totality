@@ -646,6 +646,11 @@ export class DatabaseService {
         console.log('[Database] Exclusions table migration:', getErrorMessage(error))
       }
 
+      // Add sort_title column to media_items
+      try {
+        this.db.run('ALTER TABLE media_items ADD COLUMN sort_title TEXT')
+      } catch { /* column may already exist */ }
+
       // Add version_count column to media_items for multi-version support
       try {
         this.db.run('ALTER TABLE media_items ADD COLUMN version_count INTEGER NOT NULL DEFAULT 1')
@@ -1367,7 +1372,7 @@ export class DatabaseService {
     const sql = `
       INSERT INTO media_items (
         source_id, source_type, library_id,
-        plex_id, title, year, type, series_title, season_number, episode_number,
+        plex_id, title, sort_title, year, type, series_title, season_number, episode_number,
         file_path, file_size, duration,
         resolution, width, height, video_codec, video_bitrate,
         audio_codec, audio_channels, audio_bitrate,
@@ -1376,11 +1381,12 @@ export class DatabaseService {
         subtitle_tracks,
         container,
         imdb_id, tmdb_id, series_tmdb_id, poster_url, episode_thumb_url, season_poster_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, plex_id) DO UPDATE SET
         source_type = excluded.source_type,
         library_id = excluded.library_id,
         title = excluded.title,
+        sort_title = excluded.sort_title,
         year = excluded.year,
         type = excluded.type,
         series_title = excluded.series_title,
@@ -1428,6 +1434,7 @@ export class DatabaseService {
       item.library_id || null,
       item.plex_id,
       item.title,
+      item.sort_title || null,
       item.year || null,
       item.type,
       item.series_title || null,
@@ -1572,14 +1579,14 @@ export class DatabaseService {
 
     // Dynamic sorting with validated column names (prevent SQL injection)
     const sortColumnMap: Record<string, string> = {
-      'title': 'm.title',
+      'title': 'COALESCE(m.sort_title, m.title)',
       'year': 'm.year',
       'updated_at': 'm.updated_at',
       'created_at': 'm.created_at',
       'tier_score': 'q.tier_score',
       'overall_score': 'q.overall_score'
     }
-    const sortColumn = sortColumnMap[filters?.sortBy || 'title'] || 'm.title'
+    const sortColumn = sortColumnMap[filters?.sortBy || 'title'] || 'COALESCE(m.sort_title, m.title)'
     const sortOrder = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
     sql += ` ORDER BY ${sortColumn} ${sortOrder}`
 
@@ -3089,8 +3096,10 @@ export class DatabaseService {
    * Get all series completeness records (deduplicated by series_title)
    * Returns the entry with the best completeness for each unique series
    */
-  getSeriesCompleteness(): SeriesCompleteness[] {
+  getSeriesCompleteness(sourceId?: string): SeriesCompleteness[] {
     if (!this.db) throw new Error('Database not initialized')
+
+    const sourceFilter = sourceId ? ' AND source_id = ?' : ''
 
     // Get deduplicated series - for each series_title, return the entry with highest completeness
     const result = this.db.exec(`
@@ -3099,11 +3108,13 @@ export class DatabaseService {
       INNER JOIN (
         SELECT series_title, MAX(completeness_percentage) as max_pct
         FROM series_completeness
+        WHERE 1=1${sourceFilter}
         GROUP BY series_title
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
+      WHERE 1=1${sourceFilter}
       GROUP BY sc.series_title
       ORDER BY sc.series_title ASC
-    `)
+    `, sourceId ? [sourceId, sourceId] : [])
     if (!result.length) return []
 
     return this.rowsToObjects<SeriesCompleteness>(result[0])
@@ -3215,6 +3226,7 @@ export class DatabaseService {
     let sql = `
       SELECT
         COALESCE(m.series_title, 'Unknown Series') as series_title,
+        MIN(m.sort_title) as sort_title,
         COUNT(*) as episode_count,
         COUNT(DISTINCT m.season_number) as season_count,
         MAX(m.poster_url) as poster_url,
@@ -3261,7 +3273,7 @@ export class DatabaseService {
         sql += ` ORDER BY season_count ${sortOrder}`
         break
       default:
-        sql += ` ORDER BY series_title ${sortOrder}`
+        sql += ` ORDER BY COALESCE(sort_title, series_title) ${sortOrder}`
     }
 
     // Pagination
@@ -3538,12 +3550,12 @@ export class DatabaseService {
   /**
    * Get all movie collections
    */
-  getMovieCollections(): MovieCollection[] {
+  getMovieCollections(sourceId?: string): MovieCollection[] {
     if (!this.db) throw new Error('Database not initialized')
 
-    const result = this.db.exec(
-      'SELECT * FROM movie_collections ORDER BY collection_name ASC'
-    )
+    const result = sourceId
+      ? this.db.exec('SELECT * FROM movie_collections WHERE source_id = ? ORDER BY collection_name ASC', [sourceId])
+      : this.db.exec('SELECT * FROM movie_collections ORDER BY collection_name ASC')
     if (!result.length) return []
 
     return this.rowsToObjects<MovieCollection>(result[0])
@@ -3604,12 +3616,18 @@ export class DatabaseService {
   /**
    * Clear all movie collections (for re-sync with Plex)
    */
-  async clearMovieCollections(): Promise<void> {
+  async clearMovieCollections(sourceId?: string): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
 
-    this.db.run('DELETE FROM movie_collections')
-    await this.save()
-    console.log('Cleared all movie collections')
+    if (sourceId) {
+      this.db.run('DELETE FROM movie_collections WHERE source_id = ?', [sourceId])
+      await this.save()
+      console.log(`Cleared movie collections for source ${sourceId}`)
+    } else {
+      this.db.run('DELETE FROM movie_collections')
+      await this.save()
+      console.log('Cleared all movie collections')
+    }
   }
 
   /**

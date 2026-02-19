@@ -118,6 +118,7 @@ export interface MediaItem {
   // Provider item ID (was plex_id, now generic but kept for compatibility)
   plex_id: string
   title: string
+  sort_title?: string
   year?: number
   type: 'movie' | 'episode'
   series_title?: string

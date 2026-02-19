@@ -1976,6 +1976,7 @@ export class LocalFolderProvider implements MediaProvider {
     return {
       plex_id: metadata.itemId,
       title: metadata.title,
+      sort_title: metadata.sortTitle,
       year: metadata.year,
       type: metadata.type,
       series_title: metadata.seriesTitle,

@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS media_items (
   plex_id TEXT NOT NULL,
 
   title TEXT NOT NULL,
+  sort_title TEXT,
   year INTEGER,
   type TEXT NOT NULL CHECK(type IN ('movie', 'episode')),
   series_title TEXT,

@@ -447,9 +447,10 @@ export class PlexProvider implements MediaProvider {
       // Cache for season metadata and show TMDB IDs
       const seasonCache = new Map<string, PlexMediaItem | null>()
       const showTmdbIdCache = new Map<string, string | undefined>()
+      const showTitleSortCache = new Map<string, string | undefined>()
 
       // First pass: count total items (including episodes for TV shows)
-      const itemsToProcess: Array<PlexMediaItem & { _showTmdbId?: string }> = []
+      const itemsToProcess: Array<PlexMediaItem & { _showTmdbId?: string; _showTitleSort?: string }> = []
       for (const item of items) {
         if (libraryType === null) {
           libraryType = item.type === 'show' ? 'show' : 'movie'
@@ -473,10 +474,17 @@ export class PlexProvider implements MediaProvider {
             showTmdbIdCache.set(item.ratingKey, showTmdbId)
           }
 
+          const showTitleSort = showMetadata?.titleSort || item.titleSort
+          if (showTitleSort) {
+            showTitleSortCache.set(item.ratingKey, showTitleSort)
+          }
+
           // Get all episodes
           const episodes = await this.getAllEpisodes(item.ratingKey)
           for (const ep of episodes) {
-            (ep as PlexMediaItem & { _showTmdbId?: string })._showTmdbId = showTmdbId
+            const epExt = ep as PlexMediaItem & { _showTmdbId?: string; _showTitleSort?: string }
+            epExt._showTmdbId = showTmdbId
+            epExt._showTitleSort = showTitleSort
           }
           itemsToProcess.push(...episodes)
         } else {
@@ -537,8 +545,10 @@ export class PlexProvider implements MediaProvider {
                 }
               }
 
-              const showTmdbId = (item as PlexMediaItem & { _showTmdbId?: string })._showTmdbId
-              const converted = this.convertToMediaItem(detailed, showTmdbId)
+              const itemExt = item as PlexMediaItem & { _showTmdbId?: string; _showTitleSort?: string }
+              const showTmdbId = itemExt._showTmdbId
+              const showTitleSort = itemExt._showTitleSort
+              const converted = this.convertToMediaItem(detailed, showTmdbId, showTitleSort)
 
               if (converted) {
                 const { mediaItem, versions } = converted
@@ -970,6 +980,7 @@ export class PlexProvider implements MediaProvider {
       providerType: 'plex',
       itemId: item.ratingKey,
       title: item.title,
+      sortTitle: item.titleSort,
       type: item.type as 'movie' | 'episode',
       year: item.year,
       seriesTitle: item.grandparentTitle,
@@ -1014,7 +1025,7 @@ export class PlexProvider implements MediaProvider {
     }
   }
 
-  private convertToMediaItem(item: PlexMediaItem, showTmdbId?: string): { mediaItem: MediaItem; versions: Omit<MediaItemVersion, 'id' | 'media_item_id'>[] } | null {
+  private convertToMediaItem(item: PlexMediaItem, showTmdbId?: string, showTitleSort?: string): { mediaItem: MediaItem; versions: Omit<MediaItemVersion, 'id' | 'media_item_id'>[] } | null {
     const allMedia = item.Media || []
     if (allMedia.length === 0) return null
 
@@ -1184,6 +1195,7 @@ export class PlexProvider implements MediaProvider {
       mediaItem: {
         plex_id: item.ratingKey,
         title: item.title,
+        sort_title: item.type === 'episode' ? (showTitleSort || undefined) : (item.titleSort || undefined),
         year: item.year,
         type: item.type as 'movie' | 'episode',
         series_title: item.grandparentTitle,

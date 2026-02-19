@@ -140,6 +140,7 @@ export interface MediaMetadata {
   // Core identification
   itemId: string
   title: string
+  sortTitle?: string
   type: 'movie' | 'episode'
   year?: number
 

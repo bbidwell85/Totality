@@ -11,6 +11,7 @@ import * as path from 'path'
 import axios, { AxiosInstance } from 'axios'
 import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
+import { getMovieCollectionService } from '../../services/MovieCollectionService'
 import {
   normalizeVideoCodec,
   normalizeAudioCodec,
@@ -114,6 +115,8 @@ export interface JellyfinMediaItem {
   // Date metadata
   DateCreated?: string
   PremiereDate?: string
+  // Sort title
+  SortName?: string
 }
 
 export interface JellyfinMediaSource {
@@ -179,6 +182,7 @@ export interface JellyfinMusicAlbum {
   Genres?: string[]
   ChildCount?: number
   RunTimeTicks?: number
+  SortName?: string
 }
 
 export interface JellyfinMusicTrack {
@@ -287,10 +291,18 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
     const pathPrefix = this.providerType === 'emby' ? '/emby' : ''
     let url = `${this.serverUrl}${pathPrefix}/Items/${itemId}/Images/${imageType}`
 
-    // Only add tag for cache busting - images may not require auth
+    const params = new URLSearchParams()
     if (imageTag) {
-      url += `?tag=${encodeURIComponent(imageTag)}`
+      params.set('tag', imageTag)
     }
+    // Add auth token so images load even when server requires authentication
+    // (Plex already does this with X-Plex-Token in image URLs)
+    const token = this.apiKey || this.accessToken
+    if (token) {
+      params.set('api_key', token)
+    }
+    const qs = params.toString()
+    if (qs) url += `?${qs}`
 
     return url
   }
@@ -773,7 +785,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         console.log(`[${this.providerType}Provider ${this.sourceId}] Incremental scan: fetching items modified after ${sinceTimestamp!.toISOString()}`)
       }
 
-      const fieldsParam = 'Path,MediaSources,ProviderIds,DateCreated,PremiereDate,ParentId,SeriesId,SeasonId,ImageTags,SeriesPrimaryImageTag,ParentPrimaryImageItemId,ParentPrimaryImageTag,ParentThumbItemId,ParentThumbImageTag,ParentBackdropItemId,ParentBackdropImageTags'
+      const fieldsParam = 'Path,MediaSources,ProviderIds,DateCreated,PremiereDate,ParentId,SeriesId,SeasonId,ImageTags,SeriesPrimaryImageTag,ParentPrimaryImageItemId,ParentPrimaryImageTag,ParentThumbItemId,ParentThumbImageTag,ParentBackdropItemId,ParentBackdropImageTags,SortName'
 
       if (isBoxsets) {
         // Two-phase scan for BoxSets/Collections libraries
@@ -839,9 +851,37 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
             const tmdbCollectionId = boxset.ProviderIds?.Tmdb
               || `${this.providerType}-boxset-${boxset.Id}`
 
-            const posterUrl = boxset.ImageTags?.Primary
+            const boxsetPosterUrl = boxset.ImageTags?.Primary
               ? this.buildImageUrl(boxset.Id, 'Primary', boxset.ImageTags.Primary)
               : undefined
+
+            let totalMovies = ownedTmdbIds.length
+            let ownedCount = ownedTmdbIds.length
+            let missingMovies: unknown[] = []
+            let completenessPercentage = 100
+            let collectionPosterUrl = boxsetPosterUrl
+            let collectionBackdropUrl: string | undefined
+
+            // If we have a real TMDB collection ID, look up full membership
+            if (boxset.ProviderIds?.Tmdb) {
+              try {
+                const collectionService = getMovieCollectionService()
+                const result = await collectionService.lookupCollectionCompleteness(
+                  boxset.ProviderIds.Tmdb,
+                  ownedTmdbIds,
+                )
+                if (result) {
+                  totalMovies = result.totalMovies
+                  ownedCount = result.ownedMovies
+                  missingMovies = result.missingMovies
+                  completenessPercentage = result.completenessPercentage
+                  collectionPosterUrl = result.posterUrl || boxsetPosterUrl
+                  collectionBackdropUrl = result.backdropUrl
+                }
+              } catch (error) {
+                console.warn(`[${this.providerType}Provider] Failed TMDB lookup for BoxSet "${boxset.Name}":`, error)
+              }
+            }
 
             const db = getDatabase()
             await db.upsertMovieCollection({
@@ -849,13 +889,13 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
               collection_name: boxset.Name,
               source_id: this.sourceId,
               library_id: libraryId,
-              total_movies: ownedTmdbIds.length,
-              owned_movies: ownedTmdbIds.length,
-              missing_movies: JSON.stringify([]),
+              total_movies: totalMovies,
+              owned_movies: ownedCount,
+              missing_movies: JSON.stringify(missingMovies),
               owned_movie_ids: JSON.stringify(ownedTmdbIds),
-              completeness_percentage: 100,
-              poster_url: posterUrl,
-              backdrop_url: undefined,
+              completeness_percentage: completenessPercentage,
+              poster_url: collectionPosterUrl,
+              backdrop_url: collectionBackdropUrl,
             })
           }
 
@@ -917,6 +957,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       const seriesMetadataMap = new Map<string, {
         providerIds?: { Imdb?: string; Tmdb?: string }
         primaryImageTag?: string
+        sortName?: string
       }>()
       if (libraryType === 'show') {
         // Collect unique series IDs
@@ -940,7 +981,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
                 headers: this.getAuthHeaders(),
                 params: {
                   Ids: batchIds.join(','),
-                  Fields: 'ProviderIds,ImageTags',
+                  Fields: 'ProviderIds,ImageTags,SortName',
                 },
               }
             )
@@ -949,6 +990,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
               seriesMetadataMap.set(series.Id, {
                 providerIds: series.ProviderIds,
                 primaryImageTag: series.ImageTags?.Primary,
+                sortName: series.SortName,
               })
             }
           } catch (error) {
@@ -966,6 +1008,10 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
             // If episode doesn't have SeriesPrimaryImageTag, use the one from series metadata
             if (!item.SeriesPrimaryImageTag && seriesData.primaryImageTag) {
               item.SeriesPrimaryImageTag = seriesData.primaryImageTag
+            }
+            // Attach series sort name for sort_title
+            if (seriesData.sortName) {
+              ;(item as JellyfinMediaItem & { _seriesSortName?: string })._seriesSortName = seriesData.sortName
             }
           }
         }
@@ -1182,6 +1228,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       providerType: this.providerType,
       itemId: item.Id,
       title: item.Name,
+      sortTitle: item.SortName,
       type: isEpisode ? 'episode' : 'movie',
       year: item.ProductionYear,
       seriesTitle: item.SeriesName,
@@ -1483,6 +1530,9 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       mediaItem: {
         plex_id: item.Id,
         title: item.Name,
+        sort_title: isEpisode
+          ? ((item as JellyfinMediaItem & { _seriesSortName?: string })._seriesSortName || undefined)
+          : (item.SortName || undefined),
         year: item.ProductionYear,
         type: isEpisode ? 'episode' : 'movie',
         series_title: item.SeriesName,
@@ -1804,6 +1854,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       artist_id: artistId,
       artist_name: artistName,
       title: item.Name,
+      sort_title: item.SortName || undefined,
       year: item.ProductionYear,
       musicbrainz_id: musicbrainzId,
       genres: item.Genres ? JSON.stringify(item.Genres) : undefined,

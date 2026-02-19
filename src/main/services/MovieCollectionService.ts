@@ -227,6 +227,70 @@ export class MovieCollectionService extends CancellableOperation {
   }
 
   /**
+   * Look up a TMDB collection's full membership and calculate completeness.
+   * Used by both analyzeAllCollections() and BoxSet scanning.
+   */
+  async lookupCollectionCompleteness(
+    tmdbCollectionId: string,
+    ownedTmdbIds: string[],
+  ): Promise<{
+    totalMovies: number
+    ownedMovies: number
+    missingMovies: MissingMovie[]
+    completenessPercentage: number
+    posterUrl?: string
+    backdropUrl?: string
+    collectionName: string
+  } | null> {
+    const tmdb = getTMDBService()
+
+    const tmdbCollection: TMDBCollection = await tmdb.getCollectionDetails(tmdbCollectionId)
+
+    // Filter to only include released movies
+    const today = new Date().toISOString().split('T')[0]
+    const releasedParts = tmdbCollection.parts.filter(part => {
+      if (!part.release_date) return false
+      return part.release_date <= today
+    })
+
+    // Skip collections with only 1 movie
+    if (releasedParts.length <= 1) {
+      return null
+    }
+
+    const allOwnedIdsSet = new Set(ownedTmdbIds)
+
+    const missingMovies: MissingMovie[] = releasedParts
+      .filter(part => !allOwnedIdsSet.has(part.id.toString()))
+      .map(part => ({
+        tmdb_id: part.id.toString(),
+        title: part.title,
+        year: part.release_date ? parseInt(part.release_date.split('-')[0], 10) : undefined,
+        poster_path: part.poster_path ? tmdb.buildImageUrl(part.poster_path, 'w300') || undefined : undefined,
+      }))
+
+    const totalMovies = releasedParts.length
+    const ownedCount = ownedTmdbIds.length
+    const completenessPercentage = totalMovies > 0
+      ? Math.round((ownedCount / totalMovies) * 100)
+      : 100
+
+    return {
+      totalMovies,
+      ownedMovies: ownedCount,
+      missingMovies,
+      completenessPercentage,
+      posterUrl: tmdbCollection.poster_path
+        ? tmdb.buildImageUrl(tmdbCollection.poster_path, 'w500') || undefined
+        : undefined,
+      backdropUrl: tmdbCollection.backdrop_path
+        ? tmdb.buildImageUrl(tmdbCollection.backdrop_path, 'original') || undefined
+        : undefined,
+      collectionName: tmdbCollection.name,
+    }
+  }
+
+  /**
    * Analyze collections using TMDB API
    * 1. For each movie with TMDB ID, lookup which collection it belongs to
    * 2. Group movies by TMDB collection ID
@@ -427,7 +491,7 @@ export class MovieCollectionService extends CancellableOperation {
     // Pre-fetch existing collections to check for recently analyzed
     const existingCollections = new Map<string, { updatedAt: string; ownedCount: number }>()
     if (skipRecentlyAnalyzed) {
-      const allCollections = db.getMovieCollections()
+      const allCollections = db.getMovieCollections(sourceId)
       for (const col of allCollections) {
         if (col.updated_at && col.tmdb_collection_id) {
           existingCollections.set(col.tmdb_collection_id, {
@@ -440,8 +504,9 @@ export class MovieCollectionService extends CancellableOperation {
     }
 
     // Clear existing collections to sync (only if not skipping)
+    // Scope to sourceId to preserve BoxSet-scanned collections from other sources
     if (!skipRecentlyAnalyzed) {
-      db.clearMovieCollections()
+      db.clearMovieCollections(sourceId || undefined)
     }
 
     // Phase 2: Fetch full collection details and calculate missing movies
@@ -481,92 +546,47 @@ export class MovieCollectionService extends CancellableOperation {
       })
 
       try {
-        // Fetch full collection details from TMDB
-        const tmdbCollection: TMDBCollection = await tmdb.getCollectionDetails(
-          collectionInfo.tmdbCollectionId.toString()
-        )
-
-        // Filter to only include released movies (release_date exists and is in the past)
-        const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
-        const releasedParts = tmdbCollection.parts.filter(part => {
-          if (!part.release_date) return false
-          return part.release_date <= today
-        })
-
-        // Skip collections with only 1 movie - these aren't really "collections"
-        // This handles edge cases where TMDB has a collection entry for a standalone film
-        if (releasedParts.length <= 1) {
-          console.log(`[MovieCollectionService] Skipping "${tmdbCollection.name}" - only ${releasedParts.length} released movie(s), not a real collection`)
-          processedCount++
-          continue
-        }
-
         // Get owned movie TMDB IDs
         const ownedTmdbIds = collectionInfo.ownedMovies
           .map(m => m.tmdb_id)
           .filter(Boolean) as string[]
 
-        // Check which owned movies appear in the collection's parts
-        // Note: TMDB can have inconsistencies where a movie's belongs_to_collection field
-        // references a collection that doesn't list the movie in its parts array
-        const releasedIds = new Set(releasedParts.map(p => p.id.toString()))
-        const unvalidatedOwnedIds = ownedTmdbIds.filter(id => !releasedIds.has(id))
-
-        // Log discrepancies but trust the movie's belongs_to_collection field
-        if (unvalidatedOwnedIds.length > 0) {
-          const unvalidatedMovies = collectionInfo.ownedMovies.filter(m => unvalidatedOwnedIds.includes(m.tmdb_id!))
-          console.warn(`[MovieCollectionService] "${tmdbCollection.name}" - movies claim membership but not in TMDB parts: ${unvalidatedMovies.map(m => m.title).join(', ')} - keeping them anyway`)
-        }
-
-        // Skip only if we have NO owned movies at all (not just unvalidated ones)
+        // Skip only if we have NO owned movies at all
         if (ownedTmdbIds.length === 0) {
-          console.log(`[MovieCollectionService] Skipping "${tmdbCollection.name}" - no owned movies found`)
+          console.log(`[MovieCollectionService] Skipping "${collectionInfo.collectionName}" - no owned movies found`)
           processedCount++
           continue
         }
 
-        // Use ALL owned IDs (trust belongs_to_collection) not just validated ones
-        const allOwnedIdsSet = new Set(ownedTmdbIds)
+        const result = await this.lookupCollectionCompleteness(
+          collectionInfo.tmdbCollectionId.toString(),
+          ownedTmdbIds,
+        )
 
-        // Calculate missing movies (only from released movies, excluding all owned)
-        const missingMovies: MissingMovie[] = releasedParts
-          .filter(part => !allOwnedIdsSet.has(part.id.toString()))
-          .map(part => ({
-            tmdb_id: part.id.toString(),
-            title: part.title,
-            year: part.release_date ? parseInt(part.release_date.split('-')[0], 10) : undefined,
-            poster_path: part.poster_path ? tmdb.buildImageUrl(part.poster_path, 'w300') || undefined : undefined
-          }))
+        // lookupCollectionCompleteness returns null for single-movie collections
+        if (!result) {
+          console.log(`[MovieCollectionService] Skipping "${collectionInfo.collectionName}" - not a real collection (<=1 released movie)`)
+          processedCount++
+          continue
+        }
 
-        const totalMovies = releasedParts.length
-        const ownedCount = ownedTmdbIds.length
-        const completenessPercentage = totalMovies > 0
-          ? Math.round((ownedCount / totalMovies) * 100)
-          : 100
-
-        // Build collection data with all owned movie IDs (trusting belongs_to_collection)
         const data: Omit<MovieCollection, 'id' | 'created_at' | 'updated_at'> = {
           tmdb_collection_id: collectionInfo.tmdbCollectionId.toString(),
-          collection_name: tmdbCollection.name,
+          collection_name: result.collectionName,
           source_id: sourceId,
           library_id: libraryId,
-          total_movies: totalMovies,
-          owned_movies: ownedCount,
-          missing_movies: JSON.stringify(missingMovies),
+          total_movies: result.totalMovies,
+          owned_movies: result.ownedMovies,
+          missing_movies: JSON.stringify(result.missingMovies),
           owned_movie_ids: JSON.stringify(ownedTmdbIds),
-          completeness_percentage: completenessPercentage,
-          poster_url: tmdbCollection.poster_path
-            ? tmdb.buildImageUrl(tmdbCollection.poster_path, 'w500') || undefined
-            : undefined,
-          backdrop_url: tmdbCollection.backdrop_path
-            ? tmdb.buildImageUrl(tmdbCollection.backdrop_path, 'original') || undefined
-            : undefined,
+          completeness_percentage: result.completenessPercentage,
+          poster_url: result.posterUrl,
+          backdrop_url: result.backdropUrl,
         }
 
         await db.upsertMovieCollection(data)
 
-        const missingCount = missingMovies.length
-        console.log(`[MovieCollectionService] ${tmdbCollection.name}: ${ownedCount}/${totalMovies} owned, ${missingCount} missing (${completenessPercentage}%)`)
+        console.log(`[MovieCollectionService] ${result.collectionName}: ${result.ownedMovies}/${result.totalMovies} owned, ${result.missingMovies.length} missing (${result.completenessPercentage}%)`)
 
       } catch (error) {
         console.error(`[MovieCollectionService] Failed to fetch collection "${collectionInfo.collectionName}":`, error)
@@ -622,9 +642,9 @@ export class MovieCollectionService extends CancellableOperation {
   /**
    * Get all movie collections
    */
-  getCollections(): MovieCollection[] {
+  getCollections(sourceId?: string): MovieCollection[] {
     const db = getDatabase()
-    return db.getMovieCollections()
+    return db.getMovieCollections(sourceId)
   }
 
   /**

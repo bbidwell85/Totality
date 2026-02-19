@@ -348,9 +348,9 @@ export function MediaBrowser({
   // Load completeness data (non-blocking background load)
   const loadCompletenessData = async () => {
     try {
-      const [seriesData, collectionsData, sStats, , collectionExclusions, seriesExclusions] = await Promise.all([
-        window.electronAPI.seriesGetAll(),
-        window.electronAPI.collectionsGetAll(),
+      const [seriesData, collectionsData, , , collectionExclusions, seriesExclusions] = await Promise.all([
+        window.electronAPI.seriesGetAll(activeSourceId || undefined),
+        window.electronAPI.collectionsGetAll(activeSourceId || undefined),
         window.electronAPI.seriesGetStats(),
         window.electronAPI.collectionsGetStats(),
         window.electronAPI.getExclusions('collection_movie'),
@@ -414,7 +414,9 @@ export function MediaBrowser({
         totalMissingEpisodes: seriesEntries.reduce((sum, s) => {
           try { return sum + JSON.parse(s.missing_episodes || '[]').length } catch { return sum }
         }, 0),
-        averageCompleteness: (sStats as SeriesStats).averageCompleteness,
+        averageCompleteness: seriesEntries.length > 0
+          ? Math.round(seriesEntries.reduce((sum, s) => sum + (s.completeness_percentage || 0), 0) / seriesEntries.length)
+          : 0,
       })
       setCollectionStats({
         total: filteredCollections.length,

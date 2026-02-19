@@ -165,8 +165,8 @@ function createWindow() {
       // unsafe-inline needed for Tailwind; unsafe-eval needed for Vite HMR in dev
       `style-src 'self' 'unsafe-inline'`,
       `script-src 'self'${isDev ? " 'unsafe-inline' 'unsafe-eval'" : ''}`,
-      // TMDB posters, provider artwork, local-artwork protocol, data URIs
-      "img-src 'self' https: local-artwork: data:",
+      // TMDB posters, provider artwork (http: for local-network servers), local-artwork protocol, data URIs
+      "img-src 'self' https: http: local-artwork: data:",
       // API calls to Plex, Jellyfin, Emby, TMDB, MusicBrainz; ws: for Vite HMR in dev
       `connect-src 'self' https: http:${isDev ? ' ws:' : ''}`,
       "font-src 'self' data:",

@@ -39,6 +39,7 @@ export interface PlexMediaItem {
   studio?: string
   type: 'movie' | 'episode' | 'show'
   title: string
+  titleSort?: string
   contentRating?: string
   summary?: string
   rating?: number
