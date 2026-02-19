@@ -287,6 +287,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   countMediaItems: (filters?: unknown) => ipcRenderer.invoke('db:countMediaItems', filters),
   getTVShows: (filters?: unknown) => ipcRenderer.invoke('db:getTVShows', filters),
   countTVShows: (filters?: unknown) => ipcRenderer.invoke('db:countTVShows', filters),
+  countTVEpisodes: (filters?: unknown) => ipcRenderer.invoke('db:countTVEpisodes', filters),
   getMediaItemById: (id: number) => ipcRenderer.invoke('db:getMediaItemById', id),
   upsertMediaItem: (item: unknown) => ipcRenderer.invoke('db:upsertMediaItem', item),
   deleteMediaItem: (id: number) => ipcRenderer.invoke('db:deleteMediaItem', id),
@@ -1100,6 +1101,7 @@ export interface ElectronAPI {
   countMediaItems: (filters?: unknown) => Promise<number>
   getTVShows: (filters?: unknown) => Promise<unknown[]>
   countTVShows: (filters?: unknown) => Promise<number>
+  countTVEpisodes: (filters?: unknown) => Promise<number>
   getMediaItemById: (id: number) => Promise<unknown | null>
   upsertMediaItem: (item: unknown) => Promise<number>
   deleteMediaItem: (id: number) => Promise<boolean>

@@ -3334,6 +3334,48 @@ export class DatabaseService {
   }
 
   /**
+   * Count total TV episodes matching filters
+   */
+  countTVEpisodes(filters?: TVShowFilters): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    let sql = `
+      SELECT COUNT(*) as count
+      FROM media_items m
+      WHERE m.type = 'episode'
+    `
+    const params: (string | number)[] = []
+
+    if (filters?.sourceId) {
+      sql += ' AND m.source_id = ?'
+      params.push(filters.sourceId)
+    }
+
+    if (filters?.libraryId) {
+      sql += ' AND m.library_id = ?'
+      params.push(filters.libraryId)
+    }
+
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND COALESCE(m.series_title, 'Unknown Series') NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += " AND UPPER(SUBSTR(COALESCE(m.series_title, 'Unknown Series'), 1, 1)) = ?"
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    if (filters?.searchQuery) {
+      sql += " AND COALESCE(m.series_title, 'Unknown Series') LIKE '%' || ? || '%'"
+      params.push(filters.searchQuery)
+    }
+
+    const result = this.db.exec(sql, params)
+    if (!result.length || !result[0].values.length) return 0
+    return Number(result[0].values[0][0]) || 0
+  }
+
+  /**
    * Get all episodes for a specific series
    * @param seriesTitle The series title to find episodes for
    * @param sourceId Optional source ID to filter by

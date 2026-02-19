@@ -136,6 +136,7 @@ export function MediaBrowser({
   // TV show pagination state
   const [paginatedShows, setPaginatedShows] = useState<TVShowSummary[]>([])
   const [totalShowCount, setTotalShowCount] = useState(0)
+  const [totalEpisodeCount, setTotalEpisodeCount] = useState(0)
   const [showsLoading, setShowsLoading] = useState(false)
   const showsOffsetRef = useRef(0)
   const SHOWS_PAGE_SIZE = 200
@@ -685,9 +686,10 @@ export function MediaBrowser({
       if (alphabetFilter) filters.alphabetFilter = alphabetFilter
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
 
-      const [newShows, count] = await Promise.all([
+      const [newShows, count, episodeCount] = await Promise.all([
         window.electronAPI.getTVShows(filters),
-        window.electronAPI.countTVShows(filters)
+        window.electronAPI.countTVShows(filters),
+        window.electronAPI.countTVEpisodes(filters)
       ])
 
       if (reset) {
@@ -698,6 +700,7 @@ export function MediaBrowser({
         showsOffsetRef.current = offset + SHOWS_PAGE_SIZE
       }
       setTotalShowCount(count as number)
+      setTotalEpisodeCount(episodeCount as number)
     } catch (err) {
       console.error('Error loading TV shows:', err)
     } finally {
@@ -2077,6 +2080,7 @@ export function MediaBrowser({
             onDismissMissingEpisode={handleDismissMissingEpisode}
             onDismissMissingSeason={handleDismissMissingSeason}
             totalShowCount={totalShowCount}
+            totalEpisodeCount={totalEpisodeCount}
             showsLoading={showsLoading}
             onLoadMoreShows={loadMoreShows}
           />

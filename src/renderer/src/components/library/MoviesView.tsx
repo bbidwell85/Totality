@@ -135,10 +135,17 @@ export function MoviesView({
     )
   }
 
+  const statsBar = (
+    <div className="flex items-center gap-6 text-sm text-muted-foreground">
+      <span>{totalMovieCount.toLocaleString()} Movies</span>
+    </div>
+  )
+
   if (viewType === 'list') {
     return (
       <div>
-        <div className="space-y-2">
+        {statsBar}
+        <div className="space-y-2 mt-4">
           {displayItems.map((item) => {
             if (item.type === 'collection') {
               return (
@@ -179,8 +186,9 @@ export function MoviesView({
   // Grid view using standard grid (VirtualizedGrid doesn't support mixed item types well)
   return (
     <div>
+      {statsBar}
       <div
-        className="grid gap-8"
+        className="grid gap-8 mt-4"
         style={{
           gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
         }}

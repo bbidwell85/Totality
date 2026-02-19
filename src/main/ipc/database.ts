@@ -73,6 +73,16 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  ipcMain.handle('db:countTVEpisodes', async (_event, filters?: unknown) => {
+    try {
+      const validFilters = validateInput(TVShowFiltersSchema, filters, 'db:countTVEpisodes')
+      return db.countTVEpisodes(validFilters)
+    } catch (error) {
+      console.error('Error counting TV episodes:', error)
+      throw error
+    }
+  })
+
   ipcMain.handle('db:getMediaItemById', async (_event, id: unknown) => {
     try {
       const validId = validateInput(PositiveIntSchema, id, 'db:getMediaItemById')

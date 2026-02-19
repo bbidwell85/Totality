@@ -2541,6 +2541,48 @@ export class BetterSQLiteService {
   }
 
   /**
+   * Count total TV episodes matching filters
+   */
+  countTVEpisodes(filters?: TVShowFilters): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    let sql = `
+      SELECT COUNT(*) as count
+      FROM media_items m
+      WHERE m.type = 'episode'
+    `
+    const params: unknown[] = []
+
+    if (filters?.sourceId) {
+      sql += ' AND m.source_id = ?'
+      params.push(filters.sourceId)
+    }
+
+    if (filters?.libraryId) {
+      sql += ' AND m.library_id = ?'
+      params.push(filters.libraryId)
+    }
+
+    if (filters?.alphabetFilter) {
+      if (filters.alphabetFilter === '#') {
+        sql += " AND COALESCE(m.series_title, 'Unknown Series') NOT GLOB '[A-Za-z]*'"
+      } else {
+        sql += " AND UPPER(SUBSTR(COALESCE(m.series_title, 'Unknown Series'), 1, 1)) = ?"
+        params.push(filters.alphabetFilter.toUpperCase())
+      }
+    }
+
+    if (filters?.searchQuery) {
+      sql += " AND COALESCE(m.series_title, 'Unknown Series') LIKE '%' || ? || '%'"
+      params.push(filters.searchQuery)
+    }
+
+    const stmt = this.db.prepare(sql)
+    const result = stmt.get(...params) as { count: number }
+    return result?.count || 0
+  }
+
+  /**
    * Get episodes for a series
    */
   getEpisodesForSeries(

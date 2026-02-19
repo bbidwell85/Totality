@@ -328,6 +328,7 @@ export function TVShowsView({
   onDismissMissingEpisode,
   onDismissMissingSeason,
   totalShowCount,
+  totalEpisodeCount,
   showsLoading,
   onLoadMoreShows,
 }: {
@@ -363,6 +364,7 @@ export function TVShowsView({
   onDismissMissingEpisode?: (episode: MissingEpisode, seriesTitle: string, tmdbId?: string) => void
   onDismissMissingSeason?: (seasonNumber: number, seriesTitle: string, tmdbId?: string) => void
   totalShowCount: number
+  totalEpisodeCount: number
   showsLoading: boolean
   onLoadMoreShows: () => void
 }) {
@@ -415,11 +417,20 @@ export function TVShowsView({
       )
     }
 
+    const statsBar = (
+      <div className="flex items-center gap-6 text-sm text-muted-foreground">
+        <span>{totalShowCount.toLocaleString()} Shows</span>
+        <span className="text-muted-foreground/50">•</span>
+        <span>{totalEpisodeCount.toLocaleString()} Episodes</span>
+      </div>
+    )
+
     // List view
     if (viewType === 'list') {
       return (
         <>
-          <div className="space-y-2">
+          {statsBar}
+          <div className="space-y-2 mt-4">
             {shows.map((show) => {
               const completeness = seriesCompleteness.get(show.series_title)
               return <ShowListItem key={show.series_title} show={show} onClick={() => onSelectShow(show.series_title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={async () => { await onAnalyzeSeries(show.series_title) }} onFixMatch={onFixMatch ? (sourceId, folderPath) => onFixMatch(show.series_title, sourceId, folderPath) : undefined} />
@@ -439,8 +450,9 @@ export function TVShowsView({
     // Grid view (default)
     return (
       <>
+        {statsBar}
         <div
-          className="grid gap-8"
+          className="grid gap-8 mt-4"
           style={{
             gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
           }}
