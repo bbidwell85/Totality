@@ -470,7 +470,7 @@ export class QualityAnalyzer {
     effectiveBitrate: number
     bestAudio: { codec: string; channels: number; bitrate: number; hasObjectAudio: boolean }
   } {
-    const qualityTier = this.classifyTier(input.resolution)
+    const qualityTier = this.classifyTier(input.resolution, input.height)
     const codecEfficiency = this.getCodecEfficiency(input.video_codec)
     const effectiveBitrate = input.video_bitrate * codecEfficiency
     const videoQuality = this.determineVideoQuality(effectiveBitrate, qualityTier)
@@ -570,7 +570,7 @@ export class QualityAnalyzer {
   /**
    * Classify media into quality tier using resolution string
    */
-  private classifyTier(resolution: string): QualityTier {
+  private classifyTier(resolution: string, height?: number): QualityTier {
     const resLower = resolution.toLowerCase()
 
     if (resLower.includes('4k') || resLower.includes('2160p')) {
@@ -582,6 +582,24 @@ export class QualityAnalyzer {
     if (resLower.includes('720p') || resLower.includes('720i')) {
       return '720p'
     }
+
+    // Parse WxH format (e.g., "1920x1080")
+    const wxhMatch = resolution.match(/(\d+)\s*x\s*(\d+)/i)
+    if (wxhMatch) {
+      const h = parseInt(wxhMatch[2], 10)
+      if (h >= 2160) return '4K'
+      if (h >= 1080) return '1080p'
+      if (h >= 720) return '720p'
+      return 'SD'
+    }
+
+    // Fallback to height field if available
+    if (height) {
+      if (height >= 2160) return '4K'
+      if (height >= 1080) return '1080p'
+      if (height >= 720) return '720p'
+    }
+
     return 'SD'
   }
 

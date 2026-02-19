@@ -55,11 +55,10 @@ describe('QualityAnalyzer', () => {
       expect(score.quality_tier).toBe('4K')
     })
 
-    it('should handle numeric resolution strings (falls back to SD for WxH format)', async () => {
-      // Note: classifyTier() only recognizes patterns like '1080p', not 'WxH' format
+    it('should parse WxH resolution format correctly', async () => {
       const item = createMediaItem({ resolution: '1920x1080', video_bitrate: 10000 })
       const score = await analyzer.analyzeMediaItem(item)
-      expect(score.quality_tier).toBe('SD') // WxH format not parsed as resolution tier
+      expect(score.quality_tier).toBe('1080p')
     })
 
     it('should default to SD for unknown resolution', async () => {
@@ -151,13 +150,13 @@ describe('QualityAnalyzer', () => {
     it('should apply AV1 efficiency multiplier', async () => {
       const item = createMediaItem({
         resolution: '2160p', // Use standard resolution string
-        video_bitrate: 15000,
+        video_bitrate: 16000,
         video_codec: 'av1',
         audio_codec: 'truehd', // HIGH audio to not drag down overall
         audio_channels: 8,
       })
       const score = await analyzer.analyzeMediaItem(item)
-      // AV1 has 3x efficiency, so effective bitrate is 45000 (above 40000 HIGH threshold)
+      // AV1 has 2.5x efficiency, so effective bitrate is 40000 (at 40000 HIGH threshold)
       expect(score.tier_quality).toBe('HIGH')
     })
   })

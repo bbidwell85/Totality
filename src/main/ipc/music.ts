@@ -103,11 +103,21 @@ export function registerMusicHandlers(): void {
       const albums = db.getMusicAlbums({ sourceId: validSourceId })
       console.log(`[music:scanLibrary] Found ${albums.length} albums in database for sourceId=${validSourceId}`)
 
+      // Batch fetch all tracks to avoid N+1 queries
+      const albumIds = albums.map((a: { id?: number }) => a.id).filter((id: number | undefined): id is number => id != null)
+      const tracksByAlbum = 'getMusicTracksByAlbumIds' in db
+        ? (db as unknown as { getMusicTracksByAlbumIds: (ids: number[]) => Map<number, MusicTrack[]> }).getMusicTracksByAlbumIds(albumIds)
+        : null
+
+      db.startBatch()
       for (const album of albums) {
-        const tracks = db.getMusicTracks({ albumId: album.id })
+        const tracks = tracksByAlbum
+          ? (tracksByAlbum.get(album.id!) || [])
+          : db.getMusicTracks({ albumId: album.id })
         const qualityScore = analyzer.analyzeMusicAlbum(album, tracks)
         await db.upsertMusicQualityScore(qualityScore)
       }
+      await db.endBatch()
 
       // Update library scan timestamp if successful
       if (result.success && library) {
@@ -329,10 +339,19 @@ export function registerMusicHandlers(): void {
       const filters: MusicFilters = validSourceId ? { sourceId: validSourceId } : {}
       const albums = db.getMusicAlbums(filters)
 
+      // Batch fetch all tracks to avoid N+1 queries
+      const albumIds = albums.map((a: { id?: number }) => a.id).filter((id: number | undefined): id is number => id != null)
+      const tracksByAlbum = 'getMusicTracksByAlbumIds' in db
+        ? (db as unknown as { getMusicTracksByAlbumIds: (ids: number[]) => Map<number, MusicTrack[]> }).getMusicTracksByAlbumIds(albumIds)
+        : null
+
       let processed = 0
 
+      db.startBatch()
       for (const album of albums) {
-        const tracks = db.getMusicTracks({ albumId: album.id })
+        const tracks = tracksByAlbum
+          ? (tracksByAlbum.get(album.id!) || [])
+          : db.getMusicTracks({ albumId: album.id })
         const qualityScore = analyzer.analyzeMusicAlbum(album, tracks)
         await db.upsertMusicQualityScore(qualityScore)
 
@@ -344,6 +363,7 @@ export function registerMusicHandlers(): void {
           percentage: (processed / albums.length) * 100,
         })
       }
+      await db.endBatch()
 
       return { success: true, analyzed: albums.length }
     } catch (error: unknown) {

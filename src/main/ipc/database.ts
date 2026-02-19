@@ -172,6 +172,11 @@ export function registerDatabaseHandlers() {
         getQualityAnalyzer().invalidateThresholdsCache()
       }
 
+      // Refresh TMDB API key when it changes (no restart needed)
+      if (validKey === 'tmdb_api_key') {
+        getTMDBService().refreshApiKey()
+      }
+
       // Broadcast settings change event to all windows
       const win = BrowserWindow.fromWebContents(event.sender)
       if (win) {

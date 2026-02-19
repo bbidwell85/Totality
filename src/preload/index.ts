@@ -1254,22 +1254,16 @@ export interface ElectronAPI {
   onMusicAnalysisProgress: (callback: (progress: unknown) => void) => () => void
 
   // MusicBrainz Completeness
-  musicConfigureMusicBrainzApi: (apiUrl: string, apiToken: string) => Promise<{ success: boolean }>
-  musicUsePublicMusicBrainzApi: () => Promise<{ success: boolean }>
   musicSearchMusicBrainzArtist: (name: string) => Promise<unknown[]>
   musicAnalyzeArtistCompleteness: (artistId: number) => Promise<unknown>
-  musicAnalyzeAllArtistsCompleteness: () => Promise<{ success: boolean }>
   musicGetArtistCompleteness: (artistName: string) => Promise<unknown | null>
   musicGetAllArtistCompleteness: (sourceId?: string) => Promise<unknown[]>
-  onMusicCompletenessProgress: (callback: (progress: unknown) => void) => void
 
   // Album Track Completeness
   musicAnalyzeAlbumTrackCompleteness: (albumId: number) => Promise<unknown | null>
-  musicAnalyzeAllAlbumsTrackCompleteness: () => Promise<{ success: boolean }>
   musicGetAlbumCompleteness: (albumId: number) => Promise<unknown | null>
   musicGetAllAlbumCompleteness: () => Promise<unknown[]>
   musicGetIncompleteAlbums: () => Promise<unknown[]>
-  onMusicTrackCompletenessProgress: (callback: (progress: unknown) => void) => void
 
   // Music - Match Fixing
   musicFixArtistMatch: (artistId: number, musicbrainzId: string) => Promise<{
@@ -1284,8 +1278,6 @@ export interface ElectronAPI {
 
   // Music - Cancellation
   musicCancelScan: (sourceId: string) => Promise<{ success: boolean }>
-  musicCancelArtistAnalysis: () => Promise<{ success: boolean }>
-  musicCancelTrackAnalysis: () => Promise<{ success: boolean }>
 
   // Database - Statistics
   getLibraryStats: (sourceId?: string) => Promise<{

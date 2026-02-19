@@ -15,7 +15,8 @@ import { BrowserWindow } from 'electron'
 import * as chokidar from 'chokidar'
 import * as path from 'path'
 import * as fs from 'fs'
-import { execSync } from 'child_process'
+import { exec } from 'child_process'
+import { promisify } from 'util'
 import { getDatabase } from '../database/getDatabase'
 import { getSourceManager } from './SourceManager'
 import { safeSend } from '../ipc/utils/safeSend'
@@ -35,18 +36,18 @@ const MEDIA_EXTENSIONS = new Set([
   '.mp3', '.flac', '.m4a', '.aac', '.ogg', '.wav', '.wma', '.alac', '.aiff', '.opus',
 ])
 
+const execAsync = promisify(exec)
+
 /**
  * Cache of Windows network drive letters, detected once at startup via wmic.
  * DriveType 4 = "Network Drive" in Win32_LogicalDisk.
  */
-let networkDriveLetters: Set<string> | null = null
+let networkDriveLetters: Set<string> = new Set()
 
-function detectWindowsNetworkDrives(): Set<string> {
-  if (networkDriveLetters) return networkDriveLetters
-  networkDriveLetters = new Set()
-  if (process.platform !== 'win32') return networkDriveLetters
+async function detectWindowsNetworkDrivesAsync(): Promise<void> {
+  if (process.platform !== 'win32') return
   try {
-    const output = execSync('wmic logicaldisk get DeviceID,DriveType', {
+    const { stdout } = await execAsync('wmic logicaldisk get DeviceID,DriveType', {
       encoding: 'utf-8',
       timeout: 5000,
       windowsHide: true,
@@ -55,16 +56,17 @@ function detectWindowsNetworkDrives(): Set<string> {
     // DeviceID  DriveType
     // C:        3
     // Z:        4
-    for (const line of output.split('\n')) {
+    const detected = new Set<string>()
+    for (const line of stdout.split('\n')) {
       const match = line.match(/^([A-Z]):?\s+(\d+)/)
       if (match && match[2] === '4') {
-        networkDriveLetters.add(match[1])
+        detected.add(match[1])
       }
     }
+    networkDriveLetters = detected
   } catch {
     // wmic unavailable or timed out — fall back to empty set (treat all drives as local)
   }
-  return networkDriveLetters
 }
 
 /**
@@ -75,10 +77,10 @@ function isNetworkPath(filePath: string): boolean {
   // Windows UNC paths: \\server\share
   if (filePath.startsWith('\\\\')) return true
 
-  // Windows mapped drives — check actual drive type via wmic
+  // Windows mapped drives — check actual drive type from cached wmic result
   if (process.platform === 'win32') {
     const driveLetter = filePath.match(/^([A-Za-z]):/)?.[1]?.toUpperCase()
-    if (driveLetter && detectWindowsNetworkDrives().has(driveLetter)) {
+    if (driveLetter && networkDriveLetters.has(driveLetter)) {
       return true
     }
   }
@@ -122,9 +124,10 @@ export class LiveMonitoringService {
    * Initialize the monitoring service
    */
   async initialize(): Promise<void> {
-    const db = getDatabase()
+    // Detect network drives early (async, non-blocking)
+    await detectWindowsNetworkDrivesAsync()
 
-    // Load config from database settings
+    const db = getDatabase()
     const enabled = db.getSetting('monitoring_enabled')
     this.config.enabled = enabled === 'true'
 

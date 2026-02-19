@@ -214,6 +214,30 @@ export class BetterSQLiteService {
       }
     }
 
+    // Migration: Add 'kodi-mysql' to source_type CHECK constraints for existing databases
+    try {
+      const schemaRow = this.db.prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='media_sources'"
+      ).get() as { sql: string } | undefined
+      if (schemaRow?.sql && !schemaRow.sql.includes('kodi-mysql')) {
+        this.db.exec('PRAGMA writable_schema = ON')
+        const tables = "'media_sources','media_items','music_artists','music_albums','music_tracks'"
+        // Handle migration 001 format (missing 'local')
+        this.db.exec(
+          `UPDATE sqlite_master SET sql = replace(sql, '''kodi-local''))', '''kodi-local'', ''kodi-mysql'', ''local''))') WHERE type = 'table' AND name IN (${tables})`
+        )
+        // Handle schema.ts format (has 'local')
+        this.db.exec(
+          `UPDATE sqlite_master SET sql = replace(sql, '''kodi-local'', ''local''))', '''kodi-local'', ''kodi-mysql'', ''local''))') WHERE type = 'table' AND name IN (${tables})`
+        )
+        this.db.exec('PRAGMA writable_schema = OFF')
+        this.db.exec('PRAGMA integrity_check')
+        console.log('[BetterSQLite] Migration: Added kodi-mysql to source_type CHECK constraints')
+      }
+    } catch (error: unknown) {
+      console.log('[BetterSQLite] kodi-mysql CHECK migration note:', getErrorMessage(error))
+    }
+
     // Create indexes for performance
     try {
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_items_tmdb_id ON media_items(tmdb_id) WHERE tmdb_id IS NOT NULL')
@@ -2090,6 +2114,31 @@ export class BetterSQLiteService {
 
     const stmt = this.db.prepare(sql)
     return stmt.all(...params) as MusicTrack[]
+  }
+
+  /**
+   * Batch fetch tracks for multiple album IDs in a single query
+   * Returns Map of album_id → MusicTrack[]
+   */
+  getMusicTracksByAlbumIds(albumIds: number[]): Map<number, MusicTrack[]> {
+    if (!this.db) throw new Error('Database not initialized')
+    const result = new Map<number, MusicTrack[]>()
+    if (albumIds.length === 0) return result
+
+    const placeholders = albumIds.map(() => '?').join(',')
+    const stmt = this.db.prepare(
+      `SELECT * FROM music_tracks WHERE album_id IN (${placeholders}) ORDER BY album_id, disc_number ASC, track_number ASC`
+    )
+    const rows = stmt.all(...albumIds) as MusicTrack[]
+
+    for (const track of rows) {
+      if (track.album_id) {
+        const list = result.get(track.album_id)
+        if (list) list.push(track)
+        else result.set(track.album_id, [track])
+      }
+    }
+    return result
   }
 
   countMusicTracks(filters?: MusicFilters): number {
@@ -3986,6 +4035,17 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       "SELECT COUNT(*) as count FROM media_items WHERE type = 'episode' AND series_title = ? AND season_number = ?"
     )
     return (stmt.get(seriesTitle, seasonNumber) as { count: number }).count
+  }
+
+  /**
+   * Check if a specific episode exists by series title + season + episode number
+   */
+  getEpisodeCountForSeasonEpisode(seriesTitle: string, seasonNumber: number, episodeNumber: number): number {
+    if (!this.db) throw new Error('Database not initialized')
+    const stmt = this.db.prepare(
+      "SELECT COUNT(*) as count FROM media_items WHERE type = 'episode' AND series_title = ? AND season_number = ? AND episode_number = ?"
+    )
+    return (stmt.get(seriesTitle, seasonNumber, episodeNumber) as { count: number }).count
   }
 
   /**

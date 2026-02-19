@@ -278,6 +278,19 @@ export const KodiMySQLConfigSchema = z.object({
 })
 
 /**
+ * Kodi MySQL test/detect connection config (no displayName required)
+ */
+export const KodiMySQLTestConfigSchema = z.object({
+  host: z.string().min(1, 'Host is required'),
+  port: z.number().int().min(1).max(65535).optional(),
+  username: z.string().min(1, 'Username is required').max(100),
+  password: z.string().max(256),
+  databasePrefix: z.string().max(50).optional(),
+  ssl: z.boolean().optional(),
+  connectionTimeout: z.number().int().min(1000).max(60000).optional(),
+})
+
+/**
  * Local folder source configuration
  */
 export const LocalFolderConfigSchema = z.object({

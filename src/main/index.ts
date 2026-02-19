@@ -274,6 +274,16 @@ app.whenReady().then(async () => {
       // URL format: local-artwork://file?path=C:\path\to\file.jpg
       if (url.hostname === 'file') {
         const filePath = url.searchParams.get('path')
+        if (!filePath) return new Response('Not found', { status: 404 })
+
+        // SECURITY: Only allow image file extensions to prevent arbitrary file reads
+        const ext = path.extname(filePath).toLowerCase()
+        const ALLOWED_IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff'])
+        if (!ALLOWED_IMAGE_EXTS.has(ext)) {
+          console.warn('[Security] Blocked non-image file request:', filePath)
+          return new Response('Forbidden', { status: 403 })
+        }
+
         if (filePath && fs.existsSync(filePath)) {
           // Handle Windows UNC paths
           if (filePath.startsWith('\\\\')) {

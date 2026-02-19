@@ -353,6 +353,35 @@ export class DatabaseService {
         }
       }
 
+      // Migration: Add 'kodi-mysql' to source_type CHECK constraints for existing databases
+      try {
+        const checkInfo = this.db.exec(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name='media_sources'"
+        )
+        if (checkInfo.length > 0 && checkInfo[0].values.length > 0) {
+          const schemaSQL = checkInfo[0].values[0][0] as string
+          if (schemaSQL && !schemaSQL.includes('kodi-mysql')) {
+            this.db.run('PRAGMA writable_schema = ON')
+            const tables = ['media_sources', 'media_items', 'music_artists', 'music_albums', 'music_tracks']
+            for (const table of tables) {
+              // Handle migration 001 format (missing 'local')
+              this.db.run(
+                `UPDATE sqlite_master SET sql = replace(sql, '''kodi-local''))', '''kodi-local'', ''kodi-mysql'', ''local''))') WHERE type = 'table' AND name = '${table}'`
+              )
+              // Handle schema.ts format (has 'local')
+              this.db.run(
+                `UPDATE sqlite_master SET sql = replace(sql, '''kodi-local'', ''local''))', '''kodi-local'', ''kodi-mysql'', ''local''))') WHERE type = 'table' AND name = '${table}'`
+              )
+            }
+            this.db.run('PRAGMA writable_schema = OFF')
+            this.db.run('PRAGMA integrity_check')
+            console.log('[Database] Migration: Added kodi-mysql to source_type CHECK constraints')
+          }
+        }
+      } catch (e: unknown) {
+        console.log('[Database] kodi-mysql CHECK migration note:', getErrorMessage(e))
+      }
+
       // Execute main schema (CREATE TABLE IF NOT EXISTS)
       this.db.run(DATABASE_SCHEMA)
 

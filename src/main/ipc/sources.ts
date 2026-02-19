@@ -24,6 +24,7 @@ import {
   AddSourceSchema,
   UpdateSourceSchema,
   KodiMySQLConfigSchema,
+  KodiMySQLTestConfigSchema,
   SafeUrlSchema,
   SourceIdSchema,
   BooleanSchema,
@@ -670,25 +671,18 @@ export function registerSourceHandlers(): void {
   /**
    * Test MySQL/MariaDB connection and detect Kodi databases
    */
-  ipcMain.handle('kodi:testMySQLConnection', async (_event, config: {
-    host: string
-    port?: number
-    username: string
-    password: string
-    databasePrefix?: string
-    ssl?: boolean
-    connectionTimeout?: number
-  }) => {
+  ipcMain.handle('kodi:testMySQLConnection', async (_event, config: unknown) => {
     try {
+      const validConfig = validateInput(KodiMySQLTestConfigSchema, config, 'kodi:testMySQLConnection')
       const connectionService = getKodiMySQLConnectionService()
       const mysqlConfig: KodiMySQLConfig = {
-        host: config.host,
-        port: config.port || 3306,
-        username: config.username,
-        password: config.password,
-        databasePrefix: config.databasePrefix || 'kodi_',
-        ssl: config.ssl,
-        connectionTimeout: config.connectionTimeout || 10000,
+        host: validConfig.host,
+        port: validConfig.port || 3306,
+        username: validConfig.username,
+        password: validConfig.password,
+        databasePrefix: validConfig.databasePrefix || 'kodi_',
+        ssl: validConfig.ssl,
+        connectionTimeout: validConfig.connectionTimeout || 10000,
       }
       return await connectionService.testConnection(mysqlConfig)
     } catch (error: unknown) {
@@ -703,21 +697,16 @@ export function registerSourceHandlers(): void {
   /**
    * Detect Kodi databases on MySQL server
    */
-  ipcMain.handle('kodi:detectMySQLDatabases', async (_event, config: {
-    host: string
-    port?: number
-    username: string
-    password: string
-    databasePrefix?: string
-  }) => {
+  ipcMain.handle('kodi:detectMySQLDatabases', async (_event, config: unknown) => {
     try {
+      const validConfig = validateInput(KodiMySQLTestConfigSchema, config, 'kodi:detectMySQLDatabases')
       const connectionService = getKodiMySQLConnectionService()
       const mysqlConfig: KodiMySQLConfig = {
-        host: config.host,
-        port: config.port || 3306,
-        username: config.username,
-        password: config.password,
-        databasePrefix: config.databasePrefix || 'kodi_',
+        host: validConfig.host,
+        port: validConfig.port || 3306,
+        username: validConfig.username,
+        password: validConfig.password,
+        databasePrefix: validConfig.databasePrefix || 'kodi_',
       }
       return await connectionService.detectDatabases(mysqlConfig)
     } catch (error: unknown) {

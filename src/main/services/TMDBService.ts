@@ -46,6 +46,15 @@ export class TMDBService {
   }
 
   /**
+   * Refresh API key from database (called when settings change)
+   */
+  refreshApiKey(): void {
+    const db = getDatabase()
+    const setting = db.getSetting('tmdb_api_key')
+    this.apiKey = setting || null
+  }
+
+  /**
    * Get TMDB API key from settings
    */
   private getApiKey(): string {

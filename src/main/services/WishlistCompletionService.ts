@@ -102,6 +102,9 @@ export class WishlistCompletionService {
     const seasonItems = items.filter(
       (i) => i.media_type === 'season' && i.series_title && i.season_number != null
     )
+    const episodeItems = items.filter(
+      (i) => i.media_type === 'episode' && i.series_title && i.season_number != null && i.episode_number != null
+    )
     const albumItems = items.filter((i) => i.media_type === 'album' && i.musicbrainz_id)
     const trackItems = items.filter((i) => i.media_type === 'track' && i.musicbrainz_id)
 
@@ -125,6 +128,19 @@ export class WishlistCompletionService {
     // Check seasons by series_title + season_number
     for (const item of seasonItems) {
       const count = db.getEpisodeCountForSeason(item.series_title!, item.season_number!)
+      if (count > 0) {
+        completed.push({
+          id: item.id!,
+          title: item.title,
+          reason: 'missing',
+          media_type: item.media_type,
+        })
+      }
+    }
+
+    // Check episodes by series_title + season_number + episode_number
+    for (const item of episodeItems) {
+      const count = db.getEpisodeCountForSeasonEpisode(item.series_title!, item.season_number!, item.episode_number!)
       if (count > 0) {
         completed.push({
           id: item.id!,

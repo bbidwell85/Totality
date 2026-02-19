@@ -48,7 +48,7 @@ export async function runMigration(db: Database): Promise<void> {
       CREATE TABLE media_sources (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         source_id TEXT NOT NULL UNIQUE,
-        source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local')),
+        source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local')),
         display_name TEXT NOT NULL,
         connection_config TEXT NOT NULL DEFAULT '{}',
         is_enabled INTEGER NOT NULL DEFAULT 1,
