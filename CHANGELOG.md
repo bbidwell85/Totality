@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.19](https://github.com/bbidwell85/totality/compare/v0.1.18...v0.1.19) (2026-02-20)
+
+
+### Features
+
+* add codec efficiency UI and correct AV1 default to 2.5x ([688e51f](https://github.com/bbidwell85/totality/commit/688e51f714f87ece7f6657ec8559b2f8b25d9faf))
+* add copy-to-clipboard button for Handbrake extra options ([1ce98f7](https://github.com/bbidwell85/totality/commit/1ce98f74c2fc8363e8a9cb741be8ac9287d5e785))
+* add item count stats bars to Movies and TV Shows views ([451d678](https://github.com/bbidwell85/totality/commit/451d6785aed5ce9550c736a656857c710e7f217d))
+* add sort title support, fix Emby collections, and scope completeness by source ([fbf1c9c](https://github.com/bbidwell85/totality/commit/fbf1c9c2bafde18cf51426ed241a6ac051106a63))
+* add task queue persistence (H3) and file-based logging (M5) ([d32db18](https://github.com/bbidwell85/totality/commit/d32db180aa2ac5c2036fc8b717fc2659eec1ce42))
+* auto-complete wishlist items when library content is added or upgraded ([70aa951](https://github.com/bbidwell85/totality/commit/70aa9515ea9d905a3c8fc15440e713427d1c2f3d))
+
+
+### Bug Fixes
+
+* add Zod validation to all unvalidated IPC handlers ([4071c8c](https://github.com/bbidwell85/totality/commit/4071c8c5ef9d4ba20396c8dba4c42644899aae29))
+* address remaining medium-priority production findings ([b8580c0](https://github.com/bbidwell85/totality/commit/b8580c0f647cec2fe04916cc60f4cd47e8118675))
+* bugs, security, performance, and infrastructure fixes from full audit ([00d0aab](https://github.com/bbidwell85/totality/commit/00d0aabe36b2a5b39637de52ea09ede5d6a32a0f))
+* completeness panel stats now account for dismissed items and EP/Singles toggle ([34200a9](https://github.com/bbidwell85/totality/commit/34200a97197ccf70d70088467c5b9ceabe563288))
+* consolidate Quality settings tab — move codec efficiency into Video Quality card, slim threshold bars ([7c163f7](https://github.com/bbidwell85/totality/commit/7c163f7b8cfbbf6dad60ed0ff4bad31bdc59398d))
+* correct Emby/Jellyfin video bitrate to exclude audio from container bitrate ([079df25](https://github.com/bbidwell85/totality/commit/079df2583ce6d52f6d31c53bca1ccda08cf87c1a))
+* harden security, performance, and reliability ([6565ae4](https://github.com/bbidwell85/totality/commit/6565ae4a39468e283974510c4633db99151cd295))
+* live-update dashboard and completeness panel when EP/Singles settings change ([0e91a26](https://github.com/bbidwell85/totality/commit/0e91a26595780534d3b54b8ddec75268c1f5fddd))
+* low-priority hardening (symlink check, query limit) ([3812979](https://github.com/bbidwell85/totality/commit/38129794e4a225102ad35d26cce5cd9ccc7478c2))
+* move EP/Singles filtering server-side and add live settings refresh ([b863056](https://github.com/bbidwell85/totality/commit/b8630567a8a73a6f6c9de85cbdacf7e858477782))
+* split MediaBrowser into view components, improve network detection, remove dead code ([baceca5](https://github.com/bbidwell85/totality/commit/baceca55c41486d968885ae8cfeac0814e30ee20))
+
 ### [0.1.18](https://github.com/bbidwell85/totality/compare/v0.1.17...v0.1.18) (2026-02-16)
 
 

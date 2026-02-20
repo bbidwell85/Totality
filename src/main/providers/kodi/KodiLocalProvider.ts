@@ -15,7 +15,7 @@ import { getErrorMessage } from '../../services/utils/errorUtils'
  * - Database file must be readable (not locked by Kodi)
  */
 
-import initSqlJs, { Database } from 'sql.js'
+import type { Database } from 'sql.js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { getDatabase } from '../../database/getDatabase'
@@ -98,7 +98,8 @@ export class KodiLocalProvider implements MediaProvider {
   private databasePath: string = ''
   private databaseVersion: number = 0
   private db: Database | null = null
-  private sqlJs: Awaited<ReturnType<typeof initSqlJs>> | null = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private sqlJs: any = null
 
   // Music database support
   private musicDatabasePath: string = ''
@@ -146,7 +147,7 @@ export class KodiLocalProvider implements MediaProvider {
    */
   private async initSqlJs(): Promise<void> {
     if (!this.sqlJs) {
-      // sql.js WASM file is bundled with the package
+      const { default: initSqlJs } = await import('sql.js')
       this.sqlJs = await initSqlJs()
     }
   }

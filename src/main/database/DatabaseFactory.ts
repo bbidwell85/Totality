@@ -18,9 +18,20 @@ import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 
-// Static imports for database services (prevents Vite bundling issues with dynamic require)
+// better-sqlite3 is always available in production
 import { getBetterSQLiteService } from './BetterSQLiteService'
-import { getDatabaseService as getSqlJsService } from '../services/DatabaseService'
+
+// SQL.js is loaded dynamically to avoid requiring it in production builds
+// (it's excluded from the ASAR bundle since production uses better-sqlite3)
+let sqlJsServiceLoader: (() => DatabaseServiceInterface) | null = null
+
+async function getSqlJsService(): Promise<DatabaseServiceInterface> {
+  if (!sqlJsServiceLoader) {
+    const mod = await import('../services/DatabaseService')
+    sqlJsServiceLoader = mod.getDatabaseService
+  }
+  return sqlJsServiceLoader()
+}
 
 // The database backend to use (cached after first check)
 let useBetterSqlite: boolean | null = null
@@ -151,13 +162,17 @@ export async function getDatabaseServiceAsync(): Promise<DatabaseServiceInterfac
 /**
  * Get the synchronous database service
  * Note: This should only be called after the app is ready and database is initialized
- * Migration must be performed before calling this
+ * Migration must be performed before calling this (which loads the SQL.js module if needed)
  */
 export function getDatabaseServiceSync(): DatabaseServiceInterface {
   if (shouldUseBetterSqlite()) {
     return getBetterSQLiteService()
   } else {
-    return getSqlJsService()
+    // SQL.js loader must have been initialized by a prior getDatabaseServiceAsync() call
+    if (!sqlJsServiceLoader) {
+      throw new Error('[DatabaseFactory] SQL.js service not loaded. Call getDatabaseServiceAsync() first.')
+    }
+    return sqlJsServiceLoader()
   }
 }
 
