@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useId } from 'react'
-import { RotateCcw, Save, Loader2, RefreshCw, ChevronDown, Film, Music, Clapperboard, Copy, Check, Gauge } from 'lucide-react'
+import { RotateCcw, Save, Loader2, RefreshCw, ChevronDown, Film, Music, Clapperboard, Copy, Check } from 'lucide-react'
 
 // Default values for all quality settings
 const DEFAULT_SETTINGS = {
@@ -289,13 +289,6 @@ export function QualitySettingsTab() {
 
   return (
     <div className="p-6 space-y-3 overflow-y-auto">
-      {/* Header */}
-      <div className="mb-4">
-        <p className="text-xs text-muted-foreground">
-          Configure bitrate thresholds for quality scoring. Newer codecs like HEVC and AV1 look just as good at lower bitrates, so scores are adjusted automatically — see Codec Efficiency below. Audio thresholds target stereo codecs (AAC, MP3) and scale for surround formats (AC3, EAC3, DTS).
-        </p>
-      </div>
-
       {/* Video Quality Card */}
       <SettingsCard
         title="Video Quality"
@@ -357,72 +350,61 @@ export function QualitySettingsTab() {
               }}
             />
           </div>
-        </div>
-      </SettingsCard>
 
-      {/* Codec Efficiency Card */}
-      <SettingsCard
-        title="Codec Efficiency"
-        description="How much credit each codec gets for using lower bitrates"
-        icon={<Gauge className="w-7 h-7" />}
-        expanded={expandedCards.has('codec')}
-        onToggle={() => toggleCard('codec')}
-      >
-        <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Newer codecs like HEVC and AV1 deliver the same picture quality at much lower bitrates
-            than H.264. To score them fairly, Totality gives newer codecs credit for their
-            efficiency — an HEVC file doesn't need as high a bitrate to earn the same score.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            A value of 2.0x means the codec is twice as efficient as H.264, so it only needs half
-            the bitrate to score the same. Higher values = more credit for efficiency.
-          </p>
+          {/* Codec Efficiency */}
+          <div className="border-t border-border pt-4 mt-2">
+            <h4 className="text-sm font-medium mb-2">Codec Efficiency</h4>
+            <p className="text-xs text-muted-foreground mb-3">
+              Newer codecs like HEVC and AV1 deliver the same picture quality at much lower bitrates
+              than H.264. A value of 2.0x means the codec is twice as efficient, so it only needs half
+              the bitrate to score the same.
+            </p>
 
-          <div className="grid grid-cols-2 gap-4">
-            <NumberInput
-              label="H.264 (baseline)"
-              value={settings.quality_codec_h264}
-              min={0.5}
-              max={5.0}
-              step={0.1}
-              onChange={(v) => updateSetting('quality_codec_h264', v)}
-              hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_h264)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
-            />
-            <NumberInput
-              label="HEVC / H.265"
-              value={settings.quality_codec_h265}
-              min={0.5}
-              max={5.0}
-              step={0.1}
-              onChange={(v) => updateSetting('quality_codec_h265', v)}
-              hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_h265)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
-            />
-            <NumberInput
-              label="AV1"
-              value={settings.quality_codec_av1}
-              min={0.5}
-              max={5.0}
-              step={0.1}
-              onChange={(v) => updateSetting('quality_codec_av1', v)}
-              hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_av1)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
-            />
-            <NumberInput
-              label="VP9"
-              value={settings.quality_codec_vp9}
-              min={0.5}
-              max={5.0}
-              step={0.1}
-              onChange={(v) => updateSetting('quality_codec_vp9', v)}
-              hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_vp9)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <NumberInput
+                label="H.264 (baseline)"
+                value={settings.quality_codec_h264}
+                min={0.5}
+                max={5.0}
+                step={0.1}
+                onChange={(v) => updateSetting('quality_codec_h264', v)}
+                hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_h264)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
+              />
+              <NumberInput
+                label="HEVC / H.265"
+                value={settings.quality_codec_h265}
+                min={0.5}
+                max={5.0}
+                step={0.1}
+                onChange={(v) => updateSetting('quality_codec_h265', v)}
+                hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_h265)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
+              />
+              <NumberInput
+                label="AV1"
+                value={settings.quality_codec_av1}
+                min={0.5}
+                max={5.0}
+                step={0.1}
+                onChange={(v) => updateSetting('quality_codec_av1', v)}
+                hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_av1)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
+              />
+              <NumberInput
+                label="VP9"
+                value={settings.quality_codec_vp9}
+                min={0.5}
+                max={5.0}
+                step={0.1}
+                onChange={(v) => updateSetting('quality_codec_vp9', v)}
+                hint={`Needs ${formatEffectiveThreshold(settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number, settings.quality_codec_vp9)} for ${RESOLUTION_TABS.find(t => t.id === selectedTier)?.label} HIGH`}
+              />
+            </div>
+
+            <p className="text-[10px] text-muted-foreground italic mt-3">
+              Most users won't need to change these. Adjust if your HEVC or AV1 files are scoring
+              higher or lower than they look — lower the value if scores seem too generous, raise it
+              if scores seem too harsh.
+            </p>
           </div>
-
-          <p className="text-[10px] text-muted-foreground italic">
-            Most users won't need to change these. Adjust if your HEVC or AV1 files are scoring
-            higher or lower than they look — lower the value if scores seem too generous, raise it
-            if scores seem too harsh.
-          </p>
         </div>
       </SettingsCard>
 
@@ -595,10 +577,10 @@ function QualityThreshold({
         <span className="text-xs font-medium">{label}</span>
       </div>
 
-      <div className="relative h-6">
+      <div className="relative h-4">
         <div
           ref={trackRef}
-          className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-3 rounded-full cursor-pointer overflow-hidden"
+          className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full cursor-pointer overflow-hidden"
           onClick={(e) => {
             const value = getValueFromPosition(e.clientX)
             const distToMedium = Math.abs(value - mediumValue)
@@ -622,8 +604,8 @@ function QualityThreshold({
           aria-valuemin={min}
           aria-valuemax={highValue - step}
           aria-valuenow={mediumValue}
-          className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full cursor-grab shadow-md border-2 border-background z-10 ${dragging === 'medium' ? 'cursor-grabbing scale-110' : 'hover:scale-110'} transition-transform`}
-          style={{ left: `${mediumPercent}%`, marginLeft: '-8px' }}
+          className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full cursor-grab shadow-md border-2 border-background z-10 ${dragging === 'medium' ? 'cursor-grabbing scale-110' : 'hover:scale-110'} transition-transform`}
+          style={{ left: `${mediumPercent}%`, marginLeft: '-6px' }}
           onMouseDown={handleMouseDown('medium')}
         />
 
@@ -634,8 +616,8 @@ function QualityThreshold({
           aria-valuemin={mediumValue + step}
           aria-valuemax={max}
           aria-valuenow={highValue}
-          className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full cursor-grab shadow-md border-2 border-background z-10 ${dragging === 'high' ? 'cursor-grabbing scale-110' : 'hover:scale-110'} transition-transform`}
-          style={{ left: `${highPercent}%`, marginLeft: '-8px' }}
+          className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full cursor-grab shadow-md border-2 border-background z-10 ${dragging === 'high' ? 'cursor-grabbing scale-110' : 'hover:scale-110'} transition-transform`}
+          style={{ left: `${highPercent}%`, marginLeft: '-6px' }}
           onMouseDown={handleMouseDown('high')}
         />
       </div>
