@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.2.0](https://github.com/bbidwell85/totality/compare/v0.1.19...v0.2.0) (2026-03-17)
+
+
+### Features
+
+* add AI music tools, security audit fixes, faster startup, and UI improvements ([d498c6d](https://github.com/bbidwell85/totality/commit/d498c6d32c4c5c29c3655e488416b87e5928fe99))
+* enhance AI chat, add verbose logging, and expose file logging settings ([6380def](https://github.com/bbidwell85/totality/commit/6380def3b190eb238f2682c4d82e6527b31c7f85))
+* improve AI assistant, fix quality scoring, and clean up stale Plex items ([f9ac451](https://github.com/bbidwell85/totality/commit/f9ac4515ce45ff652f1d04714c47c63de7532260))
+* replace Claude AI with Gemini, add TMDB search tool, and optimize token usage ([af6628a](https://github.com/bbidwell85/totality/commit/af6628aa77e2f2f2717f1b44920f1e12ea3089ea))
+
 ### [0.1.19](https://github.com/bbidwell85/totality/compare/v0.1.18...v0.1.19) (2026-02-20)
 
 
