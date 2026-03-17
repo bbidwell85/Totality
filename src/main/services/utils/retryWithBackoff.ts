@@ -18,6 +18,8 @@ export interface RetryOptions {
   jitter?: boolean
   /** HTTP status codes that should trigger a retry (default: [429, 500, 502, 503, 504]) */
   retryableStatuses?: number[]
+  /** Minimum delay floor in milliseconds — overrides calculated backoff if higher (e.g., from Retry-After header) */
+  minRetryDelay?: number
   /** Optional callback when a retry occurs */
   onRetry?: (attempt: number, error: Error, delay: number) => void
 }
@@ -28,7 +30,8 @@ const DEFAULT_OPTIONS: Required<Omit<RetryOptions, 'onRetry'>> = {
   maxDelay: 30000,
   backoffFactor: 2,
   jitter: true,
-  retryableStatuses: [429, 500, 502, 503, 504]
+  retryableStatuses: [429, 500, 502, 503, 504],
+  minRetryDelay: 0,
 }
 
 /**
@@ -137,14 +140,17 @@ export async function retryWithBackoff<T>(
         throw lastError
       }
 
-      // Calculate delay
-      const delay = calculateDelay(
+      // Calculate delay, respecting minRetryDelay floor (e.g., from Retry-After header)
+      const calculatedDelay = calculateDelay(
         attempt,
         config.initialDelay,
         config.maxDelay,
         config.backoffFactor,
         config.jitter
       )
+      const delay = options.minRetryDelay
+        ? Math.max(calculatedDelay, options.minRetryDelay)
+        : calculatedDelay
 
       // Call retry callback if provided
       if (options.onRetry) {

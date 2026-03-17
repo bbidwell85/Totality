@@ -41,6 +41,10 @@ export interface LogEntry {
 const MAX_INFO_ENTRIES = 2000
 const MAX_IMPORTANT_ENTRIES = 500
 
+/** Function type for lazy database access — injected to avoid circular dependency */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DatabaseGetter = () => any
+
 class LoggingService {
   private infoLogs: LogEntry[] = [] // Circular buffer for info/debug/verbose
   private importantLogs: LogEntry[] = [] // Protected buffer for warn/error
@@ -49,6 +53,7 @@ class LoggingService {
   private startedAt = new Date()
   private verboseEnabled = false
   private homeDir = os.homedir()
+  private dbGetter: DatabaseGetter | null = null
   private originalConsole: {
     log: typeof console.log
     warn: typeof console.warn
@@ -95,6 +100,14 @@ class LoggingService {
   initialize(): void {
     this.interceptConsole()
     this.addEntry('info', '[LoggingService]', 'Logging service initialized')
+  }
+
+  /**
+   * Inject database getter to avoid circular dependency with dynamic require.
+   * Must be called after database is initialized.
+   */
+  setDatabaseGetter(getter: DatabaseGetter): void {
+    this.dbGetter = getter
   }
 
   setMainWindow(window: BrowserWindow | null): void {
@@ -213,10 +226,10 @@ class LoggingService {
     this.addEntry('info', '[LoggingService]', `Verbose logging ${enabled ? 'enabled' : 'disabled'}`)
     // Persist to database
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getDatabase } = require('../database/getDatabase')
-      const db = getDatabase()
-      db.setSetting('verbose_logging_enabled', String(enabled))
+      if (this.dbGetter) {
+        const db = this.dbGetter()
+        db.setSetting('verbose_logging_enabled', String(enabled))
+      }
     } catch { /* DB may not be ready */ }
   }
 
@@ -298,9 +311,8 @@ class LoggingService {
 
   private loadFileLoggingSettings(): void {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getDatabase } = require('../database/getDatabase')
-      const db = getDatabase()
+      if (!this.dbGetter) return
+      const db = this.dbGetter()
       const enabled = db.getSetting('file_logging_enabled')
       const minLevel = db.getSetting('file_logging_min_level')
       const retention = db.getSetting('log_retention_days')

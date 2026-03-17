@@ -209,8 +209,8 @@ CREATE TABLE IF NOT EXISTS series_completeness (
   series_title TEXT NOT NULL,
 
   -- Source/library scoping
-  source_id TEXT,
-  library_id TEXT,
+  source_id TEXT NOT NULL DEFAULT '',
+  library_id TEXT NOT NULL DEFAULT '',
 
   total_seasons INTEGER NOT NULL,
   total_episodes INTEGER NOT NULL,
@@ -240,8 +240,8 @@ CREATE TABLE IF NOT EXISTS movie_collections (
   collection_name TEXT NOT NULL,
 
   -- Source/library scoping
-  source_id TEXT,
-  library_id TEXT,
+  source_id TEXT NOT NULL DEFAULT '',
+  library_id TEXT NOT NULL DEFAULT '',
 
   total_movies INTEGER NOT NULL,
   owned_movies INTEGER NOT NULL,
@@ -679,7 +679,10 @@ CREATE INDEX IF NOT EXISTS idx_quality_scores_tier ON quality_scores(quality_tie
 CREATE INDEX IF NOT EXISTS idx_quality_scores_tier_quality ON quality_scores(tier_quality);
 CREATE INDEX IF NOT EXISTS idx_quality_scores_tier_both ON quality_scores(quality_tier, tier_quality);
 CREATE INDEX IF NOT EXISTS idx_media_items_type_series ON media_items(type, series_title) WHERE type = 'episode';
+CREATE INDEX IF NOT EXISTS idx_media_items_imdb_id ON media_items(imdb_id) WHERE imdb_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_media_items_year ON media_items(year) WHERE year IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(key);
+CREATE INDEX IF NOT EXISTS idx_series_completeness_tmdb_id ON series_completeness(tmdb_id) WHERE tmdb_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_series_completeness_title ON series_completeness(series_title);
 CREATE INDEX IF NOT EXISTS idx_series_completeness_library ON series_completeness(source_id, library_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_series_completeness_unique ON series_completeness(series_title, source_id, library_id);
@@ -705,6 +708,7 @@ CREATE INDEX IF NOT EXISTS idx_music_albums_artist ON music_albums(artist_id);
 CREATE INDEX IF NOT EXISTS idx_music_albums_artist_name ON music_albums(artist_name);
 CREATE INDEX IF NOT EXISTS idx_music_albums_musicbrainz ON music_albums(musicbrainz_id);
 CREATE INDEX IF NOT EXISTS idx_music_albums_year ON music_albums(year);
+CREATE INDEX IF NOT EXISTS idx_music_albums_type ON music_albums(album_type) WHERE album_type IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_music_tracks_source ON music_tracks(source_id);
 CREATE INDEX IF NOT EXISTS idx_music_tracks_library ON music_tracks(source_id, library_id);

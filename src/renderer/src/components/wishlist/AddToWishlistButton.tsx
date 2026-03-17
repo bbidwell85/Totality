@@ -73,17 +73,29 @@ export function AddToWishlistButton({
     }
     // Match by strongest available identifier
     if (tmdbId) {
-      return items.find(item => item.tmdb_id === tmdbId && item.media_type === effectiveMediaType)
+      const match = items.find(item => item.tmdb_id === tmdbId && item.media_type === effectiveMediaType)
+      if (match) return match
     }
     if (musicbrainzId) {
-      return items.find(item => item.musicbrainz_id === musicbrainzId)
+      const match = items.find(item => item.musicbrainz_id === musicbrainzId)
+      if (match) return match
     }
     if (mediaItemId) {
-      return items.find(item => item.media_item_id === mediaItemId)
+      const match = items.find(item => item.media_item_id === mediaItemId)
+      if (match) return match
     }
-    // Fallback: match by title + media type
+    // Music fallback: match by artist + title (handles items added without musicbrainz_id)
+    if ((effectiveMediaType === 'album' || effectiveMediaType === 'track') && artistName) {
+      const match = items.find(
+        item => item.media_type === effectiveMediaType &&
+                item.title === effectiveTitle &&
+                item.artist_name === artistName
+      )
+      if (match) return match
+    }
+    // General fallback: match by title + media type
     return items.find(item => item.title === effectiveTitle && item.media_type === effectiveMediaType)
-  }, [items, mediaType, isEpisode, seriesTitle, seasonNumber, tmdbId, musicbrainzId, mediaItemId, effectiveMediaType, effectiveTitle])
+  }, [items, mediaType, isEpisode, seriesTitle, seasonNumber, tmdbId, musicbrainzId, mediaItemId, effectiveMediaType, effectiveTitle, artistName])
 
   const isInWishlist = !!wishlistMatch
 
@@ -146,16 +158,17 @@ export function AddToWishlistButton({
   if (compact) {
     return (
       <button
-        onClick={handleToggle}
+        onClick={(e) => { e.stopPropagation(); handleToggle() }}
         disabled={isLoading}
         className={`p-1 transition-colors disabled:opacity-50 ${
           isInWishlist
-            ? 'text-amber-400 hover:text-amber-500'
-            : 'text-primary hover:text-primary/80'
+            ? 'text-amber-400 hover:text-amber-300'
+            : 'text-muted-foreground hover:text-foreground'
         }`}
         title={isInWishlist ? removeLabel : buttonLabel}
+        aria-label={isInWishlist ? removeLabel : buttonLabel}
       >
-        <Star className={`w-5 h-5 ${isInWishlist ? 'fill-amber-400' : ''}`} />
+        <Star className={`w-5 h-5 transition-colors ${isInWishlist ? 'fill-amber-400 text-amber-400' : ''}`} />
       </button>
     )
   }
@@ -164,9 +177,14 @@ export function AddToWishlistButton({
     <button
       onClick={handleToggle}
       disabled={isLoading}
-      className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm disabled:opacity-50 transition-colors bg-primary text-primary-foreground hover:bg-primary/90"
+      title={isInWishlist ? removeLabel : buttonLabel}
+      className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm disabled:opacity-50 transition-colors ${
+        isInWishlist
+          ? 'bg-amber-400/15 text-amber-400 hover:bg-amber-400/25 border border-amber-400/30'
+          : 'bg-primary text-primary-foreground hover:bg-primary/90'
+      }`}
     >
-      <Star className={`w-4 h-4 ${isInWishlist ? 'fill-amber-400 text-amber-400' : ''}`} />
+      <Star className={`w-4 h-4 ${isInWishlist ? 'fill-amber-400' : ''}`} />
       <span>{isInWishlist ? inListLabel : buttonLabel}</span>
     </button>
   )

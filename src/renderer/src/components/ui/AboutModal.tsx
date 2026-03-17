@@ -7,9 +7,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Info, Heart, Scale } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
+import { useTheme } from '../../contexts/ThemeContext'
 import tmdbLogo from '../../assets/tmdb-logo.svg'
 import musicbrainzLogo from '../../assets/musicbrainz-logo.svg'
 import logoImage from '../../assets/logo.png'
+import logoBlackImage from '../../assets/logo_black.png'
 
 interface AboutModalProps {
   isOpen: boolean
@@ -55,14 +57,15 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150]">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150]" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
       <div ref={modalRef} className="bg-card border border-border rounded-lg w-full max-w-lg mx-4 shadow-xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-lg">
-          <h2 className="text-lg font-semibold">About Totality</h2>
+          <h2 id="about-modal-title" className="text-lg font-semibold">About Totality</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-md hover:bg-muted transition-colors"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -113,6 +116,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
 /** About Tab - App info and description */
 function AboutTab() {
   const [version, setVersion] = useState<string>('...')
+  const { effectiveIsDark } = useTheme()
 
   useEffect(() => {
     window.electronAPI.getAppVersion().then(setVersion).catch(() => setVersion('unknown'))
@@ -122,13 +126,13 @@ function AboutTab() {
     <div className="space-y-6">
       {/* Logo and Version */}
       <div className="flex flex-col items-center">
-        <img src={logoImage} alt="Totality" className="h-24 w-auto object-contain mb-3" />
+        <img src={effectiveIsDark ? logoImage : logoBlackImage} alt="Totality" className="h-24 w-auto object-contain mb-3" />
         <p className="text-sm text-muted-foreground">Version {version}</p>
       </div>
 
       {/* Description */}
       <p className="text-sm text-muted-foreground text-center">
-        Analyze media library quality and recommend upgrades for your Plex, Jellyfin, Emby, and Kodi collections.
+        Analyze media library quality, track completeness, and discover upgrades across your Plex, Jellyfin, Emby, Kodi, and local folder collections.
       </p>
 
       {/* Features */}
@@ -139,8 +143,8 @@ function AboutTab() {
         <ul className="text-sm text-muted-foreground space-y-2">
           <li>• Multi-source library scanning (Plex, Jellyfin, Emby, Kodi, Local Folders)</li>
           <li>• Video and audio quality analysis with tier-based scoring</li>
-          <li>• TV series and movie collection completeness tracking</li>
-          <li>• Music library analysis with MusicBrainz integration</li>
+          <li>• TV series, movie collection, and music completeness tracking</li>
+          <li>• AI-powered assistant for library insights and recommendations</li>
           <li>• Shopping wishlist for missing and upgrade items</li>
         </ul>
       </div>
@@ -208,6 +212,29 @@ function CreditsTab() {
         </div>
       </section>
 
+      {/* AI Assistant */}
+      <section>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
+          AI Assistant
+        </h3>
+        <div className="p-3 bg-muted/30 rounded-lg">
+          <div className="text-xs text-muted-foreground leading-relaxed">
+            <p className="font-medium text-foreground mb-1">Google Gemini</p>
+            <p>
+              AI chat and library analysis powered by{' '}
+              <ExtLink href="https://ai.google.dev">
+                Google Gemini
+              </ExtLink>
+              {' '}via the{' '}
+              <ExtLink href="https://www.npmjs.com/package/@google/genai">
+                @google/genai
+              </ExtLink>
+              {' '}SDK. Features include natural language library queries, quality and upgrade reports, completeness analysis, and personalized recommendations. Requires a personal Gemini API key.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Media Analysis */}
       <section>
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
@@ -248,9 +275,14 @@ function CreditsTab() {
           <TechLink name="Vite" url="https://vitejs.dev" license="MIT" />
           <TechLink name="Tailwind CSS" url="https://tailwindcss.com" license="MIT" />
           <TechLink name="Lucide Icons" url="https://lucide.dev" license="ISC" />
+          <TechLink name="better-sqlite3" url="https://github.com/WiseLibs/better-sqlite3" license="MIT" />
           <TechLink name="SQL.js" url="https://sql.js.org" license="MIT" />
+          <TechLink name="electron-updater" url="https://www.electron.build/auto-update" license="MIT" />
           <TechLink name="react-window" url="https://react-window.vercel.app" license="MIT" />
+          <TechLink name="dnd-kit" url="https://dndkit.com" license="MIT" />
           <TechLink name="Axios" url="https://axios-http.com" license="MIT" />
+          <TechLink name="Zod" url="https://zod.dev" license="MIT" />
+          <TechLink name="react-markdown" url="https://github.com/remarkjs/react-markdown" license="MIT" />
         </div>
       </section>
 
@@ -259,10 +291,13 @@ function CreditsTab() {
         <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
           External Services
         </h3>
-        <div className="text-xs text-muted-foreground leading-relaxed p-3 bg-muted/30 rounded-lg">
+        <div className="text-xs text-muted-foreground leading-relaxed p-3 bg-muted/30 rounded-lg space-y-2">
           <p>
             The wishlist feature provides convenience links to search for physical media on external retailers including Amazon, eBay, and Discogs, as well as music services like Bandcamp and HDtracks.
             Totality is not affiliated with these services and does not receive compensation for referrals.
+          </p>
+          <p>
+            Automatic updates are delivered via GitHub Releases and checked periodically using electron-updater.
           </p>
         </div>
       </section>
@@ -293,6 +328,9 @@ function LegalTab() {
             <strong className="text-foreground">AI Features:</strong> When enabled, AI chat and reports send library metadata (titles, quality specs, statistics) to Google&apos;s Gemini API using your personal API key. No data passes through Totality&apos;s servers. Chat history is not saved to disk.
           </p>
           <p>
+            <strong className="text-foreground">Auto-Updates:</strong> Totality periodically checks GitHub Releases for new versions. No personal data is transmitted during update checks.
+          </p>
+          <p>
             <strong className="text-foreground">No Analytics:</strong> Totality does not collect usage analytics, telemetry, or personal information.
           </p>
         </div>
@@ -309,6 +347,9 @@ function LegalTab() {
           </p>
           <p>
             <strong className="text-foreground">Retailers:</strong> Amazon, eBay, Discogs, Bandcamp, and HDtracks are trademarks of their respective owners.
+          </p>
+          <p>
+            <strong className="text-foreground">AI Services:</strong> Google and Gemini are trademarks of Google LLC.
           </p>
           <p>
             <strong className="text-foreground">Data Services:</strong> TMDB and MusicBrainz are trademarks of their respective owners.
@@ -333,6 +374,9 @@ function LegalTab() {
           </p>
           <p>
             Quality analysis is based on technical metadata (resolution, bitrate, codecs) and may not reflect subjective viewing or listening experience. Upgrade recommendations are suggestions only.
+          </p>
+          <p>
+            AI-generated responses and reports may contain inaccuracies. Always verify recommendations before making purchase decisions.
           </p>
         </div>
       </section>

@@ -39,7 +39,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@google/genai": "^1.43.0",
-    "axios": "^1.6.0",
+    "axios": "^1.13.6",
     "better-sqlite3": "^11.8.1",
     "chokidar": "^3.6.0",
     "electron-updater": "^6.7.3",

@@ -463,7 +463,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   const svBestTrackIdx = getBestTrackIndex(svAudioTracks)
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-6" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-6" role="dialog" aria-modal="true" onClick={onClose}>
       <div
         className="bg-card rounded-xl w-full max-w-4xl max-h-[calc(100vh-48px)] overflow-hidden flex flex-col shadow-2xl border border-border"
         onClick={(e) => e.stopPropagation()}

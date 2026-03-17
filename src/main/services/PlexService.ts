@@ -560,34 +560,51 @@ export class PlexService {
     const analyzer = getQualityAnalyzer()
     await analyzer.loadThresholdsFromDatabase()
 
-    let scanned = 0
-    let totalItems = items.length
-
-    // Track scanned plex_ids to remove stale items later
     const scannedPlexIds = new Set<string>()
-
-    // Determine library type based on first item
-    let libraryType: 'movie' | 'show' | null = null
-
-    // Cache for season metadata to avoid repeated fetches
     const seasonCache = new Map<string, PlexMediaItem | null>()
 
-    // Cache for show-level TMDB IDs (from show metadata GUIDs)
-    const showTmdbIdCache = new Map<string, string | undefined>()
+    // Expand TV shows into episodes, determine library type
+    const { itemsToProcess, libraryType } = await this.expandShowsToEpisodes(items)
+    const totalItems = itemsToProcess.length
+    console.log(`Processing ${totalItems} items...`)
 
-    // First pass: count total episodes for TV shows
+    // Process all items in batches
+    let scanned = 0
+    db.startBatch()
+    try {
+      scanned = await this.processBatches(
+        itemsToProcess, totalItems, db, analyzer,
+        scannedPlexIds, seasonCache, onProgress,
+      )
+    } finally {
+      await db.endBatch()
+    }
+
+    // Remove stale items and update scan time
+    await this.removeStaleItems(db, libraryType, scannedPlexIds)
+    await db.setSetting('last_scan_time', new Date().toISOString())
+
+    return scanned
+  }
+
+  /**
+   * Expand TV shows into individual episodes for processing
+   */
+  private async expandShowsToEpisodes(items: PlexMediaItem[]): Promise<{
+    itemsToProcess: Array<PlexMediaItem & { _showTmdbId?: string }>
+    libraryType: 'movie' | 'show' | null
+  }> {
     const itemsToProcess: Array<PlexMediaItem & { _showTmdbId?: string }> = []
+    let libraryType: 'movie' | 'show' | null = null
+
     for (const item of items) {
-      // Determine library type from first item
       if (libraryType === null) {
         libraryType = item.type === 'show' ? 'show' : 'movie'
       }
 
       if (item.type === 'show') {
-        // For TV shows, get show metadata to extract show-level TMDB ID
         const showMetadata = await this.getItemMetadata(item.ratingKey)
         let showTmdbId: string | undefined
-
         if (showMetadata?.Guid) {
           for (const guid of showMetadata.Guid) {
             if (guid.id.includes('tmdb://')) {
@@ -596,120 +613,109 @@ export class PlexService {
             }
           }
         }
-
         if (showTmdbId) {
-          showTmdbIdCache.set(item.ratingKey, showTmdbId)
           console.log(`Show "${item.title}" has TMDB ID: ${showTmdbId}`)
         }
 
-        // Get all episodes
         const episodes = await this.getAllEpisodes(item.ratingKey)
-        // Attach show TMDB ID to each episode for later use
         for (const ep of episodes) {
           (ep as PlexMediaItem & { _showTmdbId?: string })._showTmdbId = showTmdbId
         }
         itemsToProcess.push(...(episodes as Array<PlexMediaItem & { _showTmdbId?: string }>))
       } else {
-        // For movies, concerts, etc., add directly
         itemsToProcess.push(item)
       }
     }
 
-    totalItems = itemsToProcess.length
-    console.log(`Processing ${totalItems} items...`)
+    return { itemsToProcess, libraryType }
+  }
 
-    // Start batch mode for better performance (reduces disk writes)
-    db.startBatch()
+  /**
+   * Process items in parallel batches, saving to database
+   */
+  private async processBatches(
+    itemsToProcess: Array<PlexMediaItem & { _showTmdbId?: string }>,
+    totalItems: number,
+    db: ReturnType<typeof getDatabase>,
+    analyzer: ReturnType<typeof getQualityAnalyzer>,
+    scannedPlexIds: Set<string>,
+    seasonCache: Map<string, PlexMediaItem | null>,
+    onProgress?: (progress: ScanProgress) => void,
+  ): Promise<number> {
+    const BATCH_SIZE = 10
+    let scanned = 0
 
-    // Process items in parallel batches for better performance
-    const BATCH_SIZE = 10 // Number of concurrent API requests
+    for (let i = 0; i < itemsToProcess.length; i += BATCH_SIZE) {
+      const batch = itemsToProcess.slice(i, i + BATCH_SIZE)
+      const metadataResults = await Promise.allSettled(
+        batch.map(item => this.getItemMetadata(item.ratingKey))
+      )
 
-    try {
-      for (let i = 0; i < itemsToProcess.length; i += BATCH_SIZE) {
-        const batch = itemsToProcess.slice(i, i + BATCH_SIZE)
+      for (let j = 0; j < batch.length; j++) {
+        const item = batch[j]
+        const result = metadataResults[j]
 
-        // Fetch metadata for all items in batch concurrently
-        const metadataResults = await Promise.allSettled(
-          batch.map(item => this.getItemMetadata(item.ratingKey))
-        )
-
-        // Process each result
-        for (let j = 0; j < batch.length; j++) {
-          const item = batch[j]
-          const result = metadataResults[j]
-
-          try {
-            if (result.status === 'rejected') {
-              console.error(`Failed to fetch metadata for ${item.title}:`, result.reason)
-              continue
-            }
-
-            const detailed = result.value
-            if (!detailed || !detailed.Media || detailed.Media.length === 0) {
-              console.warn(`No media info for ${item.title}, skipping`)
-              continue
-            }
-
-            // For TV episodes, fetch season metadata if we have a parentKey
-            if (detailed.type === 'episode' && detailed.parentKey) {
-              const seasonKey = detailed.parentKey.split('/').pop()
-              if (seasonKey && !seasonCache.has(seasonKey)) {
-                const seasonMetadata = await this.getSeasonMetadata(seasonKey)
-                seasonCache.set(seasonKey, seasonMetadata)
-              }
-
-              // Add season thumb to episode metadata if available
-              const seasonMetadata = seasonCache.get(seasonKey!)
-              if (seasonMetadata?.thumb && !detailed.parentThumb) {
-                detailed.parentThumb = seasonMetadata.thumb
-              }
-            }
-
-            // Convert to MediaItem (pass show TMDB ID for episodes)
-            const showTmdbId = item._showTmdbId
-            const mediaItem = this.convertToMediaItem(detailed, showTmdbId)
-            if (mediaItem) {
-              const id = await db.upsertMediaItem(mediaItem)
-
-              // Track this plex_id as valid
-              if (mediaItem.plex_id) {
-                scannedPlexIds.add(mediaItem.plex_id)
-              }
-
-              // Analyze quality
-              mediaItem.id = id
-              const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
-              await db.upsertQualityScore(qualityScore)
-
-              scanned++
-            }
-
-            // Report progress
-            if (onProgress) {
-              onProgress({
-                scanned,
-                total: totalItems,
-                currentItem: item.title,
-                percentage: (scanned / totalItems) * 100,
-              })
-            }
-          } catch (error) {
-            console.error(`Failed to process ${item.title}:`, error)
+        try {
+          if (result.status === 'rejected') {
+            console.error(`Failed to fetch metadata for ${item.title}:`, result.reason)
+            continue
           }
-        }
 
-        // Periodic checkpoint save every 50 items for crash recovery
-        if (scanned % 50 === 0 && scanned > 0) {
-          await db.forceSave()
-          console.log(`Checkpoint saved at ${scanned} items`)
+          const detailed = result.value
+          if (!detailed || !detailed.Media || detailed.Media.length === 0) {
+            console.warn(`No media info for ${item.title}, skipping`)
+            continue
+          }
+
+          // For TV episodes, fetch season metadata if we have a parentKey
+          if (detailed.type === 'episode' && detailed.parentKey) {
+            const seasonKey = detailed.parentKey.split('/').pop()
+            if (seasonKey && !seasonCache.has(seasonKey)) {
+              seasonCache.set(seasonKey, await this.getSeasonMetadata(seasonKey))
+            }
+            const seasonMetadata = seasonCache.get(seasonKey!)
+            if (seasonMetadata?.thumb && !detailed.parentThumb) {
+              detailed.parentThumb = seasonMetadata.thumb
+            }
+          }
+
+          const mediaItem = this.convertToMediaItem(detailed, item._showTmdbId)
+          if (mediaItem) {
+            const id = await db.upsertMediaItem(mediaItem)
+            if (mediaItem.plex_id) scannedPlexIds.add(mediaItem.plex_id)
+            mediaItem.id = id
+            const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
+            await db.upsertQualityScore(qualityScore)
+            scanned++
+          }
+
+          onProgress?.({
+            scanned, total: totalItems,
+            currentItem: item.title,
+            percentage: (scanned / totalItems) * 100,
+          })
+        } catch (error) {
+          console.error(`Failed to process ${item.title}:`, error)
         }
       }
-    } finally {
-      // Always end batch mode to ensure data is saved
-      await db.endBatch()
+
+      if (scanned % 50 === 0 && scanned > 0) {
+        await db.forceSave()
+        console.log(`Checkpoint saved at ${scanned} items`)
+      }
     }
 
-    // Remove items that are no longer in Plex library
+    return scanned
+  }
+
+  /**
+   * Remove items that are no longer in the Plex library
+   */
+  private async removeStaleItems(
+    db: ReturnType<typeof getDatabase>,
+    libraryType: 'movie' | 'show' | null,
+    scannedPlexIds: Set<string>,
+  ): Promise<void> {
     if (libraryType && scannedPlexIds.size > 0) {
       const itemType = libraryType === 'show' ? 'episode' : 'movie'
       const removedCount = await db.removeStaleMediaItems(scannedPlexIds, itemType)
@@ -717,11 +723,6 @@ export class PlexService {
         console.log(`Removed ${removedCount} stale ${itemType}(s) no longer in Plex library`)
       }
     }
-
-    // Update last scan time
-    await db.setSetting('last_scan_time', new Date().toISOString())
-
-    return scanned
   }
 
   /**

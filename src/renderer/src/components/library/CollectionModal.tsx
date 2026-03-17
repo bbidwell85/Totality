@@ -126,7 +126,7 @@ export const CollectionModal = memo(function CollectionModal({
 
   return (
     <>
-      {createPortal(<div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+      {createPortal(<div className="fixed inset-0 z-[150] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="collection-modal-title">
         {/* Backdrop */}
         <div
           className="absolute inset-0 bg-black/70"
@@ -138,7 +138,7 @@ export const CollectionModal = memo(function CollectionModal({
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-lg flex-shrink-0">
             <div>
-              <h2 className="text-xl font-semibold">{collection.collection_name}</h2>
+              <h2 id="collection-modal-title" className="text-xl font-semibold">{collection.collection_name}</h2>
               <p className="text-sm text-muted-foreground mt-1">
                 {collection.owned_movies} of {collection.total_movies} movies owned
                 <span className="mx-2">•</span>

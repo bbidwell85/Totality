@@ -45,6 +45,7 @@ export function getFFprobeWorkerPool(): FFprobeWorkerPool {
 }
 
 export class FFprobeWorkerPool {
+  private static readonly MAX_QUEUE_DEPTH = 10000
   private workers: WorkerInfo[] = []
   private taskQueue: QueuedTask[] = []
   private taskIdCounter = 0
@@ -184,6 +185,16 @@ export class FFprobeWorkerPool {
       }
     }
 
+    if (this.taskQueue.length >= FFprobeWorkerPool.MAX_QUEUE_DEPTH) {
+      return {
+        success: false,
+        error: 'Analysis queue is full — too many files queued',
+        filePath,
+        audioTracks: [],
+        subtitleTracks: [],
+      }
+    }
+
     return new Promise((resolve, reject) => {
       const taskId = `task-${++this.taskIdCounter}`
       const task: QueuedTask = { taskId, filePath, resolve, reject }
@@ -315,9 +326,12 @@ export class FFprobeWorkerPool {
   }
 
   /**
-   * Remove a worker from the pool
+   * Remove a worker from the pool and clean up its listeners
    */
   private removeWorker(workerInfo: WorkerInfo): void {
+    // Remove all event listeners to prevent memory leaks
+    workerInfo.worker.removeAllListeners()
+
     const index = this.workers.indexOf(workerInfo)
     if (index !== -1) {
       this.workers.splice(index, 1)

@@ -57,6 +57,7 @@ export class GeminiService {
   private model: string = GeminiService.DEFAULT_MODEL
   private enabled: boolean = true
   private rateLimitedUntil: number | null = null
+  private static readonly MAX_EXPLANATION_CACHE = 100
   private explanationCache = new Map<string, { text: string; timestamp: number }>()
 
   constructor() {
@@ -267,6 +268,7 @@ export class GeminiService {
     const contents: Content[] = this.toGeminiContents(params.messages)
     const maxRounds = params.maxToolRounds || 10
     let totalUsage = { input_tokens: 0, output_tokens: 0 }
+    const recentToolCalls: string[] = [] // Track recent tool call signatures for loop detection
 
     for (let round = 0; round < maxRounds; round++) {
       let response: GenerateContentResponse
@@ -307,6 +309,20 @@ export class GeminiService {
       const functionResponses: Content = {
         role: 'user',
         parts: [],
+      }
+
+      // Detect tool-use loops: same tool calls repeated 3+ times in a row
+      const callSignature = functionCalls.map(fc => `${fc.name}:${JSON.stringify(fc.args)}`).join('|')
+      recentToolCalls.push(callSignature)
+      if (recentToolCalls.length >= 3) {
+        const last3 = recentToolCalls.slice(-3)
+        if (last3[0] === last3[1] && last3[1] === last3[2]) {
+          console.warn('[GeminiService] Tool-use loop detected — same calls repeated 3 times, breaking')
+          return {
+            text: 'I encountered an issue processing your request. Please try rephrasing your question.',
+            usage: totalUsage,
+          }
+        }
       }
 
       for (const fc of functionCalls) {
@@ -471,6 +487,11 @@ export class GeminiService {
       })
 
       const text = response.text || ''
+      // Evict oldest entry if cache is full
+      if (this.explanationCache.size >= GeminiService.MAX_EXPLANATION_CACHE) {
+        const firstKey = this.explanationCache.keys().next().value
+        if (firstKey) this.explanationCache.delete(firstKey)
+      }
       this.explanationCache.set(cacheKey, { text, timestamp: Date.now() })
       return text
     } catch (error) {

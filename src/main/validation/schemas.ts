@@ -294,9 +294,23 @@ export const KodiMySQLTestConfigSchema = z.object({
  * Local folder source configuration
  */
 export const LocalFolderConfigSchema = z.object({
-  folderPath: z.string().min(1, 'Folder path is required'),
+  folderPath: FilePathSchema,
   displayName: z.string().min(1).max(100).trim(),
-  mediaType: z.enum(['movies', 'tv', 'music']).optional(),
+  mediaType: z.enum(['movies', 'tvshows', 'mixed']),
+})
+
+/**
+ * Local folder source with custom library configurations
+ */
+export const LocalFolderWithLibrariesSchema = z.object({
+  folderPath: FilePathSchema,
+  displayName: z.string().min(1).max(100).trim(),
+  libraries: z.array(z.object({
+    name: z.string().min(1).max(200),
+    path: FilePathSchema,
+    mediaType: z.enum(['movies', 'tvshows', 'music']),
+    enabled: z.boolean(),
+  })).max(50),
 })
 
 // ============================================================================

@@ -218,24 +218,36 @@ export class BetterSQLiteService {
     }
 
     // Migration: Add 'kodi-mysql' to source_type CHECK constraints for existing databases
+    // Uses PRAGMA writable_schema to modify CHECK constraints in-place (SQLite limitation)
     try {
       const schemaRow = this.db.prepare(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='media_sources'"
       ).get() as { sql: string } | undefined
       if (schemaRow?.sql && !schemaRow.sql.includes('kodi-mysql')) {
+        const tableNames = ['media_sources', 'media_items', 'music_artists', 'music_albums', 'music_tracks']
         this.db.exec('PRAGMA writable_schema = ON')
-        const tables = "'media_sources','media_items','music_artists','music_albums','music_tracks'"
-        // Handle migration 001 format (missing 'local')
-        this.db.exec(
-          `UPDATE sqlite_master SET sql = replace(sql, '''kodi-local''))', '''kodi-local'', ''kodi-mysql'', ''local''))') WHERE type = 'table' AND name IN (${tables})`
-        )
-        // Handle schema.ts format (has 'local')
-        this.db.exec(
-          `UPDATE sqlite_master SET sql = replace(sql, '''kodi-local'', ''local''))', '''kodi-local'', ''kodi-mysql'', ''local''))') WHERE type = 'table' AND name IN (${tables})`
-        )
-        this.db.exec('PRAGMA writable_schema = OFF')
-        this.db.exec('PRAGMA integrity_check')
-        console.log('[BetterSQLite] Migration: Added kodi-mysql to source_type CHECK constraints')
+        try {
+          for (const table of tableNames) {
+            // Handle migration 001 format (missing 'local')
+            this.db.prepare(
+              `UPDATE sqlite_master SET sql = replace(sql, '''kodi-local''))', '''kodi-local'', ''kodi-mysql'', ''local''))') WHERE type = 'table' AND name = ?`
+            ).run(table)
+            // Handle schema.ts format (has 'local')
+            this.db.prepare(
+              `UPDATE sqlite_master SET sql = replace(sql, '''kodi-local'', ''local''))', '''kodi-local'', ''kodi-mysql'', ''local''))') WHERE type = 'table' AND name = ?`
+            ).run(table)
+          }
+        } finally {
+          this.db.exec('PRAGMA writable_schema = OFF')
+        }
+        // Verify database integrity after schema modification
+        const integrityResult = this.db.pragma('integrity_check') as Array<{ integrity_check: string }>
+        const isOk = integrityResult.length === 1 && integrityResult[0].integrity_check === 'ok'
+        if (!isOk) {
+          console.error('[BetterSQLite] Integrity check failed after CHECK migration:', integrityResult)
+        } else {
+          console.log('[BetterSQLite] Migration: Added kodi-mysql to source_type CHECK constraints')
+        }
       }
     } catch (error: unknown) {
       console.log('[BetterSQLite] kodi-mysql CHECK migration note:', getErrorMessage(error))
@@ -244,27 +256,34 @@ export class BetterSQLiteService {
     // Create indexes for performance
     try {
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_items_tmdb_id ON media_items(tmdb_id) WHERE tmdb_id IS NOT NULL')
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_items_imdb_id ON media_items(imdb_id) WHERE imdb_id IS NOT NULL')
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_items_year ON media_items(year) WHERE year IS NOT NULL')
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_series_completeness_tmdb_id ON series_completeness(tmdb_id) WHERE tmdb_id IS NOT NULL')
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_music_albums_type ON music_albums(album_type) WHERE album_type IS NOT NULL')
     } catch {
-      // Index may already exist
+      // Indexes may already exist
     }
 
     // Populate media_item_versions from existing media_items (one version per item)
     this.migrateExistingItemsToVersions()
 
-    // Clean up orphaned records from prior cascade delete bugs
+    // Clean up orphaned records from prior cascade delete bugs (wrapped in transaction)
     try {
-      const orphanedScores = this.db.prepare(
-        'DELETE FROM quality_scores WHERE media_item_id NOT IN (SELECT id FROM media_items)'
-      ).run()
-      const orphanedVersions = this.db.prepare(
-        'DELETE FROM media_item_versions WHERE media_item_id NOT IN (SELECT id FROM media_items)'
-      ).run()
-      const orphanedCollections = this.db.prepare(
-        'DELETE FROM media_item_collections WHERE media_item_id NOT IN (SELECT id FROM media_items)'
-      ).run()
-      const total = orphanedScores.changes + orphanedVersions.changes + orphanedCollections.changes
+      const cleanupOrphans = this.db.transaction(() => {
+        const orphanedScores = this.db!.prepare(
+          'DELETE FROM quality_scores WHERE media_item_id NOT IN (SELECT id FROM media_items)'
+        ).run()
+        const orphanedVersions = this.db!.prepare(
+          'DELETE FROM media_item_versions WHERE media_item_id NOT IN (SELECT id FROM media_items)'
+        ).run()
+        const orphanedCollections = this.db!.prepare(
+          'DELETE FROM media_item_collections WHERE media_item_id NOT IN (SELECT id FROM media_items)'
+        ).run()
+        return orphanedScores.changes + orphanedVersions.changes + orphanedCollections.changes
+      })
+      const total = cleanupOrphans()
       if (total > 0) {
-        console.log(`[BetterSQLite] Orphan cleanup: removed ${orphanedScores.changes} quality_scores, ${orphanedVersions.changes} versions, ${orphanedCollections.changes} collection links`)
+        console.log(`[BetterSQLite] Orphan cleanup: removed ${total} orphaned records`)
       }
     } catch (err) {
       console.warn('[BetterSQLite] Orphan cleanup skipped:', err)
@@ -342,11 +361,14 @@ export class BetterSQLiteService {
   }
 
   /**
-   * Batch mode is a no-op for better-sqlite3 (changes are auto-persisted)
-   * Kept for API compatibility
+   * Batch mode is a no-op for better-sqlite3 — each write is auto-persisted
+   * via WAL mode. For multi-step operations needing atomicity, use
+   * db.transaction() explicitly instead.
+   *
+   * SQL.js backend uses batch mode to defer disk writes until endBatch().
    */
   startBatch(): void {
-    // No-op: better-sqlite3 uses WAL mode which handles this automatically
+    // No-op: better-sqlite3 auto-persists via WAL mode
   }
 
   /**
@@ -1195,41 +1217,45 @@ export class BetterSQLiteService {
 
     const best = sorted[0]
 
-    // Clear all is_best flags, then set the best one
-    this.db.prepare('UPDATE media_item_versions SET is_best = 0 WHERE media_item_id = ?').run(mediaItemId)
-    if (best.id) {
-      this.db.prepare('UPDATE media_item_versions SET is_best = 1 WHERE id = ?').run(best.id)
-    }
+    // Wrap in transaction to ensure consistency across the 3 related updates
+    const updateBest = this.db.transaction(() => {
+      // Clear all is_best flags, then set the best one
+      this.db!.prepare('UPDATE media_item_versions SET is_best = 0 WHERE media_item_id = ?').run(mediaItemId)
+      if (best.id) {
+        this.db!.prepare('UPDATE media_item_versions SET is_best = 1 WHERE id = ?').run(best.id)
+      }
 
-    // Sync best version's file/quality fields to parent media_item
-    this.db.prepare(`
-      UPDATE media_items SET
-        file_path = ?, file_size = ?, duration = ?,
-        resolution = ?, width = ?, height = ?,
-        video_codec = ?, video_bitrate = ?,
-        audio_codec = ?, audio_channels = ?, audio_bitrate = ?,
-        video_frame_rate = ?, color_bit_depth = ?, hdr_format = ?, color_space = ?,
-        video_profile = ?, video_level = ?,
-        audio_profile = ?, audio_sample_rate = ?, has_object_audio = ?,
-        audio_tracks = ?, subtitle_tracks = ?, container = ?, file_mtime = ?,
-        version_count = ?,
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      best.file_path, best.file_size, best.duration,
-      best.resolution, best.width, best.height,
-      best.video_codec, best.video_bitrate,
-      best.audio_codec, best.audio_channels, best.audio_bitrate,
-      best.video_frame_rate || null, best.color_bit_depth || null,
-      best.hdr_format || null, best.color_space || null,
-      best.video_profile || null, best.video_level || null,
-      best.audio_profile || null, best.audio_sample_rate || null,
-      best.has_object_audio ? 1 : 0,
-      best.audio_tracks || null, best.subtitle_tracks || null,
-      best.container || null, best.file_mtime || null,
-      versions.length,
-      mediaItemId
-    )
+      // Sync best version's file/quality fields to parent media_item
+      this.db!.prepare(`
+        UPDATE media_items SET
+          file_path = ?, file_size = ?, duration = ?,
+          resolution = ?, width = ?, height = ?,
+          video_codec = ?, video_bitrate = ?,
+          audio_codec = ?, audio_channels = ?, audio_bitrate = ?,
+          video_frame_rate = ?, color_bit_depth = ?, hdr_format = ?, color_space = ?,
+          video_profile = ?, video_level = ?,
+          audio_profile = ?, audio_sample_rate = ?, has_object_audio = ?,
+          audio_tracks = ?, subtitle_tracks = ?, container = ?, file_mtime = ?,
+          version_count = ?,
+          updated_at = datetime('now')
+        WHERE id = ?
+      `).run(
+        best.file_path, best.file_size, best.duration,
+        best.resolution, best.width, best.height,
+        best.video_codec, best.video_bitrate,
+        best.audio_codec, best.audio_channels, best.audio_bitrate,
+        best.video_frame_rate || null, best.color_bit_depth || null,
+        best.hdr_format || null, best.color_space || null,
+        best.video_profile || null, best.video_level || null,
+        best.audio_profile || null, best.audio_sample_rate || null,
+        best.has_object_audio ? 1 : 0,
+        best.audio_tracks || null, best.subtitle_tracks || null,
+        best.container || null, best.file_mtime || null,
+        versions.length,
+        mediaItemId
+      )
+    })
+    updateBest()
   }
 
   // ============================================================================
@@ -2028,6 +2054,10 @@ export class BetterSQLiteService {
       sql += ' AND source_id = ?'
       params.push(filters.sourceId)
     }
+    if (filters?.libraryId) {
+      sql += ' AND library_id = ?'
+      params.push(filters.libraryId)
+    }
     if (filters?.searchQuery) {
       sql += ' AND (title LIKE ? OR artist_name LIKE ?)'
       params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`)
@@ -2070,6 +2100,7 @@ export class BetterSQLiteService {
     const params: unknown[] = []
     if (filters?.artistId) { sql += ' AND artist_id = ?'; params.push(filters.artistId) }
     if (filters?.sourceId) { sql += ' AND source_id = ?'; params.push(filters.sourceId) }
+    if (filters?.libraryId) { sql += ' AND library_id = ?'; params.push(filters.libraryId) }
     if (filters?.searchQuery) { sql += ' AND (title LIKE ? OR artist_name LIKE ?)'; params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`) }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }

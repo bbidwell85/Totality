@@ -14,7 +14,6 @@ files:
   - package.json
   - "!**/*.map"
   - "!**/*.d.ts"
-  - "!node_modules/sql.js/**/*"
   - "!**/node_modules/**/{test,tests,__tests__,__mocks__}/**/*"
   - "!**/node_modules/**/*.md"
   - "!**/node_modules/**/{.eslintrc*,.prettierrc*,tsconfig*.json}"

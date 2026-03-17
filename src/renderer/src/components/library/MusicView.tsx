@@ -145,29 +145,27 @@ export function MusicView({
     return () => observer.disconnect()
   }, [onLoadMoreAlbums, musicViewMode, viewType])
 
-  // Click-outside handler for track menu
+  // Click-outside and Escape key handler for track menu
   useEffect(() => {
+    if (trackMenuOpen === null) return
+
     const handleClickOutside = (event: MouseEvent) => {
       if (trackMenuRef.current && !trackMenuRef.current.contains(event.target as Node)) {
         setTrackMenuOpen(null)
       }
     }
-    if (trackMenuOpen !== null) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [trackMenuOpen])
-
-  // Escape key handler for track menu
-  useEffect(() => {
-    if (trackMenuOpen === null) return
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setTrackMenuOpen(null)
       }
     }
+
+    document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
   }, [trackMenuOpen])
 
   // Handle track rescan
@@ -1111,8 +1109,8 @@ export function MusicView({
           {/* Infinite scroll sentinel + loading indicator */}
           <div ref={artistSentinelRef} className="h-1" />
           {artistsLoading && (
-            <div className="flex justify-center py-4">
-              <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" />
+            <div className="flex justify-center py-4" aria-live="polite" role="status">
+              <RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" aria-label="Loading more artists" />
             </div>
           )}
           {artists.length < totalArtistCount && !artistsLoading && (
@@ -1165,7 +1163,7 @@ export function MusicView({
               <VirtualList
                 height={Math.max(400, window.innerHeight - 280)}
                 itemCount={allFilteredAlbums.length}
-                itemSize={88}
+                itemSize={104}
                 width="100%"
                 className="scrollbar-visible"
                 itemData={{
@@ -1224,8 +1222,8 @@ export function MusicView({
           {/* Sentinel for album grid infinite scroll */}
           <div ref={albumSentinelRef} className="h-1" />
           {/* Album count footer */}
-          <div className="px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-2">
-            {albumsLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+          <div className="px-4 py-1.5 text-xs text-muted-foreground flex items-center gap-2" aria-live="polite" role="status">
+            {albumsLoading && <RefreshCw className="w-3 h-3 animate-spin" aria-label="Loading more albums" />}
             <span>
               {allFilteredAlbums.length === totalAlbumCount
                 ? `${totalAlbumCount.toLocaleString()} albums`
@@ -2225,7 +2223,7 @@ const MissingAlbumCard = memo(({ album, artistName }: {
           )}
         </div>
         {/* Wishlist button */}
-        <div className="flex-shrink-0 [&_button]:!text-white [&_button]:hover:!text-white/80">
+        <div className="flex-shrink-0">
           <AddToWishlistButton
             mediaType="album"
             title={album.title}

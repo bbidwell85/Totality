@@ -96,69 +96,126 @@ export class SourceManager {
   private async loadSources(): Promise<void> {
     const db = getDatabase()
     const sources = db.getMediaSources()
+    const unavailableSources: Array<{ name: string; type: string }> = []
 
-    for (const source of sources) {
-      try {
-        const connectionConfig = JSON.parse(source.connection_config)
-        const config: SourceConfig = {
-          sourceId: source.source_id,
-          sourceType: source.source_type,
-          displayName: source.display_name,
-          connectionConfig,
-          isEnabled: source.is_enabled,
-        }
-
-        const provider = createProvider(source.source_type, config)
-        this.providers.set(source.source_id, provider)
-
-        // For Plex providers with saved serverId, restore server selection
-        if (source.source_type === 'plex' && connectionConfig.serverId && connectionConfig.token) {
-          const plexProvider = provider as PlexProvider
-          try {
-            // Set token first (should be set in constructor, but ensure it's set)
-            if (!await plexProvider.isAuthenticated()) {
-              plexProvider.setAuthToken(connectionConfig.token)
-            }
-            // Restore server selection
-            const success = await plexProvider.selectServer(connectionConfig.serverId)
-            if (success) {
-              const server = plexProvider.getSelectedServer()
-              // Update display name to actual server name if it differs
-              if (server && server.name && server.name !== source.display_name) {
-                await db.upsertMediaSource({
-                  ...source,
-                  display_name: server.name,
-                })
-                console.log(`[SourceManager] Restored server selection: ${server.name}`)
-              } else {
-                console.log(`[SourceManager] Restored server selection for ${source.display_name}`)
-              }
-
-              // Sync legacy PlexService for backward compatibility (MovieCollectionService uses it)
-              try {
-                const plexService = getPlexService()
-                // Authenticate PlexService with the token from connection config
-                await plexService.authenticateWithToken(connectionConfig.token)
-                await plexService.selectServer(connectionConfig.serverId)
-                console.log(`[SourceManager] Synced legacy PlexService with server: ${source.display_name}`)
-              } catch (syncError) {
-                console.warn(`[SourceManager] Could not sync legacy PlexService:`, syncError)
-              }
-            } else {
-              console.warn(`[SourceManager] Failed to restore server selection for ${source.display_name}`)
-            }
-          } catch (error) {
-            console.warn(`[SourceManager] Could not restore server for ${source.display_name}:`, error)
-          }
-        }
-
-        console.log(`[SourceManager] Loaded provider: ${source.display_name} (${source.source_type})`)
-      } catch (error) {
-        console.error(`[SourceManager] Failed to load provider ${source.source_id}:`, error)
-      }
-    }
+    // Load all providers in parallel with per-source timeout
+    await Promise.allSettled(
+      sources.map((source: MediaSource) => this.loadSingleSource(source, db, unavailableSources))
+    )
 
     console.log(`[SourceManager] Initialized with ${this.providers.size} providers`)
+
+    // Create notifications for unavailable sources (after startup)
+    if (unavailableSources.length > 0) {
+      const names = unavailableSources.map(s => s.name).join(', ')
+      console.warn(`[SourceManager] Unavailable sources at startup: ${names}`)
+      try {
+        db.createNotification({
+          type: 'error',
+          title: 'Media source unavailable',
+          message: unavailableSources.length === 1
+            ? `"${unavailableSources[0].name}" could not be reached at startup. Please check the connection.`
+            : `${unavailableSources.length} sources could not be reached at startup: ${names}. Please check their connections.`,
+        })
+      } catch (err) {
+        console.warn('[SourceManager] Could not create notification for unavailable sources:', err)
+      }
+    }
+  }
+
+  private async loadSingleSource(
+    source: MediaSource,
+    db: ReturnType<typeof getDatabase>,
+    unavailableSources: Array<{ name: string; type: string }>
+  ): Promise<void> {
+    try {
+      const connectionConfig = JSON.parse(source.connection_config)
+      const config: SourceConfig = {
+        sourceId: source.source_id,
+        sourceType: source.source_type,
+        displayName: source.display_name,
+        connectionConfig,
+        isEnabled: source.is_enabled,
+      }
+
+      const provider = createProvider(source.source_type, config)
+      this.providers.set(source.source_id, provider)
+
+      // For Plex providers with saved serverId, restore server selection with timeout
+      if (source.source_type === 'plex' && connectionConfig.serverId && connectionConfig.token) {
+        const plexProvider = provider as PlexProvider
+        try {
+          const restored = await this.withTimeout(
+            this.restorePlexServer(plexProvider, connectionConfig, source, db),
+            5000,
+            `Plex server "${source.display_name}" connection timed out`
+          )
+          if (!restored) {
+            unavailableSources.push({ name: source.display_name, type: source.source_type })
+          }
+        } catch (error) {
+          console.warn(`[SourceManager] Could not restore server for ${source.display_name}:`, error)
+          unavailableSources.push({ name: source.display_name, type: source.source_type })
+        }
+      }
+
+      console.log(`[SourceManager] Loaded provider: ${source.display_name} (${source.source_type})`)
+    } catch (error) {
+      console.error(`[SourceManager] Failed to load provider ${source.source_id}:`, error)
+    }
+  }
+
+  private async restorePlexServer(
+    plexProvider: PlexProvider,
+    connectionConfig: Record<string, unknown>,
+    source: MediaSource,
+    db: ReturnType<typeof getDatabase>
+  ): Promise<boolean> {
+    // Set token first (should be set in constructor, but ensure it's set)
+    if (!await plexProvider.isAuthenticated()) {
+      plexProvider.setAuthToken(connectionConfig.token as string)
+    }
+    // Restore server selection
+    const success = await plexProvider.selectServer(connectionConfig.serverId as string)
+    if (success) {
+      const server = plexProvider.getSelectedServer()
+      // Update display name to actual server name if it differs
+      if (server && server.name && server.name !== source.display_name) {
+        await db.upsertMediaSource({
+          ...source,
+          display_name: server.name,
+        })
+        console.log(`[SourceManager] Restored server selection: ${server.name}`)
+      } else {
+        console.log(`[SourceManager] Restored server selection for ${source.display_name}`)
+      }
+
+      // Sync legacy PlexService for backward compatibility (MovieCollectionService uses it)
+      try {
+        const plexService = getPlexService()
+        await plexService.authenticateWithToken(connectionConfig.token as string)
+        await plexService.selectServer(connectionConfig.serverId as string)
+        console.log(`[SourceManager] Synced legacy PlexService with server: ${source.display_name}`)
+      } catch (syncError) {
+        console.warn(`[SourceManager] Could not sync legacy PlexService:`, syncError)
+      }
+      return true
+    } else {
+      console.warn(`[SourceManager] Failed to restore server selection for ${source.display_name}`)
+      return false
+    }
+  }
+
+  /**
+   * Run a promise with a timeout. Rejects if the promise doesn't resolve within the given ms.
+   */
+  private withTimeout<T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) =>
+        setTimeout(() => reject(new Error(timeoutMessage)), ms)
+      ),
+    ])
   }
 
   // ============================================================================
@@ -355,96 +412,31 @@ export class SourceManager {
 
     const provider = this.providers.get(sourceId)
     if (!provider) {
-      return {
-        success: false,
-        error: `Source not found: ${sourceId}`,
-      }
+      return { success: false, error: `Source not found: ${sourceId}` }
     }
 
     // For Plex sources, check if a server is selected before testing connection
     if (provider.providerType === 'plex') {
       const plexProvider = provider as PlexProvider
       if (!plexProvider.hasSelectedServer()) {
-        return {
-          success: false,
-          error: 'No server selected - please complete setup',
-        }
+        return { success: false, error: 'No server selected - please complete setup' }
       }
     }
 
     const db = getDatabase()
 
-    // For Jellyfin/Emby: authenticate with username/password if no accessToken
+    // For Jellyfin/Emby: authenticate with credentials if no access token
     if (provider.providerType === 'jellyfin' || provider.providerType === 'emby') {
-      const source = db.getMediaSourceById(sourceId)
-      if (source) {
-        try {
-          const config = JSON.parse(source.connection_config)
-
-          // If we have username/password but no accessToken, authenticate first
-          if (config.username && config.password && !config.accessToken) {
-            console.log(`[SourceManager] Authenticating ${provider.providerType} with username/password`)
-
-            const authResult = await provider.authenticate({
-              serverUrl: config.serverUrl,
-              username: config.username,
-              password: config.password,
-            })
-
-            if (authResult.success && authResult.token) {
-              // Save the token back to the database
-              const updatedConfig = {
-                ...config,
-                accessToken: authResult.token,
-                userId: authResult.userId,
-                // Remove password from stored config for security
-                password: undefined,
-              }
-
-              await db.upsertMediaSource({
-                source_id: sourceId,
-                source_type: source.source_type,
-                display_name: source.display_name,
-                connection_config: JSON.stringify(updatedConfig),
-                is_enabled: source.is_enabled,
-              })
-
-              // Recreate the provider with the new credentials
-              const newConfig: SourceConfig = {
-                sourceId,
-                sourceType: source.source_type as ProviderType,
-                displayName: source.display_name,
-                connectionConfig: updatedConfig,
-                isEnabled: source.is_enabled,
-              }
-              const newProvider = createProvider(source.source_type, newConfig)
-              this.providers.set(sourceId, newProvider)
-
-              console.log(`[SourceManager] ${provider.providerType} authenticated and credentials saved`)
-            } else {
-              return {
-                success: false,
-                error: authResult.error || 'Authentication failed',
-              }
-            }
-          }
-        } catch (err: unknown) {
-          console.error(`[SourceManager] Error during ${provider.providerType} authentication:`, err)
-          return {
-            success: false,
-            error: err instanceof Error ? err.message : 'Authentication error',
-          }
-        }
-      }
+      const authResult = await this.authenticateJellyfinEmbyIfNeeded(sourceId, provider, db)
+      if (authResult) return authResult // Returns error result if auth failed
     }
 
-    // Get the (possibly updated) provider
+    // Run the actual connection test
     const currentProvider = this.providers.get(sourceId) || provider
     const startTime = Date.now()
     const result = await currentProvider.testConnection()
     const elapsed = Date.now() - startTime
 
-    // Update connection timestamp if successful
     if (result.success) {
       await db.updateSourceConnectionTime(sourceId)
       getLoggingService().verbose('[SourceManager]', `Connection test passed for ${currentProvider.providerType} source in ${elapsed}ms`, result.serverVersion ? `Server version: ${result.serverVersion}` : undefined)
@@ -453,6 +445,68 @@ export class SourceManager {
     }
 
     return result
+  }
+
+  /**
+   * Authenticate Jellyfin/Emby with username/password if no access token exists.
+   * Returns a ConnectionTestResult on failure, or null if auth succeeded or wasn't needed.
+   */
+  private async authenticateJellyfinEmbyIfNeeded(
+    sourceId: string,
+    provider: MediaProvider,
+    db: ReturnType<typeof getDatabase>,
+  ): Promise<ConnectionTestResult | null> {
+    const source = db.getMediaSourceById(sourceId)
+    if (!source) return null
+
+    try {
+      const config = JSON.parse(source.connection_config)
+      if (!config.username || !config.password || config.accessToken) return null
+
+      console.log(`[SourceManager] Authenticating ${provider.providerType} with username/password`)
+
+      const authResult = await provider.authenticate({
+        serverUrl: config.serverUrl,
+        username: config.username,
+        password: config.password,
+      })
+
+      if (!authResult.success || !authResult.token) {
+        return { success: false, error: authResult.error || 'Authentication failed' }
+      }
+
+      // Save token and remove password from stored config
+      const updatedConfig = {
+        ...config,
+        accessToken: authResult.token,
+        userId: authResult.userId,
+        password: undefined,
+      }
+
+      await db.upsertMediaSource({
+        source_id: sourceId,
+        source_type: source.source_type,
+        display_name: source.display_name,
+        connection_config: JSON.stringify(updatedConfig),
+        is_enabled: source.is_enabled,
+      })
+
+      // Recreate provider with new credentials
+      const newProvider = createProvider(source.source_type, {
+        sourceId,
+        sourceType: source.source_type as ProviderType,
+        displayName: source.display_name,
+        connectionConfig: updatedConfig,
+        isEnabled: source.is_enabled,
+      })
+      this.providers.set(sourceId, newProvider)
+
+      console.log(`[SourceManager] ${provider.providerType} authenticated and credentials saved`)
+      return null // Auth succeeded
+    } catch (err: unknown) {
+      console.error(`[SourceManager] Error during ${provider.providerType} authentication:`, err)
+      return { success: false, error: err instanceof Error ? err.message : 'Authentication error' }
+    }
   }
 
   // ============================================================================
@@ -626,7 +680,9 @@ export class SourceManager {
         onProgress(progress)
       } : undefined
 
+      console.log(`[SourceManager] Starting scan: provider=${provider.providerType}, sourceId=${sourceId}, libraryId=${libraryId}`)
       const result = await provider.scanLibrary(libraryId, { onProgress: wrappedProgress })
+      console.log(`[SourceManager] Scan result: itemsScanned=${result.itemsScanned}, itemsAdded=${result.itemsAdded}, itemsUpdated=${result.itemsUpdated}, itemsRemoved=${result.itemsRemoved}, success=${result.success}, errors=${result.errors.length}`)
 
       // Verbose scan summary
       const durationSec = (result.durationMs / 1000).toFixed(1)

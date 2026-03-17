@@ -201,6 +201,9 @@ export class TMDBService {
 
     const urlForLogging = url.toString().replace(apiKey, 'API_KEY')
 
+    // Track rate limit delay from Retry-After header for retry backoff
+    const retryState = { minRetryDelay: 0 }
+
     // Make request with retry logic and timeout
     const data = await retryWithBackoff<T>(
       async () => {
@@ -225,7 +228,9 @@ export class TMDBService {
         const rateLimitDelay = getRateLimitRetryAfter(response)
         if (rateLimitDelay !== null) {
           getLoggingService().verbose('[TMDB]', `Rate limited, retry after ${rateLimitDelay}ms`)
-        console.warn(`[TMDB] Rate limited, retry after ${rateLimitDelay}ms`)
+          console.warn(`[TMDB] Rate limited, retry after ${rateLimitDelay}ms`)
+          // Pass server's delay to retry backoff as minimum floor
+          retryState.minRetryDelay = rateLimitDelay
           const error = new Error(`TMDB rate limited (429)`) as Error & { status: number }
           error.status = 429
           throw error
@@ -247,6 +252,7 @@ export class TMDBService {
         maxRetries: 3,
         initialDelay: 1000,
         maxDelay: 10000,
+        get minRetryDelay() { return retryState.minRetryDelay },
         onRetry: (attempt, error, delay) => {
           console.warn(`[TMDB] Retry ${attempt}/3 for ${urlForLogging} after ${delay}ms: ${error.message}`)
         }

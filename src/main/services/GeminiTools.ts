@@ -2,6 +2,7 @@ import type { GeminiToolDefinition } from './GeminiService'
 import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from './QualityAnalyzer'
 import { getTMDBService } from './TMDBService'
+import { getMusicBrainzService } from './MusicBrainzService'
 
 /** Actionable item from tool results — not-owned titles the user can add to wishlist */
 export interface ActionableItem {
@@ -116,12 +117,78 @@ export const LIBRARY_TOOLS: GeminiToolDefinition[] = [
   },
   {
     name: 'get_music_stats',
-    description: 'Get music library statistics: total artists, albums, tracks, and quality breakdown.',
+    description: 'Get music library statistics: total artists, albums, tracks.',
     parameters: {
       type: 'object',
       properties: {
         source_id: { type: 'string', description: 'Optional: limit stats to a specific source' },
       },
+    },
+  },
+  {
+    name: 'get_music_albums',
+    description: 'Get music albums from the library with optional filters. Use to browse albums by artist, quality tier, or find albums needing upgrades.',
+    parameters: {
+      type: 'object',
+      properties: {
+        artist_name: { type: 'string', description: 'Filter albums by artist name' },
+        quality_tier: { type: 'string', enum: ['LOSSY_LOW', 'LOSSY_MID', 'LOSSY_HIGH', 'LOSSLESS', 'HI_RES'], description: 'Filter by audio quality tier' },
+        needs_upgrade: { type: 'boolean', description: 'Only return albums that need quality upgrades' },
+        search_query: { type: 'string', description: 'Search by album title' },
+        sort_by: { type: 'string', enum: ['title', 'artist', 'year', 'added_at'], description: 'Sort field' },
+        sort_order: { type: 'string', enum: ['asc', 'desc'], description: 'Sort direction' },
+        limit: { type: 'number', description: 'Max results (default 20, max 50)' },
+      },
+    },
+  },
+  {
+    name: 'get_music_quality_distribution',
+    description: 'Get music quality distribution across the library. Shows counts by audio quality tier (Hi-Res, Lossless, Lossy High/Mid/Low) and lists albums needing upgrades.',
+    parameters: {
+      type: 'object',
+      properties: {
+        include_upgrades: { type: 'boolean', description: 'Include list of albums needing upgrade (default false)' },
+        upgrade_limit: { type: 'number', description: 'Max upgrade albums to return (default 10)' },
+      },
+    },
+  },
+  {
+    name: 'get_artist_completeness',
+    description: 'Get artist discography completeness from MusicBrainz. Shows which artists have incomplete discographies with missing album details. Use for "which artists am I missing albums from?" queries.',
+    parameters: {
+      type: 'object',
+      properties: {
+        artist_name: { type: 'string', description: 'Optional: check completeness for a specific artist' },
+        incomplete_only: { type: 'boolean', description: 'Only return artists with missing albums (default false)' },
+        limit: { type: 'number', description: 'Max results (default 20, max 50)' },
+      },
+    },
+  },
+  {
+    name: 'get_album_details',
+    description: 'Get detailed information about a specific album: tracks, audio quality (codec, bitrate, sample rate, bit depth), quality score, and completeness.',
+    parameters: {
+      type: 'object',
+      properties: {
+        album_id: { type: 'number', description: 'Album ID (from prior tool calls)' },
+        album_title: { type: 'string', description: 'Album title to search for (used if album_id not provided)' },
+        artist_name: { type: 'string', description: 'Artist name to help disambiguation when searching by title' },
+      },
+    },
+  },
+  {
+    name: 'check_music_ownership',
+    description: 'Check if the user owns music by specific artists. Use after recommending artists to verify which are already in the library.',
+    parameters: {
+      type: 'object',
+      properties: {
+        artists: {
+          type: 'array',
+          items: { type: 'string', description: 'Artist name' },
+          description: 'List of artist names to check (max 20)',
+        },
+      },
+      required: ['artists'],
     },
   },
   {
@@ -189,7 +256,7 @@ export const LIBRARY_TOOLS: GeminiToolDefinition[] = [
   },
   {
     name: 'check_ownership',
-    description: 'Check if the user owns specific titles. Use after making recommendations from general knowledge to verify ownership status.',
+    description: 'Check if the user owns specific movies or TV shows. Use after making recommendations to verify ownership status. For music artists, use check_music_ownership instead.',
     parameters: {
       type: 'object',
       properties: {
@@ -224,7 +291,7 @@ export const LIBRARY_TOOLS: GeminiToolDefinition[] = [
   },
   {
     name: 'add_to_wishlist',
-    description: 'Add movies or TV shows to the user\'s wishlist/shopping list. Use when the user asks to save titles for later acquisition. Always confirm what you\'re adding before calling this tool.',
+    description: 'Add movies, TV shows, or music albums to the user\'s wishlist/shopping list. Use when the user asks to save titles for later acquisition. Always confirm what you\'re adding before calling this tool.',
     parameters: {
       type: 'object',
       properties: {
@@ -233,13 +300,14 @@ export const LIBRARY_TOOLS: GeminiToolDefinition[] = [
           items: {
             type: 'object',
             properties: {
-              title: { type: 'string', description: 'Title of the movie or TV show' },
-              media_type: { type: 'string', enum: ['movie', 'tv'], description: 'Type of media' },
+              title: { type: 'string', description: 'Title of the movie, TV show, or album' },
+              media_type: { type: 'string', enum: ['movie', 'tv', 'album', 'track'], description: 'Type of media' },
               year: { type: 'number', description: 'Release year (helps disambiguation)' },
-              tmdb_id: { type: 'number', description: 'TMDB ID if known from prior tool calls' },
+              tmdb_id: { type: 'number', description: 'TMDB ID if known (movies/TV only)' },
+              artist_name: { type: 'string', description: 'Artist name (music only)' },
               reason: { type: 'string', enum: ['missing', 'upgrade'], description: 'Why it\'s on the list (default: missing)' },
               priority: { type: 'number', description: 'Priority 1-5 (1=highest, 5=lowest, default: 3)' },
-              notes: { type: 'string', description: 'Optional context (e.g., "Part of Marvel franchise")' },
+              notes: { type: 'string', description: 'Optional context (e.g., "Part of Marvel franchise", "Need lossless version")' },
             },
             required: ['title', 'media_type'],
           },
@@ -320,6 +388,29 @@ function checkTVShowOwnership(
   return { owned: false, episode_count: 0 }
 }
 
+/** Sanitize and validate a string tool input */
+function toolString(input: Record<string, unknown>, key: string, maxLen = 500): string {
+  const val = input[key]
+  if (typeof val !== 'string') return ''
+  return val.slice(0, maxLen).trim()
+}
+
+/** Sanitize and validate a numeric tool input */
+function toolNumber(input: Record<string, unknown>, key: string, min = 0, max = 10000): number | undefined {
+  const val = input[key]
+  if (val === undefined || val === null) return undefined
+  const num = typeof val === 'number' ? val : Number(val)
+  if (isNaN(num)) return undefined
+  return Math.max(min, Math.min(max, Math.floor(num)))
+}
+
+/** Sanitize and validate a boolean tool input */
+function toolBoolean(input: Record<string, unknown>, key: string): boolean | undefined {
+  const val = input[key]
+  if (typeof val === 'boolean') return val
+  return undefined
+}
+
 /**
  * Execute a tool by name with the given input.
  * Returns a JSON string result for Gemini to process.
@@ -333,7 +424,8 @@ export async function executeTool(
 
   switch (name) {
     case 'search_library': {
-      const query = input.query as string
+      const query = toolString(input, 'query', 200)
+      if (!query) return JSON.stringify({ error: 'query is required' })
       const results = db.globalSearch(query, 10)
       const hasResults = results.movies.length > 0 || results.tvShows.length > 0 ||
         results.episodes.length > 0 || results.artists.length > 0 ||
@@ -369,15 +461,15 @@ export async function executeTool(
     }
 
     case 'get_media_items': {
-      const limit = Math.min((input.limit as number) || 20, 50)
+      const limit = toolNumber(input, 'limit', 1, 50) || 20
       const items = db.getMediaItems({
-        type: input.type as 'movie' | 'episode' | undefined,
-        qualityTier: input.quality_tier as string | undefined,
-        tierQuality: input.tier_quality as string | undefined,
-        needsUpgrade: input.needs_upgrade as boolean | undefined,
-        searchQuery: input.search_query as string | undefined,
-        sortBy: (input.sort_by as string | undefined) || 'title',
-        sortOrder: (input.sort_order as 'asc' | 'desc' | undefined) || 'asc',
+        type: toolString(input, 'type') as 'movie' | 'episode' | undefined || undefined,
+        qualityTier: toolString(input, 'quality_tier') || undefined,
+        tierQuality: toolString(input, 'tier_quality') || undefined,
+        needsUpgrade: toolBoolean(input, 'needs_upgrade'),
+        searchQuery: toolString(input, 'search_query', 200) || undefined,
+        sortBy: toolString(input, 'sort_by') || 'title',
+        sortOrder: (toolString(input, 'sort_order') as 'asc' | 'desc') || 'asc',
         limit,
       })
       const simplified = items.map((item: Record<string, unknown>) => compact({
@@ -400,10 +492,10 @@ export async function executeTool(
     }
 
     case 'get_tv_shows': {
-      const limit = Math.min((input.limit as number) || 20, 50)
+      const limit = toolNumber(input, 'limit', 1, 50) || 20
       const shows = db.getTVShows({
-        searchQuery: input.search_query as string | undefined,
-        sortBy: (input.sort_by as 'title' | 'episode_count' | 'season_count' | undefined) || 'title',
+        searchQuery: toolString(input, 'search_query', 200) || undefined,
+        sortBy: (toolString(input, 'sort_by') as 'title' | 'episode_count' | 'season_count') || 'title',
         limit,
       })
       const simplified = shows.map((s: Record<string, unknown>) => compact({
@@ -415,7 +507,7 @@ export async function executeTool(
     }
 
     case 'get_library_stats': {
-      const stats = db.getLibraryStats(input.source_id as string | undefined)
+      const stats = db.getLibraryStats(toolString(input, 'source_id') || undefined)
       return JSON.stringify(stats)
     }
 
@@ -426,18 +518,17 @@ export async function executeTool(
 
     case 'get_series_completeness': {
       let series
-      if (input.series_title) {
-        const single = db.getSeriesCompletenessByTitle(
-          input.series_title as string,
-        )
+      const seriesTitle = toolString(input, 'series_title', 300)
+      if (seriesTitle) {
+        const single = db.getSeriesCompletenessByTitle(seriesTitle)
         series = single ? [single] : []
-      } else if (input.incomplete_only) {
+      } else if (toolBoolean(input, 'incomplete_only')) {
         series = db.getIncompleteSeries()
       } else {
         series = db.getAllSeriesCompleteness()
       }
-      const limit = Math.min((input.limit as number) || 20, 50)
-      const limited = series.slice(0, limit)
+      const seriesLimit = toolNumber(input, 'limit', 1, 50) || 20
+      const limited = series.slice(0, seriesLimit)
       const simplified = limited.map((s: Record<string, unknown>) => {
         let missingCount = 0
         let missingSample: string[] = []
@@ -464,13 +555,13 @@ export async function executeTool(
 
     case 'get_collection_completeness': {
       let collections
-      if (input.incomplete_only) {
+      if (toolBoolean(input, 'incomplete_only')) {
         collections = db.getIncompleteMovieCollections()
       } else {
         collections = db.getMovieCollections()
       }
-      const limit = Math.min((input.limit as number) || 20, 50)
-      const limited = collections.slice(0, limit)
+      const collLimit = toolNumber(input, 'limit', 1, 50) || 20
+      const limited = collections.slice(0, collLimit)
       const simplified = limited.map((c: Record<string, unknown>) => {
         let missingCount = 0
         let missingSample: string[] = []
@@ -494,7 +585,7 @@ export async function executeTool(
     }
 
     case 'get_music_stats': {
-      const stats = db.getMusicStats(input.source_id as string | undefined)
+      const stats = db.getMusicStats(toolString(input, 'source_id') || undefined)
       return JSON.stringify(stats)
     }
 
@@ -504,11 +595,11 @@ export async function executeTool(
     }
 
     case 'get_wishlist': {
-      const limit = Math.min((input.limit as number) || 20, 50)
+      const wlLimit = toolNumber(input, 'limit', 1, 50) || 20
       const items = db.getWishlistItems({
-        reason: input.reason as 'missing' | 'upgrade' | undefined,
-        media_type: input.media_type as string | undefined,
-        limit,
+        reason: (toolString(input, 'reason') as 'missing' | 'upgrade') || undefined,
+        media_type: toolString(input, 'media_type') || undefined,
+        limit: wlLimit,
         status: 'active',
       })
       const simplified = items.map((item: Record<string, unknown>) => compact({
@@ -527,8 +618,9 @@ export async function executeTool(
     }
 
     case 'search_tmdb': {
-      const query = input.query as string
-      const searchType = input.search_type as string
+      const query = toolString(input, 'query', 200)
+      if (!query) return JSON.stringify({ error: 'query is required' })
+      const searchType = toolString(input, 'search_type') || 'movie'
       const tmdb = getTMDBService()
 
       if (searchType === 'collection') {
@@ -691,13 +783,13 @@ export async function executeTool(
     }
 
     case 'discover_titles': {
-      const mediaType = input.media_type as 'movie' | 'tv'
-      const genre = input.genre as string | undefined
-      const yearMin = input.year_min as number | undefined
-      const yearMax = input.year_max as number | undefined
-      const sortBy = input.sort_by as string | undefined
-      const minRating = input.min_rating as number | undefined
-      const limit = Math.min((input.limit as number) || 20, 30)
+      const mediaType = (toolString(input, 'media_type') || 'movie') as 'movie' | 'tv'
+      const genre = toolString(input, 'genre', 100) || undefined
+      const yearMin = toolNumber(input, 'year_min', 1900, 2100)
+      const yearMax = toolNumber(input, 'year_max', 1900, 2100)
+      const sortBy = toolString(input, 'sort_by') || undefined
+      const minRating = toolNumber(input, 'min_rating', 0, 10)
+      const limit = toolNumber(input, 'limit', 1, 30) || 20
 
       const tmdb = getTMDBService()
 
@@ -789,10 +881,11 @@ export async function executeTool(
     }
 
     case 'get_similar_titles': {
-      const title = input.title as string
-      const year = input.year as number | undefined
-      const mediaType = input.media_type as 'movie' | 'tv'
-      const limit = Math.min((input.limit as number) || 20, 30)
+      const title = toolString(input, 'title', 300)
+      if (!title) return JSON.stringify({ error: 'title is required' })
+      const year = toolNumber(input, 'year', 1900, 2100)
+      const mediaType = (toolString(input, 'media_type') || 'movie') as 'movie' | 'tv'
+      const limit = toolNumber(input, 'limit', 1, 30) || 20
       const tmdb = getTMDBService()
 
       if (mediaType === 'movie') {
@@ -896,8 +989,12 @@ export async function executeTool(
     }
 
     case 'check_ownership': {
-      const titles = (input.titles as Array<{ title: string; year?: number; media_type: string }>)
-        .slice(0, 20)
+      const rawTitles = Array.isArray(input.titles) ? input.titles : []
+      const titles = rawTitles.slice(0, 20).map((t: Record<string, unknown>) => ({
+        title: String(t.title || '').slice(0, 300),
+        year: typeof t.year === 'number' ? t.year : undefined,
+        media_type: String(t.media_type || 'movie'),
+      })).filter(t => t.title)
       const tmdb = getTMDBService()
 
       const results = []
@@ -957,16 +1054,50 @@ export async function executeTool(
       })
     }
 
+    case 'check_music_ownership': {
+      const rawArtists = Array.isArray(input.artists) ? input.artists : []
+      const artists = rawArtists.slice(0, 20).map((a: Record<string, unknown>) =>
+        String(a.name || a || '').slice(0, 300)
+      ).filter(Boolean)
+
+      const results = artists.map((name: string) => {
+        const searchResults = db.globalSearch(name, 5)
+        const artistResults = (searchResults as Record<string, unknown>).artists as Array<Record<string, unknown>> | undefined
+        const match = artistResults?.find(a =>
+          String(a.name).toLowerCase() === name.toLowerCase()
+        ) || (artistResults && artistResults.length > 0 ? artistResults[0] : null)
+
+        if (match) {
+          const albums = db.getMusicAlbumsByArtistName(String(match.name), 100)
+          return compact({
+            artist: match.name,
+            owned: true,
+            album_count: albums.length,
+            albums: albums.slice(0, 5).map((a: Record<string, unknown>) => a.title),
+          })
+        }
+        return { artist: name, owned: false, album_count: 0 }
+      })
+
+      return JSON.stringify({
+        checked: results.length,
+        owned_count: results.filter(r => r.owned).length,
+        results,
+      })
+    }
+
     case 'get_item_details': {
       let item: Record<string, unknown> | null = null
+      const itemId = toolNumber(input, 'id', 1)
+      const itemTitle = toolString(input, 'title', 300)
 
-      if (input.id) {
-        item = db.getMediaItemById(input.id as number) as Record<string, unknown> | null
-      } else if (input.title) {
-        const results = db.globalSearch(input.title as string, 5)
+      if (itemId) {
+        item = db.getMediaItemById(itemId) as Record<string, unknown> | null
+      } else if (itemTitle) {
+        const results = db.globalSearch(itemTitle, 5)
         const mediaResults = (results as Record<string, unknown>).media_items as Array<Record<string, unknown>> | undefined
         if (mediaResults && mediaResults.length > 0) {
-          const typeFilter = input.type as string | undefined
+          const typeFilter = toolString(input, 'type') || undefined
           const match = typeFilter
             ? mediaResults.find((r) => r.type === typeFilter) || mediaResults[0]
             : mediaResults[0]
@@ -1070,15 +1201,17 @@ export async function executeTool(
     }
 
     case 'add_to_wishlist': {
-      const items = (input.items as Array<{
-        title: string
-        media_type: string
-        year?: number
-        tmdb_id?: number
-        reason?: string
-        priority?: number
-        notes?: string
-      }>).slice(0, 20)
+      const rawItems = Array.isArray(input.items) ? input.items : []
+      const items = rawItems.slice(0, 20).map((i: Record<string, unknown>) => ({
+        title: String(i.title || '').slice(0, 300),
+        media_type: String(i.media_type || 'movie'),
+        year: typeof i.year === 'number' ? i.year : undefined,
+        tmdb_id: typeof i.tmdb_id === 'number' ? i.tmdb_id : undefined,
+        artist_name: typeof i.artist_name === 'string' ? i.artist_name.slice(0, 300) : undefined,
+        reason: typeof i.reason === 'string' ? i.reason.slice(0, 100) : undefined,
+        priority: typeof i.priority === 'number' ? Math.max(1, Math.min(5, i.priority)) : undefined,
+        notes: typeof i.notes === 'string' ? i.notes.slice(0, 500) : undefined,
+      })).filter(i => i.title)
       const tmdb = getTMDBService()
 
       const wishlistItems: Array<Record<string, unknown>> = []
@@ -1087,46 +1220,69 @@ export async function executeTool(
         let resolvedTitle = item.title
         let posterUrl: string | null = null
 
-        try {
-          if (tmdbId) {
-            // Fetch poster from TMDB using known ID
-            if (item.media_type === 'movie') {
-              const details = await tmdb.getMovieDetails(tmdbId)
-              posterUrl = tmdb.buildImageUrl(details.poster_path, 'w300')
-              resolvedTitle = details.title || resolvedTitle
-            } else {
-              const details = await tmdb.getTVShowDetails(tmdbId)
-              posterUrl = tmdb.buildImageUrl(details.poster_path, 'w300')
-              resolvedTitle = details.name || resolvedTitle
-            }
-          } else {
-            // Search TMDB to resolve ID and poster
-            if (item.media_type === 'movie') {
-              const results = await tmdb.searchMovie(item.title, item.year)
-              if (results.results.length > 0) {
-                const match = results.results[0]
-                tmdbId = String(match.id)
-                resolvedTitle = match.title
-                posterUrl = tmdb.buildImageUrl(match.poster_path, 'w300')
-              }
-            } else {
-              const results = await tmdb.searchTVShow(item.title)
-              if (results.results.length > 0) {
-                const match = results.results[0]
-                tmdbId = String(match.id)
-                resolvedTitle = match.name
-                posterUrl = tmdb.buildImageUrl(match.poster_path, 'w300')
+        if (item.media_type === 'album' || item.media_type === 'track') {
+          // Music: look up MusicBrainz for album art
+          try {
+            const mb = getMusicBrainzService()
+            const artistName = item.artist_name || ''
+            if (artistName && item.title) {
+              const releases = await mb.searchRelease(artistName, item.title)
+              if (releases.length > 0) {
+                const releaseGroupId = releases[0].id
+                const artUrl = await mb.getCoverArtUrl(releaseGroupId)
+                if (artUrl) posterUrl = artUrl
+                resolvedTitle = releases[0].title || resolvedTitle
               }
             }
-          }
-        } catch { /* continue without TMDB data */ }
+          } catch { /* continue without MusicBrainz data */ }
+        } else {
+          // Movie/TV: look up TMDB for poster
+          try {
+            if (tmdbId) {
+              if (item.media_type === 'movie') {
+                const details = await tmdb.getMovieDetails(tmdbId)
+                posterUrl = tmdb.buildImageUrl(details.poster_path, 'w300')
+                resolvedTitle = details.title || resolvedTitle
+              } else {
+                const details = await tmdb.getTVShowDetails(tmdbId)
+                posterUrl = tmdb.buildImageUrl(details.poster_path, 'w300')
+                resolvedTitle = details.name || resolvedTitle
+              }
+            } else {
+              if (item.media_type === 'movie') {
+                const results = await tmdb.searchMovie(item.title, item.year)
+                if (results.results.length > 0) {
+                  const match = results.results[0]
+                  tmdbId = String(match.id)
+                  resolvedTitle = match.title
+                  posterUrl = tmdb.buildImageUrl(match.poster_path, 'w300')
+                }
+              } else {
+                const results = await tmdb.searchTVShow(item.title)
+                if (results.results.length > 0) {
+                  const match = results.results[0]
+                  tmdbId = String(match.id)
+                  resolvedTitle = match.name
+                  posterUrl = tmdb.buildImageUrl(match.poster_path, 'w300')
+                }
+              }
+            }
+          } catch { /* continue without TMDB data */ }
+        }
+
+        // Map chat media types to wishlist media types
+        const wishlistMediaType = item.media_type === 'tv' ? 'season'
+          : item.media_type === 'album' ? 'album'
+          : item.media_type === 'track' ? 'track'
+          : 'movie'
 
         wishlistItems.push({
-          media_type: item.media_type === 'tv' ? 'season' : 'movie',
+          media_type: wishlistMediaType,
           title: resolvedTitle,
           year: item.year,
           tmdb_id: tmdbId,
           poster_url: posterUrl,
+          artist_name: item.artist_name,
           reason: item.reason || 'missing',
           priority: Math.max(1, Math.min(5, item.priority || 3)),
           notes: item.notes,
@@ -1148,6 +1304,222 @@ export async function executeTool(
           priority: w.priority,
         })),
       })
+    }
+
+    // ========================================================================
+    // MUSIC TOOLS
+    // ========================================================================
+
+    case 'get_music_albums': {
+      const limit = toolNumber(input, 'limit', 1, 50) || 20
+      const artistName = toolString(input, 'artist_name', 300) || undefined
+      const qualityTier = toolString(input, 'quality_tier') || undefined
+      const needsUpgrade = toolBoolean(input, 'needs_upgrade')
+      const searchQuery = toolString(input, 'search_query', 200) || undefined
+
+      if (needsUpgrade) {
+        // Use dedicated upgrade method
+        const albums = db.getAlbumsNeedingUpgrade(limit)
+        const simplified = albums.map((a: Record<string, unknown>) => compact({
+          id: a.id,
+          title: a.title,
+          artist_name: a.artist_name,
+          year: a.year,
+          best_audio_codec: a.best_audio_codec,
+          avg_audio_bitrate: a.avg_audio_bitrate,
+          best_bit_depth: a.best_bit_depth,
+          best_sample_rate: a.best_sample_rate,
+          track_count: a.track_count,
+        }))
+        return JSON.stringify({ count: simplified.length, albums: simplified })
+      }
+
+      // Build filters
+      const filters: Record<string, unknown> = { limit }
+      if (searchQuery) filters.searchQuery = searchQuery
+      if (qualityTier) filters.qualityTier = qualityTier
+      if (input.sort_by) filters.sortBy = toolString(input, 'sort_by')
+      if (input.sort_order) filters.sortOrder = toolString(input, 'sort_order')
+
+      let albums: Record<string, unknown>[]
+      if (artistName) {
+        albums = db.getMusicAlbumsByArtistName(artistName, limit) as Record<string, unknown>[]
+      } else {
+        albums = db.getMusicAlbums(filters) as Record<string, unknown>[]
+      }
+
+      // Enrich with quality scores
+      const simplified = albums.map((a: Record<string, unknown>) => {
+        const quality = db.getMusicQualityScore(a.id as number)
+        return compact({
+          id: a.id,
+          title: a.title,
+          artist_name: a.artist_name,
+          year: a.year,
+          album_type: a.album_type,
+          track_count: a.track_count,
+          best_audio_codec: a.best_audio_codec,
+          avg_audio_bitrate: a.avg_audio_bitrate,
+          best_bit_depth: a.best_bit_depth,
+          best_sample_rate: a.best_sample_rate,
+          quality_tier: quality?.quality_tier,
+          tier_quality: quality?.tier_quality,
+          tier_score: quality?.tier_score,
+          needs_upgrade: quality?.needs_upgrade,
+        })
+      })
+      return JSON.stringify({ count: simplified.length, albums: simplified })
+    }
+
+    case 'get_music_quality_distribution': {
+      const includeUpgrades = toolBoolean(input, 'include_upgrades') || false
+      const upgradeLimit = toolNumber(input, 'upgrade_limit', 1, 50) || 10
+
+      // Get all albums and their quality scores
+      const allAlbums = db.getMusicAlbums({ limit: 10000 }) as Record<string, unknown>[]
+      const tiers: Record<string, number> = {
+        HI_RES: 0, LOSSLESS: 0, LOSSY_HIGH: 0, LOSSY_MID: 0, LOSSY_LOW: 0, UNSCORED: 0,
+      }
+
+      for (const album of allAlbums) {
+        const quality = db.getMusicQualityScore(album.id as number)
+        if (quality) {
+          const tier = (quality as Record<string, unknown>).quality_tier as string
+          if (tier in tiers) tiers[tier]++
+          else tiers.UNSCORED++
+        } else {
+          tiers.UNSCORED++
+        }
+      }
+
+      const result: Record<string, unknown> = {
+        total_albums: allAlbums.length,
+        distribution: tiers,
+        lossless_percentage: allAlbums.length > 0
+          ? Math.round(((tiers.LOSSLESS + tiers.HI_RES) / allAlbums.length) * 100)
+          : 0,
+      }
+
+      if (includeUpgrades) {
+        const upgradeAlbums = db.getAlbumsNeedingUpgrade(upgradeLimit)
+        result.albums_needing_upgrade = upgradeAlbums.map((a: Record<string, unknown>) => compact({
+          title: a.title,
+          artist_name: a.artist_name,
+          best_audio_codec: a.best_audio_codec,
+          avg_audio_bitrate: a.avg_audio_bitrate,
+        }))
+      }
+
+      return JSON.stringify(result)
+    }
+
+    case 'get_artist_completeness': {
+      const artistName = toolString(input, 'artist_name', 300)
+      const incompleteOnly = toolBoolean(input, 'incomplete_only') || false
+      const limit = toolNumber(input, 'limit', 1, 50) || 20
+
+      let artists: Record<string, unknown>[]
+      if (artistName) {
+        const single = db.getArtistCompleteness(artistName)
+        artists = single ? [single as Record<string, unknown>] : []
+      } else {
+        const all = db.getAllArtistCompleteness() as Record<string, unknown>[]
+        artists = incompleteOnly
+          ? all.filter(a => (a.completeness_percentage as number) < 100)
+          : all
+      }
+
+      const limited = artists.slice(0, limit)
+      const simplified = limited.map((a: Record<string, unknown>) => {
+        let missingCount = 0
+        let missingSample: string[] = []
+        try {
+          const parsed = JSON.parse((a.missing_albums as string) || '[]')
+          missingCount = parsed.length
+          missingSample = parsed.slice(0, 5).map((m: Record<string, unknown>) =>
+            m.year ? `${m.title} (${m.year})` : `${m.title}`,
+          )
+        } catch { /* empty */ }
+        return compact({
+          artist_name: a.artist_name,
+          total_albums: a.total_albums,
+          owned_albums: a.owned_albums,
+          completeness_percentage: a.completeness_percentage,
+          country: a.country,
+          missing_album_count: missingCount,
+          missing_sample: missingSample.length > 0 ? missingSample : undefined,
+        })
+      })
+      return JSON.stringify({ count: artists.length, shown: limited.length, artists: simplified })
+    }
+
+    case 'get_album_details': {
+      const albumId = toolNumber(input, 'album_id', 1)
+      const albumTitle = toolString(input, 'album_title', 300)
+      const artistHint = toolString(input, 'artist_name', 300)
+
+      let album: Record<string, unknown> | null = null
+
+      if (albumId) {
+        album = db.getMusicAlbumById(albumId) as Record<string, unknown> | null
+      } else if (albumTitle) {
+        // Search for the album
+        const results = db.globalSearch(albumTitle, 10)
+        const albumResults = (results as Record<string, unknown>).albums as Array<Record<string, unknown>> | undefined
+        if (albumResults && albumResults.length > 0) {
+          // Try to match by artist hint if provided
+          const match = artistHint
+            ? albumResults.find(a => String(a.artist_name).toLowerCase().includes(artistHint.toLowerCase())) || albumResults[0]
+            : albumResults[0]
+          album = db.getMusicAlbumById(match.id as number) as Record<string, unknown> | null
+        }
+      }
+
+      if (!album) {
+        return JSON.stringify({ error: 'Album not found' })
+      }
+
+      // Get tracks
+      const tracks = db.getMusicTracks({ albumId: album.id as number, limit: 200 }) as Record<string, unknown>[]
+      const trackData = tracks.map((t: Record<string, unknown>) => compact({
+        track_number: t.track_number,
+        disc_number: t.disc_number,
+        title: t.title,
+        duration_sec: t.duration ? Math.round((t.duration as number) / 1000) : undefined,
+        codec: t.audio_codec,
+        bitrate: t.audio_bitrate,
+        sample_rate: t.sample_rate,
+        bit_depth: t.bit_depth,
+        is_lossless: t.is_lossless,
+        is_hi_res: t.is_hi_res,
+      }))
+
+      // Get quality score
+      const quality = db.getMusicQualityScore(album.id as number)
+
+      // Get album completeness
+      const completeness = db.getAlbumCompleteness(album.id as number)
+
+      const details = compact({
+        title: album.title,
+        artist_name: album.artist_name,
+        year: album.year,
+        album_type: album.album_type,
+        track_count: tracks.length,
+        total_duration_min: album.total_duration ? Math.round((album.total_duration as number) / 60000) : undefined,
+        best_audio_codec: album.best_audio_codec,
+        avg_audio_bitrate: album.avg_audio_bitrate,
+        best_sample_rate: album.best_sample_rate,
+        best_bit_depth: album.best_bit_depth,
+        quality_tier: quality ? (quality as Record<string, unknown>).quality_tier : undefined,
+        tier_quality: quality ? (quality as Record<string, unknown>).tier_quality : undefined,
+        tier_score: quality ? (quality as Record<string, unknown>).tier_score : undefined,
+        needs_upgrade: quality ? (quality as Record<string, unknown>).needs_upgrade : undefined,
+        completeness_percentage: completeness ? (completeness as Record<string, unknown>).completeness_percentage : undefined,
+        tracks: trackData,
+      })
+
+      return JSON.stringify(details)
     }
 
     default:

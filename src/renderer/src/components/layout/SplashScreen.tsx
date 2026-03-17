@@ -6,8 +6,11 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
+import { useTheme } from '../../contexts/ThemeContext'
 import logoAnimation from '../../assets/totality_anim.webm'
+import logoAnimationBlack from '../../assets/totality_anim_black.webm'
 import logoImage from '../../assets/logo.png'
+import logoBlackImage from '../../assets/logo_black.png'
 
 interface SplashScreenProps {
   onComplete: () => void
@@ -18,6 +21,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
   const [fadeOut, setFadeOut] = useState(false)
   const [videoReady, setVideoReady] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const { effectiveIsDark } = useTheme()
 
   // Start video playback after a delay to ensure window is fully visible
   useEffect(() => {
@@ -75,7 +79,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
       >
         <video
           ref={videoRef}
-          src={logoAnimation}
+          src={effectiveIsDark ? logoAnimation : logoAnimationBlack}
           muted
           playsInline
           preload="auto"
@@ -87,8 +91,8 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
           }}
         />
         <img
-          src={logoImage}
-          alt="Totality"
+          src={effectiveIsDark ? logoImage : logoBlackImage}
+          alt="Totality application logo"
           className="absolute inset-0 w-full h-full object-contain"
           style={{
             opacity: videoEnded ? 1 : 0,

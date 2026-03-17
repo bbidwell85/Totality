@@ -154,13 +154,14 @@ export function useChat(viewContext?: ViewContext) {
           ),
         )
       } else {
-        // Update assistant message with response
+        // Update assistant message with response (guard against empty text)
+        const responseText = result.text || 'Sorry, I wasn\'t able to generate a response. Please try rephrasing your question.'
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
               ? {
                   ...m,
-                  content: result.text,
+                  content: responseText,
                   isLoading: false,
                   toolsUsed: toolsForCurrentRequest.current.length > 0
                     ? [...new Set(toolsForCurrentRequest.current)]

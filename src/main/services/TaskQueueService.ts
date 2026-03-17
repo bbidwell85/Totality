@@ -358,6 +358,12 @@ export class TaskQueueService {
    * Persist any in-flight or queued tasks as interrupted on app shutdown
    */
   persistInterruptedTasks(): void {
+    // Clear any pending progress throttle timer
+    if (this.progressThrottleTimer) {
+      clearTimeout(this.progressThrottleTimer)
+      this.progressThrottleTimer = null
+    }
+
     const now = new Date().toISOString()
     try {
       const db = getDatabase()

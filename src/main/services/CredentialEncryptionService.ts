@@ -35,6 +35,17 @@ const ENCRYPTED_PREFIX = 'ENC:'
 
 export class CredentialEncryptionService {
   private isAvailable: boolean
+  private lastDecryptionFailed = false
+
+  /**
+   * Check if any decryption has failed since last check.
+   * Resets the flag after reading.
+   */
+  hasDecryptionFailed(): boolean {
+    const failed = this.lastDecryptionFailed
+    this.lastDecryptionFailed = false
+    return failed
+  }
 
   constructor() {
     // Check if safeStorage is available on this platform
@@ -91,7 +102,9 @@ export class CredentialEncryptionService {
       const encryptedBuffer = Buffer.from(encryptedBase64, 'base64')
       return safeStorage.decryptString(encryptedBuffer)
     } catch (error) {
-      console.error('[CredentialEncryption] Failed to decrypt value — credential may need to be re-entered:', error)
+      console.error('[CredentialEncryption] Failed to decrypt value — credential must be re-entered:', error)
+      // Track that a decryption failure occurred so callers can notify the user
+      this.lastDecryptionFailed = true
       // Return empty string on failure to force re-authentication,
       // rather than returning the encrypted blob which would be used as a raw credential
       return ''

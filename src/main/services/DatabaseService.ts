@@ -917,26 +917,36 @@ export class DatabaseService {
     return this.dbPath
   }
 
+  /** Valid table names for export/import/reset — used to prevent SQL injection */
+  private static readonly ALLOWED_TABLES = new Set([
+    'media_sources',
+    'media_items',
+    'quality_scores',
+    'settings',
+    'series_completeness',
+    'movie_collections',
+    'music_artists',
+    'music_albums',
+    'music_tracks',
+    'music_quality_scores',
+    'artist_completeness',
+    'album_completeness',
+  ])
+
+  /** Validate a table name against the allowlist */
+  private assertValidTable(table: string): void {
+    if (!DatabaseService.ALLOWED_TABLES.has(table)) {
+      throw new Error(`Invalid table name: ${table}`)
+    }
+  }
+
   /**
    * Export all database data to JSON
    */
   exportData(): Record<string, unknown[]> {
     if (!this.db) throw new Error('Database not initialized')
 
-    const tables = [
-      'media_sources',
-      'media_items',
-      'quality_scores',
-      'settings',
-      'series_completeness',
-      'movie_collections',
-      'music_artists',
-      'music_albums',
-      'music_tracks',
-      'music_quality_scores',
-      'artist_completeness',
-      'album_completeness',
-    ]
+    const tables = [...DatabaseService.ALLOWED_TABLES]
 
     const exportedData: Record<string, unknown[]> = {
       _meta: [{
@@ -948,6 +958,7 @@ export class DatabaseService {
 
     for (const table of tables) {
       try {
+        this.assertValidTable(table)
         const result = this.db.exec(`SELECT * FROM ${table}`)
         if (result.length > 0) {
           const columns = result[0].columns
@@ -1301,6 +1312,7 @@ export class DatabaseService {
         if (!data[table] || !Array.isArray(data[table]) || data[table].length === 0) {
           continue
         }
+        this.assertValidTable(table)
 
         const rows = data[table] as Record<string, unknown>[]
 
@@ -1311,6 +1323,7 @@ export class DatabaseService {
             const placeholders = columns.map(() => '?').join(', ')
 
             // Use INSERT OR REPLACE to handle existing data
+            // Note: table and column names are validated against allowlist above
             const sql = `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`
             this.db.run(sql, values)
             imported++
@@ -1319,11 +1332,10 @@ export class DatabaseService {
           }
         }
       }
-
-      await this.endBatch()
     } catch (error: unknown) {
-      this.batchMode = false
       errors.push(`Import failed: ${getErrorMessage(error)}`)
+    } finally {
+      await this.endBatch()
     }
 
     return { imported, errors }
@@ -1352,6 +1364,7 @@ export class DatabaseService {
 
     for (const table of tables) {
       try {
+        this.assertValidTable(table)
         this.db.run(`DELETE FROM ${table}`)
       } catch (error) {
         console.log(`Could not clear table ${table}`)

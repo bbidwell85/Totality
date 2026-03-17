@@ -26,6 +26,7 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 import { getDatabaseServiceAsync, getDatabaseServiceSync, getDatabaseBackend } from './database/DatabaseFactory'
+import { getDatabase } from './database/getDatabase'
 import { getSourceManager } from './services/SourceManager'
 import { registerDatabaseHandlers } from './ipc/database'
 import { registerQualityHandlers } from './ipc/quality'
@@ -52,15 +53,22 @@ declare const __dirname: string
 // Crash handlers - ensure database integrity on unexpected errors
 // With better-sqlite3 (WAL mode): data is auto-persisted, forceSave() just checkpoints WAL
 // With SQL.js: forceSave() writes in-memory database to disk
-process.on('uncaughtException', async (error) => {
+process.on('uncaughtException', (error) => {
   console.error('[CRASH] Uncaught exception:', error)
   try {
     const db = getDatabaseServiceSync()
     if (db.isInitialized) {
       const backend = getDatabaseBackend()
       if (backend === 'sql.js') {
-        await db.forceSave()
-        console.log('[CRASH] SQL.js database saved before exit')
+        // Use .then() to ensure exit happens after save completes
+        const saveResult = db.forceSave()
+        if (saveResult && typeof saveResult.then === 'function') {
+          saveResult
+            .then(() => console.log('[CRASH] SQL.js database saved before exit'))
+            .catch((e: unknown) => console.error('[CRASH] Failed to save database:', e))
+            .finally(() => process.exit(1))
+          return // Don't exit yet — wait for save
+        }
       } else {
         console.log('[CRASH] better-sqlite3 data already persisted (WAL mode)')
       }
@@ -71,15 +79,19 @@ process.on('uncaughtException', async (error) => {
   process.exit(1)
 })
 
-process.on('unhandledRejection', async (reason, promise) => {
+process.on('unhandledRejection', (reason, promise) => {
   console.error('[CRASH] Unhandled rejection at:', promise, 'reason:', reason)
   try {
     const db = getDatabaseServiceSync()
     if (db.isInitialized) {
       const backend = getDatabaseBackend()
       if (backend === 'sql.js') {
-        await db.forceSave()
-        console.log('[CRASH] SQL.js database saved after unhandled rejection')
+        const saveResult = db.forceSave()
+        if (saveResult && typeof saveResult.then === 'function') {
+          saveResult
+            .then(() => console.log('[CRASH] SQL.js database saved after unhandled rejection'))
+            .catch((e: unknown) => console.error('[CRASH] Failed to save database:', e))
+        }
       }
       // better-sqlite3: no action needed, WAL mode auto-persists
     }
@@ -239,6 +251,14 @@ app.on('before-quit', async (event) => {
   // Cleanup auto-update timers
   getAutoUpdateService().cleanup()
 
+  // Shutdown FFprobe worker pool (terminate workers before closing DB)
+  try {
+    const { getFFprobeWorkerPool } = await import('./services/FFprobeWorkerPool')
+    await getFFprobeWorkerPool().shutdown()
+  } catch {
+    // Pool may not have been initialized
+  }
+
   // Flush log buffer to disk
   await getLoggingService().shutdown()
 
@@ -346,6 +366,9 @@ app.whenReady().then(async () => {
     const db = await getDatabaseServiceAsync()
     await db.initialize()
     console.log(`Database initialized successfully (backend: ${getDatabaseBackend()})`)
+
+    // Inject database getter into logging service (replaces dynamic require)
+    getLoggingService().setDatabaseGetter(() => getDatabase())
 
     // Initialize file-based logging (requires database for settings)
     await getLoggingService().initializeFileLogging()

@@ -144,18 +144,21 @@ export function registerJellyfinHandlers(): void {
    */
   ipcMain.handle('emby:authenticateApiKey', async (
     _event,
-    serverUrl: string,
-    apiKey: string,
-    displayName: string
+    serverUrl: unknown,
+    apiKey: unknown,
+    displayName: unknown
   ) => {
+    const validated = validateInput(JellyfinApiKeyAuthSchema, {
+      serverUrl, apiKey, displayName,
+    }, 'emby:authenticateApiKey')
     try {
       const { EmbyProvider } = await import('../providers/jellyfin-emby/EmbyProvider')
 
       const provider = new EmbyProvider({
         sourceId: undefined, // Will be generated
         sourceType: 'emby',
-        displayName,
-        connectionConfig: { serverUrl, apiKey },
+        displayName: validated.displayName,
+        connectionConfig: { serverUrl: validated.serverUrl, apiKey: validated.apiKey },
       })
 
       // Test the connection with the API key
@@ -170,10 +173,10 @@ export function registerJellyfinHandlers(): void {
       // Add the source with the API key
       const source = await manager.addSource({
         sourceType: 'emby',
-        displayName,
+        displayName: validated.displayName,
         connectionConfig: {
-          serverUrl,
-          apiKey,
+          serverUrl: validated.serverUrl,
+          apiKey: validated.apiKey,
         },
       })
 

@@ -561,6 +561,12 @@ export class MediaFileAnalyzer {
             if (location) {
               // Resolve relative URLs against the current request URL
               const redirectUrl = new URL(location, requestUrl).href
+              // Validate redirect stays on HTTPS (except localhost)
+              const redirectParsed = new URL(redirectUrl)
+              if (redirectParsed.protocol !== 'https:') {
+                reject(new Error(`Redirect to insecure URL blocked: ${redirectParsed.hostname}`))
+                return
+              }
               doRequest(redirectUrl, redirectCount + 1)
               return
             }

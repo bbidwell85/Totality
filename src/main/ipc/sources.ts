@@ -30,6 +30,8 @@ import {
   BooleanSchema,
   FilePathSchema,
   OptionalProviderTypeSchema,
+  LocalFolderConfigSchema,
+  LocalFolderWithLibrariesSchema,
 } from '../validation/schemas'
 
 /**
@@ -1079,27 +1081,19 @@ export function registerSourceHandlers(): void {
   /**
    * Add a local folder as a media source with specific library configurations
    */
-  ipcMain.handle('local:addSourceWithLibraries', async (_event, config: {
-    folderPath: string
-    displayName: string
-    libraries: Array<{
-      name: string
-      path: string
-      mediaType: 'movies' | 'tvshows' | 'music'
-      enabled: boolean
-    }>
-  }) => {
+  ipcMain.handle('local:addSourceWithLibraries', async (_event, config: unknown) => {
+    const validated = validateInput(LocalFolderWithLibrariesSchema, config, 'local:addSourceWithLibraries')
     try {
       // Create the source with 'mixed' type - we'll handle library creation manually
       const source = await manager.addSource({
         sourceType: 'local',
-        displayName: config.displayName,
+        displayName: validated.displayName,
         connectionConfig: {
-          folderPath: config.folderPath,
+          folderPath: validated.folderPath,
           mediaType: 'mixed',
-          name: config.displayName,
+          name: validated.displayName,
           // Store the custom library config
-          customLibraries: config.libraries,
+          customLibraries: validated.libraries,
         },
         isEnabled: true,
       })
@@ -1114,19 +1108,16 @@ export function registerSourceHandlers(): void {
   /**
    * Add a local folder as a media source
    */
-  ipcMain.handle('local:addSource', async (_event, config: {
-    folderPath: string
-    displayName: string
-    mediaType: 'movies' | 'tvshows' | 'mixed'
-  }) => {
+  ipcMain.handle('local:addSource', async (_event, config: unknown) => {
+    const validated = validateInput(LocalFolderConfigSchema, config, 'local:addSource')
     try {
       return await manager.addSource({
         sourceType: 'local',
-        displayName: config.displayName,
+        displayName: validated.displayName,
         connectionConfig: {
-          folderPath: config.folderPath,
-          mediaType: config.mediaType,
-          name: config.displayName,
+          folderPath: validated.folderPath,
+          mediaType: validated.mediaType,
+          name: validated.displayName,
         },
         isEnabled: true,
       })

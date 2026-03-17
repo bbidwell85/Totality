@@ -6,7 +6,8 @@
  * Provides access to sources, scanning state, and source operations.
  */
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
+import { useToast } from './ToastContext'
 import type {
   MediaSourceResponse,
   MediaLibraryResponse,
@@ -131,6 +132,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<Map<string, boolean>>(new Map())
   const [newItemCounts, setNewItemCounts] = useState<Map<string, number>>(new Map())
+  const { addToast } = useToast()
+  const hasShownStartupToast = useRef(false)
 
   // Library type availability
   const [hasMovies, setHasMovies] = useState(false)
@@ -161,9 +164,13 @@ export function SourceProvider({ children }: SourceProviderProps) {
     })
   }, [])
 
+  // Use ref to avoid recreating checkAllConnections when sources change
+  const sourcesRef = useRef(sources)
+  sourcesRef.current = sources
+
   // Check connection status for all enabled sources
   const checkAllConnections = useCallback(async () => {
-    const enabledSources = sources.filter(s => s.is_enabled)
+    const enabledSources = sourcesRef.current.filter(s => s.is_enabled)
     const newStatus = new Map<string, boolean>()
 
     await Promise.all(
@@ -178,7 +185,7 @@ export function SourceProvider({ children }: SourceProviderProps) {
     )
 
     setConnectionStatus(newStatus)
-  }, [sources])
+  }, [])
 
   // Load sources on mount
   useEffect(() => {
@@ -217,7 +224,8 @@ export function SourceProvider({ children }: SourceProviderProps) {
       const interval = setInterval(checkAllConnections, 30000)
       return () => clearInterval(interval)
     }
-  }, [sources, checkAllConnections])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sources.length])
 
   // Auto-select first enabled source when sources load
   useEffect(() => {
@@ -250,32 +258,46 @@ export function SourceProvider({ children }: SourceProviderProps) {
   }
 
   // Detect which library types are available from enabled sources
+  // Runs all sources in parallel with a per-source timeout to avoid blocking on unreachable servers
   const detectLibraryTypesFromList = async (sourceList: MediaSourceResponse[]) => {
     let movies = false, tv = false, music = false
+    const unreachable: string[] = []
 
-    try {
-      for (const source of sourceList) {
-        if (!source.is_enabled) continue
+    const enabledSources = sourceList.filter(s => s.is_enabled)
 
-        const libraries = await window.electronAPI.sourcesGetLibrariesWithStatus(source.source_id)
-        for (const lib of libraries) {
-          if (lib.isEnabled) {
-            if (lib.type === 'movie') movies = true
-            if (lib.type === 'show') tv = true
-            if (lib.type === 'music') music = true
-          }
+    const results = await Promise.allSettled(
+      enabledSources.map(async (source) => {
+        try {
+          const libraries = await Promise.race([
+            window.electronAPI.sourcesGetLibrariesWithStatus(source.source_id),
+            new Promise<never>((_resolve, reject) =>
+              setTimeout(() => reject(new Error('timeout')), 5000)
+            ),
+          ])
+          return { source, libraries }
+        } catch {
+          unreachable.push(source.display_name)
+          return { source, libraries: [] as Array<MediaLibraryResponse & { isEnabled: boolean }> }
         }
+      })
+    )
 
-        // Early exit if we've found all types
-        if (movies && tv && music) break
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue
+      for (const lib of result.value.libraries) {
+        if (lib.isEnabled) {
+          if (lib.type === 'movie') movies = true
+          if (lib.type === 'show') tv = true
+          if (lib.type === 'music') music = true
+        }
       }
-    } catch (err) {
-      console.warn('Failed to detect library types:', err)
     }
 
     setHasMovies(movies)
     setHasTV(tv)
     setHasMusic(music)
+
+    return unreachable
   }
 
   // Public function to refresh library types (e.g., after toggling a library)
@@ -293,13 +315,28 @@ export function SourceProvider({ children }: SourceProviderProps) {
       setSources(sourceList)
       await loadStats()
       // Detect library types immediately after loading sources
-      await detectLibraryTypesFromList(sourceList)
+      const unreachable = await detectLibraryTypesFromList(sourceList)
+
+      // Show toast for unreachable sources on initial load
+      if (unreachable.length > 0 && !hasShownStartupToast.current) {
+        hasShownStartupToast.current = true
+        const names = unreachable.join(', ')
+        addToast({
+          type: 'error',
+          title: 'Source unavailable',
+          message: unreachable.length === 1
+            ? `"${unreachable[0]}" could not be reached. Check the connection.`
+            : `${unreachable.length} sources could not be reached: ${names}`,
+          duration: 8000,
+        })
+      }
     } catch (err: unknown) {
       setError((err as Error).message || 'Failed to load sources')
       console.error('Failed to refresh sources:', err)
     } finally {
       setIsLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Refresh source data when a scan completes (updates last_scan_at)
