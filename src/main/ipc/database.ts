@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { z } from 'zod'
 import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
+import { getGeminiService } from '../services/GeminiService'
 import { getTMDBService } from '../services/TMDBService'
 import { invalidateNfsMappingsCache } from '../providers/kodi/KodiDatabaseSchema'
 import { getErrorMessage, isNodeError } from './utils'
@@ -199,7 +200,6 @@ export function registerDatabaseHandlers() {
 
       // Refresh Gemini API key/model/enabled when they change (no restart needed)
       if (validKey === 'gemini_api_key' || validKey === 'gemini_model' || validKey === 'ai_enabled') {
-        const { getGeminiService } = require('../services/GeminiService')
         getGeminiService().refreshApiKey()
       }
 

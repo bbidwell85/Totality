@@ -20,7 +20,7 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
   // Check if AI is configured
   useEffect(() => {
     if (isOpen) {
-      window.electronAPI.aiIsConfigured().then(setIsConfigured)
+      window.electronAPI.aiIsConfigured().then(setIsConfigured).catch(() => setIsConfigured(false))
     }
   }, [isOpen])
 
@@ -28,7 +28,7 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
   useEffect(() => {
     const cleanup = window.electronAPI.onSettingsChanged((data) => {
       if (data.key === 'gemini_api_key' || data.key === 'ai_enabled') {
-        window.electronAPI.aiIsConfigured().then(setIsConfigured)
+        window.electronAPI.aiIsConfigured().then(setIsConfigured).catch(() => setIsConfigured(false))
       }
     })
     return cleanup

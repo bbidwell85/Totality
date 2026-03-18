@@ -412,7 +412,7 @@ export class BetterSQLiteService {
     if (!row) return null
 
     // Decrypt sensitive settings
-    const sensitiveKeys = ['plex_token', 'tmdb_api_key', 'musicbrainz_api_token']
+    const sensitiveKeys = ['plex_token', 'tmdb_api_key', 'musicbrainz_api_token', 'gemini_api_key']
     if (sensitiveKeys.includes(key)) {
       const encryption = getCredentialEncryptionService()
       return encryption.decryptSetting(key, row.value)
@@ -428,7 +428,7 @@ export class BetterSQLiteService {
     if (!this.db) throw new Error('Database not initialized')
 
     // Encrypt sensitive settings
-    const sensitiveKeys = ['plex_token', 'tmdb_api_key', 'musicbrainz_api_token']
+    const sensitiveKeys = ['plex_token', 'tmdb_api_key', 'musicbrainz_api_token', 'gemini_api_key']
     let storedValue = value
     if (sensitiveKeys.includes(key)) {
       const encryption = getCredentialEncryptionService()
@@ -2325,36 +2325,15 @@ export class BetterSQLiteService {
   ): number {
     if (!this.db) throw new Error('Database not initialized')
 
-    const sourceId = data.source_id || null
-    const libraryId = data.library_id || null
+    const sourceId = data.source_id || ''
+    const libraryId = data.library_id || ''
 
     // Check if record exists
-    let existingId: number | null = null
-    if (sourceId === null && libraryId === null) {
-      const stmt = this.db.prepare(
-        'SELECT id FROM series_completeness WHERE series_title = ? AND source_id IS NULL AND library_id IS NULL'
-      )
-      const row = stmt.get(data.series_title) as { id: number } | undefined
-      existingId = row?.id || null
-    } else if (sourceId === null) {
-      const stmt = this.db.prepare(
-        'SELECT id FROM series_completeness WHERE series_title = ? AND source_id IS NULL AND library_id = ?'
-      )
-      const row = stmt.get(data.series_title, libraryId) as { id: number } | undefined
-      existingId = row?.id || null
-    } else if (libraryId === null) {
-      const stmt = this.db.prepare(
-        'SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id IS NULL'
-      )
-      const row = stmt.get(data.series_title, sourceId) as { id: number } | undefined
-      existingId = row?.id || null
-    } else {
-      const stmt = this.db.prepare(
-        'SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ?'
-      )
-      const row = stmt.get(data.series_title, sourceId, libraryId) as { id: number } | undefined
-      existingId = row?.id || null
-    }
+    const stmt = this.db.prepare(
+      'SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ?'
+    )
+    const row = stmt.get(data.series_title, sourceId, libraryId) as { id: number } | undefined
+    const existingId = row?.id || null
 
     if (existingId !== null) {
       this.db.prepare(`
@@ -2831,36 +2810,15 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   ): number {
     if (!this.db) throw new Error('Database not initialized')
 
-    const sourceId = data.source_id || null
-    const libraryId = data.library_id || null
+    const sourceId = data.source_id || ''
+    const libraryId = data.library_id || ''
 
     // Check if record exists
-    let existingId: number | null = null
-    if (sourceId === null && libraryId === null) {
-      const stmt = this.db.prepare(
-        'SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id IS NULL AND library_id IS NULL'
-      )
-      const row = stmt.get(data.tmdb_collection_id) as { id: number } | undefined
-      existingId = row?.id || null
-    } else if (sourceId === null) {
-      const stmt = this.db.prepare(
-        'SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id IS NULL AND library_id = ?'
-      )
-      const row = stmt.get(data.tmdb_collection_id, libraryId) as { id: number } | undefined
-      existingId = row?.id || null
-    } else if (libraryId === null) {
-      const stmt = this.db.prepare(
-        'SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id = ? AND library_id IS NULL'
-      )
-      const row = stmt.get(data.tmdb_collection_id, sourceId) as { id: number } | undefined
-      existingId = row?.id || null
-    } else {
-      const stmt = this.db.prepare(
-        'SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id = ? AND library_id = ?'
-      )
-      const row = stmt.get(data.tmdb_collection_id, sourceId, libraryId) as { id: number } | undefined
-      existingId = row?.id || null
-    }
+    const stmt = this.db.prepare(
+      'SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id = ? AND library_id = ?'
+    )
+    const row = stmt.get(data.tmdb_collection_id, sourceId, libraryId) as { id: number } | undefined
+    const existingId = row?.id || null
 
     if (existingId !== null) {
       this.db.prepare(`
@@ -3681,7 +3639,8 @@ WHERE m.type = 'episode' AND m.series_title = ?`
    * Update media item artwork
    */
   updateMediaItemArtwork(
-    id: number,
+    sourceId: string,
+    plexId: string,
     artwork: { posterUrl?: string; episodeThumbUrl?: string; seasonPosterUrl?: string }
   ): void {
     if (!this.db) throw new Error('Database not initialized')
@@ -3705,9 +3664,9 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     if (updates.length === 0) return
 
     updates.push("updated_at = datetime('now')")
-    params.push(id)
+    params.push(sourceId, plexId)
 
-    const sql = `UPDATE media_items SET ${updates.join(', ')} WHERE id = ?`
+    const sql = `UPDATE media_items SET ${updates.join(', ')} WHERE source_id = ? AND plex_id = ?`
     this.db.prepare(sql).run(...params)
   }
 

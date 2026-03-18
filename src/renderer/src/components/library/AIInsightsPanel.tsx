@@ -36,7 +36,7 @@ export function AIInsightsPanel({ isOpen, onClose, onOpenSettings, initialReport
         if (configured && initialReport && !selectedReport && !isGenerating) {
           generateReport(initialReport)
         }
-      })
+      }).catch(() => setIsConfigured(false))
     } else {
       // Reset state when panel closes
       setSelectedReport(null)
@@ -49,7 +49,7 @@ export function AIInsightsPanel({ isOpen, onClose, onOpenSettings, initialReport
   useEffect(() => {
     const cleanup = window.electronAPI.onSettingsChanged((data) => {
       if (data.key === 'gemini_api_key' || data.key === 'ai_enabled') {
-        window.electronAPI.aiIsConfigured().then(setIsConfigured)
+        window.electronAPI.aiIsConfigured().then(setIsConfigured).catch(() => setIsConfigured(false))
       }
     })
     return cleanup
