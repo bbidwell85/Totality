@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.2.1](https://github.com/bbidwell85/totality/compare/v0.2.0...v0.2.1) (2026-03-18)
+
+
+### Bug Fixes
+
+* resolve NOT NULL constraint failures in collection/series analysis and AI panel reactivity ([122683c](https://github.com/bbidwell85/totality/commit/122683cca1e0e521d1e99fb22512099301ec973b))
+
 ## [0.2.0](https://github.com/bbidwell85/totality/compare/v0.1.19...v0.2.0) (2026-03-17)
 
 
