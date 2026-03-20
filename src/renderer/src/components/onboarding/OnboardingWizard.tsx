@@ -388,7 +388,7 @@ export function OnboardingWizard({ onComplete, onAddSource }: OnboardingWizardPr
         </div>
 
         {/* Navigation footer */}
-        <div className="flex-shrink-0 border-t border-border bg-card/50 backdrop-blur-sm">
+        <div className="flex-shrink-0 border-t border-border bg-card/50">
           <div className="px-8 py-5">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
               <button

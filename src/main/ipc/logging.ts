@@ -107,41 +107,71 @@ async function getDiagnosticInfo(): Promise<DiagnosticInfo> {
 
 export function registerLoggingHandlers(): void {
   ipcMain.handle('logs:getAll', async (_event, limit?: unknown) => {
-    const validLimit = limit !== undefined ? validateInput(z.number().int().positive().max(100000), limit, 'logs:getAll') : undefined
-    return getLoggingService().getLogs(validLimit)
+    try {
+      const validLimit = limit !== undefined ? validateInput(z.number().int().positive().max(100000), limit, 'logs:getAll') : undefined
+      return getLoggingService().getLogs(validLimit)
+    } catch (error) {
+      console.error('[IPC logs:getAll] Error:', error)
+      throw error
+    }
   })
 
   ipcMain.handle('logs:clear', async () => {
-    getLoggingService().clearLogs()
+    try {
+      getLoggingService().clearLogs()
+    } catch (error) {
+      console.error('[IPC logs:clear] Error:', error)
+      throw error
+    }
   })
 
   ipcMain.handle('logs:setVerbose', async (_event, enabled: unknown) => {
-    const validEnabled = validateInput(BooleanSchema, enabled, 'logs:setVerbose')
-    getLoggingService().setVerboseLogging(validEnabled)
-    return { success: true }
+    try {
+      const validEnabled = validateInput(BooleanSchema, enabled, 'logs:setVerbose')
+      getLoggingService().setVerboseLogging(validEnabled)
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC logs:setVerbose] Error:', error)
+      throw error
+    }
   })
 
   ipcMain.handle('logs:isVerbose', async () => {
-    return getLoggingService().isVerboseEnabled()
+    try {
+      return getLoggingService().isVerboseEnabled()
+    } catch (error) {
+      console.error('[IPC logs:isVerbose] Error:', error)
+      throw error
+    }
   })
 
   ipcMain.handle('logs:getFileLoggingSettings', async () => {
-    const db = getDatabase()
-    return {
-      enabled: db.getSetting('file_logging_enabled') !== 'false',
-      minLevel: (db.getSetting('file_logging_min_level') || 'info') as LogLevel,
-      retentionDays: parseInt(db.getSetting('log_retention_days') || '7', 10),
+    try {
+      const db = getDatabase()
+      return {
+        enabled: db.getSetting('file_logging_enabled') !== 'false',
+        minLevel: (db.getSetting('file_logging_min_level') || 'info') as LogLevel,
+        retentionDays: parseInt(db.getSetting('log_retention_days') || '7', 10),
+      }
+    } catch (error) {
+      console.error('[IPC logs:getFileLoggingSettings] Error:', error)
+      throw error
     }
   })
 
   ipcMain.handle('logs:setFileLoggingSettings', async (_event, settings: unknown) => {
-    const valid = validateInput(FileLoggingSettingsSchema, settings, 'logs:setFileLoggingSettings')
-    const db = getDatabase()
-    if (valid.enabled !== undefined) db.setSetting('file_logging_enabled', String(valid.enabled))
-    if (valid.minLevel !== undefined) db.setSetting('file_logging_min_level', valid.minLevel)
-    if (valid.retentionDays !== undefined) db.setSetting('log_retention_days', String(valid.retentionDays))
-    getLoggingService().updateFileLoggingSettings(valid)
-    return { success: true }
+    try {
+      const valid = validateInput(FileLoggingSettingsSchema, settings, 'logs:setFileLoggingSettings')
+      const db = getDatabase()
+      if (valid.enabled !== undefined) db.setSetting('file_logging_enabled', String(valid.enabled))
+      if (valid.minLevel !== undefined) db.setSetting('file_logging_min_level', valid.minLevel)
+      if (valid.retentionDays !== undefined) db.setSetting('log_retention_days', String(valid.retentionDays))
+      getLoggingService().updateFileLoggingSettings(valid)
+      return { success: true }
+    } catch (error) {
+      console.error('[IPC logs:setFileLoggingSettings] Error:', error)
+      throw error
+    }
   })
 
   ipcMain.handle('logs:export', async () => {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { FixedSizeList as VirtualList } from 'react-window'
-import { Music, Disc3, User, MoreVertical, RefreshCw, X, Pencil, CircleFadingArrowUp } from 'lucide-react'
+import { Music, Disc3, User, MoreVertical, RefreshCw, X, Pencil, CircleFadingArrowUp, EyeOff } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { useMenuClose } from '../../hooks/useMenuClose'
 import { providerColors } from './mediaUtils'
@@ -62,7 +62,8 @@ export function MusicView({
   onFixAlbumMatch,
   onRescanTrack,
   includeEps,
-  includeSingles
+  includeSingles,
+  onDismissMissingAlbum,
 }: {
   artists: MusicArtist[]
   totalArtistCount: number
@@ -106,9 +107,20 @@ export function MusicView({
   onRescanTrack?: (track: MusicTrack) => Promise<void>
   includeEps: boolean
   includeSingles: boolean
+  onDismissMissingAlbum?: (album: MissingAlbum, artistName: string, artistMusicbrainzId?: string) => Promise<void>
 }) {
   const [isAnalyzingAlbum, setIsAnalyzingAlbum] = useState(false)
   const [isAnalyzingArtist, setIsAnalyzingArtist] = useState(false)
+  const [showArtistMenu, setShowArtistMenu] = useState(false)
+  const artistMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!showArtistMenu) return
+    const handle = (e: MouseEvent) => {
+      if (artistMenuRef.current && !artistMenuRef.current.contains(e.target as Node)) setShowArtistMenu(false)
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [showArtistMenu])
   const [trackMenuOpen, setTrackMenuOpen] = useState<string | number | null>(null)
   const [rescanningTrackId, setRescanningTrackId] = useState<string | number | null>(null)
   const trackMenuRef = useRef<HTMLDivElement>(null)
@@ -761,41 +773,65 @@ export function MusicView({
 
           return createPortal(
             <div
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-6"
+              className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-6"
               onClick={() => setSelectedTrackForQuality(null)}
             >
               <div
                 className="bg-card rounded-xl w-full max-w-lg overflow-hidden shadow-2xl border border-border"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Header */}
-                <div className="flex items-start justify-between gap-4 p-4 border-b border-border/30 bg-black/30 rounded-t-xl">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-lg font-bold truncate">{selectedTrackForQuality.title}</h2>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {selectedTrackForQuality.artist_name && selectedTrackForQuality.album_title
-                        ? `${selectedTrackForQuality.artist_name} · ${selectedTrackForQuality.album_title}`
-                        : 'Track Quality Analysis'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    {/* Add to Wishlist Button for low quality tracks */}
-                    {(tier === 'low' || tier === 'medium') && selectedTrackForQuality.artist_name && (
-                      <AddToWishlistButton
-                        mediaType="track"
-                        title={selectedTrackForQuality.title}
-                        artistName={selectedTrackForQuality.artist_name}
-                        albumTitle={selectedTrackForQuality.album_title}
-                        posterUrl={selectedAlbum?.thumb_url || undefined}
-                        reason="upgrade"
-                      />
-                    )}
-                    <button
-                      onClick={() => setSelectedTrackForQuality(null)}
-                      className="text-muted-foreground hover:text-foreground p-1"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
+                {/* Header — matches MediaDetails pattern */}
+                <div className="flex gap-4 p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-xl">
+                  {/* Album Art */}
+                  {selectedAlbum?.thumb_url && (
+                    <img
+                      src={selectedAlbum.thumb_url}
+                      alt=""
+                      className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  )}
+
+                  {/* Title & Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h2 className="text-lg font-medium truncate">{selectedTrackForQuality.title}</h2>
+                        {(selectedTrackForQuality.artist_name || selectedTrackForQuality.album_title) && (
+                          <p className="text-sm text-muted-foreground truncate">
+                            {[selectedTrackForQuality.artist_name, selectedTrackForQuality.album_title].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {(tier === 'low' || tier === 'medium') && (
+                          <AddToWishlistButton
+                            mediaType="track"
+                            title={selectedTrackForQuality.title}
+                            artistName={selectedTrackForQuality.artist_name}
+                            albumTitle={selectedTrackForQuality.album_title}
+                            posterUrl={selectedAlbum?.thumb_url || undefined}
+                            reason="upgrade"
+                            compact
+                          />
+                        )}
+                        {(tier === 'low' || tier === 'medium') && (
+                          <button
+                            onClick={() => setSelectedTrackForQuality(null)}
+                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                            title="Dismiss"
+                          >
+                            <EyeOff className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setSelectedTrackForQuality(null)}
+                          className="text-muted-foreground hover:text-foreground p-1"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -896,9 +932,9 @@ export function MusicView({
           Back to Artists
         </button>
 
-        {/* Artist Header */}
-        <div className="flex items-start gap-6">
-          <div className="w-40 h-40 bg-muted rounded-full overflow-hidden flex-shrink-0 shadow-lg">
+        {/* Artist Header — matches TV show layout */}
+        <div className="flex gap-4 mb-6 h-32">
+          <div className="w-32 aspect-square bg-muted rounded-lg overflow-hidden flex-shrink-0 shadow-lg shadow-black/30">
             {selectedArtist.thumb_url ? (
               <img
                 src={selectedArtist.thumb_url}
@@ -911,26 +947,61 @@ export function MusicView({
               </div>
             )}
           </div>
-          <div className="flex-1">
-            <h2 className="text-2xl font-bold">{selectedArtist.name}</h2>
-            <p className="text-muted-foreground mt-1">
-              {selectedArtist.album_count} albums • {selectedArtist.track_count} tracks
-            </p>
-            {/* Completeness info */}
-            {artistCompleteness.has(selectedArtist.name) && (
-              <p className="text-sm text-muted-foreground mt-2">
-                {artistCompleteness.get(selectedArtist.name)!.owned_albums} of {artistCompleteness.get(selectedArtist.name)!.total_albums} albums in discography
-              </p>
-            )}
-            {/* Analyze button */}
-            <button
-              onClick={() => handleAnalyzeArtist(selectedArtist.id)}
-              disabled={isAnalyzingArtist}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors mt-3"
-            >
-              <RefreshCw className={`w-4 h-4 ${isAnalyzingArtist ? 'animate-spin' : ''}`} />
-              {isAnalyzingArtist ? 'Analyzing...' : 'Analyze Completeness'}
-            </button>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="flex items-start gap-4 h-full">
+              {/* Title & Stats */}
+              <div className="flex-shrink-0">
+                <h3 className="text-2xl font-bold mb-1">{selectedArtist.name}</h3>
+                <p className="text-muted-foreground text-sm">
+                  {selectedArtist.album_count} albums • {selectedArtist.track_count} tracks
+                </p>
+                {artistCompleteness.has(selectedArtist.name) && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {artistCompleteness.get(selectedArtist.name)!.owned_albums} of {artistCompleteness.get(selectedArtist.name)!.total_albums} albums in discography
+                  </p>
+                )}
+              </div>
+
+              {/* Biography — fills middle, scrolls within fixed header height */}
+              {selectedArtist.biography && (
+                <div className="flex-1 min-w-0 self-stretch overflow-hidden">
+                  <p className="text-sm text-muted-foreground overflow-y-auto h-full leading-relaxed">
+                    {selectedArtist.biography}
+                  </p>
+                </div>
+              )}
+
+              {/* 3-dot menu */}
+              <div ref={artistMenuRef} className="relative flex-shrink-0">
+                <button
+                  onClick={() => setShowArtistMenu(!showArtistMenu)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground"
+                >
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+                {showArtistMenu && (
+                  <div className="absolute top-8 right-0 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[180px] z-50">
+                    <button
+                      onClick={() => { handleAnalyzeArtist(selectedArtist.id); setShowArtistMenu(false) }}
+                      disabled={isAnalyzingArtist}
+                      className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzingArtist ? 'animate-spin' : ''}`} />
+                      {isAnalyzingArtist ? 'Analyzing...' : 'Analyze Completeness'}
+                    </button>
+                    {onFixArtistMatch && (
+                      <button
+                        onClick={() => { onFixArtistMatch(selectedArtist.id, selectedArtist.name); setShowArtistMenu(false) }}
+                        className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Fix Match
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -997,7 +1068,7 @@ export function MusicView({
 
           return (
             <div className="mt-8">
-              <h3 className="text-lg font-semibold mb-4 text-yellow-400">
+              <h3 className="text-lg font-semibold mb-4">
                 Missing ({allMissing.length})
               </h3>
               {viewType === 'list' ? (
@@ -1007,6 +1078,7 @@ export function MusicView({
                       key={album.musicbrainz_id || idx}
                       album={album}
                       artistName={selectedArtist.name}
+                      onDismiss={onDismissMissingAlbum ? () => onDismissMissingAlbum(album, selectedArtist.name, selectedArtist.musicbrainz_id) : undefined}
                     />
                   ))}
                 </div>
@@ -1020,6 +1092,7 @@ export function MusicView({
                       key={album.musicbrainz_id || idx}
                       album={album}
                       artistName={selectedArtist.name}
+                      onDismiss={onDismissMissingAlbum ? () => onDismissMissingAlbum(album, selectedArtist.name, selectedArtist.musicbrainz_id) : undefined}
                     />
                   ))}
                 </div>
@@ -1156,6 +1229,11 @@ export function MusicView({
                   {albumSortColumn === 'artist' && (
                     <span className="text-primary">{albumSortDirection === 'asc' ? '↑' : '↓'}</span>
                   )}
+                </div>
+
+                {/* Completeness column */}
+                <div className="w-20 text-center">
+                  <span>Tracks</span>
                 </div>
               </div>
 
@@ -1358,17 +1436,16 @@ export function MusicView({
                   setSelectedTrackForQuality: typeof setSelectedTrackForQuality
                 }}) => {
                   const track = data.tracks[index]
-                  const albumInfo = track.album_id ? data.albumInfoMap.get(track.album_id) : undefined
-                  const artistName = track.artist_id
-                    ? data.artistNameMap.get(track.artist_id)
-                    : albumInfo?.artistName
+                  // Use denormalized fields directly — maps may not have all entries loaded
+                  const artistName = track.artist_name || (track.artist_id ? data.artistNameMap.get(track.artist_id) : undefined)
+                  const albumTitle = track.album_name || (track.album_id ? data.albumInfoMap.get(track.album_id)?.title : undefined)
                   return (
                     <div style={style}>
                       <TrackListItem
                         track={track}
                         index={index + 1}
                         artistName={artistName}
-                        albumTitle={albumInfo?.title}
+                        albumTitle={albumTitle}
                         columnWidths={data.columnWidths}
                         onClickQuality={() => {
                           // Compute quality tier
@@ -1397,7 +1474,7 @@ export function MusicView({
                             is_lossless: track.is_lossless,
                             qualityTier,
                             artist_name: artistName,
-                            album_title: albumInfo?.title
+                            album_title: albumTitle
                           })
                         }}
                       />
@@ -1465,40 +1542,54 @@ export function MusicView({
 
         return createPortal(
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-6"
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-6"
             onClick={() => setSelectedTrackForQuality(null)}
           >
             <div
               className="bg-card rounded-xl w-full max-w-lg overflow-hidden shadow-2xl border border-border"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header */}
-              <div className="flex items-start justify-between gap-4 p-4 border-b border-border/30 bg-black/30 rounded-t-xl">
-                <div className="min-w-0 flex-1">
-                  <h2 className="text-lg font-bold truncate">{selectedTrackForQuality.title}</h2>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {selectedTrackForQuality.artist_name && selectedTrackForQuality.album_title
-                      ? `${selectedTrackForQuality.artist_name} · ${selectedTrackForQuality.album_title}`
-                      : 'Track Quality Analysis'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  {/* Add to Wishlist Button for low quality tracks */}
-                  {(tier === 'low' || tier === 'medium') && (
-                    <AddToWishlistButton
-                      mediaType="track"
-                      title={selectedTrackForQuality.title}
-                      artistName={selectedTrackForQuality.artist_name}
-                      albumTitle={selectedTrackForQuality.album_title}
-                      reason="upgrade"
-                    />
-                  )}
-                  <button
-                    onClick={() => setSelectedTrackForQuality(null)}
-                    className="text-muted-foreground hover:text-foreground p-1"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+              {/* Header — matches MediaDetails pattern */}
+              <div className="flex gap-4 p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-xl">
+                {/* Title & Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-medium truncate">{selectedTrackForQuality.title}</h2>
+                      {(selectedTrackForQuality.artist_name || selectedTrackForQuality.album_title) && (
+                        <p className="text-sm text-muted-foreground truncate">
+                          {[selectedTrackForQuality.artist_name, selectedTrackForQuality.album_title].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {(tier === 'low' || tier === 'medium') && (
+                        <AddToWishlistButton
+                          mediaType="track"
+                          title={selectedTrackForQuality.title}
+                          artistName={selectedTrackForQuality.artist_name}
+                          albumTitle={selectedTrackForQuality.album_title}
+                          reason="upgrade"
+                          compact
+                        />
+                      )}
+                      {(tier === 'low' || tier === 'medium') && (
+                        <button
+                          onClick={() => setSelectedTrackForQuality(null)}
+                          className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Dismiss"
+                        >
+                          <EyeOff className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setSelectedTrackForQuality(null)}
+                        className="text-muted-foreground hover:text-foreground p-1"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2025,9 +2116,6 @@ const AlbumListItem = memo(({ album, onClick, showArtist = true, showSourceBadge
       {/* Info */}
       <div className="flex-1 min-w-0">
         <h4 className="font-semibold text-sm truncate">{album.title}</h4>
-        {showArtist && (
-          <p className="text-xs text-muted-foreground truncate">{album.artist_name}</p>
-        )}
         {album.year && (
           <p className="text-xs text-muted-foreground">{album.year}</p>
         )}
@@ -2038,12 +2126,23 @@ const AlbumListItem = memo(({ album, onClick, showArtist = true, showSourceBadge
           {isLossless && !isHiRes && (
             <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">Lossless</span>
           )}
-          {completeness && (
-            <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
-              {completeness.owned_tracks}/{completeness.total_tracks}
-            </span>
-          )}
         </div>
+      </div>
+
+      {/* Artist column */}
+      {showArtist && (
+        <div className="w-48 flex-shrink-0">
+          <p className="text-sm text-muted-foreground truncate">{album.artist_name}</p>
+        </div>
+      )}
+
+      {/* Completeness column */}
+      <div className="w-20 flex-shrink-0 text-center">
+        {completeness && (
+          <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
+            {completeness.owned_tracks}/{completeness.total_tracks}
+          </span>
+        )}
       </div>
     </div>
   )
@@ -2178,9 +2277,10 @@ const TrackListItem = memo(({ track, index, artistName, albumTitle, columnWidths
   )
 })
 
-const MissingAlbumCard = memo(({ album, artistName }: {
+const MissingAlbumCard = memo(({ album, artistName, onDismiss }: {
   album: MissingAlbum
   artistName: string
+  onDismiss?: () => void
 }) => {
   const [imageError, setImageError] = useState(false)
 
@@ -2222,8 +2322,8 @@ const MissingAlbumCard = memo(({ album, artistName }: {
             <p className="text-xs text-muted-foreground/70">{album.year}</p>
           )}
         </div>
-        {/* Wishlist button */}
-        <div className="flex-shrink-0">
+        {/* Wishlist + Dismiss buttons */}
+        <div className="flex-shrink-0 flex items-center gap-1">
           <AddToWishlistButton
             mediaType="album"
             title={album.title}
@@ -2233,6 +2333,15 @@ const MissingAlbumCard = memo(({ album, artistName }: {
             posterUrl={coverUrl || undefined}
             compact
           />
+          {onDismiss && (
+            <button
+              onClick={onDismiss}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+              title="Dismiss"
+            >
+              <EyeOff className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -2240,9 +2349,10 @@ const MissingAlbumCard = memo(({ album, artistName }: {
 })
 
 // List item component for missing albums
-const MissingAlbumListItem = memo(({ album, artistName }: {
+const MissingAlbumListItem = memo(({ album, artistName, onDismiss }: {
   album: MissingAlbum
   artistName: string
+  onDismiss?: () => void
 }) => {
   const [imageError, setImageError] = useState(false)
 
@@ -2286,8 +2396,8 @@ const MissingAlbumListItem = memo(({ album, artistName }: {
         </div>
       </div>
 
-      {/* Wishlist button */}
-      <div className="flex-shrink-0">
+      {/* Wishlist + Dismiss buttons */}
+      <div className="flex-shrink-0 flex items-center gap-1">
         <AddToWishlistButton
           mediaType="album"
           title={album.title}
@@ -2297,6 +2407,15 @@ const MissingAlbumListItem = memo(({ album, artistName }: {
           posterUrl={coverUrl || undefined}
           compact
         />
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+            title="Dismiss"
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </div>
   )

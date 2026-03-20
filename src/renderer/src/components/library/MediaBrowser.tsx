@@ -256,6 +256,29 @@ export function MediaBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Handle back navigation from TopBar
+  useEffect(() => {
+    const handleBack = () => {
+      if (view === 'music') {
+        if (selectedAlbum) {
+          setSelectedAlbum(null)
+          setAlbumTracks([])
+          setSelectedAlbumCompleteness(null)
+        } else if (selectedArtist) {
+          setSelectedArtist(null)
+        }
+      } else if (view === 'tv') {
+        if (selectedSeason !== null) {
+          setSelectedSeason(null)
+        } else if (selectedShow) {
+          setSelectedShow(null)
+        }
+      }
+    }
+    window.addEventListener('navigate-back', handleBack)
+    return () => window.removeEventListener('navigate-back', handleBack)
+  }, [view, selectedAlbum, selectedArtist, selectedShow, selectedSeason])
+
   // Handle initialTab prop from dashboard navigation
   useEffect(() => {
     if (initialTab) {
@@ -830,11 +853,13 @@ export function MediaBrowser({
     handleDismissMissingEpisode,
     handleDismissMissingSeason,
     handleDismissCollectionMovie,
+    handleDismissMissingAlbum,
     handleDismissMissingItem,
   } = useDismissHandlers({
     setPaginatedMovies, setSelectedShowEpisodes,
     seriesCompleteness, setSeriesCompleteness,
     selectedCollection, setSelectedCollection, setMovieCollections,
+    setArtistCompleteness,
     selectedMissingItem, setSelectedMissingItem, addToast,
   })
 
@@ -842,12 +867,31 @@ export function MediaBrowser({
   // Optional overrides allow callers to pass fresh EP/Singles values to avoid stale state
   const loadMusicCompletenessData = async (overrideEps?: boolean, overrideSingles?: boolean) => {
     try {
-      const completenessData = await window.electronAPI.musicGetAllArtistCompleteness() as ArtistCompletenessData[]
+      const [completenessData, albumExclusions] = await Promise.all([
+        window.electronAPI.musicGetAllArtistCompleteness() as Promise<ArtistCompletenessData[]>,
+        window.electronAPI.getExclusions('artist_album'),
+      ])
 
-      // Index by artist name
+      // Build exclusion lookup set (by musicbrainz_id stored as ref_key)
+      const excludedAlbumIds = new Set(albumExclusions.map(e => e.ref_key))
+
+      // Filter excluded albums from missing lists
+      const filterMissingJson = (json: string | undefined): string => {
+        try {
+          const parsed = JSON.parse(json || '[]') as Array<{ musicbrainz_id?: string }>
+          return JSON.stringify(parsed.filter(item => !excludedAlbumIds.has(item.musicbrainz_id)))
+        } catch { return json || '[]' }
+      }
+
+      // Index by artist name, filtering exclusions
       const completenessMap = new Map<string, ArtistCompletenessData>()
       completenessData.forEach(c => {
-        completenessMap.set(c.artist_name, c)
+        completenessMap.set(c.artist_name, {
+          ...c,
+          missing_albums: filterMissingJson(c.missing_albums),
+          missing_eps: filterMissingJson(c.missing_eps),
+          missing_singles: filterMissingJson(c.missing_singles),
+        })
       })
       setArtistCompleteness(completenessMap)
 
@@ -2185,6 +2229,7 @@ export function MediaBrowser({
             }}
             includeEps={includeEps}
             includeSingles={includeSingles}
+            onDismissMissingAlbum={handleDismissMissingAlbum}
           />
         ))}
           </div>

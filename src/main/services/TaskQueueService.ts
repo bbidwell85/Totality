@@ -25,6 +25,7 @@ import { KodiProvider } from '../providers/kodi/KodiProvider'
 import { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
 import { LocalFolderProvider } from '../providers/local/LocalFolderProvider'
 import type { ScanResult } from '../providers/base/MediaProvider'
+import type { MusicTrack } from '../types/database'
 import { getWishlistCompletionService } from './WishlistCompletionService'
 
 // ============================================================================
@@ -748,6 +749,33 @@ export class TaskQueueService {
 
     if (!result.success && result.errors?.length > 0) {
       throw new Error(result.errors.join(', '))
+    }
+
+    // Analyze quality for all albums after scan (same as music:scanLibrary IPC handler)
+    const db = getDatabase()
+    const { getQualityAnalyzer } = await import('./QualityAnalyzer')
+    const analyzer = getQualityAnalyzer()
+    const albums = db.getMusicAlbums({ sourceId: task.sourceId })
+    if (albums.length > 0) {
+      console.log(`[TaskQueue] Analyzing music quality for ${albums.length} albums...`)
+      const albumIds = albums.map((a: { id?: number }) => a.id).filter((id: number | undefined): id is number => id != null)
+      const tracksByAlbum = 'getMusicTracksByAlbumIds' in db
+        ? (db as unknown as { getMusicTracksByAlbumIds: (ids: number[]) => Map<number, unknown[]> }).getMusicTracksByAlbumIds(albumIds)
+        : null
+
+      db.startBatch()
+      try {
+        for (const album of albums) {
+          const tracks = tracksByAlbum
+            ? (tracksByAlbum.get(album.id!) || [])
+            : db.getMusicTracks({ albumId: album.id })
+          const qualityScore = analyzer.analyzeMusicAlbum(album, tracks as MusicTrack[])
+          await db.upsertMusicQualityScore(qualityScore)
+        }
+      } finally {
+        await db.endBatch()
+      }
+      console.log(`[TaskQueue] Music quality analysis complete for ${albums.length} albums`)
     }
   }
 

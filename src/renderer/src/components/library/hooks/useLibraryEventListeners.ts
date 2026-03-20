@@ -198,6 +198,13 @@ export function useLibraryEventListeners({
       }
     })
 
+    // Listen for exclusion changes (from Settings > Library tab)
+    const handleExclusionsChanged = () => {
+      loadCompletenessData()
+      loadMusicCompletenessData()
+    }
+    window.addEventListener('exclusions-changed', handleExclusionsChanged)
+
     // Listen for wishlist auto-completion
     const cleanupWishlistAutoCompleted = window.electronAPI.onWishlistAutoCompleted?.((items) => {
       if (items.length === 1) {
@@ -267,6 +274,7 @@ export function useLibraryEventListeners({
       cleanupSettingsChanged?.()
       cleanupWishlistAutoCompleted?.()
       cleanupScanCompleted?.()
+      window.removeEventListener('exclusions-changed', handleExclusionsChanged)
     }
   }, [
     handleLibraryUpdate,

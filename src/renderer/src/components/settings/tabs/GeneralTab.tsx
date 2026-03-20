@@ -8,7 +8,50 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Monitor, Radio, ChevronDown, CheckCircle, Circle } from 'lucide-react'
+
+// Collapsible settings card matching Library/Services tab pattern
+function SettingsCard({ title, description, icon, status, statusText, expanded, onToggle, children }: {
+  title: string
+  description: string
+  icon: React.ReactNode
+  status: 'configured' | 'partial' | 'not-configured'
+  statusText: string
+  expanded: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="border border-border/40 rounded-lg overflow-hidden bg-card/30">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors text-left"
+      >
+        <div className="flex-shrink-0">
+          {status === 'configured' ? (
+            <CheckCircle className="w-5 h-5 text-green-500" />
+          ) : status === 'partial' ? (
+            <CheckCircle className="w-5 h-5 text-amber-500" />
+          ) : (
+            <Circle className="w-5 h-5 text-muted-foreground/50" />
+          )}
+        </div>
+        <div className="flex-shrink-0 text-muted-foreground">{icon}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-sm">{title}</span>
+            <span className="text-xs text-muted-foreground">{statusText}</span>
+          </div>
+          <p className="text-xs text-muted-foreground truncate">{description}</p>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="px-4 pb-4 pt-2 border-t border-border/30 bg-muted/10">{children}</div>
+      )}
+    </div>
+  )
+}
 
 interface MonitoringConfig {
   enabled: boolean
@@ -75,6 +118,13 @@ function Toggle({
 }
 
 export function GeneralTab() {
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
+  const toggleCard = (id: string) => setExpandedCards(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+
   const [isLoading, setIsLoading] = useState(true)
   const [minimizeToTray, setMinimizeToTray] = useState(false)
   const [startMinimized, setStartMinimized] = useState(false)
@@ -149,9 +199,16 @@ export function GeneralTab() {
   return (
     <div className="p-6 space-y-5 overflow-y-auto">
       {/* Window Behavior */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium text-foreground">Window Behavior</h3>
-        <div className="bg-muted/30 rounded-lg border border-border/40 p-4 space-y-3">
+      <SettingsCard
+        title="Window Behavior"
+        description="System tray and startup options"
+        icon={<Monitor className="w-5 h-5" />}
+        status="configured"
+        statusText={minimizeToTray ? 'Tray enabled' : 'Default'}
+        expanded={expandedCards.has('window')}
+        onToggle={() => toggleCard('window')}
+      >
+        <div className="space-y-3">
           <label className="flex items-center justify-between cursor-pointer">
             <div>
               <p className="text-sm font-medium text-foreground">Minimize to tray on close</p>
@@ -186,12 +243,19 @@ export function GeneralTab() {
             </label>
           )}
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Live Monitoring */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium text-foreground">Live Monitoring</h3>
-        <div className="bg-muted/30 rounded-lg border border-border/40 p-4 space-y-4">
+      <SettingsCard
+        title="Live Monitoring"
+        description="Automatic change detection for media sources"
+        icon={<Radio className="w-5 h-5" />}
+        status={monitoringConfig.enabled ? 'configured' : 'not-configured'}
+        statusText={monitoringConfig.enabled ? 'Active' : 'Disabled'}
+        expanded={expandedCards.has('monitoring')}
+        onToggle={() => toggleCard('monitoring')}
+      >
+        <div className="space-y-4">
           {/* Enable toggle */}
           <div className="flex items-center justify-between">
             <div>
@@ -236,7 +300,7 @@ export function GeneralTab() {
                           saveMonitoringConfig({ pollingIntervals: newIntervals })
                         }}
                         disabled={isSaving || !monitoringConfig.enabled || !isConfigured}
-                        className="bg-background text-foreground text-xs rounded-md px-2.5 py-1.5 border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary min-w-[90px] disabled:opacity-50"
+                        className="bg-background text-foreground text-sm rounded-md px-3 py-2 border border-border/30 focus:outline-none focus:ring-2 focus:ring-primary min-w-[90px] disabled:opacity-50"
                       >
                         {INTERVAL_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -245,7 +309,7 @@ export function GeneralTab() {
                         ))}
                       </select>
                     ) : (
-                      <span className="bg-background text-foreground text-xs rounded-md px-2.5 py-1.5 border border-border/50 min-w-[90px] text-center">
+                      <span className="bg-background text-foreground text-sm rounded-md px-3 py-2 border border-border/30 min-w-[90px] text-center">
                         File Watching
                       </span>
                     )}
@@ -282,7 +346,7 @@ export function GeneralTab() {
             </div>
           </div>
         </div>
-      </div>
+      </SettingsCard>
     </div>
   )
 }

@@ -387,6 +387,8 @@ function AppContent() {
           hasMovies={hasMovies}
           hasTV={hasTV}
           hasMusic={hasMusic}
+          onBack={() => window.dispatchEvent(new CustomEvent('navigate-back'))}
+          canGoBack={currentView === 'library'}
         />
 
         {currentView === 'dashboard' ? (

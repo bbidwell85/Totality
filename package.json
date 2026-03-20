@@ -39,6 +39,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@google/genai": "^1.43.0",
+    "adm-zip": "^0.5.16",
     "axios": "^1.13.6",
     "better-sqlite3": "^11.8.1",
     "chokidar": "^3.6.0",
@@ -54,6 +55,7 @@
     "sql.js": "^1.10.3"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.10.5",
     "@types/react": "^18.2.43",

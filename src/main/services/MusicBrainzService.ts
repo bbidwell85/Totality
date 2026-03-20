@@ -388,7 +388,7 @@ export class MusicBrainzService extends CancellableOperation {
    * Get track list for a release from MusicBrainz
    * Optimized to fetch releases with media+recordings in a single API call
    */
-  async getReleaseTracklist(releaseGroupId: string): Promise<{
+  async getReleaseTracklist(releaseGroupId: string, expectedTrackCount?: number): Promise<{
     releaseId: string
     tracks: Array<{
       musicbrainz_id: string
@@ -436,7 +436,7 @@ export class MusicBrainzService extends CancellableOperation {
         return null
       }
 
-      // Find the first release with media/tracks
+      // Find the best release — prefer one whose track count matches expected
       interface MBReleaseWithMedia {
         id: string
         title: string
@@ -451,8 +451,23 @@ export class MusicBrainzService extends CancellableOperation {
           }>
         }>
       }
-      const release = (releases as MBReleaseWithMedia[]).find((r) => r.media && r.media.length > 0) || releases[0] as MBReleaseWithMedia
-      console.log(`[MusicBrainzService] Using release: ${release.title} (${release.id})`)
+      const releasesWithMedia = (releases as MBReleaseWithMedia[]).filter(r => r.media && r.media.length > 0)
+      let release: MBReleaseWithMedia
+
+      if (expectedTrackCount && releasesWithMedia.length > 1) {
+        // Rank releases by closest track count to expected
+        const ranked = releasesWithMedia.map(r => ({
+          release: r,
+          trackCount: r.media!.reduce((sum, m) => sum + (m.tracks?.length || 0), 0),
+        })).sort((a, b) =>
+          Math.abs(a.trackCount - expectedTrackCount) - Math.abs(b.trackCount - expectedTrackCount)
+        )
+        release = ranked[0].release
+        console.log(`[MusicBrainzService] Selected release: ${release.title} (${release.id}) with ${ranked[0].trackCount} tracks (expected ~${expectedTrackCount})`)
+      } else {
+        release = releasesWithMedia[0] || releases[0] as MBReleaseWithMedia
+        console.log(`[MusicBrainzService] Using release: ${release.title} (${release.id})`)
+      }
       const releaseId = release.id
 
       const tracks: Array<{
@@ -486,7 +501,13 @@ export class MusicBrainzService extends CancellableOperation {
       console.log(`[MusicBrainzService] Total tracks extracted: ${tracks.length}`)
       return { releaseId, tracks }
     } catch (error) {
-      console.error('[MusicBrainzService] Track list fetch failed:', error)
+      // 404 is expected when album isn't in MusicBrainz — log as warning without stack trace
+      const is404 = error instanceof Error && error.message.includes('404')
+      if (is404) {
+        console.warn('[MusicBrainzService] Track list not found in MusicBrainz (404)')
+      } else {
+        console.error('[MusicBrainzService] Track list fetch failed:', error)
+      }
       return null
     }
   }
@@ -743,10 +764,13 @@ export class MusicBrainzService extends CancellableOperation {
     let foundMbId: string | undefined
     const originalMbId = musicbrainzReleaseGroupId
 
+    // Use owned track count as hint for selecting the best MusicBrainz release
+    const expectedTrackCount = ownedTrackTitles.length || undefined
+
     // Try stored MBID first if available
     if (musicbrainzReleaseGroupId) {
       console.log(`[MusicBrainzService] Trying stored MBID: ${musicbrainzReleaseGroupId}`)
-      tracklist = await this.getReleaseTracklist(musicbrainzReleaseGroupId)
+      tracklist = await this.getReleaseTracklist(musicbrainzReleaseGroupId, expectedTrackCount)
     }
 
     // If no tracklist from stored MBID, search MusicBrainz
@@ -757,7 +781,7 @@ export class MusicBrainzService extends CancellableOperation {
       // Try each search result until we find one with tracks
       for (const result of searchResults) {
         console.log(`[MusicBrainzService] Trying search result: ${result.id} (${result.title})`)
-        tracklist = await this.getReleaseTracklist(result.id)
+        tracklist = await this.getReleaseTracklist(result.id, expectedTrackCount)
         if (tracklist && tracklist.tracks.length > 0) {
           musicbrainzReleaseGroupId = result.id
           // Mark as found if we didn't have an MBID before

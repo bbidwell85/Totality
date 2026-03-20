@@ -16,7 +16,6 @@ import {
   Network,
   Circle,
   Bot,
-  Shield,
 } from 'lucide-react'
 
 interface ServiceCardProps {
@@ -28,6 +27,11 @@ interface ServiceCardProps {
   expanded: boolean
   onToggle: () => void
   children: React.ReactNode
+  enableToggle?: {
+    enabled: boolean
+    onToggle: () => void
+    id: string
+  }
 }
 
 function ServiceCard({
@@ -39,43 +43,68 @@ function ServiceCard({
   expanded,
   onToggle,
   children,
+  enableToggle,
 }: ServiceCardProps) {
   return (
     <div className="border border-border/40 rounded-lg overflow-hidden bg-card/30">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors text-left"
-      >
-        {/* Status indicator */}
-        <div className="flex-shrink-0">
-          {status === 'configured' ? (
-            <CheckCircle className="w-5 h-5 text-green-500" />
-          ) : status === 'partial' ? (
-            <CheckCircle className="w-5 h-5 text-amber-500" />
-          ) : (
-            <Circle className="w-5 h-5 text-muted-foreground/50" />
-          )}
-        </div>
-
-        {/* Icon */}
-        <div className="flex-shrink-0 text-muted-foreground">{icon}</div>
-
-        {/* Title and status */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-sm">{title}</span>
-            <span className="text-xs text-muted-foreground">{statusText}</span>
+      <div className="flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors">
+        <button
+          onClick={onToggle}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+        >
+          {/* Status indicator */}
+          <div className="flex-shrink-0">
+            {status === 'configured' ? (
+              <CheckCircle className="w-5 h-5 text-green-500" />
+            ) : status === 'partial' ? (
+              <CheckCircle className="w-5 h-5 text-amber-500" />
+            ) : (
+              <Circle className="w-5 h-5 text-muted-foreground/50" />
+            )}
           </div>
-          <p className="text-xs text-muted-foreground truncate">{description}</p>
-        </div>
+
+          {/* Icon */}
+          <div className="flex-shrink-0 text-muted-foreground">{icon}</div>
+
+          {/* Title and status */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-sm">{title}</span>
+              <span className="text-xs text-muted-foreground">{statusText}</span>
+            </div>
+            <p className="text-xs text-muted-foreground truncate">{description}</p>
+          </div>
+
+        </button>
+
+        {/* Enable toggle */}
+        {enableToggle && (
+          <button
+            id={enableToggle.id}
+            role="switch"
+            aria-checked={enableToggle.enabled}
+            onClick={(e) => { e.stopPropagation(); enableToggle.onToggle() }}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+              enableToggle.enabled ? 'bg-primary' : 'bg-muted-foreground/30'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition duration-200 ease-in-out ${
+                enableToggle.enabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        )}
 
         {/* Expand indicator */}
-        <ChevronDown
-          className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
-            expanded ? 'rotate-180' : ''
-          }`}
-        />
-      </button>
+        <button onClick={onToggle} className="p-1 flex-shrink-0">
+          <ChevronDown
+            className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
+              expanded ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+      </div>
 
       {/* Expanded content */}
       {expanded && (
@@ -87,7 +116,7 @@ function ServiceCard({
 
 export function ServicesTab() {
   // Expanded state
-  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set(['tmdb']))
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
 
   // TMDB state
   const [tmdbApiKey, setTmdbApiKey] = useState('')
@@ -413,7 +442,7 @@ export function ServicesTab() {
   }
 
   return (
-    <div className="p-6 space-y-3 overflow-y-auto">
+    <div className="p-6 space-y-5 overflow-y-auto">
       {/* Header */}
       <div className="mb-4">
         <p className="text-xs text-muted-foreground">
@@ -431,24 +460,8 @@ export function ServicesTab() {
         expanded={expandedCards.has('tmdb')}
         onToggle={() => toggleCard('tmdb')}
       >
-        <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Required for TV series and movie collection completeness analysis. Get a free API key
-            at{' '}
-            <button
-              type="button"
-              onClick={() => window.electronAPI.openExternal('https://www.themoviedb.org/settings/api')}
-              className="text-primary hover:underline"
-            >
-              themoviedb.org
-            </button>
-          </p>
-
-          <div className="space-y-2">
-            <label htmlFor={tmdbId} className="block text-xs font-medium text-muted-foreground">
-              API Key
-            </label>
-            <div className="flex gap-2">
+        <div className="space-y-3">
+          <div className="flex gap-2">
               <div className="relative flex-1">
                 <input
                   id={tmdbId}
@@ -472,11 +485,18 @@ export function ServicesTab() {
               </div>
               <button
                 onClick={handleTestTmdb}
-                disabled={!tmdbApiKey.trim() || tmdbStatus === 'testing'}
-                className="px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                disabled={!tmdbApiKey.trim() || tmdbStatus === 'testing' || tmdbStatus === 'valid'}
+                className={`px-3 py-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2 ${
+                  tmdbStatus === 'valid' ? 'text-green-500' :
+                  tmdbStatus === 'invalid' ? 'text-red-500 bg-red-500/10' :
+                  'text-sm bg-muted hover:bg-muted/80'
+                }`}
+                title={tmdbStatus === 'valid' ? 'API key is valid' : tmdbStatus === 'invalid' ? 'Invalid API key' : 'Test API key'}
               >
-                {tmdbStatus === 'testing' && <Loader2 className="w-4 h-4 animate-spin" />}
-                Test
+                {tmdbStatus === 'testing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
+                 tmdbStatus === 'valid' ? <CheckCircle className="w-4 h-4" /> :
+                 tmdbStatus === 'invalid' ? <><XCircle className="w-4 h-4" /><span className="text-xs">Invalid</span></> :
+                 <span className="text-sm">Test</span>}
               </button>
               {tmdbApiKey.trim() && (
                 <button
@@ -484,27 +504,17 @@ export function ServicesTab() {
                     setTmdbApiKey('')
                     setTmdbStatus('idle')
                   }}
-                  className="px-3 py-2 text-sm bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-md transition-colors"
+                  className="px-3 py-2 text-sm text-muted-foreground hover:text-destructive rounded-md transition-colors"
                   aria-label="Clear TMDB API key"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               )}
             </div>
-            {tmdbStatus === 'valid' && (
-              <div className="flex items-center gap-2 text-xs text-green-500">
-                <CheckCircle className="w-4 h-4" />
-                API key is valid
-              </div>
-            )}
-            {tmdbStatus === 'invalid' && (
-              <div className="flex items-center gap-2 text-xs text-red-500">
-                <XCircle className="w-4 h-4" />
-                Invalid API key
-              </div>
-            )}
-          </div>
-
+          <p className="text-xs text-muted-foreground">
+            Free API key from{' '}
+            <button type="button" onClick={() => window.electronAPI.openExternal('https://www.themoviedb.org/settings/api')} className="text-primary hover:underline">themoviedb.org</button>
+          </p>
         </div>
       </ServiceCard>
 
@@ -517,32 +527,16 @@ export function ServicesTab() {
         statusText={getFFprobeStatusText()}
         expanded={expandedCards.has('ffprobe')}
         onToggle={() => toggleCard('ffprobe')}
+        enableToggle={ffprobeAvailable ? { enabled: ffprobeEnabled, onToggle: handleToggleFFprobe, id: toggleId } : undefined}
       >
-        <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Required for Local Folder sources. Enhances Kodi sources with additional metadata. Used
-            as fallback for Jellyfin/Emby when audio bitrate data is missing.
-          </p>
+        <div className="space-y-3">
 
           {/* Installation controls */}
-          <div className="flex items-center justify-between p-3 bg-background/50 rounded-lg">
-            <div className="flex items-center gap-3">
-              {ffprobeAvailable ? (
-                <div className="flex items-center gap-2 text-green-500">
-                  <CheckCircle className="w-4 h-4" />
-                  <span className="text-sm font-medium">Installed</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Circle className="w-4 h-4" />
-                  <span className="text-sm font-medium">Not Installed</span>
-                </div>
-              )}
-              {ffprobeVersion && (
-                <span className="text-xs text-muted-foreground">(v{ffprobeVersion})</span>
-              )}
-            </div>
-
+          <div className="flex items-center justify-between">
+            {ffprobeVersion && (
+              <span className="text-xs text-muted-foreground">v{ffprobeVersion}</span>
+            )}
+            {!ffprobeVersion && <span />}
             <div className="flex items-center gap-2">
               {ffprobeAvailable && (
                 <button
@@ -641,34 +635,6 @@ export function ServicesTab() {
             </div>
           )}
 
-          {/* Enable Toggle */}
-          {ffprobeAvailable && (
-            <div className="flex items-center justify-between p-3 bg-background/50 rounded-lg">
-              <div>
-                <label htmlFor={toggleId} className="text-sm font-medium">
-                  Enable FFprobe analysis
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Use FFprobe to analyze media files during scans
-                </p>
-              </div>
-              <button
-                id={toggleId}
-                role="switch"
-                aria-checked={ffprobeEnabled}
-                onClick={handleToggleFFprobe}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
-                  ffprobeEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition duration-200 ease-in-out ${
-                    ffprobeEnabled ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-          )}
 
           {/* Error */}
           {ffprobeError && (
@@ -677,25 +643,6 @@ export function ServicesTab() {
             </div>
           )}
 
-          {/* Usage info */}
-          <div className="text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground">Usage by source type:</p>
-            <ul className="list-disc list-inside space-y-0.5 pl-1">
-              <li>
-                <strong className="text-foreground">Local Folders:</strong> Required
-              </li>
-              <li>
-                <strong className="text-foreground">Kodi:</strong> Enhances metadata
-              </li>
-              <li>
-                <strong className="text-foreground">Jellyfin/Emby:</strong> Fallback for audio
-                bitrates
-              </li>
-              <li>
-                <strong className="text-foreground">Plex:</strong> Not used
-              </li>
-            </ul>
-          </div>
         </div>
       </ServiceCard>
 
@@ -708,25 +655,18 @@ export function ServicesTab() {
         statusText={geminiConfigured ? 'Configured' : 'Not configured'}
         expanded={expandedCards.has('gemini')}
         onToggle={() => toggleCard('gemini')}
+        enableToggle={geminiApiKey.trim() ? {
+          enabled: aiEnabled,
+          onToggle: () => {
+            const newValue = !aiEnabled
+            setAiEnabled(newValue)
+            window.electronAPI.setSetting('ai_enabled', String(newValue))
+          },
+          id: aiToggleId,
+        } : undefined}
       >
-        <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Enables AI features: natural language library search, smart upgrade recommendations,
-            quality reports, and more. Get a free API key (no credit card required) at{' '}
-            <button
-              type="button"
-              onClick={() => window.electronAPI.openExternal('https://aistudio.google.com/apikey')}
-              className="text-primary hover:underline"
-            >
-              aistudio.google.com
-            </button>
-          </p>
-
-          <div className="space-y-2">
-            <label htmlFor={geminiId} className="block text-xs font-medium text-muted-foreground">
-              API Key
-            </label>
-            <div className="flex gap-2">
+        <div className="space-y-3">
+          <div className="flex gap-2">
               <div className="relative flex-1">
                 <input
                   id={geminiId}
@@ -751,11 +691,18 @@ export function ServicesTab() {
               </div>
               <button
                 onClick={handleTestGemini}
-                disabled={!geminiApiKey.trim() || geminiStatus === 'testing'}
-                className="px-3 py-2 text-sm bg-muted hover:bg-muted/80 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                disabled={!geminiApiKey.trim() || geminiStatus === 'testing' || geminiStatus === 'valid'}
+                className={`px-3 py-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2 ${
+                  geminiStatus === 'valid' ? 'text-green-500' :
+                  geminiStatus === 'invalid' ? 'text-red-500 bg-red-500/10' :
+                  'text-sm bg-muted hover:bg-muted/80'
+                }`}
+                title={geminiStatus === 'valid' ? 'API key is valid' : geminiStatus === 'invalid' ? (geminiError || 'Invalid API key') : 'Test API key'}
               >
-                {geminiStatus === 'testing' && <Loader2 className="w-4 h-4 animate-spin" />}
-                Test
+                {geminiStatus === 'testing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
+                 geminiStatus === 'valid' ? <CheckCircle className="w-4 h-4" /> :
+                 geminiStatus === 'invalid' ? <><XCircle className="w-4 h-4" /><span className="text-xs">Invalid</span></> :
+                 <span className="text-sm">Test</span>}
               </button>
               {geminiApiKey.trim() && (
                 <button
@@ -764,26 +711,18 @@ export function ServicesTab() {
                     setGeminiStatus('idle')
                     setGeminiError(null)
                   }}
-                  className="px-3 py-2 text-sm bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-md transition-colors"
+                  className="px-3 py-2 text-sm text-muted-foreground hover:text-destructive rounded-md transition-colors"
                   aria-label="Clear Gemini API key"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               )}
             </div>
-            {geminiStatus === 'valid' && (
-              <div className="flex items-center gap-2 text-xs text-green-500">
-                <CheckCircle className="w-4 h-4" />
-                API key is valid
-              </div>
-            )}
-            {geminiStatus === 'invalid' && (
-              <div className="flex items-center gap-2 text-xs text-red-500">
-                <XCircle className="w-4 h-4" />
-                {geminiError || 'Invalid API key'}
-              </div>
-            )}
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Free API key from{' '}
+            <button type="button" onClick={() => window.electronAPI.openExternal('https://aistudio.google.com/apikey')} className="text-primary hover:underline">aistudio.google.com</button>
+            {' '}(no credit card required)
+          </p>
 
           <div className="space-y-2">
             <label htmlFor={geminiModelId} className="block text-xs font-medium text-muted-foreground">
@@ -798,59 +737,8 @@ export function ServicesTab() {
               <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended)</option>
               <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most capable)</option>
             </select>
-            <p className="text-xs text-muted-foreground">
-              Flash offers the best balance of speed and free-tier limits (10 RPM, 250 RPD). No credit card required.
-            </p>
           </div>
 
-          {/* AI Enable/Disable Toggle */}
-          {geminiApiKey.trim() && (
-            <div className="flex items-center justify-between p-3 bg-background/50 rounded-lg">
-              <div>
-                <label htmlFor={aiToggleId} className="text-sm font-medium">
-                  Enable AI features
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Disable chat, reports, and AI insights without removing your API key
-                </p>
-              </div>
-              <button
-                id={aiToggleId}
-                role="switch"
-                aria-checked={aiEnabled}
-                onClick={async () => {
-                  const newValue = !aiEnabled
-                  setAiEnabled(newValue)
-                  await window.electronAPI.setSetting('ai_enabled', newValue ? 'true' : 'false')
-                }}
-                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
-                  aiEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition duration-200 ease-in-out ${
-                    aiEnabled ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-          )}
-
-          {/* Privacy Info */}
-          <div className="p-3 bg-muted/30 rounded-lg space-y-2">
-            <div className="flex items-center gap-2 mb-1">
-              <Shield className="w-3.5 h-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground">Data shared with Google Gemini</span>
-            </div>
-            <ul className="text-[11px] text-muted-foreground space-y-1 list-disc list-inside">
-              <li><strong className="text-foreground/70">Chat:</strong> Your messages (last 20) and library data retrieved by the AI (titles, quality details, ownership status)</li>
-              <li><strong className="text-foreground/70">Reports:</strong> Library statistics and up to 50 items with technical specs (titles, codecs, resolution, bitrates)</li>
-              <li><strong className="text-foreground/70">Not sent:</strong> File paths, server credentials, or personal information</li>
-            </ul>
-            <p className="text-[11px] text-muted-foreground/70">
-              Your API key connects directly to Google &mdash; no data passes through Totality&apos;s servers. Chat history is not saved to disk.
-            </p>
-          </div>
         </div>
       </ServiceCard>
 

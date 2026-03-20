@@ -149,6 +149,63 @@ export function registerSeriesHandlers() {
   // ============================================================================
 
   /**
+   * Get TV show details from TMDB (overview for series view)
+   */
+  ipcMain.handle('tmdb:getTVShowDetails', async (_event, tmdbId: unknown) => {
+    const validTmdbId = validateInput(NonEmptyStringSchema, tmdbId, 'tmdb:getTVShowDetails')
+    try {
+      const tmdb = getTMDBService()
+      const details = await tmdb.getTVShowDetails(validTmdbId)
+      return {
+        overview: details.overview || null,
+      }
+    } catch (error) {
+      console.error(`Error fetching TV show details for ${validTmdbId}:`, error)
+      return null
+    }
+  })
+
+  /**
+   * Get movie details from TMDB (overview for missing movie popup)
+   */
+  ipcMain.handle('tmdb:getMovieDetails', async (_event, tmdbId: unknown) => {
+    const validTmdbId = validateInput(NonEmptyStringSchema, tmdbId, 'tmdb:getMovieDetails')
+    try {
+      const tmdb = getTMDBService()
+      const details = await tmdb.getMovieDetails(validTmdbId)
+      return {
+        overview: details.overview || null,
+        releaseDate: details.release_date || null,
+        runtime: details.runtime || null,
+      }
+    } catch (error) {
+      console.error(`Error fetching movie details for ${validTmdbId}:`, error)
+      return null
+    }
+  })
+
+  /**
+   * Get season details from TMDB (overview, episode count, air date)
+   */
+  ipcMain.handle('series:getSeasonDetails', async (_event, tmdbId: unknown, seasonNumber: unknown) => {
+    const validTmdbId = validateInput(NonEmptyStringSchema, tmdbId, 'series:getSeasonDetails.tmdbId')
+    const validSeasonNumber = validateInput(z.number().int().nonnegative(), seasonNumber, 'series:getSeasonDetails.seasonNumber')
+    try {
+      const tmdb = getTMDBService()
+      const seasonDetails = await tmdb.getSeasonDetails(validTmdbId, validSeasonNumber)
+      return {
+        overview: seasonDetails.overview || null,
+        episodeCount: seasonDetails.episodes?.length || 0,
+        airDate: seasonDetails.air_date || null,
+        name: seasonDetails.name || null,
+      }
+    } catch (error) {
+      console.error(`Error fetching season details for ${validTmdbId} S${validSeasonNumber}:`, error)
+      return null
+    }
+  })
+
+  /**
    * Get season poster URL from TMDB
    */
   ipcMain.handle('series:getSeasonPoster', async (_event, tmdbId: unknown, seasonNumber: unknown) => {

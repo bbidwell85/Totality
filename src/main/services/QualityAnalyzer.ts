@@ -828,7 +828,7 @@ export class QualityAnalyzer {
     }
 
     const needsUpgrade = qualityTier === 'LOSSY_LOW' ||
-      (qualityTier === 'LOSSY_MID' && tierQuality === 'LOW')
+      qualityTier === 'LOSSY_MID'
 
     return {
       album_id: album.id!,

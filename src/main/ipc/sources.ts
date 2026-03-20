@@ -50,6 +50,7 @@ export function registerSourceHandlers(): void {
    */
   ipcMain.handle('app:openExternal', async (_event, url: unknown) => {
     const validUrl = validateInput(SafeUrlSchema, url, 'app:openExternal')
+    console.log('[IPC app:openExternal]', validUrl)
     await shell.openExternal(validUrl)
   })
 
@@ -63,6 +64,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:add', async (_event, config: unknown) => {
     try {
       const validatedConfig = validateInput(AddSourceSchema, config, 'sources:add')
+      console.log('[IPC sources:add] Adding source:', validatedConfig.display_name, `(${validatedConfig.source_type})`)
       return await manager.addSource(validatedConfig)
     } catch (error: unknown) {
       console.error('Error adding source:', error)
@@ -77,6 +79,7 @@ export function registerSourceHandlers(): void {
     try {
       const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:update')
       const validatedUpdates = validateInput(UpdateSourceSchema, updates, 'sources:update')
+      console.log('[IPC sources:update] Updating source:', validSourceId)
       await manager.updateSource(validSourceId, validatedUpdates)
     } catch (error: unknown) {
       console.error('Error updating source:', error)
@@ -90,6 +93,7 @@ export function registerSourceHandlers(): void {
   ipcMain.handle('sources:remove', async (_event, sourceId: unknown) => {
     try {
       const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:remove')
+      console.log('[IPC sources:remove] Removing source:', validSourceId)
       await manager.removeSource(validSourceId)
     } catch (error: unknown) {
       console.error('Error removing source:', error)
@@ -333,6 +337,7 @@ export function registerSourceHandlers(): void {
       const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:toggleLibrary')
       const validLibraryId = validateInput(SourceIdSchema, libraryId, 'sources:toggleLibrary')
       const validEnabled = validateInput(BooleanSchema, enabled, 'sources:toggleLibrary')
+      console.log('[IPC sources:toggleLibrary]', validSourceId, validLibraryId, validEnabled ? 'enabled' : 'disabled')
       const db = getDatabase()
       await db.toggleLibrary(validSourceId, validLibraryId, validEnabled)
 

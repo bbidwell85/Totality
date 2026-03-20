@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { MoreVertical, RefreshCw, Pencil, EyeOff } from 'lucide-react'
+import { MoreVertical, RefreshCw, Pencil, EyeOff, X } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import type { WishlistMediaType } from '../../contexts/WishlistContext'
 import { useMenuClose } from '../../hooks/useMenuClose'
@@ -97,6 +97,7 @@ interface MediaWithQuality {
   poster_url?: string
   episode_thumb_url?: string
   season_poster_url?: string
+  summary?: string
   video_frame_rate?: number
   color_bit_depth?: number
   hdr_format?: string
@@ -476,7 +477,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
               src={media.type === 'episode' && media.episode_thumb_url ? media.episode_thumb_url : media.poster_url}
               alt=""
               className={`rounded-lg object-cover flex-shrink-0 ${
-                media.type === 'episode' && media.episode_thumb_url ? 'w-32 h-20' : 'w-16 h-24'
+                media.type === 'episode' && media.episode_thumb_url ? 'w-44 h-28' : 'w-24 h-36'
               }`}
               onError={(e) => { e.currentTarget.style.display = 'none' }}
             />
@@ -519,7 +520,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                   <div ref={menuRef} className="relative">
                     <button
                       onClick={() => setShowMenu(!showMenu)}
-                      className="text-muted-foreground hover:text-foreground p-1.5 rounded-full hover:bg-muted/50"
+                      className="text-muted-foreground hover:text-foreground p-1.5"
                       title="More options"
                     >
                       {isRescanning ? (
@@ -564,9 +565,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                 )}
 
                 <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -578,6 +577,13 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
               {(sv?.file_size ?? media.file_size) > 0 && <><span className="mx-0.5">·</span><span>{formatFileSize(sv?.file_size ?? media.file_size)}</span></>}
               {(sv?.container ?? media.container) && <><span className="mx-0.5">·</span><span className="uppercase">{sv?.container ?? media.container}</span></>}
             </div>
+
+            {/* Summary */}
+            {media.summary && (
+              <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-h-20 overflow-y-auto">
+                {media.summary}
+              </p>
+            )}
 
             {/* Version Selector Pills */}
             {versions.length > 1 && (
@@ -842,27 +848,23 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
               {media.imdb_id && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">IMDb</span>
-                  <a
-                    href={`https://www.imdb.com/title/${media.imdb_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
+                  <button
+                    onClick={() => window.electronAPI.openExternal(`https://www.imdb.com/title/${media.imdb_id}`)}
+                    className="text-primary hover:underline cursor-pointer"
                   >
                     {media.imdb_id}
-                  </a>
+                  </button>
                 </div>
               )}
               {media.tmdb_id && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">TMDb</span>
-                  <a
-                    href={`https://www.themoviedb.org/${media.type === 'movie' ? 'movie' : 'tv'}/${media.tmdb_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
+                  <button
+                    onClick={() => window.electronAPI.openExternal(`https://www.themoviedb.org/${media.type === 'movie' ? 'movie' : 'tv'}/${media.tmdb_id}`)}
+                    className="text-primary hover:underline cursor-pointer"
                   >
                     {media.tmdb_id}
-                  </a>
+                  </button>
                 </div>
               )}
             </div>

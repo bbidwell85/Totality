@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { ArrowUpCircle, RefreshCw, CheckCircle2, AlertCircle, Download } from 'lucide-react'
+import { ArrowUpCircle, RefreshCw, Download } from 'lucide-react'
 
 interface UpdateState {
   status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
@@ -54,12 +54,6 @@ function Toggle({
   )
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 export function UpdateTab() {
   const [isLoading, setIsLoading] = useState(true)
   const [appVersion, setAppVersion] = useState('')
@@ -95,8 +89,13 @@ export function UpdateTab() {
     return cleanup
   }, [])
 
+  const [isChecking, setIsChecking] = useState(false)
+
   const handleCheckForUpdates = async () => {
+    setIsChecking(true)
     await window.electronAPI.autoUpdateCheckForUpdates()
+    // Ensure spinner shows for at least 1 second
+    setTimeout(() => setIsChecking(false), 1000)
   }
 
   const handleDownloadUpdate = async () => {
@@ -115,19 +114,67 @@ export function UpdateTab() {
     )
   }
 
-  const { status, version: newVersion, downloadProgress, error, lastChecked } = updateState
+  const { status, version: newVersion, downloadProgress, lastChecked } = updateState
 
   return (
     <div className="p-6 space-y-5 overflow-y-auto">
-      {/* Current Version */}
-      <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border/40">
+      {/* Current Version + Update Status */}
+      <div className="bg-muted/30 rounded-lg border border-border/40 p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <ArrowUpCircle className="w-7 h-7 text-primary" />
-          <div>
-            <h3 className="text-sm font-medium text-foreground">Totality</h3>
-            <p className="text-xs text-muted-foreground">Version {appVersion}</p>
+          <ArrowUpCircle className="w-7 h-7 text-primary flex-shrink-0" />
+          <div className="flex-1">
+            <h3 className="text-sm font-medium text-foreground">Totality v{appVersion}</h3>
+            {(status === 'idle' || status === 'not-available') && lastChecked && (
+              <p className="text-xs text-muted-foreground">
+                Up to date · Last checked {new Date(lastChecked).toLocaleString()}
+              </p>
+            )}
+            {(status === 'idle' || status === 'not-available') && !lastChecked && (
+              <p className="text-xs text-muted-foreground">Up to date</p>
+            )}
+            {status === 'checking' && (
+              <p className="text-xs text-muted-foreground">Checking for updates...</p>
+            )}
+            {status === 'available' && (
+              <p className="text-xs text-primary">Version {newVersion} available</p>
+            )}
+            {status === 'downloading' && downloadProgress && (
+              <p className="text-xs text-muted-foreground">
+                Downloading... {Math.round(downloadProgress.percent)}%
+              </p>
+            )}
+            {status === 'downloaded' && (
+              <p className="text-xs text-green-500">Version {newVersion} ready to install</p>
+            )}
+            {status === 'error' && (
+              <p className="text-xs text-destructive">Update check failed</p>
+            )}
           </div>
+          <button
+            onClick={status === 'downloaded' ? handleInstallUpdate : status === 'available' ? handleDownloadUpdate : handleCheckForUpdates}
+            disabled={isChecking || status === 'checking' || status === 'downloading'}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {(isChecking || status === 'checking') ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> :
+             status === 'downloaded' ? <ArrowUpCircle className="w-3.5 h-3.5" /> :
+             status === 'available' ? <Download className="w-3.5 h-3.5" /> :
+             <RefreshCw className="w-3.5 h-3.5" />}
+            {(isChecking || status === 'checking') ? 'Checking...' :
+             status === 'downloaded' ? 'Install' :
+             status === 'available' ? 'Download' :
+             'Check for Updates'}
+          </button>
         </div>
+
+        {/* Download progress bar */}
+        {status === 'downloading' && downloadProgress && (
+          <div className="w-full bg-muted rounded-full h-1.5">
+            <div
+              className="bg-primary h-1.5 rounded-full transition-all"
+              style={{ width: `${downloadProgress.percent}%` }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Auto-Update Toggle */}
@@ -152,127 +199,6 @@ export function UpdateTab() {
         </div>
       </div>
 
-      {/* Status Display */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium text-foreground">Update Status</h3>
-        <div className="bg-muted/30 rounded-lg border border-border/40 p-4 space-y-3">
-          {/* Idle / Not Available */}
-          {(status === 'idle' || status === 'not-available') && (
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-              <div>
-                <p className="text-sm text-foreground">You're up to date</p>
-                {lastChecked && (
-                  <p className="text-xs text-muted-foreground">
-                    Last checked: {new Date(lastChecked).toLocaleString()}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Checking */}
-          {status === 'checking' && (
-            <div className="flex items-center gap-3">
-              <RefreshCw className="w-5 h-5 text-primary animate-spin flex-shrink-0" />
-              <p className="text-sm text-foreground">Checking for updates...</p>
-            </div>
-          )}
-
-          {/* Available */}
-          {status === 'available' && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <ArrowUpCircle className="w-5 h-5 text-primary flex-shrink-0" />
-                <div>
-                  <p className="text-sm text-foreground">
-                    Version {newVersion} is available
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Current version: {appVersion}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={handleDownloadUpdate}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium"
-              >
-                <Download className="w-4 h-4" />
-                Download Update
-              </button>
-            </div>
-          )}
-
-          {/* Downloading */}
-          {status === 'downloading' && downloadProgress && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <Download className="w-5 h-5 text-primary flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm text-foreground">
-                    Downloading update... {Math.round(downloadProgress.percent)}%
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatBytes(downloadProgress.transferred)} / {formatBytes(downloadProgress.total)}
-                    {' '}({formatBytes(downloadProgress.bytesPerSecond)}/s)
-                  </p>
-                </div>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div
-                  className="bg-primary h-2 rounded-full transition-all"
-                  style={{ width: `${downloadProgress.percent}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Downloaded */}
-          {status === 'downloaded' && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
-                <div>
-                  <p className="text-sm text-foreground">
-                    Version {newVersion} is ready to install
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    The app will restart to apply the update
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={handleInstallUpdate}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm font-medium"
-              >
-                <ArrowUpCircle className="w-4 h-4" />
-                Restart and Update
-              </button>
-            </div>
-          )}
-
-          {/* Error */}
-          {status === 'error' && (
-            <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0" />
-              <div>
-                <p className="text-sm text-foreground">Update check failed</p>
-                <p className="text-xs text-muted-foreground">{error}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Check Button */}
-      <button
-        onClick={handleCheckForUpdates}
-        disabled={status === 'checking' || status === 'downloading'}
-        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md border border-border/50 hover:bg-muted/50 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <RefreshCw className={`w-4 h-4 ${status === 'checking' ? 'animate-spin' : ''}`} />
-        {status === 'checking' ? 'Checking...' : 'Check for Updates'}
-      </button>
     </div>
   )
 }

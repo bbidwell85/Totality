@@ -77,7 +77,7 @@ export function ChatMessage({ message, activeTools }: ChatMessageProps) {
           {!isUser && message.actionableItems && message.actionableItems.length > 0 && (
             <div className="mt-2 pt-2 border-t border-border/20">
               <p className="text-[10px] text-muted-foreground mb-1.5">Add to wishlist:</p>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-col gap-1">
                 {message.actionableItems.map((item, i) => (
                   <ChatWishlistButton key={`${item.tmdb_id || item.title}-${i}`} item={item} />
                 ))}
@@ -287,14 +287,14 @@ function ChatWishlistButton({ item }: { item: ActionableItem }) {
     <button
       onClick={handleToggle}
       disabled={loading}
-      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors ${
+      className={`flex items-center gap-1.5 py-0.5 text-xs transition-colors cursor-pointer ${
         inWishlist
-          ? 'bg-amber-400/15 text-amber-400 hover:bg-amber-400/25 cursor-pointer'
-          : 'bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground cursor-pointer'
+          ? 'text-foreground'
+          : 'text-muted-foreground hover:text-foreground'
       }`}
     >
-      <Star className={`w-3 h-3 ${inWishlist ? 'fill-amber-400 text-amber-400' : ''}`} />
-      <span>{item.title}{item.year ? ` (${item.year})` : ''}</span>
+      <Star className={`w-3 h-3 flex-shrink-0 ${inWishlist ? 'fill-amber-400 text-amber-400' : ''}`} />
+      <span className="text-left">{item.title}{item.year ? ` (${item.year})` : ''}</span>
     </button>
   )
 }

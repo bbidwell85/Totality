@@ -17,6 +17,7 @@ import { getFileNameParser, ParsedMovieInfo, ParsedEpisodeInfo } from '../../ser
 import { getTMDBService } from '../../services/TMDBService'
 import { getLoggingService } from '../../services/LoggingService'
 import { getMusicBrainzService } from '../../services/MusicBrainzService'
+import { getGeminiService } from '../../services/GeminiService'
 import { normalizeVideoCodec, normalizeResolution, normalizeAudioCodec } from '../../services/MediaNormalizer'
 import type {
   MediaProvider,
@@ -1588,7 +1589,6 @@ export class LocalFolderProvider implements MediaProvider {
     results: Array<{ id: number; title: string; release_date?: string; overview?: string; poster_path?: string | null; backdrop_path?: string | null }>,
   ): Promise<{ tmdbId: number; title: string; year?: number; posterPath?: string; backdropPath?: string } | null> {
     try {
-      const { getGeminiService } = require('../../services/GeminiService')
       const gemini = getGeminiService()
       if (!gemini.isConfigured()) return null
 

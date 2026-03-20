@@ -700,6 +700,11 @@ export class DatabaseService {
         }
       }
 
+      // Add summary column to media_items
+      try {
+        this.db.run('ALTER TABLE media_items ADD COLUMN summary TEXT')
+      } catch { /* column may already exist */ }
+
       // Migrate existing plain-text credentials to encrypted format
       await this.migrateCredentialsToEncrypted()
 
@@ -1408,8 +1413,9 @@ export class DatabaseService {
         audio_profile, audio_sample_rate, has_object_audio, audio_tracks,
         subtitle_tracks,
         container,
-        imdb_id, tmdb_id, series_tmdb_id, poster_url, episode_thumb_url, season_poster_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        imdb_id, tmdb_id, series_tmdb_id, poster_url, episode_thumb_url, season_poster_url, summary,
+        user_fixed_match
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, plex_id) DO UPDATE SET
         source_type = excluded.source_type,
         library_id = excluded.library_id,
@@ -1448,7 +1454,9 @@ export class DatabaseService {
         series_tmdb_id = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.series_tmdb_id ELSE COALESCE(excluded.series_tmdb_id, media_items.series_tmdb_id) END,
         poster_url = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.poster_url ELSE COALESCE(excluded.poster_url, media_items.poster_url) END,
         episode_thumb_url = COALESCE(excluded.episode_thumb_url, media_items.episode_thumb_url),
-        season_poster_url = COALESCE(excluded.season_poster_url, media_items.season_poster_url)
+        season_poster_url = COALESCE(excluded.season_poster_url, media_items.season_poster_url),
+        summary = COALESCE(excluded.summary, media_items.summary),
+        user_fixed_match = CASE WHEN media_items.user_fixed_match = 1 THEN 1 ELSE excluded.user_fixed_match END
     `
 
     // Debug logging for year field
@@ -1497,6 +1505,8 @@ export class DatabaseService {
       item.poster_url || null,
       item.episode_thumb_url || null,
       item.season_poster_url || null,
+      item.summary || null,
+      item.user_fixed_match ? 1 : 0,
     ])
 
     // Get the ID of the inserted/updated row
@@ -3094,27 +3104,14 @@ export class DatabaseService {
   ): Promise<number> {
     if (!this.db) throw new Error('Database not initialized')
 
-    const sourceId = data.source_id || null
-    const libraryId = data.library_id || null
+    // Use empty string for NOT NULL DEFAULT '' columns (matches schema and BetterSQLiteService)
+    const sourceId = data.source_id || ''
+    const libraryId = data.library_id || ''
 
-    // Check if record exists - handle NULL values properly
-    const checkSql = sourceId === null && libraryId === null
-      ? `SELECT id FROM series_completeness WHERE series_title = ? AND source_id IS NULL AND library_id IS NULL`
-      : sourceId === null
-      ? `SELECT id FROM series_completeness WHERE series_title = ? AND source_id IS NULL AND library_id = ?`
-      : libraryId === null
-      ? `SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id IS NULL`
-      : `SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ?`
-
-    const checkParams = sourceId === null && libraryId === null
-      ? [data.series_title]
-      : sourceId === null
-      ? [data.series_title, libraryId]
-      : libraryId === null
-      ? [data.series_title, sourceId]
-      : [data.series_title, sourceId, libraryId]
-
-    const existing = this.db.exec(checkSql, checkParams)
+    const existing = this.db.exec(
+      `SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ?`,
+      [data.series_title, sourceId, libraryId]
+    )
     const existingId = existing.length > 0 && existing[0].values.length > 0
       ? existing[0].values[0][0] as number
       : null
@@ -3654,27 +3651,14 @@ export class DatabaseService {
   ): Promise<number> {
     if (!this.db) throw new Error('Database not initialized')
 
-    const sourceId = data.source_id || null
-    const libraryId = data.library_id || null
+    // Use empty string for NOT NULL DEFAULT '' columns (matches schema and BetterSQLiteService)
+    const sourceId = data.source_id || ''
+    const libraryId = data.library_id || ''
 
-    // Check if record exists - handle NULL values properly
-    const checkSql = sourceId === null && libraryId === null
-      ? `SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id IS NULL AND library_id IS NULL`
-      : sourceId === null
-      ? `SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id IS NULL AND library_id = ?`
-      : libraryId === null
-      ? `SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id = ? AND library_id IS NULL`
-      : `SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id = ? AND library_id = ?`
-
-    const checkParams = sourceId === null && libraryId === null
-      ? [data.tmdb_collection_id]
-      : sourceId === null
-      ? [data.tmdb_collection_id, libraryId]
-      : libraryId === null
-      ? [data.tmdb_collection_id, sourceId]
-      : [data.tmdb_collection_id, sourceId, libraryId]
-
-    const existing = this.db.exec(checkSql, checkParams)
+    const existing = this.db.exec(
+      `SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id = ? AND library_id = ?`,
+      [data.tmdb_collection_id, sourceId, libraryId]
+    )
     const existingId = existing.length > 0 && existing[0].values.length > 0
       ? existing[0].values[0][0] as number
       : null

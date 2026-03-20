@@ -87,7 +87,7 @@ export class BetterSQLiteService {
       // Configure for performance
       this.db.pragma('journal_mode = WAL')
       this.db.pragma('synchronous = NORMAL')
-      this.db.pragma('cache_size = -64000') // 64MB cache
+      this.db.pragma('cache_size = -32000') // 32MB cache
       this.db.pragma('foreign_keys = ON')
       this.db.pragma('temp_store = MEMORY')
       this.db.pragma('busy_timeout = 5000') // Wait up to 5s for locked database
@@ -203,6 +203,9 @@ export class BetterSQLiteService {
       // Per-version split quality scores
       'ALTER TABLE media_item_versions ADD COLUMN bitrate_tier_score INTEGER DEFAULT 0',
       'ALTER TABLE media_item_versions ADD COLUMN audio_tier_score INTEGER DEFAULT 0',
+
+      // Media item summary/description
+      'ALTER TABLE media_items ADD COLUMN summary TEXT',
     ]
 
     for (const statement of alterStatements) {
@@ -262,6 +265,41 @@ export class BetterSQLiteService {
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_music_albums_type ON music_albums(album_type) WHERE album_type IS NOT NULL')
     } catch {
       // Indexes may already exist
+    }
+
+    // Fix music track album_id references — prior bug in upsertMusicAlbum returned
+    // stale lastInsertRowid after ON CONFLICT DO UPDATE, causing tracks to link to
+    // wrong albums. Re-link tracks by matching source_id + album_name + artist_name.
+    try {
+      const mismatchCount = (this.db.prepare(`
+        SELECT COUNT(*) as cnt FROM music_tracks t
+        WHERE t.album_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM music_albums a
+            WHERE a.id = t.album_id AND a.title = t.album_name AND a.source_id = t.source_id
+          )
+      `).get() as { cnt: number })?.cnt || 0
+
+      if (mismatchCount > 0) {
+        this.db.exec(`
+          UPDATE music_tracks SET album_id = (
+            SELECT a.id FROM music_albums a
+            WHERE a.title = music_tracks.album_name
+              AND a.artist_name = music_tracks.artist_name
+              AND a.source_id = music_tracks.source_id
+            LIMIT 1
+          )
+          WHERE EXISTS (
+            SELECT 1 FROM music_albums a
+            WHERE a.title = music_tracks.album_name
+              AND a.artist_name = music_tracks.artist_name
+              AND a.source_id = music_tracks.source_id
+          )
+        `)
+        console.log(`[BetterSQLite] Fixed ${mismatchCount} music tracks with incorrect album_id references`)
+      }
+    } catch (error: unknown) {
+      console.log('[BetterSQLite] Music track album_id fix note:', getErrorMessage(error))
     }
 
     // Populate media_item_versions from existing media_items (one version per item)
@@ -374,8 +412,8 @@ export class BetterSQLiteService {
   /**
    * End batch mode (no-op for better-sqlite3)
    */
-  endBatch(): void {
-    // No-op: better-sqlite3 auto-persists
+  async endBatch(): Promise<void> {
+    // No-op: better-sqlite3 auto-persists via WAL mode
   }
 
   /**
@@ -863,11 +901,11 @@ export class BetterSQLiteService {
         audio_profile, audio_sample_rate, has_object_audio, audio_tracks,
         subtitle_tracks,
         container, file_mtime, imdb_id, tmdb_id, series_tmdb_id, poster_url,
-        episode_thumb_url, season_poster_url, user_fixed_match,
+        episode_thumb_url, season_poster_url, summary, user_fixed_match,
         created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
       )
       ON CONFLICT(source_id, plex_id) DO UPDATE SET
         library_id = excluded.library_id,
@@ -908,11 +946,12 @@ export class BetterSQLiteService {
         poster_url = COALESCE(excluded.poster_url, media_items.poster_url),
         episode_thumb_url = COALESCE(excluded.episode_thumb_url, media_items.episode_thumb_url),
         season_poster_url = COALESCE(excluded.season_poster_url, media_items.season_poster_url),
+        summary = COALESCE(excluded.summary, media_items.summary),
         user_fixed_match = CASE WHEN media_items.user_fixed_match = 1 THEN 1 ELSE excluded.user_fixed_match END,
         updated_at = datetime('now')
     `)
 
-    const result = stmt.run(
+    stmt.run(
       item.source_id || 'legacy',
       item.source_type || 'plex',
       item.library_id || null,
@@ -954,15 +993,12 @@ export class BetterSQLiteService {
       item.poster_url || null,
       item.episode_thumb_url || null,
       item.season_poster_url || null,
+      item.summary || null,
       item.user_fixed_match ? 1 : 0
     )
 
-    // Return the ID (either new or existing)
-    if (result.changes > 0 && result.lastInsertRowid) {
-      return Number(result.lastInsertRowid)
-    }
-
-    // If it was an update, get the existing ID
+    // Always look up by unique key — lastInsertRowid is unreliable after
+    // ON CONFLICT DO UPDATE (may return stale rowid from a prior INSERT)
     const existing = this.getMediaItemByProviderId(item.plex_id, item.source_id)
     return existing?.id || 0
   }
@@ -1449,12 +1485,56 @@ export class BetterSQLiteService {
   deleteMediaSource(sourceId: string): void {
     if (!this.db) throw new Error('Database not initialized')
 
-    // Delete all associated data
+    console.log(`[BetterSQLite] Deleting source ${sourceId} and all associated data...`)
+
+    // Delete media item related data (versions, quality scores, collections)
     this.deleteMediaItemsForSource(sourceId)
+
+    // Delete wishlist items referencing media items from this source
+    this.db.prepare(`
+      DELETE FROM wishlist_items WHERE media_item_id IN (
+        SELECT id FROM media_items WHERE source_id = ?
+      )
+    `).run(sourceId)
+
+    // Delete music quality scores for albums from this source
+    this.db.prepare(`
+      DELETE FROM music_quality_scores WHERE album_id IN (
+        SELECT id FROM music_albums WHERE source_id = ?
+      )
+    `).run(sourceId)
+
+    // Delete album completeness data for albums from this source
+    this.db.prepare(`
+      DELETE FROM album_completeness WHERE album_id IN (
+        SELECT id FROM music_albums WHERE source_id = ?
+      )
+    `).run(sourceId)
+
+    // Delete artist completeness data for artists from this source
+    this.db.prepare(`
+      DELETE FROM artist_completeness WHERE artist_name IN (
+        SELECT name FROM music_artists WHERE source_id = ?
+      )
+    `).run(sourceId)
+
+    // Delete music tracks, albums, artists
+    this.db.prepare('DELETE FROM music_tracks WHERE source_id = ?').run(sourceId)
+    this.db.prepare('DELETE FROM music_albums WHERE source_id = ?').run(sourceId)
+    this.db.prepare('DELETE FROM music_artists WHERE source_id = ?').run(sourceId)
+
+    // Delete completeness and scan data
     this.db.prepare('DELETE FROM series_completeness WHERE source_id = ?').run(sourceId)
     this.db.prepare('DELETE FROM movie_collections WHERE source_id = ?').run(sourceId)
     this.db.prepare('DELETE FROM library_scans WHERE source_id = ?').run(sourceId)
+
+    // Delete notifications for this source
+    this.db.prepare('DELETE FROM notifications WHERE source_id = ?').run(sourceId)
+
+    // Delete the source itself
     this.db.prepare('DELETE FROM media_sources WHERE source_id = ?').run(sourceId)
+
+    console.log(`[BetterSQLite] Deleted source and all data: ${sourceId}`)
   }
 
   /**
@@ -1764,7 +1844,7 @@ export class BetterSQLiteService {
         updated_at = datetime('now')
     `)
 
-    const result = stmt.run(
+    stmt.run(
       track.source_id,
       track.source_type,
       track.library_id || null,
@@ -1793,11 +1873,8 @@ export class BetterSQLiteService {
       track.added_at || null
     )
 
-    if (result.changes > 0 && result.lastInsertRowid) {
-      return Number(result.lastInsertRowid)
-    }
-
-    // Get existing ID
+    // Always look up by unique key — lastInsertRowid is unreliable after
+    // ON CONFLICT DO UPDATE (may return stale rowid from a prior INSERT)
     const existing = this.db.prepare(
       'SELECT id FROM music_tracks WHERE source_id = ? AND provider_id = ?'
     ).get(track.source_id, track.provider_id) as { id: number } | undefined
@@ -1832,7 +1909,7 @@ export class BetterSQLiteService {
         updated_at = datetime('now')
     `)
 
-    const result = stmt.run(
+    stmt.run(
       artist.source_id,
       artist.source_type,
       artist.library_id || null,
@@ -1850,10 +1927,8 @@ export class BetterSQLiteService {
       artist.user_fixed_match ? 1 : 0
     )
 
-    if (result.changes > 0 && result.lastInsertRowid) {
-      return Number(result.lastInsertRowid)
-    }
-
+    // Always look up by unique key — lastInsertRowid is unreliable after
+    // ON CONFLICT DO UPDATE (may return stale rowid from a prior INSERT)
     const existing = this.db.prepare(
       'SELECT id FROM music_artists WHERE source_id = ? AND provider_id = ?'
     ).get(artist.source_id, artist.provider_id) as { id: number } | undefined
@@ -1902,7 +1977,7 @@ export class BetterSQLiteService {
         updated_at = datetime('now')
     `)
 
-    const result = stmt.run(
+    stmt.run(
       album.source_id,
       album.source_type,
       album.library_id || null,
@@ -1932,10 +2007,10 @@ export class BetterSQLiteService {
       album.user_fixed_match ? 1 : 0
     )
 
-    if (result.changes > 0 && result.lastInsertRowid) {
-      return Number(result.lastInsertRowid)
-    }
-
+    // Always look up by unique key to get the correct ID.
+    // lastInsertRowid is unreliable after ON CONFLICT DO UPDATE — it may
+    // return a stale rowid from a prior INSERT, causing tracks to link to
+    // the wrong album.
     const existing = this.db.prepare(
       'SELECT id FROM music_albums WHERE source_id = ? AND provider_id = ?'
     ).get(album.source_id, album.provider_id) as { id: number } | undefined

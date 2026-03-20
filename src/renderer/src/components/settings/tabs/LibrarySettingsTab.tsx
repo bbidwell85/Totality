@@ -224,6 +224,8 @@ export function LibrarySettingsTab() {
       }))
       try {
         await window.electronAPI.removeExclusion(id)
+        // Notify library views to reload completeness data
+        window.dispatchEvent(new CustomEvent('exclusions-changed', { detail: { type } }))
       } catch (error) {
         console.error('Failed to remove exclusion:', error)
         await reloadExclusions()
@@ -239,6 +241,8 @@ export function LibrarySettingsTab() {
       setExclusions((prev) => ({ ...prev, [type]: [] }))
       try {
         await Promise.all(items.map((e) => window.electronAPI.removeExclusion(e.id)))
+        // Notify library views to reload completeness data
+        window.dispatchEvent(new CustomEvent('exclusions-changed', { detail: { type } }))
       } catch (error) {
         console.error('Failed to clear exclusions:', error)
         await reloadExclusions()
@@ -258,7 +262,7 @@ export function LibrarySettingsTab() {
   const totalExclusions = Object.values(exclusions).reduce((sum, list) => sum + list.length, 0)
 
   return (
-    <div className="p-6 space-y-3 overflow-y-auto h-full">
+    <div className="p-6 space-y-5 overflow-y-auto h-full">
       {/* Header */}
       <div className="mb-4">
         <p className="text-xs text-muted-foreground">
@@ -384,7 +388,7 @@ export function LibrarySettingsTab() {
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveExclusion(item.id, section.type)}
-                                    className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                                    className="p-1 rounded-md text-muted-foreground hover:text-destructive transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
                                     title="Remove exclusion"
                                   >
                                     <X className="w-3.5 h-3.5" />

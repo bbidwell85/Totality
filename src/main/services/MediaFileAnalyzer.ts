@@ -13,6 +13,7 @@ import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as http from 'http'
+import AdmZip from 'adm-zip'
 import * as https from 'https'
 import { app } from 'electron'
 import { createWriteStream, mkdirSync, readFileSync } from 'fs'
@@ -621,12 +622,10 @@ export class MediaFileAnalyzer {
     const platform = process.platform
 
     if (platform === 'win32') {
-      // Use PowerShell to extract zip on Windows
-      await this.runCommand('powershell', [
-        '-NoProfile',
-        '-Command',
-        `Expand-Archive -Path "${archivePath}" -DestinationPath "${tempDir}" -Force`
-      ])
+      // Use adm-zip for reliable cross-platform zip extraction
+      // (avoids PowerShell execution policy issues and missing tar on older Windows)
+      const zip = new AdmZip(archivePath)
+      zip.extractAllTo(tempDir, true)
 
       // Find and copy ffprobe.exe
       const ffprobeSource = await this.findFileInDir(tempDir, 'ffprobe.exe')

@@ -62,6 +62,7 @@ interface KodiMovie {
   file: string
   year?: number
   runtime?: number // Duration in minutes
+  plot?: string
   streamdetails: KodiStreamDetails
   imdbnumber?: string
   art?: {
@@ -89,6 +90,7 @@ interface KodiEpisode {
   season: number
   episode: number
   runtime?: number // Duration in minutes
+  plot?: string
   streamdetails: KodiStreamDetails
   art?: {
     thumb?: string
@@ -348,7 +350,7 @@ export class KodiProvider implements MediaProvider {
 
   private async getMovies(): Promise<MediaMetadata[]> {
     const result = await this.rpcCall<{ movies: KodiMovie[] }>('VideoLibrary.GetMovies', {
-      properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art', 'runtime'],
+      properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art', 'runtime', 'plot'],
     })
 
     const movies = result.movies || []
@@ -382,7 +384,7 @@ export class KodiProvider implements MediaProvider {
   private async getEpisodesForShow(tvshowid: number, showtitle: string): Promise<MediaMetadata[]> {
     const result = await this.rpcCall<{ episodes: KodiEpisode[] }>('VideoLibrary.GetEpisodes', {
       tvshowid,
-      properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'art', 'runtime'],
+      properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'art', 'runtime', 'plot'],
     })
 
     const episodes = result.episodes || []
@@ -427,7 +429,7 @@ export class KodiProvider implements MediaProvider {
     const dateStr = sinceTimestamp.toISOString().replace('T', ' ').split('.')[0]
 
     const result = await this.rpcCall<{ movies: KodiMovie[] }>('VideoLibrary.GetMovies', {
-      properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art', 'runtime'],
+      properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art', 'runtime', 'plot'],
       filter: {
         operator: 'greaterthan',
         field: 'dateadded',
@@ -463,7 +465,7 @@ export class KodiProvider implements MediaProvider {
     const dateStr = sinceTimestamp.toISOString().replace('T', ' ').split('.')[0]
 
     const result = await this.rpcCall<{ episodes: KodiEpisode[] }>('VideoLibrary.GetEpisodes', {
-      properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'showtitle', 'art', 'runtime'],
+      properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'showtitle', 'art', 'runtime', 'plot'],
       filter: {
         operator: 'greaterthan',
         field: 'dateadded',
@@ -501,13 +503,13 @@ export class KodiProvider implements MediaProvider {
     if (type === 'movie') {
       const result = await this.rpcCall<{ moviedetails: KodiMovie }>('VideoLibrary.GetMovieDetails', {
         movieid: numId,
-        properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art'],
+        properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art', 'plot'],
       })
       return this.convertMovieToMetadata(result.moviedetails)
     } else if (type === 'episode') {
       const result = await this.rpcCall<{ episodedetails: KodiEpisode }>('VideoLibrary.GetEpisodeDetails', {
         episodeid: numId,
-        properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'showtitle', 'art'],
+        properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'showtitle', 'art', 'plot'],
       })
       return this.convertEpisodeToMetadata(result.episodedetails)
     }
@@ -853,6 +855,7 @@ export class KodiProvider implements MediaProvider {
       hasObjectAudio: hasAnyObjectAudio,
       audioTracks: audioTracks.length > 0 ? audioTracks : undefined,
       posterUrl: movie.art?.poster,
+      rawData: movie.plot ? { plot: movie.plot } : undefined,
     }
   }
 
@@ -947,6 +950,7 @@ export class KodiProvider implements MediaProvider {
       episodeThumbUrl: episode.art?.thumb,
       posterUrl: seasonPosterUrl || showPosterUrl,
       seasonPosterUrl: seasonPosterUrl,
+      rawData: episode.plot ? { plot: episode.plot } : undefined,
     }
   }
 
@@ -1009,6 +1013,7 @@ export class KodiProvider implements MediaProvider {
       poster_url: metadata.posterUrl,
       episode_thumb_url: metadata.episodeThumbUrl,
       season_poster_url: metadata.seasonPosterUrl,
+      summary: (metadata.rawData as { plot?: string })?.plot || undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

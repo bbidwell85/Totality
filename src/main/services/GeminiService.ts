@@ -57,7 +57,7 @@ export class GeminiService {
   private model: string = GeminiService.DEFAULT_MODEL
   private enabled: boolean = true
   private rateLimitedUntil: number | null = null
-  private static readonly MAX_EXPLANATION_CACHE = 100
+  private static readonly MAX_EXPLANATION_CACHE = 20
   private explanationCache = new Map<string, { text: string; timestamp: number }>()
 
   constructor() {
@@ -267,7 +267,7 @@ export class GeminiService {
 
     const contents: Content[] = this.toGeminiContents(params.messages)
     const maxRounds = params.maxToolRounds || 10
-    let totalUsage = { input_tokens: 0, output_tokens: 0 }
+    const totalUsage = { input_tokens: 0, output_tokens: 0 }
     const recentToolCalls: string[] = [] // Track recent tool call signatures for loop detection
 
     for (let round = 0; round < maxRounds; round++) {
@@ -283,6 +283,8 @@ export class GeminiService {
           },
         })
       } catch (error) {
+        // If rate limited during tool-use loop, throw RateLimitError
+        // (the IPC handler will return it as structured data, not throw)
         this.handleApiError(error)
       }
 

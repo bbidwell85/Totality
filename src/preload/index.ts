@@ -320,6 +320,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Database - Data Management
   dbGetPath: () => ipcRenderer.invoke('db:getPath'),
+  dbOpenFolder: () => ipcRenderer.invoke('db:openFolder'),
   dbExport: () => ipcRenderer.invoke('db:export'),
   dbExportCSV: (options: {
     includeUpgrades: boolean
@@ -338,6 +339,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   seriesGetStats: () => ipcRenderer.invoke('series:getStats'),
   seriesGetEpisodes: (seriesTitle: string, sourceId?: string) => ipcRenderer.invoke('series:getEpisodes', seriesTitle, sourceId),
   seriesDelete: (id: number) => ipcRenderer.invoke('series:delete', id),
+  tmdbGetMovieDetails: (tmdbId: string) =>
+    ipcRenderer.invoke('tmdb:getMovieDetails', tmdbId) as Promise<{ overview: string | null; releaseDate: string | null; runtime: number | null } | null>,
+  tmdbGetTVShowDetails: (tmdbId: string) =>
+    ipcRenderer.invoke('tmdb:getTVShowDetails', tmdbId) as Promise<{ overview: string | null } | null>,
+  seriesGetSeasonDetails: (tmdbId: string, seasonNumber: number) =>
+    ipcRenderer.invoke('series:getSeasonDetails', tmdbId, seasonNumber) as Promise<{ overview: string | null; episodeCount: number; airDate: string | null; name: string | null } | null>,
   seriesGetSeasonPoster: (tmdbId: string, seasonNumber: number) =>
     ipcRenderer.invoke('series:getSeasonPoster', tmdbId, seasonNumber),
   seriesGetEpisodeStill: (tmdbId: string, seasonNumber: number, episodeNumber: number) =>
@@ -1223,6 +1230,7 @@ export interface ElectronAPI {
 
   // Database - Data Management
   dbGetPath: () => Promise<string>
+  dbOpenFolder: () => Promise<{ success: boolean }>
   dbExport: () => Promise<{ success: boolean; path?: string; cancelled?: boolean }>
   dbExportCSV: (options: {
     includeUpgrades: boolean
@@ -1247,6 +1255,9 @@ export interface ElectronAPI {
   }>
   seriesGetEpisodes: (seriesTitle: string, sourceId?: string) => Promise<unknown[]>
   seriesDelete: (id: number) => Promise<boolean>
+  tmdbGetMovieDetails: (tmdbId: string) => Promise<{ overview: string | null; releaseDate: string | null; runtime: number | null } | null>
+  tmdbGetTVShowDetails: (tmdbId: string) => Promise<{ overview: string | null } | null>
+  seriesGetSeasonDetails: (tmdbId: string, seasonNumber: number) => Promise<{ overview: string | null; episodeCount: number; airDate: string | null; name: string | null } | null>
   seriesGetSeasonPoster: (tmdbId: string, seasonNumber: number) => Promise<string | null>
   seriesGetEpisodeStill: (tmdbId: string, seasonNumber: number, episodeNumber: number) => Promise<string | null>
   seriesCancelAnalysis: () => Promise<{ success: boolean }>

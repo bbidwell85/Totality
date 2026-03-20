@@ -174,6 +174,7 @@ export interface MediaItem {
   poster_url?: string
   episode_thumb_url?: string
   season_poster_url?: string
+  summary?: string
 
   // User override flag (preserves user-selected metadata during rescans)
   user_fixed_match?: boolean

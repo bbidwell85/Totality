@@ -290,7 +290,7 @@ export function AppearanceTab() {
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-card text-muted-foreground hover:bg-muted'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -321,7 +321,7 @@ export function AppearanceTab() {
                   </div>
                   <button
                     onClick={() => setTheme(themeConfig.id)}
-                    className={`rounded-xl overflow-hidden shadow-[0_8px_30px_rgba(0,0,0,0.4)] transition-all ${
+                    className={`rounded-xl overflow-hidden shadow-md transition-all ${
                       isActive
                         ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
                         : 'hover:opacity-80'

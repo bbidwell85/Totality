@@ -28,7 +28,7 @@ export class TMDBService {
   private static readonly CACHE_DURATION = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
   private static readonly MAX_CONCURRENT = 10 // Max concurrent requests
   private static readonly REQUEST_TIMEOUT = 30000 // 30 second timeout for API requests
-  private static readonly MAX_CACHE_SIZE = 5000 // Max cache entries to prevent unbounded memory growth
+  private static readonly MAX_CACHE_SIZE = 1000 // Max cache entries to prevent unbounded memory growth
 
   private apiKey: string | null = null
   private movieGenres: TMDBGenre[] | null = null

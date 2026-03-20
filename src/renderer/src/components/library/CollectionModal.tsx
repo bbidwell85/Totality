@@ -129,14 +129,14 @@ export const CollectionModal = memo(function CollectionModal({
       {createPortal(<div className="fixed inset-0 z-[150] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="collection-modal-title">
         {/* Backdrop */}
         <div
-          className="absolute inset-0 bg-black/70"
+          className="absolute inset-0 bg-black/60"
           onClick={onClose}
         />
 
         {/* Modal */}
-        <div ref={modalRef} className="relative bg-card border border-border rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+        <div ref={modalRef} className="relative bg-card border border-border rounded-xl shadow-xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-lg flex-shrink-0">
+          <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-xl flex-shrink-0">
             <div>
               <h2 id="collection-modal-title" className="text-xl font-semibold">{collection.collection_name}</h2>
               <p className="text-sm text-muted-foreground mt-1">
@@ -149,7 +149,7 @@ export const CollectionModal = memo(function CollectionModal({
             </div>
             <button
               onClick={onClose}
-              className="p-2 rounded-md hover:bg-muted transition-colors"
+              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="w-5 h-5" />
             </button>

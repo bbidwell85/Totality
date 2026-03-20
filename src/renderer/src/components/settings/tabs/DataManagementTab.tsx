@@ -177,20 +177,20 @@ export function DataManagementTab() {
     <div className="p-6 space-y-5 overflow-y-auto">
       {/* Database Location Section */}
       <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border/40">
-        <div className="flex items-center gap-3">
-          <Database className="w-7 h-7 text-primary" />
-          <div>
-            <h3 className="text-sm font-medium text-foreground">Database Location</h3>
-            <p className="text-xs text-muted-foreground break-all max-w-[280px]">
-              {dbPath}
-            </p>
+        <div className="flex items-center gap-3 min-w-0">
+          <Database className="w-7 h-7 text-primary flex-shrink-0" />
+          <div className="min-w-0">
+            <h3 className="text-sm font-medium text-foreground">
+              Database Location <span className="font-normal text-xs text-muted-foreground ml-2 truncate">{dbPath}</span>
+            </h3>
           </div>
         </div>
         <button
-          onClick={() => navigator.clipboard.writeText(dbPath)}
-          className="px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 rounded-md transition-colors"
+          onClick={() => window.electronAPI.dbOpenFolder()}
+          className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
         >
-          Copy Path
+          <FolderOpen className="w-3.5 h-3.5" />
+          Open Folder
         </button>
       </div>
 
@@ -233,7 +233,7 @@ export function DataManagementTab() {
             <button
               onClick={handleExport}
               disabled={isExporting}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 rounded-md transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {isExporting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -264,7 +264,7 @@ export function DataManagementTab() {
             <button
               onClick={handleImport}
               disabled={isImporting}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-muted hover:bg-muted/80 rounded-md transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {isImporting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -277,17 +277,17 @@ export function DataManagementTab() {
         </div>
       </div>
 
-      {/* Danger Zone */}
+      {/* Reset Database */}
       <div className="space-y-2">
-        <h3 className="text-sm font-medium text-red-400">Danger Zone</h3>
+        <h3 className="text-sm font-medium text-foreground">Reset</h3>
 
-        <div className="bg-red-500/5 rounded-lg border border-red-500/20">
+        <div className="bg-muted/30 rounded-lg border border-border/40">
           {showResetConfirm ? (
             <div className="p-4 space-y-4">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-red-400">
+                  <p className="text-sm font-medium text-foreground">
                     Are you sure you want to reset the database?
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -306,7 +306,7 @@ export function DataManagementTab() {
                 <button
                   onClick={handleReset}
                   disabled={isResetting}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {isResetting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -320,7 +320,7 @@ export function DataManagementTab() {
           ) : (
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-3">
-                <Trash2 className="w-5 h-5 text-red-400" />
+                <Trash2 className="w-5 h-5 text-muted-foreground" />
                 <div>
                   <span className="text-sm text-foreground">Reset Database</span>
                   <p className="text-xs text-muted-foreground">
@@ -330,8 +330,9 @@ export function DataManagementTab() {
               </div>
               <button
                 onClick={() => setShowResetConfirm(true)}
-                className="flex items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
               >
+                <Trash2 className="w-3.5 h-3.5" />
                 Reset
               </button>
             </div>

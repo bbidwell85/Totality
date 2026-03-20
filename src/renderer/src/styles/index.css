@@ -542,10 +542,10 @@ select:focus-visible,
   transform: scale(1.05);
 }
 
-/* Custom scrollbar styles - uses theme colors */
+/* Custom scrollbar styles - matches media browser scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -554,15 +554,21 @@ select:focus-visible,
 
 ::-webkit-scrollbar-thumb {
   background: hsl(var(--border));
-  border-radius: 4px;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.6);
+  background: hsl(var(--muted-foreground) / 0.4);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:active {
-  background: hsl(var(--muted-foreground) / 0.8);
+  background: hsl(var(--muted-foreground) / 0.6);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-corner {

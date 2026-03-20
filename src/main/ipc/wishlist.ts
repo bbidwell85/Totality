@@ -25,6 +25,7 @@ export function registerWishlistHandlers() {
   ipcMain.handle('wishlist:add', async (_event, item: unknown) => {
     try {
       const validItem = validateInput(WishlistItemSchema, item, 'wishlist:add')
+      console.log('[IPC wishlist:add]', validItem.media_type, `"${validItem.title}"`)
 
       // Auto-fetch poster from TMDB if tmdb_id is provided but poster_url is missing
       if (validItem.tmdb_id && !validItem.poster_url) {
@@ -54,6 +55,7 @@ export function registerWishlistHandlers() {
     try {
       const validId = validateInput(PositiveIntSchema, id, 'wishlist:update')
       const validUpdates = validateInput(WishlistItemSchema.partial(), updates, 'wishlist:update')
+      console.log('[IPC wishlist:update] id:', validId)
       await db.updateWishlistItem(validId, validUpdates)
       return { success: true }
     } catch (error) {
@@ -68,6 +70,7 @@ export function registerWishlistHandlers() {
   ipcMain.handle('wishlist:remove', async (_event, id: unknown) => {
     try {
       const validId = validateInput(PositiveIntSchema, id, 'wishlist:remove')
+      console.log('[IPC wishlist:remove] id:', validId)
       await db.removeWishlistItem(validId)
       return { success: true }
     } catch (error) {
@@ -147,6 +150,7 @@ export function registerWishlistHandlers() {
   ipcMain.handle('wishlist:addBulk', async (_event, items: unknown) => {
     try {
       const validItems = validateInput(z.array(WishlistItemSchema), items, 'wishlist:addBulk')
+      console.log('[IPC wishlist:addBulk]', validItems.length, 'items')
 
       // Auto-fetch posters from TMDB for items missing poster_url
       const tmdb = getTMDBService()

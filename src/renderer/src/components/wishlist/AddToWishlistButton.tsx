@@ -180,11 +180,11 @@ export function AddToWishlistButton({
       title={isInWishlist ? removeLabel : buttonLabel}
       className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm disabled:opacity-50 transition-colors ${
         isInWishlist
-          ? 'bg-amber-400/15 text-amber-400 hover:bg-amber-400/25 border border-amber-400/30'
+          ? 'bg-muted/50 text-foreground hover:bg-muted border border-border'
           : 'bg-primary text-primary-foreground hover:bg-primary/90'
       }`}
     >
-      <Star className={`w-4 h-4 ${isInWishlist ? 'fill-amber-400' : ''}`} />
+      <Star className={`w-4 h-4 ${isInWishlist ? 'fill-amber-400 text-amber-400' : ''}`} />
       <span>{isInWishlist ? inListLabel : buttonLabel}</span>
     </button>
   )

@@ -58,6 +58,8 @@ process.on('uncaughtException', (error) => {
   try {
     const db = getDatabaseServiceSync()
     if (db.isInitialized) {
+      // End batch mode first to ensure pending writes are flushed
+      try { db.endBatch() } catch { /* ignore */ }
       const backend = getDatabaseBackend()
       if (backend === 'sql.js') {
         // Use .then() to ensure exit happens after save completes
@@ -84,6 +86,8 @@ process.on('unhandledRejection', (reason, promise) => {
   try {
     const db = getDatabaseServiceSync()
     if (db.isInitialized) {
+      // End batch mode first to ensure pending writes are flushed
+      try { db.endBatch() } catch { /* ignore */ }
       const backend = getDatabaseBackend()
       if (backend === 'sql.js') {
         const saveResult = db.forceSave()
@@ -247,6 +251,9 @@ app.on('before-quit', async (event) => {
   if (isClosing) return
   event.preventDefault()
   isClosing = true
+
+  // Stop live monitoring (close file watchers and polling timers)
+  getLiveMonitoringService().stop()
 
   // Cleanup auto-update timers
   getAutoUpdateService().cleanup()

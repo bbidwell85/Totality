@@ -57,10 +57,10 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[150]" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
-      <div ref={modalRef} className="bg-card border border-border rounded-lg w-full max-w-lg mx-4 shadow-xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
+      <div ref={modalRef} className="bg-card border border-border rounded-xl w-full max-w-lg mx-4 shadow-xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-lg">
+        <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-xl">
           <h2 id="about-modal-title" className="text-lg font-semibold">About Totality</h2>
           <button
             onClick={onClose}

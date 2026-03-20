@@ -57,7 +57,7 @@ export class FFprobeWorkerPool {
 
   constructor() {
     // Default to CPU cores - 1, minimum 1, maximum 8
-    this.maxWorkers = Math.min(8, Math.max(1, os.cpus().length - 1))
+    this.maxWorkers = Math.min(4, Math.max(1, os.cpus().length - 1))
 
     // Determine worker script path based on environment
     if (app.isPackaged) {

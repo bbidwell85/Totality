@@ -210,8 +210,8 @@ export const WishlistItemCard = memo(function WishlistItemCard({
                 onClick={handleRemove}
                 className={`p-1.5 rounded-md transition-colors ${
                   showConfirmDelete
-                    ? 'bg-destructive text-destructive-foreground'
-                    : 'hover:bg-destructive/10 text-muted-foreground hover:text-destructive'
+                    ? 'text-destructive'
+                    : 'text-muted-foreground hover:text-destructive'
                 }`}
                 title={showConfirmDelete ? 'Click again to confirm' : 'Remove from wishlist'}
               >
@@ -237,7 +237,7 @@ export const WishlistItemCard = memo(function WishlistItemCard({
               />
               <button
                 onClick={() => onMarkCompleted(item.id)}
-                className="p-1.5 rounded-md hover:bg-green-500/20 transition-colors text-muted-foreground hover:text-green-500"
+                className="p-1.5 rounded-md transition-colors text-muted-foreground hover:text-green-500"
                 title="Mark as completed"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -246,8 +246,8 @@ export const WishlistItemCard = memo(function WishlistItemCard({
                 onClick={handleRemove}
                 className={`p-1.5 rounded-md transition-colors ${
                   showConfirmDelete
-                    ? 'bg-destructive text-destructive-foreground'
-                    : 'hover:bg-destructive/10 text-muted-foreground hover:text-destructive'
+                    ? 'text-destructive'
+                    : 'text-muted-foreground hover:text-destructive'
                 }`}
                 title={showConfirmDelete ? 'Click again to confirm' : 'Remove from wishlist'}
               >

@@ -108,6 +108,7 @@ export function registerGeminiHandlers() {
   ipcMain.handle('ai:chatMessage', async (event, params: unknown) => {
     try {
       const validated = validateInput(AiChatMessageSchema, params, 'ai:chatMessage')
+      console.log('[IPC ai:chatMessage] Chat message received, history length:', validated.messages.length)
       const win = BrowserWindow.fromWebContents(event.sender)
       const actionableItems: ActionableItem[] = []
 
@@ -172,6 +173,7 @@ export function registerGeminiHandlers() {
       console.error('Error in ai:chatMessage:', error)
       const formatted = formatError(error)
       if (formatted.rateLimited) {
+        console.log('[IPC ai:chatMessage] Rate limited, retry after', formatted.retryAfterSeconds, 'seconds')
         return formatted
       }
       throw formatted
@@ -191,6 +193,7 @@ export function registerGeminiHandlers() {
       )
       const win = BrowserWindow.fromWebContents(event.sender)
 
+      console.log('[IPC ai:qualityReport] Generating quality report')
       const result = await getGeminiAnalysisService().generateQualityReport(
         (delta) => {
           win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
@@ -214,6 +217,7 @@ export function registerGeminiHandlers() {
       )
       const win = BrowserWindow.fromWebContents(event.sender)
 
+      console.log('[IPC ai:upgradePriorities] Generating upgrade priorities report')
       const result = await getGeminiAnalysisService().generateUpgradePriorities(
         (delta) => {
           win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
@@ -237,6 +241,7 @@ export function registerGeminiHandlers() {
       )
       const win = BrowserWindow.fromWebContents(event.sender)
 
+      console.log('[IPC ai:completenessInsights] Generating completeness report')
       const result = await getGeminiAnalysisService().generateCompletenessInsights(
         (delta) => {
           win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
@@ -260,6 +265,7 @@ export function registerGeminiHandlers() {
       )
       const win = BrowserWindow.fromWebContents(event.sender)
 
+      console.log('[IPC ai:wishlistAdvice] Generating wishlist advice report')
       const result = await getGeminiAnalysisService().generateWishlistAdvice(
         (delta) => {
           win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })

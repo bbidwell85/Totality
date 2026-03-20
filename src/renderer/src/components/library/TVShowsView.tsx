@@ -377,6 +377,34 @@ export function TVShowsView({
     }
   }
 
+  // Show detail view menu
+  const [showDetailMenu, setShowDetailMenu] = useState(false)
+  const showDetailMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!showDetailMenu) return
+    const handleClick = (e: MouseEvent) => {
+      if (showDetailMenuRef.current && !showDetailMenuRef.current.contains(e.target as Node)) {
+        setShowDetailMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showDetailMenu])
+
+  // Fetch show summary from TMDB when a show is selected
+  const [showOverview, setShowOverview] = useState<string | null>(null)
+  useEffect(() => {
+    setShowOverview(null)
+    if (selectedShow && !selectedSeason) {
+      const completenessData = seriesCompleteness.get(selectedShow)
+      if (completenessData?.tmdb_id) {
+        window.electronAPI.tmdbGetTVShowDetails(completenessData.tmdb_id)
+          .then(details => { if (details?.overview) setShowOverview(details.overview) })
+          .catch(() => { /* ignore */ })
+      }
+    }
+  }, [selectedShow, selectedSeason, seriesCompleteness])
+
   // IntersectionObserver for infinite scroll
   const showSentinelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -533,7 +561,7 @@ export function TVShowsView({
           Back to TV Shows
         </button>
 
-        <div className="flex items-start gap-4 mb-6">
+        <div className="flex gap-4 mb-6 h-48">
           {selectedShowData.poster_url && (
             <div className="w-32 aspect-[2/3] bg-muted rounded-lg overflow-hidden flex-shrink-0 shadow-lg shadow-black/30">
               <img
@@ -547,28 +575,62 @@ export function TVShowsView({
               />
             </div>
           )}
-          <div>
-            <h3 className="text-2xl font-bold mb-1">{selectedShowData.title}</h3>
-            {completenessData?.status && (
-              <div className="mb-2">
-                <span className="inline-block px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
-                  {getStatusBadge(completenessData.status)?.text || completenessData.status}
-                </span>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="flex items-start gap-4 h-full">
+              {/* Title & Stats */}
+              <div className="flex-shrink-0">
+                <h3 className="text-2xl font-bold mb-1">{selectedShowData.title}</h3>
+                {completenessData?.status && (
+                  <div className="mb-1">
+                    <span className="inline-block px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
+                      {getStatusBadge(completenessData.status)?.text || completenessData.status}
+                    </span>
+                  </div>
+                )}
+                <p className="text-muted-foreground text-sm">
+                  {ownedSeasons.length} of {totalSeasons} Seasons
+                </p>
               </div>
-            )}
-            <p className="text-muted-foreground">
-              {ownedSeasons.length} of {totalSeasons} Seasons
-              {missingSeasonNumbers.length > 0 && (
-                <span className="text-orange-500 ml-2">({missingSeasonNumbers.length} missing)</span>
+
+              {/* Overview — fills middle, scrolls within fixed header height */}
+              {showOverview && (
+                <div className="flex-1 min-w-0 self-stretch overflow-hidden">
+                  <p className="text-sm text-muted-foreground overflow-y-auto h-full leading-relaxed">
+                    {showOverview}
+                  </p>
+                </div>
               )}
-            </p>
-            <button
-              onClick={() => onAnalyzeSeries(selectedShow)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors mt-3"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Analyze Series
-            </button>
+
+              {/* 3-dot menu */}
+              <div ref={showDetailMenuRef} className="relative flex-shrink-0">
+                <button
+                  onClick={() => setShowDetailMenu(!showDetailMenu)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground"
+                >
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+                {showDetailMenu && (
+                  <div className="absolute top-8 right-0 bg-card border border-border rounded-xl shadow-lg py-1 min-w-[160px] z-50">
+                    <button
+                      onClick={() => { onAnalyzeSeries(selectedShow); setShowDetailMenu(false) }}
+                      className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Analyze Series
+                    </button>
+                    {onFixMatch && (
+                      <button
+                        onClick={() => { onFixMatch(selectedShow); setShowDetailMenu(false) }}
+                        className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Fix Match
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 

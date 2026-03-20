@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, X, Home, Film, Tv, Music, Library, Star, Settings, RefreshCw, Disc3, User, Bot } from 'lucide-react'
+import { Search, X, Home, Film, Tv, Music, Library, Star, Settings, RefreshCw, Disc3, User, Bot, ArrowBigLeft } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { ActivityPanel } from '../ui/ActivityPanel'
@@ -38,6 +38,8 @@ interface TopBarProps {
   hasMovies?: boolean
   hasTV?: boolean
   hasMusic?: boolean
+  onBack?: () => void
+  canGoBack?: boolean
 }
 
 export function TopBar({
@@ -55,7 +57,9 @@ export function TopBar({
   isAutoRefreshing = false,
   hasMovies = false,
   hasTV = false,
-  hasMusic = false
+  hasMusic = false,
+  onBack,
+  canGoBack = false,
 }: TopBarProps) {
   const { sources } = useSources()
   const { count: wishlistCount } = useWishlist()
@@ -500,6 +504,20 @@ export function TopBar({
               </div>
             )}
           </div>
+
+          {/* Back Button */}
+          <button
+            onClick={canGoBack && onBack ? onBack : undefined}
+            disabled={!canGoBack}
+            className={`p-1.5 rounded-md transition-colors flex-shrink-0 ${
+              canGoBack
+                ? 'text-foreground hover:bg-muted cursor-pointer'
+                : 'text-muted-foreground/30 cursor-default'
+            }`}
+            title="Go back"
+          >
+            <ArrowBigLeft className="w-5 h-5 fill-current" />
+          </button>
 
         </div>
 

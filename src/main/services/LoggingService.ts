@@ -38,7 +38,7 @@ export interface LogEntry {
   details?: string // Stringified additional args
 }
 
-const MAX_INFO_ENTRIES = 2000
+const MAX_INFO_ENTRIES = 500
 const MAX_IMPORTANT_ENTRIES = 500
 
 /** Function type for lazy database access — injected to avoid circular dependency */
@@ -89,12 +89,27 @@ class LoggingService {
     }
   }
 
-  /** Replace the user's home directory with ~ to avoid leaking OS username */
+  /** Sanitize sensitive data from log output */
   private sanitize(text: string): string {
-    if (!this.homeDir) return text
-    // Replace both forward-slash and backslash variants
-    const escaped = this.homeDir.replace(/[\\]/g, '\\\\')
-    return text.replace(new RegExp(escaped, 'gi'), '~').replace(new RegExp(this.homeDir.replace(/\\/g, '/'), 'gi'), '~')
+    let result = text
+
+    // Replace home directory with ~ to avoid leaking OS username
+    if (this.homeDir) {
+      const escaped = this.homeDir.replace(/[\\]/g, '\\\\')
+      result = result.replace(new RegExp(escaped, 'gi'), '~').replace(new RegExp(this.homeDir.replace(/\\/g, '/'), 'gi'), '~')
+    }
+
+    // Redact Plex tokens (X-Plex-Token=xxx or token query params)
+    result = result.replace(/X-Plex-Token=[^&\s"']+/gi, 'X-Plex-Token=***')
+    result = result.replace(/([?&]token=)[^&\s"']+/gi, '$1***')
+
+    // Redact encrypted values (ENC:base64...)
+    result = result.replace(/ENC:[A-Za-z0-9+/=]{8,}/g, 'ENC:***')
+
+    // Redact API key patterns (long alphanumeric strings following key/token/api identifiers)
+    result = result.replace(/(api[_-]?key|apikey|api_token|access_token|secret)[=:]\s*['"]?[A-Za-z0-9_-]{20,}/gi, '$1=***')
+
+    return result
   }
 
   initialize(): void {

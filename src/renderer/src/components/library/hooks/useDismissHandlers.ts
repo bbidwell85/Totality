@@ -6,8 +6,10 @@ import {
 import type {
   MediaItem,
   MissingEpisode,
+  MissingAlbum,
   SeriesCompletenessData,
   MovieCollectionData,
+  ArtistCompletenessData,
 } from '../types'
 
 interface MissingItemPopupState {
@@ -37,6 +39,7 @@ interface UseDismissHandlersOptions {
   selectedCollection: MovieCollectionData | null
   setSelectedCollection: Dispatch<SetStateAction<MovieCollectionData | null>>
   setMovieCollections: Dispatch<SetStateAction<MovieCollectionData[]>>
+  setArtistCompleteness: Dispatch<SetStateAction<Map<string, ArtistCompletenessData>>>
   selectedMissingItem: MissingItemPopupState | null
   setSelectedMissingItem: (item: MissingItemPopupState | null) => void
   addToast: (toast: ToastOptions) => void
@@ -47,6 +50,7 @@ interface UseDismissHandlersReturn {
   handleDismissMissingEpisode: (episode: MissingEpisode, seriesTitle: string, tmdbId?: string) => Promise<void>
   handleDismissMissingSeason: (seasonNumber: number, seriesTitle: string, tmdbId?: string) => Promise<void>
   handleDismissCollectionMovie: (tmdbId: string, movieTitle: string) => Promise<void>
+  handleDismissMissingAlbum: (album: MissingAlbum, artistName: string, artistMusicbrainzId?: string) => Promise<void>
   handleDismissMissingItem: () => void
 }
 
@@ -62,6 +66,7 @@ export function useDismissHandlers({
   selectedCollection,
   setSelectedCollection,
   setMovieCollections,
+  setArtistCompleteness,
   selectedMissingItem,
   setSelectedMissingItem,
   addToast,
@@ -72,7 +77,7 @@ export function useDismissHandlers({
       const title = item.series_title
         ? `${item.series_title} S${item.season_number}E${item.episode_number}`
         : item.title
-      await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, title)
+      const exclusionId = await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, title)
       setPaginatedMovies(prev => prev.map(m =>
         m.id === item.id ? { ...m, needs_upgrade: false, tier_quality: m.tier_quality === 'LOW' ? 'MEDIUM' : m.tier_quality } : m
       ))
@@ -80,7 +85,26 @@ export function useDismissHandlers({
         e.id === item.id ? { ...e, needs_upgrade: false, tier_quality: e.tier_quality === 'LOW' ? 'MEDIUM' : e.tier_quality } : e
       ))
       emitDismissUpgrade({ mediaId: item.id })
-      addToast({ type: 'success', title: 'Upgrade dismissed', message: `"${title}" removed from upgrade recommendations` })
+      addToast({
+        type: 'success',
+        title: 'Upgrade dismissed',
+        message: `"${title}" removed from upgrade recommendations`,
+        duration: 8000,
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            try {
+              await window.electronAPI.removeExclusion(exclusionId)
+              setPaginatedMovies(prev => prev.map(m =>
+                m.id === item.id ? { ...m, needs_upgrade: true } : m
+              ))
+              setSelectedShowEpisodes(prev => prev.map(e =>
+                e.id === item.id ? { ...e, needs_upgrade: true } : e
+              ))
+            } catch { /* ignore */ }
+          },
+        },
+      })
     } catch (err) {
       console.error('Failed to dismiss upgrade:', err)
     }
@@ -98,7 +122,15 @@ export function useDismissHandlers({
           try {
             const missing: MissingEpisode[] = JSON.parse(data.missing_episodes)
             const filtered = missing.filter(e => !(e.season_number === episode.season_number && e.episode_number === episode.episode_number))
-            next.set(seriesTitle, { ...data, missing_episodes: JSON.stringify(filtered) })
+            // Also update missing_seasons if no episodes remain for dismissed season
+            const remainingSeasonsWithMissing = new Set(filtered.map(e => e.season_number))
+            const missSeasons: number[] = JSON.parse(data.missing_seasons || '[]')
+            const filteredSeasons = missSeasons.filter(s => remainingSeasonsWithMissing.has(s))
+            next.set(seriesTitle, {
+              ...data,
+              missing_episodes: JSON.stringify(filtered),
+              missing_seasons: JSON.stringify(filteredSeasons),
+            })
           } catch { /* ignore */ }
         }
         return next
@@ -126,7 +158,15 @@ export function useDismissHandlers({
           try {
             const missing: MissingEpisode[] = JSON.parse(d.missing_episodes)
             const filtered = missing.filter(e => e.season_number !== seasonNumber)
-            next.set(seriesTitle, { ...d, missing_episodes: JSON.stringify(filtered) })
+            // Also remove the season from missing_seasons if no episodes remain for it
+            const remainingSeasonsWithMissing = new Set(filtered.map(e => e.season_number))
+            const missSeasons: number[] = JSON.parse(d.missing_seasons || '[]')
+            const filteredSeasons = missSeasons.filter(s => remainingSeasonsWithMissing.has(s))
+            next.set(seriesTitle, {
+              ...d,
+              missing_episodes: JSON.stringify(filtered),
+              missing_seasons: JSON.stringify(filteredSeasons),
+            })
           } catch { /* ignore */ }
         }
         return next
@@ -169,6 +209,32 @@ export function useDismissHandlers({
     }
   }, [selectedCollection, setSelectedCollection, setMovieCollections, addToast])
 
+  const handleDismissMissingAlbum = useCallback(async (album: MissingAlbum, artistName: string, artistMusicbrainzId?: string) => {
+    try {
+      await window.electronAPI.addExclusion('artist_album', undefined, album.musicbrainz_id, artistMusicbrainzId || artistName, album.title)
+      setArtistCompleteness(prev => {
+        const next = new Map(prev)
+        const data = next.get(artistName)
+        if (!data) return next
+        const removeFromJson = (json: string | undefined): string => {
+          try {
+            const parsed = JSON.parse(json || '[]') as Array<{ musicbrainz_id?: string }>
+            return JSON.stringify(parsed.filter(item => item.musicbrainz_id !== album.musicbrainz_id))
+          } catch { return json || '[]' }
+        }
+        const updated = { ...data }
+        if (album.album_type === 'album') updated.missing_albums = removeFromJson(data.missing_albums)
+        else if (album.album_type === 'ep') updated.missing_eps = removeFromJson(data.missing_eps)
+        else if (album.album_type === 'single') updated.missing_singles = removeFromJson(data.missing_singles)
+        next.set(artistName, updated)
+        return next
+      })
+      addToast({ type: 'success', title: 'Album dismissed', message: `"${album.title}" removed from recommendations` })
+    } catch (err) {
+      console.error('Failed to dismiss missing album:', err)
+    }
+  }, [setArtistCompleteness, addToast])
+
   const handleDismissMissingItem = useCallback(() => {
     if (!selectedMissingItem) return
     const item = selectedMissingItem
@@ -191,6 +257,7 @@ export function useDismissHandlers({
     handleDismissMissingEpisode,
     handleDismissMissingSeason,
     handleDismissCollectionMovie,
+    handleDismissMissingAlbum,
     handleDismissMissingItem,
   }
 }

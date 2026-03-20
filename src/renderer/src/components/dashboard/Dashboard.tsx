@@ -824,9 +824,19 @@ export function Dashboard({
                 key={idx}
                 className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors group/item"
               >
-                <span className="text-sm text-muted-foreground truncate flex-1">
-                  {movie.title} {movie.year ? `(${movie.year})` : ''}
-                </span>
+                {movie.tmdb_id ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(`https://www.themoviedb.org/movie/${movie.tmdb_id}`) }}
+                    className="text-sm text-muted-foreground truncate flex-1 text-left hover:text-primary hover:underline cursor-pointer transition-colors"
+                    title="Open on TMDB"
+                  >
+                    {movie.title} {movie.year ? `(${movie.year})` : ''}
+                  </button>
+                ) : (
+                  <span className="text-sm text-muted-foreground truncate flex-1">
+                    {movie.title} {movie.year ? `(${movie.year})` : ''}
+                  </span>
+                )}
                 <AddToWishlistButton
                   mediaType="movie"
                   title={movie.title}
@@ -910,9 +920,19 @@ export function Dashboard({
                 className="flex items-center justify-between py-1.5 rounded-md hover:bg-muted/30 transition-colors group/item"
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <span className="text-sm text-foreground/80 flex-shrink-0">
-                    S{group.seasonNumber}
-                  </span>
+                  {s.tmdb_id ? (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(`https://www.themoviedb.org/tv/${s.tmdb_id}/season/${group.seasonNumber}`) }}
+                      className="text-sm text-foreground/80 flex-shrink-0 hover:text-primary hover:underline cursor-pointer transition-colors"
+                      title="Open on TMDB"
+                    >
+                      S{group.seasonNumber}
+                    </button>
+                  ) : (
+                    <span className="text-sm text-foreground/80 flex-shrink-0">
+                      S{group.seasonNumber}
+                    </span>
+                  )}
                   {group.isWholeSeason ? (
                     <span className="text-xs text-muted-foreground">
                       All {group.totalEpisodes} episodes
@@ -1025,20 +1045,44 @@ export function Dashboard({
                   {group.label}
                 </div>
                 <div className="space-y-1">
-                  {group.items.map((item, idx) => (
+                  {group.items.map((item, idx) => {
+                    const coverUrl = item.musicbrainz_id
+                      ? `https://coverartarchive.org/release-group/${item.musicbrainz_id}/front-250`
+                      : null
+                    return (
                     <div
                       key={item.musicbrainz_id || `${group.prefix}-${idx}`}
                       className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors group/item"
                     >
-                      <span className="text-sm text-muted-foreground truncate flex-1">
-                        {item.title} {item.year ? `(${item.year})` : ''}
-                      </span>
+                      <div className="w-8 h-8 bg-muted rounded overflow-hidden flex-shrink-0">
+                        {coverUrl ? (
+                          <img src={coverUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Music className="w-4 h-4 text-muted-foreground/50" />
+                          </div>
+                        )}
+                      </div>
+                      {item.musicbrainz_id ? (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(`https://musicbrainz.org/release-group/${item.musicbrainz_id}`) }}
+                          className="text-sm text-muted-foreground truncate flex-1 text-left hover:text-primary hover:underline cursor-pointer transition-colors"
+                          title="Open on MusicBrainz"
+                        >
+                          {item.title} {item.year ? `(${item.year})` : ''}
+                        </button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground truncate flex-1">
+                          {item.title} {item.year ? `(${item.year})` : ''}
+                        </span>
+                      )}
                       <AddToWishlistButton
                         mediaType="album"
                         title={item.title}
                         year={item.year}
                         artistName={artist.artist_name}
                         musicbrainzId={item.musicbrainz_id}
+                        posterUrl={coverUrl || undefined}
                         reason="missing"
                         compact
                       />
@@ -1050,7 +1094,8 @@ export function Dashboard({
                         <EyeOff className="w-3 h-3" />
                       </button>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             ))}

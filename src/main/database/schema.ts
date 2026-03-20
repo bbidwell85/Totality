@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS media_items (
   poster_url TEXT,
   episode_thumb_url TEXT,
   season_poster_url TEXT,
+  summary TEXT,
 
   -- Timestamps
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

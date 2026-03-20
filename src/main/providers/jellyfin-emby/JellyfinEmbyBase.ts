@@ -713,7 +713,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
             ParentId: libraryId,
             Recursive: true,
             IncludeItemTypes: 'Movie,Episode',
-            Fields: 'Path,MediaSources,ProviderIds',
+            Fields: 'Path,MediaSources,ProviderIds,Overview',
             StartIndex: offset,
             Limit: limit,
           },
@@ -738,7 +738,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         {
           headers: this.getAuthHeaders(),
           params: {
-            Fields: 'Path,MediaSources,ProviderIds',
+            Fields: 'Path,MediaSources,ProviderIds,Overview',
           },
         }
       )
@@ -785,7 +785,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         console.log(`[${this.providerType}Provider ${this.sourceId}] Incremental scan: fetching items modified after ${sinceTimestamp!.toISOString()}`)
       }
 
-      const fieldsParam = 'Path,MediaSources,ProviderIds,DateCreated,PremiereDate,ParentId,SeriesId,SeasonId,ImageTags,SeriesPrimaryImageTag,ParentPrimaryImageItemId,ParentPrimaryImageTag,ParentThumbItemId,ParentThumbImageTag,ParentBackdropItemId,ParentBackdropImageTags,SortName'
+      const fieldsParam = 'Path,MediaSources,ProviderIds,DateCreated,PremiereDate,ParentId,SeriesId,SeasonId,ImageTags,SeriesPrimaryImageTag,ParentPrimaryImageItemId,ParentPrimaryImageTag,ParentThumbItemId,ParentThumbImageTag,ParentBackdropItemId,ParentBackdropImageTags,SortName,Overview'
 
       if (isBoxsets) {
         // Two-phase scan for BoxSets/Collections libraries
@@ -1584,6 +1584,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         poster_url: posterUrl,
         episode_thumb_url: episodeThumbUrl,
         season_poster_url: seasonPosterUrl,
+        summary: item.Overview || undefined,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },

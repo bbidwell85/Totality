@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { ipcMain, BrowserWindow, dialog, shell } from 'electron'
+import * as path from 'path'
 import { z } from 'zod'
 import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
@@ -182,10 +183,13 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  const sensitiveSettingKeys = new Set(['plex_token', 'tmdb_api_key', 'musicbrainz_api_token', 'gemini_api_key'])
+
   ipcMain.handle('db:setSetting', async (event, key: unknown, value: unknown) => {
     try {
       const validKey = validateInput(SettingKeySchema, key, 'db:setSetting')
       const validValue = validateInput(SettingValueSchema, value, 'db:setSetting')
+      console.log('[IPC db:setSetting]', validKey, sensitiveSettingKeys.has(validKey) ? '(redacted)' : validValue)
       await db.setSetting(validKey, validValue)
 
       // Invalidate quality analyzer cache when quality settings change
@@ -395,6 +399,18 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  ipcMain.handle('db:openFolder', async () => {
+    try {
+      const dbPath = db.getDbPath()
+      const folder = path.dirname(dbPath)
+      await shell.openPath(folder)
+      return { success: true }
+    } catch (error) {
+      console.error('Error opening database folder:', error)
+      return { success: false }
+    }
+  })
+
   /**
    * Export database to JSON file
    */
@@ -544,6 +560,7 @@ export function registerDatabaseHandlers() {
   ipcMain.handle('db:addExclusion', async (_event, exclusionType: unknown, referenceId?: unknown, referenceKey?: unknown, parentKey?: unknown, title?: unknown) => {
     try {
       const validArgs = validateInput(AddExclusionSchema, { exclusionType, referenceId, referenceKey, parentKey, title }, 'db:addExclusion')
+      console.log('[IPC db:addExclusion]', validArgs.exclusionType, validArgs.title || validArgs.referenceKey || '')
       return db.addExclusion(validArgs.exclusionType, validArgs.referenceId, validArgs.referenceKey, validArgs.parentKey, validArgs.title)
     } catch (error) {
       console.error('Error adding exclusion:', error)
@@ -554,6 +571,7 @@ export function registerDatabaseHandlers() {
   ipcMain.handle('db:removeExclusion', async (_event, id: unknown) => {
     try {
       const validId = validateInput(PositiveIntSchema, id, 'db:removeExclusion')
+      console.log('[IPC db:removeExclusion] id:', validId)
       db.removeExclusion(validId)
     } catch (error) {
       console.error('Error removing exclusion:', error)
