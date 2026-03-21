@@ -289,7 +289,7 @@ export function JellyfinAuthFlow({ onSuccess, onBack, isEmby = false }: Jellyfin
       <div className="space-y-4">
         {selectedServer && (
           <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-            <div className={`w-10 h-10 ${serverIconColor} rounded-lg flex items-center justify-center text-white flex-shrink-0`}>
+            <div className={`w-10 h-10 ${serverIconColor} rounded-lg flex items-center justify-center text-white shrink-0`}>
               <Server className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
@@ -307,7 +307,7 @@ export function JellyfinAuthFlow({ onSuccess, onBack, isEmby = false }: Jellyfin
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder={selectedServer?.name || `My ${providerName}`}
-            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary text-sm"
+            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-1 focus:ring-primary text-sm"
           />
         </label>
 
@@ -320,7 +320,7 @@ export function JellyfinAuthFlow({ onSuccess, onBack, isEmby = false }: Jellyfin
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="Enter your API key"
-              className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary text-sm"
+              className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-1 focus:ring-primary text-sm"
             />
           </label>
           <p className="text-xs text-muted-foreground">
@@ -366,7 +366,7 @@ export function JellyfinAuthFlow({ onSuccess, onBack, isEmby = false }: Jellyfin
                 onClick={() => handleSelectServer(server.address, server.name)}
                 className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary hover:bg-muted/50 transition-colors text-left"
               >
-                <div className={`w-10 h-10 ${serverIconColor} rounded-lg flex items-center justify-center text-white flex-shrink-0`}>
+                <div className={`w-10 h-10 ${serverIconColor} rounded-lg flex items-center justify-center text-white shrink-0`}>
                   <Server className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -407,7 +407,7 @@ export function JellyfinAuthFlow({ onSuccess, onBack, isEmby = false }: Jellyfin
             value={manualUrl}
             onChange={(e) => setManualUrl(e.target.value)}
             placeholder="http://192.168.1.100:8096"
-            className="flex-1 px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary text-sm"
+            className="flex-1 px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-1 focus:ring-primary text-sm"
             onKeyDown={(e) => e.key === 'Enter' && handleTestManualUrl()}
           />
           <button

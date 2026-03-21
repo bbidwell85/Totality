@@ -247,7 +247,7 @@ export function TopBar({
   return (
     <header
       id="top-bar"
-      className="dark fixed top-4 left-4 right-4 z-[100] bg-black rounded-2xl shadow-xl px-4 py-3"
+      className="dark fixed top-4 left-4 right-4 z-100 bg-black rounded-2xl shadow-xl px-4 py-3"
       role="banner"
       aria-label="Main navigation"
     >
@@ -255,10 +255,10 @@ export function TopBar({
         {/* Left Section: Logo + Search */}
         <div className="flex items-center gap-4 flex-1 min-w-0">
           {/* Logo */}
-          <img src={logoImage} alt="Totality" className="h-10 flex-shrink-0" />
+          <img src={logoImage} alt="Totality" className="h-10 shrink-0" />
 
           {/* Search */}
-          <div ref={searchContainerRef} className="relative flex-shrink min-w-24 max-w-80 w-64">
+          <div ref={searchContainerRef} className="relative shrink min-w-24 max-w-80 w-64">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
             <input
               ref={searchInputRef}
@@ -268,7 +268,7 @@ export function TopBar({
               onChange={(e) => handleSearchInputChange(e.target.value)}
               onFocus={() => setShowSearchResults(true)}
               onKeyDown={handleSearchKeyDown}
-              className="w-full pl-10 pr-8 py-2 bg-input border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full pl-10 pr-8 py-2 bg-input border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
               aria-label="Search all libraries"
             />
             {searchInput && (
@@ -287,7 +287,7 @@ export function TopBar({
 
             {/* Search Results Dropdown */}
             {showSearchResults && searchInput.length >= 2 && (
-              <div className={`${getActiveTheme()} absolute top-full left-0 right-0 mt-2 bg-popover border border-border rounded-lg shadow-2xl overflow-hidden z-[9999] max-h-[400px] overflow-y-auto`}>
+              <div className={`${getActiveTheme()} absolute top-full left-0 right-0 mt-2 bg-popover border border-border rounded-lg shadow-2xl overflow-hidden z-9999 max-h-[400px] overflow-y-auto`}>
                 {isSearching && (
                   <div className="px-3 py-4 text-sm text-muted-foreground text-center">Searching...</div>
                 )}
@@ -315,7 +315,7 @@ export function TopBar({
                                 searchResultIndex === flatIndex ? 'bg-primary/20' : 'hover:bg-muted/50'
                               }`}
                             >
-                              <div className="w-8 h-12 bg-muted rounded overflow-hidden flex-shrink-0">
+                              <div className="w-8 h-12 bg-muted rounded overflow-hidden shrink-0">
                                 {movie.poster_url ? (
                                   <img src={movie.poster_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
@@ -351,7 +351,7 @@ export function TopBar({
                                 searchResultIndex === flatIndex ? 'bg-primary/20' : 'hover:bg-muted/50'
                               }`}
                             >
-                              <div className="w-8 h-12 bg-muted rounded overflow-hidden flex-shrink-0">
+                              <div className="w-8 h-12 bg-muted rounded overflow-hidden shrink-0">
                                 {show.poster_url ? (
                                   <img src={show.poster_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
@@ -384,7 +384,7 @@ export function TopBar({
                                 searchResultIndex === flatIndex ? 'bg-primary/20' : 'hover:bg-muted/50'
                               }`}
                             >
-                              <div className="w-8 h-12 bg-muted rounded overflow-hidden flex-shrink-0">
+                              <div className="w-8 h-12 bg-muted rounded overflow-hidden shrink-0">
                                 {episode.poster_url ? (
                                   <img src={episode.poster_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
@@ -422,7 +422,7 @@ export function TopBar({
                                 searchResultIndex === flatIndex ? 'bg-primary/20' : 'hover:bg-muted/50'
                               }`}
                             >
-                              <div className="w-10 h-10 bg-muted rounded-full overflow-hidden flex-shrink-0">
+                              <div className="w-10 h-10 bg-muted rounded-full overflow-hidden shrink-0">
                                 {artist.thumb_url ? (
                                   <img src={artist.thumb_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
@@ -455,7 +455,7 @@ export function TopBar({
                                 searchResultIndex === flatIndex ? 'bg-primary/20' : 'hover:bg-muted/50'
                               }`}
                             >
-                              <div className="w-10 h-10 bg-muted rounded overflow-hidden flex-shrink-0">
+                              <div className="w-10 h-10 bg-muted rounded overflow-hidden shrink-0">
                                 {album.thumb_url ? (
                                   <img src={album.thumb_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
@@ -493,7 +493,7 @@ export function TopBar({
                                 searchResultIndex === flatIndex ? 'bg-primary/20' : 'hover:bg-muted/50'
                               }`}
                             >
-                              <div className="w-10 h-10 bg-muted rounded overflow-hidden flex-shrink-0">
+                              <div className="w-10 h-10 bg-muted rounded overflow-hidden shrink-0">
                                 {track.album_thumb_url ? (
                                   <img src={track.album_thumb_url} alt="" className="w-full h-full object-cover" />
                                 ) : (
@@ -523,7 +523,7 @@ export function TopBar({
           <button
             onClick={canGoBack && onBack ? onBack : undefined}
             disabled={!canGoBack}
-            className={`p-1.5 rounded-md transition-colors flex-shrink-0 ${
+            className={`p-1.5 rounded-md transition-colors shrink-0 ${
               canGoBack
                 ? 'text-foreground hover:bg-muted cursor-pointer'
                 : 'text-muted-foreground/30 cursor-default'
@@ -537,12 +537,12 @@ export function TopBar({
 
         {/* Library Buttons - Centered */}
         {!showEmptyState && (
-          <div className="flex-shrink-0" role="tablist" aria-label="Navigation">
+          <div className="shrink-0" role="tablist" aria-label="Navigation">
             <div className="flex gap-1">
               {/* Home Button */}
               <button
                 onClick={onNavigateHome}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                   isDashboard
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-card text-muted-foreground hover:bg-muted'
@@ -563,7 +563,7 @@ export function TopBar({
               {hasMovies && (
                 <button
                   onClick={() => onNavigateToLibrary('movies')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                     !isDashboard && libraryTab === 'movies'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-card text-muted-foreground hover:bg-muted'
@@ -580,7 +580,7 @@ export function TopBar({
               {hasTV && (
                 <button
                   onClick={() => onNavigateToLibrary('tv')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                     !isDashboard && libraryTab === 'tv'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-card text-muted-foreground hover:bg-muted'
@@ -597,7 +597,7 @@ export function TopBar({
               {hasMusic && (
                 <button
                   onClick={() => onNavigateToLibrary('music')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                     !isDashboard && libraryTab === 'music'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-card text-muted-foreground hover:bg-muted'

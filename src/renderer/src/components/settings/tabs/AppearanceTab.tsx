@@ -259,7 +259,7 @@ function ThemePreview({ colors }: { colors: ThemeConfig['darkColors'] }) {
             {[...Array(3)].map((_, i) => (
               <div
                 key={i}
-                className="aspect-[2/3] rounded-sm"
+                className="aspect-2/3 rounded-sm"
                 style={{ backgroundColor: colors.card }}
               />
             ))}

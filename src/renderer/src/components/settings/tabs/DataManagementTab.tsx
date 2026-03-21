@@ -35,7 +35,7 @@ function Toggle({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
         disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
       } ${checked ? 'bg-primary' : 'bg-muted'}`}
     >
@@ -182,7 +182,7 @@ export function DataManagementTab() {
         <div className="bg-muted/30 rounded-lg border border-border/40">
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-3 min-w-0">
-              <Database className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              <Database className="w-5 h-5 text-muted-foreground shrink-0" />
               <div className="min-w-0">
                 <span className="text-sm text-foreground">Database Location</span>
                 <p className="text-xs text-muted-foreground truncate">{dbPath}</p>
@@ -290,7 +290,7 @@ export function DataManagementTab() {
           {showResetConfirm ? (
             <div className="p-4 space-y-4">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-foreground">
                     Are you sure you want to reset the database?

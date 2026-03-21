@@ -50,7 +50,7 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
     <div
       ref={cardRef}
       tabIndex={0}
-      className="group cursor-pointer rounded-md bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-none"
+      className="group cursor-pointer rounded-md bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -60,7 +60,7 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
       }}
     >
       {/* Poster Thumbnail */}
-      <div className="w-16 h-24 bg-muted rounded-md overflow-hidden flex-shrink-0 relative shadow-md shadow-black/20">
+      <div className="w-16 h-24 bg-muted rounded-md overflow-hidden shrink-0 relative shadow-md shadow-black/20">
         {show.poster_url ? (
           <img
             src={show.poster_url}
@@ -101,7 +101,7 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
       </div>
 
       {/* 3-dot menu */}
-      <div ref={menuRef} className="relative flex-shrink-0">
+      <div ref={menuRef} className="relative shrink-0">
         <button
           onClick={(e) => {
             e.stopPropagation()
@@ -182,7 +182,7 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
     <div
       ref={cardRef}
       tabIndex={0}
-      className="group flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-none"
+      className="group flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -192,7 +192,7 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
       }}
     >
       {/* Episode Thumbnail - 16:9 aspect ratio with shadow */}
-      <div className="w-44 aspect-video bg-muted overflow-hidden rounded-md shadow-md shadow-black/20 flex-shrink-0">
+      <div className="w-44 aspect-video bg-muted overflow-hidden rounded-md shadow-md shadow-black/20 shrink-0">
         {episode.episode_thumb_url ? (
           <img
             src={episode.episode_thumb_url}
@@ -211,7 +211,7 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-muted-foreground flex-shrink-0">
+          <span className="text-sm font-semibold text-muted-foreground shrink-0">
             E{episode.episode_number}
           </span>
           <h4 className="font-semibold truncate">{episode.title}</h4>
@@ -221,7 +221,7 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
           {needsUpgrade && (
             <>
               <span>•</span>
-              <span title="Quality upgrade recommended"><CircleFadingArrowUp className="w-4 h-4 text-red-500 flex-shrink-0" /></span>
+              <span title="Quality upgrade recommended"><CircleFadingArrowUp className="w-4 h-4 text-red-500 shrink-0" /></span>
             </>
           )}
         </div>
@@ -229,7 +229,7 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
 
       {/* 3-dot menu */}
       {showMenuButton && (
-        <div ref={menuRef} className="relative flex-shrink-0">
+        <div ref={menuRef} className="relative shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -534,7 +534,7 @@ export function TVShowsView({
         <div className="flex gap-6 mb-6">
           {/* Poster */}
           {selectedShowData.poster_url && (
-            <div className="w-44 aspect-[2/3] bg-muted rounded-lg overflow-hidden flex-shrink-0 shadow-lg shadow-black/30">
+            <div className="w-44 aspect-2/3 bg-muted rounded-lg overflow-hidden shrink-0 shadow-lg shadow-black/30">
               <img
                 src={selectedShowData.poster_url}
                 alt={selectedShowData.title}
@@ -559,7 +559,7 @@ export function TVShowsView({
                   setCopiedTitle(true)
                   setTimeout(() => setCopiedTitle(false), 1500)
                 }}
-                className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
                 title="Copy title"
               >
                 {copiedTitle ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
@@ -781,7 +781,7 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
     <div
       ref={cardRef}
       tabIndex={0}
-      className="focus-poster-only cursor-pointer hover-scale relative group outline-none"
+      className="focus-poster-only cursor-pointer hover-scale relative group outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -790,7 +790,7 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
         }
       }}
     >
-      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
+      <div className="aspect-2/3 bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {/* 3-dot menu button */}
         <div ref={menuRef} className="absolute top-2 left-2 z-20">
           <button
@@ -865,7 +865,7 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
         </div>
         {completenessData && (
           <div
-            className="flex-shrink-0"
+            className="shrink-0"
             title={`${completenessData.owned_episodes} of ${completenessData.total_episodes} episodes`}
           >
             {completenessData.completeness_percentage === 100 ? (
@@ -977,7 +977,7 @@ const MissingEpisodeRowWithArtwork = memo(({
     <div
       ref={cardRef}
       tabIndex={0}
-      className="group flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-none"
+      className="group flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -987,7 +987,7 @@ const MissingEpisodeRowWithArtwork = memo(({
       }}
     >
       {/* Missing Episode Thumbnail - 16:9 aspect ratio with shadow */}
-      <div className="w-44 aspect-video bg-muted flex-shrink-0 overflow-hidden rounded-md shadow-md shadow-black/20">
+      <div className="w-44 aspect-video bg-muted shrink-0 overflow-hidden rounded-md shadow-md shadow-black/20">
         {stillUrl ? (
           <img
             src={stillUrl}
@@ -1008,7 +1008,7 @@ const MissingEpisodeRowWithArtwork = memo(({
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-muted-foreground flex-shrink-0">
+          <span className="text-sm font-semibold text-muted-foreground shrink-0">
             E{episode.episode_number}
           </span>
           <h4 className="font-semibold truncate text-muted-foreground">
@@ -1024,7 +1024,7 @@ const MissingEpisodeRowWithArtwork = memo(({
 
       {/* 3-dot menu */}
       {onDismiss && (
-        <div ref={menuRef} className="relative flex-shrink-0">
+        <div ref={menuRef} className="relative shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -1059,7 +1059,7 @@ const SeasonCard = memo(({ season, showTitle, onClick }: { season: SeasonInfo; s
     <div
       ref={cardRef}
       tabIndex={0}
-      className="focus-poster-only group cursor-pointer hover-scale outline-none"
+      className="focus-poster-only group cursor-pointer hover-scale outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -1068,7 +1068,7 @@ const SeasonCard = memo(({ season, showTitle, onClick }: { season: SeasonInfo; s
         }
       }}
     >
-      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
+      <div className="aspect-2/3 bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {season.posterUrl ? (
           <img
             src={season.posterUrl}

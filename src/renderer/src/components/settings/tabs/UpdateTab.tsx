@@ -41,7 +41,7 @@ function Toggle({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
         disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
       } ${checked ? 'bg-primary' : 'bg-muted'}`}
     >
@@ -121,7 +121,7 @@ export function UpdateTab() {
       {/* Current Version + Update Status */}
       <div className="bg-muted/30 rounded-lg border border-border/40 p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <ArrowUpCircle className="w-7 h-7 text-primary flex-shrink-0" />
+          <ArrowUpCircle className="w-7 h-7 text-primary shrink-0" />
           <div className="flex-1">
             <h3 className="text-sm font-medium text-foreground">Totality v{appVersion}</h3>
             {(status === 'idle' || status === 'not-available') && lastChecked && (

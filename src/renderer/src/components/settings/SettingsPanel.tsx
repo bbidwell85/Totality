@@ -129,7 +129,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]"
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -157,7 +157,7 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
               <button
                 ref={closeButtonRef}
                 onClick={onClose}
-                className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+                className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary"
                 aria-label="Close settings"
               >
                 <X className="w-4 h-4" aria-hidden="true" />
@@ -176,13 +176,13 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
                   tabIndex={isActive ? 0 : -1}
                   onClick={() => setActiveTab(tab.id)}
                   onKeyDown={(e) => handleTabKeyDown(e, index)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left focus:outline-none focus:ring-2 focus:ring-primary ${
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left focus:outline-hidden focus:ring-2 focus:ring-primary ${
                     isActive
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   }`}
                 >
-                  <Icon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                  <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
                   {tab.label}
                 </button>
               )

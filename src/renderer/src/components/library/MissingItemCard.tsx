@@ -39,7 +39,7 @@ export const MissingItemCard = memo(function MissingItemCard({
     <div
       ref={cardRef}
       tabIndex={0}
-      className="group cursor-pointer hover-scale outline-none"
+      className="group cursor-pointer hover-scale outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -48,7 +48,7 @@ export const MissingItemCard = memo(function MissingItemCard({
         }
       }}
     >
-      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
+      <div className="aspect-2/3 bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {/* Grayscale poster or placeholder */}
         {posterUrl ? (
           <img
@@ -76,7 +76,7 @@ export const MissingItemCard = memo(function MissingItemCard({
           )}
         </div>
         {/* Action buttons */}
-        <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           {onDismiss && (
             <button
               onClick={onDismiss}

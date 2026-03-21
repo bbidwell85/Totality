@@ -35,7 +35,7 @@ export function ChatMessage({ message, activeTools }: ChatMessageProps) {
     <div className={`flex gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
       {/* Avatar */}
       <div
-        className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
+        className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
           isUser ? 'bg-primary/20 text-primary' : 'bg-accent/20 text-accent-foreground'
         }`}
       >
@@ -68,7 +68,7 @@ export function ChatMessage({ message, activeTools }: ChatMessageProps) {
               )}
             </div>
           ) : (
-            <div className="prose prose-sm prose-invert max-w-none break-words whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+            <div className="prose prose-sm prose-invert max-w-none wrap-break-word whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
               <SimpleMarkdown text={message.content} />
             </div>
           )}
@@ -165,7 +165,7 @@ function SimpleMarkdown({ text }: { text: string }) {
       const content = listMatch[3]
       elements.push(
         <div key={`li-${i}`} className="flex gap-1.5 ml-2">
-          <span className="text-muted-foreground flex-shrink-0">•</span>
+          <span className="text-muted-foreground shrink-0">•</span>
           <span><InlineMarkdown text={content} /></span>
         </div>,
       )
@@ -293,7 +293,7 @@ function ChatWishlistButton({ item }: { item: ActionableItem }) {
           : 'text-muted-foreground hover:text-foreground'
       }`}
     >
-      <Star className={`w-3 h-3 flex-shrink-0 ${inWishlist ? 'fill-amber-400 text-amber-400' : ''}`} />
+      <Star className={`w-3 h-3 shrink-0 ${inWishlist ? 'fill-amber-400 text-amber-400' : ''}`} />
       <span className="text-left">{item.title}{item.year ? ` (${item.year})` : ''}</span>
     </button>
   )

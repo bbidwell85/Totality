@@ -1430,7 +1430,7 @@ export function MediaBrowser({
       {!hideHeader && (
       <header
         id="top-bar"
-        className="dark fixed top-4 left-4 right-4 z-[100] bg-black rounded-2xl shadow-xl px-4 py-3"
+        className="dark fixed top-4 left-4 right-4 z-100 bg-black rounded-2xl shadow-xl px-4 py-3"
         role="banner"
         aria-label="Main navigation"
       >
@@ -1438,10 +1438,10 @@ export function MediaBrowser({
           {/* Left Section: Logo + Search */}
           <div className="flex items-center gap-4 flex-1 min-w-0">
             {/* Logo - Left */}
-            <img src={logoImage} alt="Totality" className="h-10 flex-shrink-0" />
+            <img src={logoImage} alt="Totality" className="h-10 shrink-0" />
 
           {/* Search - Flexible width with min/max constraints */}
-          <div ref={searchContainerRef} className="relative flex-shrink min-w-24 max-w-80 w-64" role="combobox" aria-expanded={showSearchResults && hasSearchResults} aria-haspopup="listbox" aria-owns="search-results-listbox">
+          <div ref={searchContainerRef} className="relative shrink min-w-24 max-w-80 w-64" role="combobox" aria-expanded={showSearchResults && hasSearchResults} aria-haspopup="listbox" aria-owns="search-results-listbox">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" aria-hidden="true" />
             <input
               ref={searchInputRef}
@@ -1454,7 +1454,7 @@ export function MediaBrowser({
               }}
               onFocus={() => setShowSearchResults(true)}
               onKeyDown={handleSearchKeyDown}
-              className="w-full pl-10 pr-8 py-2 bg-muted/50 border border-border/50 rounded-lg text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full pl-10 pr-8 py-2 bg-muted/50 border border-border/50 rounded-lg text-sm placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
               aria-label="Search all libraries"
               aria-autocomplete="list"
               aria-controls="search-results-listbox"
@@ -1467,7 +1467,7 @@ export function MediaBrowser({
                   setShowSearchResults(false)
                   setSearchResultIndex(-1)
                 }}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground z-10 focus:outline-none focus:ring-2 focus:ring-primary rounded"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground z-10 focus:outline-hidden focus:ring-2 focus:ring-primary rounded"
                 aria-label="Clear search"
               >
                 <X className="w-4 h-4" />
@@ -1480,7 +1480,7 @@ export function MediaBrowser({
                 id="search-results-listbox"
                 role="listbox"
                 aria-label="Search results"
-                className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-2xl overflow-hidden z-[9999] max-h-[400px] overflow-y-auto"
+                className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-2xl overflow-hidden z-9999 max-h-[400px] overflow-y-auto"
               >
                 {/* Movies */}
                 {globalSearchResults.movies.length > 0 && (
@@ -1498,7 +1498,7 @@ export function MediaBrowser({
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('movie', movie.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-none ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1516,7 +1516,7 @@ export function MediaBrowser({
                             {movie.year && <div className="text-xs text-muted-foreground">{movie.year}</div>}
                           </div>
                           {movie.needs_upgrade && (
-                            <CircleFadingArrowUp className="w-5 h-5 text-red-500 flex-shrink-0" aria-label="Upgrade recommended" />
+                            <CircleFadingArrowUp className="w-5 h-5 text-red-500 shrink-0" aria-label="Upgrade recommended" />
                           )}
                         </button>
                       )
@@ -1540,7 +1540,7 @@ export function MediaBrowser({
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('tv', show.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-none ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1578,7 +1578,7 @@ export function MediaBrowser({
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('episode', episode.id, { series_title: episode.series_title })}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-none ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1598,7 +1598,7 @@ export function MediaBrowser({
                             </div>
                           </div>
                           {episode.needs_upgrade && (
-                            <CircleFadingArrowUp className="w-4 h-4 text-red-500 flex-shrink-0" aria-label="Upgrade recommended" />
+                            <CircleFadingArrowUp className="w-4 h-4 text-red-500 shrink-0" aria-label="Upgrade recommended" />
                           )}
                         </button>
                       )
@@ -1622,7 +1622,7 @@ export function MediaBrowser({
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('artist', artist.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-none ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1660,7 +1660,7 @@ export function MediaBrowser({
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('album', album.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-none ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1680,7 +1680,7 @@ export function MediaBrowser({
                             </div>
                           </div>
                           {album.needs_upgrade && (
-                            <CircleFadingArrowUp className="w-5 h-5 text-red-500 flex-shrink-0" aria-label="Upgrade recommended" />
+                            <CircleFadingArrowUp className="w-5 h-5 text-red-500 shrink-0" aria-label="Upgrade recommended" />
                           )}
                         </button>
                       )
@@ -1704,7 +1704,7 @@ export function MediaBrowser({
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('track', track.id, { album_id: track.album_id })}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-none ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1724,7 +1724,7 @@ export function MediaBrowser({
                             </div>
                           </div>
                           {track.needs_upgrade && (
-                            <CircleFadingArrowUp className="w-5 h-5 text-red-500 flex-shrink-0" aria-label="Upgrade recommended" />
+                            <CircleFadingArrowUp className="w-5 h-5 text-red-500 shrink-0" aria-label="Upgrade recommended" />
                           )}
                         </button>
                       )
@@ -1736,7 +1736,7 @@ export function MediaBrowser({
 
             {/* No results message */}
             {showSearchResults && searchInput.length >= 2 && !hasSearchResults && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-2xl p-4 z-[9999]">
+              <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-2xl p-4 z-9999">
                 <div className="text-sm text-muted-foreground text-center">No results found</div>
               </div>
             )}
@@ -1745,13 +1745,13 @@ export function MediaBrowser({
 
           {/* Library Buttons - Centered (hidden when no sources) */}
           {!showEmptyState && (
-          <div className="flex-shrink-0" role="tablist" aria-label="Library type">
+          <div className="shrink-0" role="tablist" aria-label="Library type">
             <div className="flex gap-1">
                 {/* Home Button */}
                 {onNavigateHome && (
                   <button
                     onClick={onNavigateHome}
-                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 bg-card text-muted-foreground hover:bg-muted"
+                    className="px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 bg-card text-muted-foreground hover:bg-muted"
                     title="Return to Dashboard"
                     aria-label="Dashboard"
                   >
@@ -1777,7 +1777,7 @@ export function MediaBrowser({
                     setSelectedAlbum(null)
                   }}
                   disabled={!hasMovies}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                     view === 'movies'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-card text-muted-foreground hover:bg-muted'
@@ -1804,7 +1804,7 @@ export function MediaBrowser({
                     setSelectedAlbum(null)
                   }}
                   disabled={!hasTV}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                     view === 'tv'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-card text-muted-foreground hover:bg-muted'
@@ -1831,7 +1831,7 @@ export function MediaBrowser({
                     setSelectedAlbum(null)
                   }}
                   disabled={!hasMusic}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-none flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                     view === 'music'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-card text-muted-foreground hover:bg-muted'
@@ -1865,7 +1865,7 @@ export function MediaBrowser({
                 if (newState) setShowWishlistPanel(false)
                 setShowCompletenessPanel(newState)
               }}
-              className={`p-2.5 rounded-md transition-colors flex items-center gap-1 flex-shrink-0 focus:outline-none ${
+              className={`p-2.5 rounded-md transition-colors flex items-center gap-1 shrink-0 focus:outline-hidden ${
                 showCompletenessPanel
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-card text-muted-foreground hover:bg-muted'
@@ -1884,7 +1884,7 @@ export function MediaBrowser({
                 if (newState) setShowCompletenessPanel(false)
                 setShowWishlistPanel(newState)
               }}
-              className={`p-2.5 rounded-md transition-colors flex items-center gap-1.5 flex-shrink-0 focus:outline-none ${
+              className={`p-2.5 rounded-md transition-colors flex items-center gap-1.5 shrink-0 focus:outline-hidden ${
                 showWishlistPanel
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-card text-muted-foreground hover:bg-muted'
@@ -1907,7 +1907,7 @@ export function MediaBrowser({
             <button
               ref={settingsButtonRef}
               onClick={() => onOpenSettings?.()}
-              className="p-2.5 rounded-md transition-colors flex-shrink-0 bg-card text-muted-foreground hover:bg-muted focus:outline-none"
+              className="p-2.5 rounded-md transition-colors shrink-0 bg-card text-muted-foreground hover:bg-muted focus:outline-hidden"
               aria-label="Open settings"
             >
               <Settings className="w-4 h-4" aria-hidden="true" />
@@ -1929,7 +1929,7 @@ export function MediaBrowser({
         aria-label={`${view === 'movies' ? 'Movies' : view === 'tv' ? 'TV Shows' : 'Music'} library`}
       >
         {/* Controls Bar - sticky within container */}
-        <div className="flex-shrink-0 py-3 px-4">
+        <div className="shrink-0 py-3 px-4">
           <div className="flex flex-col gap-2">
             {/* Row 1: Filters (left) | Separator | View Controls (right) */}
             <div className="flex items-center justify-between">
@@ -1969,7 +1969,7 @@ export function MediaBrowser({
                     <select
                       value={activeLibraryId || ''}
                       onChange={(e) => setActiveLibraryId(e.target.value || null)}
-                      className="px-2.5 py-1 bg-card border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="px-2.5 py-1 bg-card border border-border rounded-md text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
                     >
                       <option value="">All Libraries</option>
                       {currentTypeLibraries.map(lib => (
@@ -1992,7 +1992,7 @@ export function MediaBrowser({
                             else tierFilterRefs.current.delete(tier)
                           }}
                           onClick={() => setTierFilter(tier as typeof tierFilter)}
-                          className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-none ${
+                          className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-hidden ${
                             tierFilter === tier
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-card text-muted-foreground hover:bg-muted'
@@ -2024,7 +2024,7 @@ export function MediaBrowser({
                             else qualityFilterRefs.current.delete(quality)
                           }}
                           onClick={() => setQualityFilter(quality as typeof qualityFilter)}
-                          className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-none ${
+                          className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-hidden ${
                             qualityFilter === quality
                               ? 'bg-primary text-primary-foreground'
                               : 'bg-card text-muted-foreground hover:bg-muted'
@@ -2043,7 +2043,7 @@ export function MediaBrowser({
                     <div className="h-6 w-px bg-border/50" />
                     <button
                       onClick={() => setCollectionsOnly(!collectionsOnly)}
-                      className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-none flex items-center gap-1.5 ${
+                      className={`px-2.5 py-1 rounded-md text-xs transition-colors focus:outline-hidden flex items-center gap-1.5 ${
                         collectionsOnly
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-card text-muted-foreground hover:bg-muted'
@@ -2082,7 +2082,7 @@ export function MediaBrowser({
                     <button
                       ref={gridViewRef}
                       onClick={() => setViewType('grid')}
-                      className={`p-1.5 rounded-md transition-colors focus:outline-none ${
+                      className={`p-1.5 rounded-md transition-colors focus:outline-hidden ${
                         viewType === 'grid'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-card text-muted-foreground hover:bg-muted'
@@ -2093,7 +2093,7 @@ export function MediaBrowser({
                     <button
                       ref={listViewRef}
                       onClick={() => setViewType('list')}
-                      className={`p-1.5 rounded-md transition-colors focus:outline-none ${
+                      className={`p-1.5 rounded-md transition-colors focus:outline-hidden ${
                         viewType === 'list'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-card text-muted-foreground hover:bg-muted'
@@ -2112,7 +2112,7 @@ export function MediaBrowser({
         {/* Scrollable Content Area with Alphabet Filter */}
         <div className="flex-1 relative min-h-0">
           {/* Main scrollable content */}
-          <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto scrollbar-visible px-4 pb-4 pr-8">
+          <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto scrollbar-visible px-4 pb-4 pr-10">
 
         {/* Content Display */}
         {showEmptyState ? (
@@ -2248,7 +2248,7 @@ export function MediaBrowser({
                 else alphabetFilterRefs.current.delete('all')
               }}
               onClick={() => scrollToLetter(null)}
-              className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-none ${
+              className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-hidden ${
                 alphabetFilter === null
                   ? 'text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -2265,7 +2265,7 @@ export function MediaBrowser({
                 else alphabetFilterRefs.current.delete('#')
               }}
               onClick={() => scrollToLetter('#')}
-              className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-none ${
+              className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-hidden ${
                 alphabetFilter === '#'
                   ? 'text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -2284,7 +2284,7 @@ export function MediaBrowser({
                   else alphabetFilterRefs.current.delete(letter)
                 }}
                 onClick={() => scrollToLetter(letter)}
-                className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-none ${
+                className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-hidden ${
                   alphabetFilter === letter
                     ? 'text-foreground'
                     : 'text-muted-foreground hover:text-foreground'

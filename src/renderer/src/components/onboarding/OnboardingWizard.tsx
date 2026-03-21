@@ -129,7 +129,7 @@ function FeatureScreenshot({ feature }: { feature: Feature }) {
   // Fallback placeholder if no screenshot
   return (
     <div
-      className={`w-full aspect-[4/3] rounded-xl bg-gradient-to-br ${feature.accentColor} border border-border/50 flex items-center justify-center relative overflow-hidden`}
+      className={`w-full aspect-4/3 rounded-xl bg-linear-to-br ${feature.accentColor} border border-border/50 flex items-center justify-center relative overflow-hidden`}
     >
       <div className="absolute inset-0 opacity-10">
         <div className="w-full h-full" style={{
@@ -157,7 +157,7 @@ function FeatureRow({ feature, imageOnLeft }: { feature: Feature; imageOnLeft: b
       {/* Text side */}
       <div className="flex-1 min-w-0 flex flex-col justify-center">
         <div className="flex items-center gap-3 mb-2">
-          <div className={`p-2.5 rounded-lg bg-gradient-to-br ${feature.accentColor}`}>
+          <div className={`p-2.5 rounded-lg bg-linear-to-br ${feature.accentColor}`}>
             <feature.icon className="w-6 h-6 text-foreground" strokeWidth={1.5} />
           </div>
           <h3 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
@@ -170,7 +170,7 @@ function FeatureRow({ feature, imageOnLeft }: { feature: Feature; imageOnLeft: b
         <ul className="space-y-2.5">
           {feature.points.map((point, i) => (
             <li key={i} className="flex items-start gap-3">
-              <div className={`w-2 h-2 rounded-full bg-gradient-to-br ${feature.accentColor.replace('/20', '')} mt-1.5 flex-shrink-0`} />
+              <div className={`w-2 h-2 rounded-full bg-linear-to-br ${feature.accentColor.replace('/20', '')} mt-1.5 shrink-0`} />
               <span className="text-sm text-muted-foreground leading-relaxed">{point}</span>
             </li>
           ))}
@@ -372,7 +372,7 @@ export function OnboardingWizard({ onComplete, onAddSource }: OnboardingWizardPr
                 {pages.map((renderPage, index) => (
                   <div
                     key={index}
-                    className="w-full flex-shrink-0"
+                    className="w-full shrink-0"
                     style={{
                       marginRight: '80px',
                       opacity: getPageOpacity(index),
@@ -388,7 +388,7 @@ export function OnboardingWizard({ onComplete, onAddSource }: OnboardingWizardPr
         </div>
 
         {/* Navigation footer */}
-        <div className="flex-shrink-0 border-t border-border bg-card/50">
+        <div className="shrink-0 border-t border-border bg-card/50">
           <div className="px-8 py-5">
             <div className="max-w-5xl mx-auto flex items-center justify-between">
               <button

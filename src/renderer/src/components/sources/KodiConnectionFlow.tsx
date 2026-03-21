@@ -345,7 +345,7 @@ export function KodiConnectionFlow({ onSuccess, onBack }: KodiConnectionFlowProp
         {/* Kodi running warning */}
         {localInstallation?.kodiRunning && (
           <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-sm">
-            <svg className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
             <span className="text-muted-foreground">
@@ -372,7 +372,7 @@ export function KodiConnectionFlow({ onSuccess, onBack }: KodiConnectionFlowProp
               disabled={localInstallation.kodiRunning}
               className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary hover:bg-muted/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:bg-transparent"
             >
-              <HardDrive className="w-5 h-5 text-foreground flex-shrink-0" />
+              <HardDrive className="w-5 h-5 text-foreground shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-sm flex items-center gap-2">
                   Local Database
@@ -391,7 +391,7 @@ export function KodiConnectionFlow({ onSuccess, onBack }: KodiConnectionFlowProp
             onClick={() => setMode('mysql')}
             className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary hover:bg-muted/50 transition-colors text-left"
           >
-            <Database className="w-5 h-5 text-foreground flex-shrink-0" />
+            <Database className="w-5 h-5 text-foreground shrink-0" />
             <div className="min-w-0">
               <div className="font-medium text-sm">MySQL/MariaDB (Shared)</div>
               <div className="text-xs text-muted-foreground">Connect to shared database for multi-device setups</div>
@@ -440,7 +440,7 @@ export function KodiConnectionFlow({ onSuccess, onBack }: KodiConnectionFlowProp
                 onChange={(e) => setIncludeVideoDb(e.target.checked)}
                 className="sr-only"
               />
-              <Film className="w-5 h-5 text-foreground flex-shrink-0" />
+              <Film className="w-5 h-5 text-foreground shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-sm">Movies & TV Shows</div>
                 <div className="text-xs text-muted-foreground">
@@ -470,7 +470,7 @@ export function KodiConnectionFlow({ onSuccess, onBack }: KodiConnectionFlowProp
                 onChange={(e) => setIncludeMusicDb(e.target.checked)}
                 className="sr-only"
               />
-              <Music className="w-5 h-5 text-foreground flex-shrink-0" />
+              <Music className="w-5 h-5 text-foreground shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-sm">Music</div>
                 <div className="text-xs text-muted-foreground">
@@ -501,7 +501,7 @@ export function KodiConnectionFlow({ onSuccess, onBack }: KodiConnectionFlowProp
             value={localDisplayName}
             onChange={(e) => setLocalDisplayName(e.target.value)}
             placeholder="Kodi (Local)"
-            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-2 focus:ring-primary text-sm"
           />
         </label>
 

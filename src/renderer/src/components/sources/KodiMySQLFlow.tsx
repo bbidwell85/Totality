@@ -304,7 +304,7 @@ export function KodiMySQLFlow({ onSuccess, onBack }: KodiMySQLFlowProps) {
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="Kodi (MySQL)"
-          className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary text-sm"
+          className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-1 focus:ring-primary text-sm"
         />
       </label>
 
@@ -320,7 +320,7 @@ export function KodiMySQLFlow({ onSuccess, onBack }: KodiMySQLFlowProps) {
               setTestResult(null)
             }}
             placeholder="192.168.1.100 or localhost"
-            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary text-sm"
+            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-1 focus:ring-primary text-sm"
           />
         </label>
         <label className="block">
@@ -335,7 +335,7 @@ export function KodiMySQLFlow({ onSuccess, onBack }: KodiMySQLFlowProps) {
             placeholder="3306"
             min="1"
             max="65535"
-            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary text-sm"
+            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-1 focus:ring-primary text-sm"
           />
         </label>
       </div>
@@ -352,7 +352,7 @@ export function KodiMySQLFlow({ onSuccess, onBack }: KodiMySQLFlowProps) {
               setTestResult(null)
             }}
             placeholder="kodi"
-            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary text-sm"
+            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-1 focus:ring-primary text-sm"
           />
         </label>
         <label className="block">
@@ -365,7 +365,7 @@ export function KodiMySQLFlow({ onSuccess, onBack }: KodiMySQLFlowProps) {
               setTestResult(null)
             }}
             placeholder="Enter password"
-            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary text-sm"
+            className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-1 focus:ring-primary text-sm"
           />
         </label>
       </div>
@@ -386,7 +386,7 @@ export function KodiMySQLFlow({ onSuccess, onBack }: KodiMySQLFlowProps) {
                 setTestResult(null)
               }}
               placeholder="kodi_"
-              className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary text-sm"
+              className="mt-1 w-full px-3 py-2 rounded-md border border-border bg-background focus:outline-hidden focus:ring-1 focus:ring-primary text-sm"
             />
             <p className="text-xs text-muted-foreground mt-1">
               Default: kodi_ (e.g., kodi_video121)

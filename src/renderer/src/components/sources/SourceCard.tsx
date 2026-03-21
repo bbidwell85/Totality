@@ -417,7 +417,7 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
                 return (
                   <div className="space-y-2">
                     <div className="flex items-start gap-2">
-                      <svg className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-5 h-5 text-destructive shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                       <div className="flex-1 min-w-0">
@@ -459,7 +459,7 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
                     <button
                       onClick={() => handleToggleLibrary(lib.id, lib.isEnabled)}
                       disabled={isTogglingLibrary === lib.id}
-                      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
                         lib.isEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
                       } ${isTogglingLibrary === lib.id ? 'opacity-50' : ''}`}
                       role="switch"
@@ -532,7 +532,7 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
               ) : !ffprobeAvailable ? (
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
                   <div className="flex items-start gap-2">
-                    <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div className="flex-1 min-w-0">

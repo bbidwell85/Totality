@@ -1,6 +1,135 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --animate-fade-in: fade-in var(--animation-duration, 500ms)
+    var(--animation-timing, ease-out);
+  --animate-fade-out: fade-out var(--animation-duration, 500ms)
+    var(--animation-timing, ease-out);
+  --animate-slide-in-from-top: slide-in-from-top
+    var(--animation-duration, 500ms) var(--animation-timing, ease-out);
+  --animate-slide-in-from-bottom: slide-in-from-bottom
+    var(--animation-duration, 500ms) var(--animation-timing, ease-out);
+  --animate-slide-in-from-left: slide-in-from-left
+    var(--animation-duration, 500ms) var(--animation-timing, ease-out);
+  --animate-slide-in-from-right: slide-in-from-right
+    var(--animation-duration, 500ms) var(--animation-timing, ease-out);
+  --animate-zoom-in: zoom-in var(--animation-duration, 500ms)
+    var(--animation-timing, ease-out);
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes fade-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes slide-in-from-top {
+    from {
+      transform: translateY(calc(-1 * var(--slide-offset, 1rem)));
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes slide-in-from-bottom {
+    from {
+      transform: translateY(var(--slide-offset, 1rem));
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  @keyframes slide-in-from-left {
+    from {
+      transform: translateX(calc(-1 * var(--slide-offset, 1rem)));
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  @keyframes slide-in-from-right {
+    from {
+      transform: translateX(var(--slide-offset, 1rem));
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  @keyframes zoom-in {
+    from {
+      transform: scale(var(--zoom-scale, 0.95));
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+/* Gradient background utilities */
+@utility bg-main-gradient {
+  background: var(--bg-gradient);
+}
+@utility bg-sidebar-gradient {
+  background: var(--sidebar-gradient);
+}
 
 @layer base {
   :root {
@@ -477,16 +606,6 @@
   }
 }
 
-/* Gradient background utilities */
-@layer components {
-  .bg-main-gradient {
-    background: var(--bg-gradient);
-  }
-  .bg-sidebar-gradient {
-    background: var(--sidebar-gradient);
-  }
-}
-
 /* Backdrop blur styles for artwork backgrounds */
 .backdrop-art {
   position: fixed;
@@ -520,12 +639,12 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 [tabindex]:focus-visible:not(.focus-poster-only) {
-  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  @apply outline-hidden ring-2 ring-primary ring-offset-2 ring-offset-background;
 }
 
 /* Library cards handle their own focus styling on the poster only */
 .focus-poster-only:focus-visible {
-  @apply outline-none ring-0;
+  @apply outline-hidden ring-0;
 }
 
 /* Optimized hover scale animation - GPU accelerated */
@@ -598,14 +717,15 @@ select:focus-visible,
 }
 
 .scrollbar-visible::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
+  background: transparent;
   border-radius: 5px;
 }
 
 .scrollbar-visible::-webkit-scrollbar-thumb {
   background: hsl(var(--border));
   border-radius: 5px;
-  border: 2px solid hsl(var(--muted));
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .scrollbar-visible::-webkit-scrollbar-thumb:hover {
@@ -614,5 +734,5 @@ select:focus-visible,
 
 .scrollbar-visible {
   scrollbar-width: auto;
-  scrollbar-color: hsl(var(--border)) hsl(var(--muted));
+  scrollbar-color: hsl(var(--border)) transparent;
 }

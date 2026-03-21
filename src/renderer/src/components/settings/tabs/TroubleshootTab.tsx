@@ -62,7 +62,7 @@ function Toggle({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
         disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
       } ${checked ? 'bg-primary' : 'bg-muted'}`}
     >
@@ -434,14 +434,14 @@ export function TroubleshootTab() {
             placeholder="Search logs..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            className="bg-muted text-foreground text-sm rounded-md px-3 py-1.5 w-44 border border-border focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-muted-foreground"
+            className="bg-muted text-foreground text-sm rounded-md px-3 py-1.5 w-44 border border-border focus:outline-hidden focus:ring-2 focus:ring-primary placeholder:text-muted-foreground"
           />
 
           {/* Filter dropdown */}
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value as LogFilter)}
-            className="bg-muted text-foreground text-sm rounded-md px-3 py-1.5 border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+            className="bg-muted text-foreground text-sm rounded-md px-3 py-1.5 border border-border focus:outline-hidden focus:ring-2 focus:ring-primary"
           >
             <option value="all">All Levels</option>
             <option value="verbose">Verbose</option>
@@ -524,7 +524,7 @@ export function TroubleshootTab() {
       )}
 
       {/* Log viewer with virtualization - min-h-0 is critical for flex shrinking */}
-      <div ref={logViewerRef} tabIndex={-1} className="flex-1 min-h-0 bg-muted/30 rounded-lg border border-border/40 font-mono overflow-hidden relative outline-none">
+      <div ref={logViewerRef} tabIndex={-1} className="flex-1 min-h-0 bg-muted/30 rounded-lg border border-border/40 font-mono overflow-hidden relative outline-hidden">
         {filteredLogs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             No logs to display
@@ -586,14 +586,14 @@ export function TroubleshootTab() {
             onClick={() => setFileLoggingExpanded(!fileLoggingExpanded)}
             className="flex items-center gap-3 flex-1 min-w-0 text-left"
           >
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               {fileLoggingSettings.enabled ? (
                 <CheckCircle className="w-5 h-5 text-green-500" />
               ) : (
                 <Circle className="w-5 h-5 text-muted-foreground/50" />
               )}
             </div>
-            <div className="flex-shrink-0 text-muted-foreground">
+            <div className="shrink-0 text-muted-foreground">
               <HardDrive className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
@@ -623,7 +623,7 @@ export function TroubleshootTab() {
                   value={fileLoggingSettings.minLevel}
                   onChange={(e) => handleFileLoggingSetting({ minLevel: e.target.value })}
                   disabled={!fileLoggingSettings.enabled}
-                  className="bg-background text-foreground text-sm rounded-md px-3 py-2 border border-border/30 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                  className="bg-background text-foreground text-sm rounded-md px-3 py-2 border border-border/30 focus:outline-hidden focus:ring-2 focus:ring-primary disabled:opacity-50"
                 >
                   <option value="verbose">Verbose</option>
                   <option value="debug">Debug</option>
@@ -638,7 +638,7 @@ export function TroubleshootTab() {
                   value={fileLoggingSettings.retentionDays}
                   onChange={(e) => handleFileLoggingSetting({ retentionDays: parseInt(e.target.value, 10) })}
                   disabled={!fileLoggingSettings.enabled}
-                  className="bg-background text-foreground text-sm rounded-md px-3 py-2 border border-border/30 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                  className="bg-background text-foreground text-sm rounded-md px-3 py-2 border border-border/30 focus:outline-hidden focus:ring-2 focus:ring-primary disabled:opacity-50"
                 >
                   <option value={3}>3 days</option>
                   <option value={7}>7 days</option>

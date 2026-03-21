@@ -241,7 +241,7 @@ const CollectionCard = memo(({ collection, onClick }: { collection: MovieCollect
     <div
       ref={cardRef}
       tabIndex={0}
-      className="focus-poster-only cursor-pointer hover-scale outline-none"
+      className="focus-poster-only cursor-pointer hover-scale outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -251,7 +251,7 @@ const CollectionCard = memo(({ collection, onClick }: { collection: MovieCollect
       }}
     >
       {/* Poster */}
-      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
+      <div className="aspect-2/3 bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {collection.poster_url ? (
           <img
             src={collection.poster_url}
@@ -263,7 +263,7 @@ const CollectionCard = memo(({ collection, onClick }: { collection: MovieCollect
             }}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-purple-500/20 to-blue-500/20">
+          <div className="w-full h-full flex items-center justify-center text-4xl bg-linear-to-br from-purple-500/20 to-blue-500/20">
             <Layers className="w-12 h-12 text-muted-foreground" />
           </div>
         )}
@@ -279,7 +279,7 @@ const CollectionCard = memo(({ collection, onClick }: { collection: MovieCollect
         </div>
         {/* Collection completion badge */}
         <div
-          className={`flex-shrink-0 text-xs font-bold px-2 py-1 rounded shadow-md flex items-center gap-1 ${
+          className={`shrink-0 text-xs font-bold px-2 py-1 rounded shadow-md flex items-center gap-1 ${
             collection.completeness_percentage === 100
               ? 'bg-green-500 text-white'
               : 'bg-foreground text-background border border-border'
@@ -307,7 +307,7 @@ function CollectionListItem({ collection, onClick }: { collection: MovieCollecti
     <div
       ref={cardRef}
       tabIndex={0}
-      className="group cursor-pointer rounded-md bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-none"
+      className="group cursor-pointer rounded-md bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -317,7 +317,7 @@ function CollectionListItem({ collection, onClick }: { collection: MovieCollecti
       }}
     >
       {/* Poster Thumbnail */}
-      <div className="w-16 h-24 bg-muted rounded-md overflow-hidden flex-shrink-0 relative shadow-md shadow-black/20">
+      <div className="w-16 h-24 bg-muted rounded-md overflow-hidden shrink-0 relative shadow-md shadow-black/20">
         {collection.poster_url ? (
           <img
             src={collection.poster_url}
@@ -394,7 +394,7 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
     <div
       ref={cardRef}
       tabIndex={0}
-      className="focus-poster-only group cursor-pointer hover-scale outline-none"
+      className="focus-poster-only group cursor-pointer hover-scale outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -404,7 +404,7 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
       }}
     >
       {/* Poster */}
-      <div className="aspect-[2/3] bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
+      <div className="aspect-2/3 bg-muted relative overflow-hidden rounded-md shadow-lg shadow-black/30">
         {/* 3-dot menu button */}
         {showMenuButton && (
           <div ref={menuRef} className="absolute top-2 left-2 z-20">
@@ -498,7 +498,7 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
           <h4 className="font-medium text-sm truncate">{movie.title}</h4>
           {movie.year && <p className="text-xs text-muted-foreground">{movie.year}</p>}
         </div>
-        <div className="flex-shrink-0 flex items-center gap-1">
+        <div className="shrink-0 flex items-center gap-1">
           {/* Collection Badge - shown when movie is part of a collection */}
           {collectionData && (
             <div
@@ -579,7 +579,7 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
     <div
       ref={cardRef}
       tabIndex={0}
-      className="group cursor-pointer rounded-md bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-none"
+      className="group cursor-pointer rounded-md bg-muted/20 hover:bg-muted/40 transition-all duration-200 p-4 flex gap-4 items-center outline-hidden"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -589,7 +589,7 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
       }}
     >
       {/* Poster Thumbnail */}
-      <div className="w-16 h-24 bg-muted rounded-md overflow-hidden flex-shrink-0 relative shadow-md shadow-black/20">
+      <div className="w-16 h-24 bg-muted rounded-md overflow-hidden shrink-0 relative shadow-md shadow-black/20">
         {movie.poster_url ? (
           <img
             src={movie.poster_url}
@@ -626,7 +626,7 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
           {needsUpgrade && (
             <>
               <span>•</span>
-              <span title="Quality upgrade recommended"><CircleFadingArrowUp className="w-4 h-4 text-red-500 flex-shrink-0" /></span>
+              <span title="Quality upgrade recommended"><CircleFadingArrowUp className="w-4 h-4 text-red-500 shrink-0" /></span>
             </>
           )}
           {collectionData && (
@@ -640,7 +640,7 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
 
       {/* 3-dot menu */}
       {showMenuButton && (
-        <div ref={menuRef} className="relative flex-shrink-0">
+        <div ref={menuRef} className="relative shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation()

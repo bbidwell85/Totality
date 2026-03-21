@@ -138,7 +138,7 @@ export const WishlistItemCard = memo(function WishlistItemCard({
       )}
 
       {/* Poster/Album Art */}
-      <div className={`w-10 ${isMusic ? 'h-10' : 'h-[60px]'} bg-muted rounded overflow-hidden flex-shrink-0`}>
+      <div className={`w-10 ${isMusic ? 'h-10' : 'h-[60px]'} bg-muted rounded overflow-hidden shrink-0`}>
         {item.poster_url ? (
           <img
             src={item.poster_url}
@@ -159,13 +159,13 @@ export const WishlistItemCard = memo(function WishlistItemCard({
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Title row with type icon */}
         <div className="flex items-start gap-1.5">
-          <MediaIcon className="w-3 h-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <MediaIcon className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1 pr-5">
             <div className="flex items-center gap-1.5">
               <h4 className="font-medium text-sm truncate leading-tight">{item.title}</h4>
               {isUpgrade && !isCompleted && (
                 <span title="Upgrade">
-                  <CircleFadingArrowUp className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                  <CircleFadingArrowUp className="w-3 h-3 text-amber-500 shrink-0" />
                 </span>
               )}
             </div>

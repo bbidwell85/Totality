@@ -431,7 +431,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
 
   if (loading) {
     return createPortal(
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]">
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-150">
         <div className="bg-card rounded-xl p-8 shadow-2xl">
           <div className="text-muted-foreground">Loading...</div>
         </div>
@@ -442,7 +442,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
 
   if (error || !media) {
     return createPortal(
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]">
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-150">
         <div className="bg-card rounded-xl p-8 shadow-2xl text-center">
           <div className="text-destructive mb-4">{error || 'Media not found'}</div>
           <button onClick={onClose} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg">
@@ -465,7 +465,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   const svBestTrackIdx = getBestTrackIndex(svAudioTracks)
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150] p-6" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-150 p-6" role="dialog" aria-modal="true" onClick={onClose}>
       <div
         className="bg-card rounded-xl w-full max-w-4xl max-h-[calc(100vh-48px)] overflow-hidden flex flex-col shadow-2xl border border-border"
         onClick={(e) => e.stopPropagation()}
@@ -477,7 +477,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
             <img
               src={media.type === 'episode' && media.episode_thumb_url ? media.episode_thumb_url : media.poster_url}
               alt=""
-              className={`rounded-lg object-cover flex-shrink-0 shadow-lg shadow-black/30 ${
+              className={`rounded-lg object-cover shrink-0 shadow-lg shadow-black/30 ${
                 media.type === 'episode' && media.episode_thumb_url ? 'w-44 h-28' : 'w-24 h-36'
               }`}
               onError={(e) => { e.currentTarget.style.display = 'none' }}
@@ -497,7 +497,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                       setCopied(true)
                       setTimeout(() => setCopied(false), 1500)
                     }}
-                    className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                    className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
                     title="Copy title"
                   >
                     {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -510,7 +510,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                   <p className="text-sm text-muted-foreground">{sv?.edition || versions[0]?.edition}</p>
                 )}
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 {/* Add to Wishlist Button */}
                 {media.tier_quality && media.tier_quality !== 'HIGH' && (
                   <AddToWishlistButton
@@ -614,7 +614,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                     <button
                       key={v.id}
                       onClick={() => setSelectedVersionId(v.id)}
-                      className={`flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                         isSelected
                           ? 'bg-primary text-primary-foreground'
                           : `${qualityColor || 'bg-muted/50'} text-muted-foreground hover:text-foreground hover:bg-muted`
@@ -858,7 +858,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">File Information</h3>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground flex-shrink-0">Path</span>
+                <span className="text-muted-foreground shrink-0">Path</span>
                 <span className="font-mono text-xs text-right truncate" title={sv?.file_path ?? media.file_path}>
                   {sv?.file_path ?? media.file_path}
                 </span>

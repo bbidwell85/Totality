@@ -138,7 +138,7 @@ export function AddSourceModal({ onClose, onSuccess }: AddSourceModalProps) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]"
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-source-modal-title"
@@ -156,7 +156,7 @@ export function AddSourceModal({ onClose, onSuccess }: AddSourceModalProps) {
           <button
             ref={closeButtonRef}
             onClick={onClose}
-            className="w-6 h-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            className="w-6 h-6 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -176,7 +176,7 @@ export function AddSourceModal({ onClose, onSuccess }: AddSourceModalProps) {
                   ref={el => buttonRefs.current[index] = el}
                   onClick={() => setSelectedProvider(provider.type)}
                   onFocus={() => setFocusedIndex(index)}
-                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors text-left outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${focusedIndex === index ? 'bg-muted' : ''}`}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted transition-colors text-left outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${focusedIndex === index ? 'bg-muted' : ''}`}
                 >
                   <div className={`w-6 h-6 ${provider.color} rounded flex items-center justify-center text-white`}>
                     {provider.type === 'local' ? (

@@ -22,9 +22,9 @@ function ToastItem({ toast, onRemove }: { toast: ToastType; onRemove: () => void
   }
 
   const icons = {
-    success: <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />,
-    error: <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />,
-    info: <Info className="w-5 h-5 text-blue-400 flex-shrink-0" />
+    success: <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />,
+    error: <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />,
+    info: <Info className="w-5 h-5 text-blue-400 shrink-0" />
   }
 
   return (
@@ -56,7 +56,7 @@ function ToastItem({ toast, onRemove }: { toast: ToastType; onRemove: () => void
 
         <button
           onClick={handleRemove}
-          className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
+          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
         >
           <X className="w-4 h-4" />
         </button>

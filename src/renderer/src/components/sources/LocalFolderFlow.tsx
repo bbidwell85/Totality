@@ -284,7 +284,7 @@ export function LocalFolderFlow({ onSuccess, onBack }: LocalFolderFlowProps) {
             value={folderPath}
             readOnly
             placeholder="Select a folder..."
-            className="flex-1 px-2 py-1.5 text-sm bg-muted border border-border rounded outline-none focus:ring-1 focus:ring-primary"
+            className="flex-1 px-2 py-1.5 text-sm bg-muted border border-border rounded outline-hidden focus:ring-1 focus:ring-primary"
           />
           <button
             onClick={handleSelectFolder}
@@ -305,7 +305,7 @@ export function LocalFolderFlow({ onSuccess, onBack }: LocalFolderFlowProps) {
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="My Media Library"
-            className="w-full px-2 py-1.5 text-sm bg-muted border border-border rounded outline-none focus:ring-1 focus:ring-primary"
+            className="w-full px-2 py-1.5 text-sm bg-muted border border-border rounded outline-hidden focus:ring-1 focus:ring-primary"
           />
         </div>
       )}
@@ -344,7 +344,7 @@ export function LocalFolderFlow({ onSuccess, onBack }: LocalFolderFlowProps) {
                 {/* Checkbox */}
                 <button
                   onClick={() => toggleLibrary(index)}
-                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
+                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors shrink-0 ${
                     lib.enabled
                       ? 'bg-primary border-primary'
                       : 'border-muted-foreground hover:border-primary/50'
@@ -358,7 +358,7 @@ export function LocalFolderFlow({ onSuccess, onBack }: LocalFolderFlowProps) {
                 </button>
 
                 {/* Icon */}
-                <span className={`flex-shrink-0 ${lib.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>
+                <span className={`shrink-0 ${lib.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>
                   {getTypeIcon(lib.selectedType)}
                 </span>
 
@@ -371,7 +371,7 @@ export function LocalFolderFlow({ onSuccess, onBack }: LocalFolderFlowProps) {
                 <select
                   value={lib.selectedType}
                   onChange={(e) => setLibraryType(index, e.target.value as 'movies' | 'tvshows' | 'music')}
-                  className="text-xs bg-muted border border-border rounded px-2 py-1 outline-none focus:ring-1 focus:ring-primary"
+                  className="text-xs bg-muted border border-border rounded px-2 py-1 outline-hidden focus:ring-1 focus:ring-primary"
                 >
                   <option value="movies">Movies</option>
                   <option value="tvshows">TV Shows</option>
@@ -403,7 +403,7 @@ export function LocalFolderFlow({ onSuccess, onBack }: LocalFolderFlowProps) {
             <select
               value={libraries[0].selectedType}
               onChange={(e) => setLibraryType(0, e.target.value as 'movies' | 'tvshows' | 'music')}
-              className="text-xs bg-muted border border-border rounded px-2 py-1 outline-none focus:ring-1 focus:ring-primary"
+              className="text-xs bg-muted border border-border rounded px-2 py-1 outline-hidden focus:ring-1 focus:ring-primary"
             >
               <option value="movies">Movies</option>
               <option value="tvshows">TV Shows</option>

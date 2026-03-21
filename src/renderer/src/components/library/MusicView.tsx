@@ -403,7 +403,7 @@ export function MusicView({
 
         {/* Album Header */}
         <div className="flex items-start gap-6">
-          <div className="w-44 aspect-square bg-muted rounded-lg overflow-hidden flex-shrink-0 shadow-lg shadow-black/30">
+          <div className="w-44 aspect-square bg-muted rounded-lg overflow-hidden shrink-0 shadow-lg shadow-black/30">
             {selectedAlbum.thumb_url ? (
               <img
                 src={selectedAlbum.thumb_url}
@@ -426,7 +426,7 @@ export function MusicView({
                   setCopiedTitle(true)
                   setTimeout(() => setCopiedTitle(false), 1500)
                 }}
-                className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
                 title="Copy title"
               >
                 {copiedTitle ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
@@ -661,7 +661,7 @@ export function MusicView({
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-sm font-semibold flex-shrink-0 ${
+                        <span className={`text-sm font-semibold shrink-0 ${
                           track.isMissing ? 'text-muted-foreground/50' : 'text-muted-foreground'
                         }`}>
                           {track.track_number || '-'}
@@ -687,14 +687,14 @@ export function MusicView({
                         {tierConfig && qualityTier === 'low' && (
                           <>
                             <span>•</span>
-                            <span title={tierConfig.title}><CircleFadingArrowUp className="w-4 h-4 text-red-500 flex-shrink-0" /></span>
+                            <span title={tierConfig.title}><CircleFadingArrowUp className="w-4 h-4 text-red-500 shrink-0" /></span>
                           </>
                         )}
                       </div>
                     </div>
                     {/* 3-dot menu for owned tracks with file_path */}
                     {!track.isMissing && track.file_path && onRescanTrack && (
-                      <div className="relative flex-shrink-0" ref={trackMenuOpen === track.id ? trackMenuRef : undefined}>
+                      <div className="relative shrink-0" ref={trackMenuOpen === track.id ? trackMenuRef : undefined}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -726,7 +726,7 @@ export function MusicView({
                     )}
                     {/* Add to wishlist button for missing tracks */}
                     {track.isMissing && (
-                      <div className="flex-shrink-0">
+                      <div className="shrink-0">
                         <AddToWishlistButton
                           mediaType="track"
                           title={track.title}
@@ -790,7 +790,7 @@ export function MusicView({
 
           return createPortal(
             <div
-              className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-6"
+              className="fixed inset-0 bg-black/60 flex items-center justify-center z-200 p-6"
               onClick={() => setSelectedTrackForQuality(null)}
             >
               <div
@@ -804,7 +804,7 @@ export function MusicView({
                     <img
                       src={selectedAlbum.thumb_url}
                       alt=""
-                      className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+                      className="w-16 h-16 rounded-lg object-cover shrink-0"
                       onError={(e) => { e.currentTarget.style.display = 'none' }}
                     />
                   )}
@@ -820,7 +820,7 @@ export function MusicView({
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         {(tier === 'low' || tier === 'medium') && (
                           <AddToWishlistButton
                             mediaType="track"
@@ -952,7 +952,7 @@ export function MusicView({
         {/* Artist Header */}
         <div className="flex gap-6 mb-6">
           {/* Artist Image — larger, prominent */}
-          <div className="w-44 h-44 bg-muted rounded-lg overflow-hidden flex-shrink-0 shadow-lg shadow-black/30">
+          <div className="w-44 h-44 bg-muted rounded-lg overflow-hidden shrink-0 shadow-lg shadow-black/30">
             {selectedArtist.thumb_url ? (
               <img
                 src={selectedArtist.thumb_url}
@@ -978,7 +978,7 @@ export function MusicView({
                   setCopiedTitle(true)
                   setTimeout(() => setCopiedTitle(false), 1500)
                 }}
-                className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
                 title="Copy title"
               >
                 {copiedTitle ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
@@ -1591,7 +1591,7 @@ export function MusicView({
 
         return createPortal(
           <div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-6"
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-200 p-6"
             onClick={() => setSelectedTrackForQuality(null)}
           >
             <div
@@ -1611,7 +1611,7 @@ export function MusicView({
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       {(tier === 'low' || tier === 'medium') && (
                         <AddToWishlistButton
                           mediaType="track"
@@ -1932,10 +1932,10 @@ const AlbumCard = memo(({ album, onClick, showArtist = true, showSourceBadge, on
           return (
             <div className="absolute top-2 right-2 z-10 flex flex-col gap-1 items-end">
               {isHiRes && (
-                <span className="px-1.5 py-0.5 text-xs font-bold bg-purple-600 text-white rounded shadow">Hi-Res</span>
+                <span className="px-1.5 py-0.5 text-xs font-bold bg-purple-600 text-white rounded shadow-sm">Hi-Res</span>
               )}
               {isLossless && !isHiRes && (
-                <span className="px-1.5 py-0.5 text-xs font-bold bg-green-600 text-white rounded shadow">Lossless</span>
+                <span className="px-1.5 py-0.5 text-xs font-bold bg-green-600 text-white rounded shadow-sm">Lossless</span>
               )}
             </div>
           )
@@ -2028,7 +2028,7 @@ const ArtistListItem = memo(({ artist, completeness, onClick, showSourceBadge, o
       onClick={onClick}
     >
       {/* Artist Thumbnail */}
-      <div className="w-16 h-16 bg-muted rounded-full overflow-hidden flex-shrink-0 relative shadow-md shadow-black/20">
+      <div className="w-16 h-16 bg-muted rounded-full overflow-hidden shrink-0 relative shadow-md shadow-black/20">
         {artist.thumb_url ? (
           <img
             src={artist.thumb_url}
@@ -2071,7 +2071,7 @@ const ArtistListItem = memo(({ artist, completeness, onClick, showSourceBadge, o
 
       {/* 3-dot menu */}
       {hasMenuActions && (
-        <div ref={menuRef} className="relative flex-shrink-0">
+        <div ref={menuRef} className="relative shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -2131,7 +2131,7 @@ const AlbumListItem = memo(({ album, onClick, showArtist = true, showSourceBadge
       onClick={onClick}
     >
       {/* Album Thumbnail */}
-      <div className="w-16 h-16 bg-muted rounded-md overflow-hidden flex-shrink-0 relative shadow-md shadow-black/20">
+      <div className="w-16 h-16 bg-muted rounded-md overflow-hidden shrink-0 relative shadow-md shadow-black/20">
         {album.thumb_url ? (
           <img
             src={album.thumb_url}
@@ -2175,13 +2175,13 @@ const AlbumListItem = memo(({ album, onClick, showArtist = true, showSourceBadge
 
       {/* Artist column */}
       {showArtist && (
-        <div className="w-48 flex-shrink-0">
+        <div className="w-48 shrink-0">
           <p className="text-sm text-muted-foreground truncate">{album.artist_name}</p>
         </div>
       )}
 
       {/* Completeness column */}
-      <div className="w-20 flex-shrink-0 text-center">
+      <div className="w-20 shrink-0 text-center">
         {completeness && (
           <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
             {completeness.owned_tracks}/{completeness.total_tracks}
@@ -2339,7 +2339,7 @@ const MissingAlbumCard = memo(({ album, artistName, onDismiss }: {
         {/* Album type badge */}
         {album.album_type !== 'album' && (
           <div className="absolute top-2 right-2 z-10">
-            <span className="px-1.5 py-0.5 text-xs font-bold bg-gray-600 text-white rounded shadow capitalize">
+            <span className="px-1.5 py-0.5 text-xs font-bold bg-gray-600 text-white rounded shadow-sm capitalize">
               {album.album_type}
             </span>
           </div>
@@ -2367,7 +2367,7 @@ const MissingAlbumCard = memo(({ album, artistName, onDismiss }: {
           )}
         </div>
         {/* Wishlist + Dismiss buttons */}
-        <div className="flex-shrink-0 flex items-center gap-1">
+        <div className="shrink-0 flex items-center gap-1">
           <AddToWishlistButton
             mediaType="album"
             title={album.title}
@@ -2408,7 +2408,7 @@ const MissingAlbumListItem = memo(({ album, artistName, onDismiss }: {
   return (
     <div className="rounded-md overflow-hidden bg-muted/20 p-4 flex gap-4 items-center opacity-60 hover:opacity-80 transition-opacity">
       {/* Album Thumbnail */}
-      <div className="w-16 h-16 bg-muted rounded-md overflow-hidden flex-shrink-0 relative grayscale shadow-md shadow-black/20">
+      <div className="w-16 h-16 bg-muted rounded-md overflow-hidden shrink-0 relative grayscale shadow-md shadow-black/20">
         {coverUrl && !imageError ? (
           <img
             src={coverUrl}
@@ -2440,7 +2440,7 @@ const MissingAlbumListItem = memo(({ album, artistName, onDismiss }: {
       </div>
 
       {/* Wishlist + Dismiss buttons */}
-      <div className="flex-shrink-0 flex items-center gap-1">
+      <div className="shrink-0 flex items-center gap-1">
         <AddToWishlistButton
           mediaType="album"
           title={album.title}

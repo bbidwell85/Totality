@@ -88,7 +88,7 @@ export function MissingItemPopup({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-150 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60"
@@ -134,8 +134,8 @@ export function MissingItemPopup({
         {/* Content */}
         <div className="p-4 flex gap-4">
           {/* Poster — fixed size, not squeezed */}
-          <div className="w-28 flex-shrink-0">
-            <div className="aspect-[2/3] bg-muted rounded-md overflow-hidden shadow-lg shadow-black/30">
+          <div className="w-28 shrink-0">
+            <div className="aspect-2/3 bg-muted rounded-md overflow-hidden shadow-lg shadow-black/30">
               {posterUrl ? (
                 <img
                   src={posterUrl}
@@ -174,7 +174,7 @@ export function MissingItemPopup({
                   setCopied(true)
                   setTimeout(() => setCopied(false), 1500)
                 }}
-                className="flex-shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors"
                 title="Copy title"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}

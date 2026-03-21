@@ -95,7 +95,7 @@ export class SectionErrorBoundary extends Component<Props, State> {
       if (compact) {
         return (
           <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm">
-            <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
             <span className="text-destructive">
               {this.props.section} failed to load
             </span>

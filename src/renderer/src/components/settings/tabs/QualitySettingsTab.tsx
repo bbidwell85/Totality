@@ -88,7 +88,7 @@ function SettingsCard({
         className="w-full flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors text-left"
       >
         {/* Icon */}
-        <div className="flex-shrink-0 text-muted-foreground">{icon}</div>
+        <div className="shrink-0 text-muted-foreground">{icon}</div>
 
         {/* Title and description */}
         <div className="flex-1 min-w-0">
@@ -676,7 +676,7 @@ function NumberInput({
           }
         }}
         aria-describedby={hint ? hintId : undefined}
-        className="w-full px-3 py-1.5 bg-background border border-border/30 rounded-md text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+        className="w-full px-3 py-1.5 bg-background border border-border/30 rounded-md text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
       />
       {hint && <p id={hintId} className="text-[10px] text-muted-foreground">{hint}</p>}
     </div>
@@ -1029,7 +1029,7 @@ function ExtraOptionsCopyable({ extraOptions }: { extraOptions: string }) {
         </code>
         <button
           onClick={handleCopy}
-          className="flex-shrink-0 p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+          className="shrink-0 p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
           title="Copy to clipboard"
         >
           {copied ? (

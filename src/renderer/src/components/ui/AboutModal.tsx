@@ -57,7 +57,7 @@ export function AboutModal({ isOpen, onClose }: AboutModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[150]" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-150" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
       <div ref={modalRef} className="bg-card border border-border rounded-xl w-full max-w-lg mx-4 shadow-xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-xl">
@@ -175,7 +175,7 @@ function CreditsTab() {
 
         {/* TMDB - Required attribution per terms of use */}
         <div className="flex items-start gap-3 mb-4 p-3 bg-muted/30 rounded-lg">
-          <img src={tmdbLogo} alt="TMDB" className="h-5 mt-0.5 flex-shrink-0" />
+          <img src={tmdbLogo} alt="TMDB" className="h-5 mt-0.5 shrink-0" />
           <div className="text-xs text-muted-foreground leading-relaxed">
             <p className="font-medium text-foreground mb-1">The Movie Database (TMDB)</p>
             <p>
@@ -190,7 +190,7 @@ function CreditsTab() {
 
         {/* MusicBrainz - Required CC BY-SA attribution */}
         <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-          <img src={musicbrainzLogo} alt="MusicBrainz" className="h-5 mt-0.5 flex-shrink-0" />
+          <img src={musicbrainzLogo} alt="MusicBrainz" className="h-5 mt-0.5 shrink-0" />
           <div className="text-xs text-muted-foreground leading-relaxed">
             <p className="font-medium text-foreground mb-1">MusicBrainz</p>
             <p>

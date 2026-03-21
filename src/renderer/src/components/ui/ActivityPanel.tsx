@@ -152,7 +152,7 @@ function SortableQueueItem({
       {...attributes}
     >
       <GripVertical
-        className={`w-4 h-4 flex-shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
+        className={`w-4 h-4 shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
           isDragging ? 'text-primary' : 'text-muted-foreground/50'
         }`}
         {...listeners}
@@ -163,7 +163,7 @@ function SortableQueueItem({
           e.stopPropagation()
           onRemove(task.id)
         }}
-        className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-red-400 flex-shrink-0"
+        className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-red-400 shrink-0"
         title="Remove"
       >
         <X className="w-3.5 h-3.5" />
@@ -470,7 +470,7 @@ export function ActivityPanel() {
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative p-2 rounded-md transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black ${
+        className={`relative p-2 rounded-md transition-colors shrink-0 focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black ${
           isOpen
             ? 'bg-primary text-primary-foreground'
             : 'bg-card text-muted-foreground hover:bg-muted'
@@ -581,7 +581,7 @@ export function ActivityPanel() {
 
         {/* Queue - grows with panel resize */}
         <div className="flex-1 min-h-0 flex flex-col border-b border-border/30">
-          <div className="flex items-center justify-between px-4 py-2 bg-muted/20 flex-shrink-0">
+          <div className="flex items-center justify-between px-4 py-2 bg-muted/20 shrink-0">
             <div className="flex items-center gap-2">
               <Clock className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -635,9 +635,9 @@ export function ActivityPanel() {
         </div>
 
         {/* History Section - Fixed height, pl-6 to avoid resize handle */}
-        <div className="h-48 flex-shrink-0 flex flex-col pl-6">
+        <div className="h-48 shrink-0 flex flex-col pl-6">
           {/* Tabs */}
-          <div className="flex border-b border-border/30 flex-shrink-0">
+          <div className="flex border-b border-border/30 shrink-0">
             <button
               onClick={() => setActiveTab('tasks')}
               className={`flex-1 py-2 text-xs font-medium transition-colors ${
@@ -692,7 +692,7 @@ export function ActivityPanel() {
                         key={entry.id}
                         className="flex items-start gap-2 py-1.5 px-2 rounded hover:bg-muted/30 text-xs"
                       >
-                        <span className="flex-shrink-0 mt-0.5">{getHistoryIcon(entry.type)}</span>
+                        <span className="shrink-0 mt-0.5">{getHistoryIcon(entry.type)}</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-foreground truncate">{entry.message}</p>
                           <p className="text-muted-foreground/60">{formatTime(entry.timestamp)}</p>
@@ -730,7 +730,7 @@ export function ActivityPanel() {
                         key={event.id}
                         className="py-1 px-2 rounded hover:bg-muted/30 flex gap-2 text-xs"
                       >
-                        <span className="text-muted-foreground/50 flex-shrink-0">
+                        <span className="text-muted-foreground/50 shrink-0">
                           {event.timestamp}
                         </span>
                         <span className={getEventColor(event.type)}>{event.message}</span>

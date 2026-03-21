@@ -135,7 +135,7 @@ export function AIInsightsPanel({ isOpen, onClose, onOpenSettings, initialReport
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center">
+    <div className="fixed inset-0 z-150 flex items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
 
@@ -198,7 +198,7 @@ export function AIInsightsPanel({ isOpen, onClose, onOpenSettings, initialReport
                   disabled={rateLimited.limited}
                   className="w-full flex items-center gap-4 p-4 bg-muted/30 hover:bg-muted/50 rounded-xl transition-colors text-left disabled:opacity-50"
                 >
-                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <div className="shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                     <Icon className="w-5 h-5 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -211,7 +211,7 @@ export function AIInsightsPanel({ isOpen, onClose, onOpenSettings, initialReport
 
             {rateLimited.limited && (
               <div className="flex items-center gap-2 px-3 py-2 text-xs bg-amber-500/10 text-amber-400 rounded-lg">
-                <Clock className="w-3.5 h-3.5 flex-shrink-0" />
+                <Clock className="w-3.5 h-3.5 shrink-0" />
                 <span>Available again in {rateLimited.retryAfterSeconds}s</span>
               </div>
             )}
@@ -230,7 +230,7 @@ export function AIInsightsPanel({ isOpen, onClose, onOpenSettings, initialReport
               )}
 
               {reportContent && (
-                <div className="prose prose-sm prose-invert max-w-none break-words whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                <div className="prose prose-sm prose-invert max-w-none wrap-break-word whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                   <SimpleMarkdown text={reportContent} />
                 </div>
               )}
@@ -244,7 +244,7 @@ export function AIInsightsPanel({ isOpen, onClose, onOpenSettings, initialReport
 
               {error && (
                 <div className="flex items-center gap-2 px-3 py-2 mt-3 text-xs bg-destructive/10 text-destructive rounded-lg">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
@@ -332,7 +332,7 @@ function SimpleMarkdown({ text }: { text: string }) {
       const content = listMatch[3]
       elements.push(
         <div key={`li-${i}`} className="flex gap-1.5 ml-2">
-          <span className="text-muted-foreground flex-shrink-0">•</span>
+          <span className="text-muted-foreground shrink-0">•</span>
           <span><InlineMarkdown text={content} /></span>
         </div>,
       )

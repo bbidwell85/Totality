@@ -618,7 +618,7 @@ export function Dashboard({
           className="flex items-center gap-3 px-2 py-2 hover:bg-muted/50 rounded-md transition-colors group/row cursor-pointer"
           onClick={() => setSelectedMediaId(item.id)}
         >
-        <div className="w-10 h-14 bg-muted rounded overflow-hidden flex-shrink-0 shadow-md shadow-black/40">
+        <div className="w-10 h-14 bg-muted rounded overflow-hidden shrink-0 shadow-md shadow-black/40">
           {item.poster_url ? (
             <img src={item.poster_url} alt="" className="w-full h-full object-cover" />
           ) : (
@@ -670,7 +670,7 @@ export function Dashboard({
           className="flex items-center gap-3 px-2 py-2 hover:bg-muted/50 rounded-md transition-colors group/row cursor-pointer"
           onClick={() => setSelectedMediaId(item.id)}
         >
-        <div className="w-10 h-14 bg-muted rounded overflow-hidden flex-shrink-0 shadow-md shadow-black/40">
+        <div className="w-10 h-14 bg-muted rounded overflow-hidden shrink-0 shadow-md shadow-black/40">
           {item.poster_url ? (
             <img src={item.poster_url} alt="" className="w-full h-full object-cover" />
           ) : (
@@ -727,7 +727,7 @@ export function Dashboard({
           className="flex items-center gap-3 px-2 py-1 hover:bg-muted/50 rounded-md transition-colors group/row cursor-pointer"
           onClick={() => setSelectedMediaId(album.id)}
         >
-          <div className="w-10 h-10 bg-muted rounded overflow-hidden flex-shrink-0">
+          <div className="w-10 h-10 bg-muted rounded overflow-hidden shrink-0">
             {album.thumb_url ? (
               <img src={album.thumb_url} alt="" className="w-full h-full object-cover" />
             ) : (
@@ -787,13 +787,13 @@ export function Dashboard({
         <div
           role="button"
           tabIndex={missingCount > 0 ? 0 : -1}
-          className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-muted/50 rounded-md transition-colors focus:outline-none"
+          className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-muted/50 rounded-md transition-colors focus:outline-hidden"
           onClick={() => missingCount > 0 && toggleCollectionExpand(index)}
           onKeyDown={handleKeyDown}
           aria-expanded={isExpanded}
           aria-label={`${collection.collection_name}, ${collection.owned_movies} of ${collection.total_movies} movies`}
         >
-          <div className="w-10 h-14 bg-muted rounded overflow-hidden flex-shrink-0 shadow-md shadow-black/40">
+          <div className="w-10 h-14 bg-muted rounded overflow-hidden shrink-0 shadow-md shadow-black/40">
             {collection.poster_url ? (
               <img src={collection.poster_url} alt="" className="w-full h-full object-cover" />
             ) : (
@@ -812,7 +812,7 @@ export function Dashboard({
             </div>
           </div>
           {missingCount > 0 && (
-            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
           )}
         </div>
 
@@ -882,13 +882,13 @@ export function Dashboard({
         <div
           role="button"
           tabIndex={missingCount > 0 ? 0 : -1}
-          className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-muted/50 rounded-md transition-colors focus:outline-none"
+          className="flex items-center gap-3 px-2 py-2 cursor-pointer hover:bg-muted/50 rounded-md transition-colors focus:outline-hidden"
           onClick={() => missingCount > 0 && toggleSeriesExpand(index)}
           onKeyDown={handleKeyDown}
           aria-expanded={isExpanded}
           aria-label={`${s.series_title}, ${s.owned_seasons} of ${s.total_seasons} seasons, ${s.owned_episodes} of ${s.total_episodes} episodes`}
         >
-          <div className="w-10 h-14 bg-muted rounded overflow-hidden flex-shrink-0 shadow-md shadow-black/40">
+          <div className="w-10 h-14 bg-muted rounded overflow-hidden shrink-0 shadow-md shadow-black/40">
             {s.poster_url ? (
               <img src={s.poster_url} alt="" className="w-full h-full object-cover" />
             ) : (
@@ -907,7 +907,7 @@ export function Dashboard({
             </div>
           </div>
           {missingCount > 0 && (
-            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
           )}
         </div>
 
@@ -923,13 +923,13 @@ export function Dashboard({
                   {s.tmdb_id ? (
                     <button
                       onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(`https://www.themoviedb.org/tv/${s.tmdb_id}/season/${group.seasonNumber}`) }}
-                      className="text-sm text-foreground/80 flex-shrink-0 hover:text-primary hover:underline cursor-pointer transition-colors"
+                      className="text-sm text-foreground/80 shrink-0 hover:text-primary hover:underline cursor-pointer transition-colors"
                       title="Open on TMDB"
                     >
                       S{group.seasonNumber}
                     </button>
                   ) : (
-                    <span className="text-sm text-foreground/80 flex-shrink-0">
+                    <span className="text-sm text-foreground/80 shrink-0">
                       S{group.seasonNumber}
                     </span>
                   )}
@@ -1005,13 +1005,13 @@ export function Dashboard({
         <div
           role="button"
           tabIndex={totalMissing > 0 ? 0 : -1}
-          className="flex items-center gap-3 px-2 py-1 cursor-pointer hover:bg-muted/50 rounded-md transition-colors focus:outline-none"
+          className="flex items-center gap-3 px-2 py-1 cursor-pointer hover:bg-muted/50 rounded-md transition-colors focus:outline-hidden"
           onClick={() => totalMissing > 0 && toggleArtistExpand(index)}
           onKeyDown={handleKeyDown}
           aria-expanded={isExpanded}
           aria-label={`${artist.artist_name}, ${ownedReleases} of ${totalReleases} releases`}
         >
-          <div className="w-10 h-10 bg-muted rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center">
+          <div className="w-10 h-10 bg-muted rounded-full overflow-hidden shrink-0 flex items-center justify-center">
             {artist.thumb_url ? (
               <img src={artist.thumb_url} alt="" className="w-full h-full object-cover" />
             ) : (
@@ -1028,7 +1028,7 @@ export function Dashboard({
             </div>
           </div>
           {totalMissing > 0 && (
-            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
           )}
         </div>
 
@@ -1054,7 +1054,7 @@ export function Dashboard({
                       key={item.musicbrainz_id || `${group.prefix}-${idx}`}
                       className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors group/item"
                     >
-                      <div className="w-8 h-8 bg-muted rounded overflow-hidden flex-shrink-0">
+                      <div className="w-8 h-8 bg-muted rounded overflow-hidden shrink-0">
                         {coverUrl ? (
                           <img src={coverUrl} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                         ) : (
@@ -1198,7 +1198,7 @@ export function Dashboard({
         <div className="flex-1 flex gap-4 px-4 pb-4 overflow-x-auto overflow-y-hidden">
           {/* Upgrades Column (Tabbed: Movies / TV / Music) */}
           <div className="flex-1 min-w-[280px] flex flex-col bg-sidebar-gradient rounded-2xl shadow-xl overflow-hidden">
-            <div className="flex-shrink-0 p-4 border-b border-border/30">
+            <div className="shrink-0 p-4 border-b border-border/30">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <CircleFadingArrowUp className="w-4 h-4 text-muted-foreground" />
@@ -1208,7 +1208,7 @@ export function Dashboard({
                   <select
                     value={upgradeSortBy}
                     onChange={e => setUpgradeSortBy(e.target.value as 'quality' | 'recent' | 'title')}
-                    className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="quality">Quality</option>
                     <option value="recent">Recent</option>
@@ -1324,7 +1324,7 @@ export function Dashboard({
           {/* Collections Column - only show if movies library exists */}
           {hasMovies && (
             <div className="flex-1 min-w-[280px] flex flex-col bg-sidebar-gradient rounded-2xl shadow-xl overflow-hidden">
-              <div className="flex-shrink-0 p-4 border-b border-border/30 flex items-center justify-between">
+              <div className="shrink-0 p-4 border-b border-border/30 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Film className="w-4 h-4 text-muted-foreground" />
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Collections</h2>
@@ -1333,7 +1333,7 @@ export function Dashboard({
                   <select
                     value={collectionSortBy}
                     onChange={e => setCollectionSortBy(e.target.value as 'completeness' | 'name' | 'recent')}
-                    className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="completeness">Completeness</option>
                     <option value="name">Name</option>
@@ -1367,7 +1367,7 @@ export function Dashboard({
           {/* Series Column - only show if TV library exists */}
           {hasTV && (
             <div className="flex-1 min-w-[280px] flex flex-col bg-sidebar-gradient rounded-2xl shadow-xl overflow-hidden">
-              <div className="flex-shrink-0 p-4 border-b border-border/30 flex items-center justify-between">
+              <div className="shrink-0 p-4 border-b border-border/30 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Tv className="w-4 h-4 text-muted-foreground" />
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">TV Series</h2>
@@ -1376,7 +1376,7 @@ export function Dashboard({
                   <select
                     value={seriesSortBy}
                     onChange={e => setSeriesSortBy(e.target.value as 'completeness' | 'name' | 'recent')}
-                    className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="completeness">Completeness</option>
                     <option value="name">Name</option>
@@ -1410,7 +1410,7 @@ export function Dashboard({
           {/* Music Column - only show if music library exists */}
           {hasMusic && (
             <div className="flex-1 min-w-[280px] flex flex-col bg-sidebar-gradient rounded-2xl shadow-xl overflow-hidden">
-              <div className="flex-shrink-0 p-4 border-b border-border/30 flex items-center justify-between">
+              <div className="shrink-0 p-4 border-b border-border/30 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Music className="w-4 h-4 text-muted-foreground" />
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Music</h2>
@@ -1419,7 +1419,7 @@ export function Dashboard({
                   <select
                     value={artistSortBy}
                     onChange={e => setArtistSortBy(e.target.value as 'completeness' | 'name')}
-                    className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="completeness">Completeness</option>
                     <option value="name">Name</option>

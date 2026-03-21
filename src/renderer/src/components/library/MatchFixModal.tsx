@@ -239,7 +239,7 @@ export function MatchFixModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-200 flex items-center justify-center bg-black/60"
       onClick={onClose}
     >
       <div
@@ -263,7 +263,7 @@ export function MatchFixModal({
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-md hover:bg-muted transition-colors flex-shrink-0"
+            className="p-2 rounded-md hover:bg-muted transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -279,7 +279,7 @@ export function MatchFixModal({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={`Search for ${getTypeLabel().toLowerCase()}...`}
-                className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
                 autoFocus
               />
             </div>
@@ -330,7 +330,7 @@ export function MatchFixModal({
                   }`}
                 >
                   {/* Poster/Thumbnail */}
-                  <div className="w-12 h-16 flex-shrink-0 bg-muted rounded overflow-hidden">
+                  <div className="w-12 h-16 shrink-0 bg-muted rounded overflow-hidden">
                     {poster ? (
                       <img
                         src={poster}
@@ -349,7 +349,7 @@ export function MatchFixModal({
                     <div className="flex items-start justify-between gap-2">
                       <div className="font-medium truncate">{title}</div>
                       {isSelected && (
-                        <Check className="w-5 h-5 text-primary flex-shrink-0" />
+                        <Check className="w-5 h-5 text-primary shrink-0" />
                       )}
                     </div>
 

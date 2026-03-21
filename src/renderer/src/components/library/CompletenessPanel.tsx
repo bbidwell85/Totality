@@ -300,7 +300,7 @@ export function CompletenessPanel({
         <button
           ref={closeButtonRef}
           onClick={onClose}
-          className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+          className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary"
           aria-label="Close completeness panel"
         >
           <X className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
@@ -319,7 +319,7 @@ export function CompletenessPanel({
             <button
               ref={settingsButtonRef}
               onClick={() => onOpenSettings?.('services')}
-              className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 focus:outline-none"
+              className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 focus:outline-hidden"
             >
               <Settings className="w-4 h-4" />
               Open Settings
@@ -418,7 +418,7 @@ export function CompletenessPanel({
               <select
                 value={selectedShowLibraryId}
                 onChange={(e) => setSelectedShowLibraryId(e.target.value)}
-                className="w-full px-2.5 py-1 bg-card border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-2.5 py-1 bg-card border border-border rounded-md text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
               >
                 <option value="">All Libraries</option>
                 {showLibraries.map(lib => (
@@ -434,7 +434,7 @@ export function CompletenessPanel({
                   <button
                     ref={seriesButtonRef}
                     onClick={() => onCancel('series')}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm focus:outline-none`}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm focus:outline-hidden`}
                   >
                     <Square className="w-4 h-4" />
                     Stop Analysis
@@ -470,7 +470,7 @@ export function CompletenessPanel({
                   ref={seriesButtonRef}
                   onClick={handleAnalyzeSeries}
                   disabled={!isKeyConfigured}
-                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm focus:outline-none`}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm focus:outline-hidden`}
                 >
                   <RefreshCw className="w-4 h-4" />
                   Analyze Series
@@ -515,7 +515,7 @@ export function CompletenessPanel({
               <select
                 value={selectedMovieLibraryId}
                 onChange={(e) => setSelectedMovieLibraryId(e.target.value)}
-                className="w-full px-2.5 py-1 bg-card border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-2.5 py-1 bg-card border border-border rounded-md text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
               >
                 <option value="">All Libraries</option>
                 {movieLibraries.map(lib => (
@@ -531,7 +531,7 @@ export function CompletenessPanel({
                   <button
                     ref={collectionsButtonRef}
                     onClick={() => onCancel('collections')}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm focus:outline-none`}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm focus:outline-hidden`}
                   >
                     <Square className="w-4 h-4" />
                     Stop Analysis
@@ -567,7 +567,7 @@ export function CompletenessPanel({
                   ref={collectionsButtonRef}
                   onClick={handleAnalyzeCollections}
                   disabled={!isKeyConfigured}
-                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm focus:outline-none`}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-sm focus:outline-hidden`}
                 >
                   <RefreshCw className="w-4 h-4" />
                   Analyze Collections
@@ -615,7 +615,7 @@ export function CompletenessPanel({
                   <button
                     ref={musicButtonRef}
                     onClick={() => onCancel('music')}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm focus:outline-none`}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-md hover:bg-destructive/90 text-sm focus:outline-hidden`}
                   >
                     <Square className="w-4 h-4" />
                     Stop Analysis
@@ -650,7 +650,7 @@ export function CompletenessPanel({
                 <button
                   ref={musicButtonRef}
                   onClick={handleAnalyzeMusic}
-                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm focus:outline-none`}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm focus:outline-hidden`}
                 >
                   <RefreshCw className="w-4 h-4" />
                   Analyze Music

@@ -27,7 +27,7 @@ function SettingsCard({ title, description, icon, status, statusText, expanded, 
         onClick={onToggle}
         className="w-full flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors text-left"
       >
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           {status === 'configured' ? (
             <CheckCircle className="w-5 h-5 text-green-500" />
           ) : status === 'partial' ? (
@@ -36,7 +36,7 @@ function SettingsCard({ title, description, icon, status, statusText, expanded, 
             <Circle className="w-5 h-5 text-muted-foreground/50" />
           )}
         </div>
-        <div className="flex-shrink-0 text-muted-foreground">{icon}</div>
+        <div className="shrink-0 text-muted-foreground">{icon}</div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-medium text-sm">{title}</span>
@@ -104,7 +104,7 @@ function Toggle({
       aria-checked={checked}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
         disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
       } ${checked ? 'bg-primary' : 'bg-muted'}`}
     >
@@ -300,7 +300,7 @@ export function GeneralTab() {
                           saveMonitoringConfig({ pollingIntervals: newIntervals })
                         }}
                         disabled={isSaving || !monitoringConfig.enabled || !isConfigured}
-                        className="bg-background text-foreground text-sm rounded-md px-3 py-2 border border-border/30 focus:outline-none focus:ring-2 focus:ring-primary min-w-[90px] disabled:opacity-50"
+                        className="bg-background text-foreground text-sm rounded-md px-3 py-2 border border-border/30 focus:outline-hidden focus:ring-2 focus:ring-primary min-w-[90px] disabled:opacity-50"
                       >
                         {INTERVAL_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>

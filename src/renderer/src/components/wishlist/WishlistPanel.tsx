@@ -176,7 +176,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
               ref={exportButtonRef}
               onClick={handleExport}
               disabled={isExporting}
-              className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none disabled:opacity-50"
+              className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-hidden disabled:opacity-50"
               aria-label="Export wishlist to CSV"
               title="Export to CSV"
             >
@@ -190,7 +190,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
           <button
             ref={closeButtonRef}
             onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+            className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary"
             aria-label="Close wishlist panel"
           >
             <X className="w-4 h-4 text-muted-foreground" />

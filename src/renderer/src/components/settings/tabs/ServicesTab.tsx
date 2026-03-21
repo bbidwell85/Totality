@@ -53,7 +53,7 @@ function ServiceCard({
           className="flex items-center gap-3 flex-1 min-w-0 text-left"
         >
           {/* Status indicator */}
-          <div className="flex-shrink-0">
+          <div className="shrink-0">
             {status === 'configured' ? (
               <CheckCircle className="w-5 h-5 text-green-500" />
             ) : status === 'partial' ? (
@@ -64,7 +64,7 @@ function ServiceCard({
           </div>
 
           {/* Icon */}
-          <div className="flex-shrink-0 text-muted-foreground">{icon}</div>
+          <div className="shrink-0 text-muted-foreground">{icon}</div>
 
           {/* Title and status */}
           <div className="flex-1 min-w-0">
@@ -84,7 +84,7 @@ function ServiceCard({
             role="switch"
             aria-checked={enableToggle.enabled}
             onClick={(e) => { e.stopPropagation(); enableToggle.onToggle() }}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
               enableToggle.enabled ? 'bg-primary' : 'bg-muted-foreground/30'
             }`}
           >
@@ -97,7 +97,7 @@ function ServiceCard({
         )}
 
         {/* Expand indicator */}
-        <button onClick={onToggle} className="p-1 flex-shrink-0">
+        <button onClick={onToggle} className="p-1 shrink-0">
           <ChevronDown
             className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
               expanded ? 'rotate-180' : ''
@@ -472,7 +472,7 @@ export function ServicesTab() {
                     setTmdbStatus('idle')
                   }}
                   placeholder="Enter your TMDB API key"
-                  className="w-full px-3 py-2 pr-10 bg-background border border-border/30 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-3 py-2 pr-10 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
                 />
                 <button
                   type="button"
@@ -678,7 +678,7 @@ export function ServicesTab() {
                     setGeminiError(null)
                   }}
                   placeholder="Enter your Gemini API key"
-                  className="w-full px-3 py-2 pr-10 bg-background border border-border/30 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-3 py-2 pr-10 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
                 />
                 <button
                   type="button"
@@ -732,7 +732,7 @@ export function ServicesTab() {
               id={geminiModelId}
               value={geminiModel}
               onChange={(e) => setGeminiModel(e.target.value)}
-              className="w-full px-3 py-2 bg-background border border-border/30 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
             >
               <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended)</option>
               <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most capable)</option>
@@ -807,12 +807,12 @@ export function ServicesTab() {
                       >
                         {testResult.success ? (
                           <>
-                            <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                            <CheckCircle className="w-3.5 h-3.5 shrink-0" />
                             <span>{testResult.message}</span>
                           </>
                         ) : (
                           <>
-                            <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                            <XCircle className="w-3.5 h-3.5 shrink-0" />
                             <span>{testResult.error}</span>
                           </>
                         )}
@@ -835,7 +835,7 @@ export function ServicesTab() {
                   value={newNfsPath}
                   onChange={(e) => setNewNfsPath(e.target.value)}
                   placeholder="nas.local/media"
-                  className="w-full px-3 py-2 bg-background border border-border/30 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-3 py-2 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div className="flex-1 space-y-1">
@@ -845,7 +845,7 @@ export function ServicesTab() {
                   value={newLocalPath}
                   onChange={(e) => setNewLocalPath(e.target.value)}
                   placeholder="Z:\"
-                  className="w-full px-3 py-2 bg-background border border-border/30 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-3 py-2 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
                 />
               </div>
               <button
