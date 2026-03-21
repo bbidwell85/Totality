@@ -358,13 +358,14 @@ export function MusicView({
       if (!codec) return false
       return LOSSLESS_CODECS.some(c => codec.toLowerCase().includes(c))
     }
-    const getTrackQualityTier = (track: MusicTrack): 'ultra' | 'high' | 'medium' | 'low' | null => {
+    const getTrackQualityTier = (track: MusicTrack): 'ultra' | 'high' | 'high-lossy' | 'medium' | 'low' | null => {
       const bitrateKbps = track.audio_bitrate || 0
       const sampleRate = track.sample_rate || 0
       const bitDepth = track.bit_depth || 16
       const isLossless = track.is_lossless || isLosslessCodec(track.audio_codec)
       if (isLossless && (bitDepth >= 24 || sampleRate > 48000)) return 'ultra'
       if (isLossless) return 'high'
+      if (bitrateKbps >= 256) return 'high-lossy'
       if (track.audio_codec?.toLowerCase().includes('aac')) {
         if (bitrateKbps >= 128) return 'medium'
       } else {
@@ -514,7 +515,7 @@ export function MusicView({
 
           // Quality tier calculation based on audio file specs
           // Tiers: Ultra (Hi-Res) > High (CD Lossless) > Medium (Transparent Lossy) > Low
-          type QualityTier = 'ultra' | 'high' | 'medium' | 'low' | null
+          type QualityTier = 'ultra' | 'high' | 'high-lossy' | 'medium' | 'low' | null
 
           // Lossless codecs
           const LOSSLESS_CODECS = ['flac', 'alac', 'wav', 'aiff', 'pcm', 'dsd', 'ape', 'wavpack', 'wv']
@@ -549,6 +550,9 @@ export function MusicView({
               return 'high'
             }
 
+            // HIGH-LOSSY: Lossy with bitrate >= 256 kbps
+            if (bitrateKbps >= 256) return 'high-lossy'
+
             // MEDIUM: Lossy with bitrate >= 160 kbps (MP3) OR AAC >= 128 kbps
             if (isAACCodec(track.codec)) {
               // AAC is more efficient - 128+ kbps is considered transparent
@@ -578,6 +582,7 @@ export function MusicView({
           const qualityTierConfig: Record<QualityTier & string, { label: string; class: string; title: string }> = {
             'ultra': { label: 'Ultra', class: 'bg-foreground text-background', title: 'Hi-Res lossless: 24-bit or >48kHz sample rate' },
             'high': { label: 'High', class: 'bg-foreground text-background', title: 'CD-quality lossless: FLAC/ALAC/WAV at 16-bit/44.1-48kHz' },
+            'high-lossy': { label: 'High', class: 'bg-foreground text-background', title: 'High bitrate lossy: 256+ kbps' },
             'medium': { label: 'Medium', class: 'bg-foreground text-background', title: 'Transparent lossy: MP3 >=160kbps or AAC >=128kbps' },
             'low': { label: 'Low', class: 'bg-foreground text-background', title: 'Low bitrate lossy: below transparent threshold' },
           }
@@ -753,21 +758,23 @@ export function MusicView({
         {/* Track Quality Details Modal */}
         {selectedTrackForQuality && (() => {
           const tier = selectedTrackForQuality.qualityTier
-          const tierLabel = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : 'Unknown'
+          const bitrateKbps = selectedTrackForQuality.bitrate || 0
+          const isLossy = !selectedTrackForQuality.is_lossless
+          const isHighLossy = isLossy && bitrateKbps >= 256
+          const tierLabel = isHighLossy ? 'High' : tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : 'Unknown'
           const tierDescription = tier === 'ultra' ? 'Hi-Res Lossless' :
                                   tier === 'high' ? 'CD-Quality Lossless' :
+                                  isHighLossy ? 'High Bitrate Lossy' :
                                   tier === 'medium' ? 'Transparent Lossy' :
                                   tier === 'low' ? 'Low Bitrate Lossy' : 'Unknown'
-          const tierColor = tier === 'ultra' ? 'text-purple-500' :
-                           tier === 'high' ? 'text-green-500' :
-                           tier === 'medium' ? 'text-blue-500' :
-                           tier === 'low' ? 'text-red-500' : 'text-muted-foreground'
-
-          // Calculate a score based on the tier (for visual consistency with video modal)
+          // Calculate score within tier (not against global ceiling)
+          const sampleRate = selectedTrackForQuality.sample_rate || 44100
+          const bitDepth = selectedTrackForQuality.bit_depth || 16
           const tierScore = tier === 'ultra' ? 100 :
-                           tier === 'high' ? 85 :
-                           tier === 'medium' ? 60 :
-                           tier === 'low' ? 30 : 0
+                           tier === 'high' ? Math.round(70 + Math.min((sampleRate / 48000), 1) * 15 + Math.min((bitDepth / 24), 1) * 15) :
+                           isHighLossy ? Math.min(Math.round(90 + (bitrateKbps - 256) / 64 * 10), 100) :
+                           tier === 'medium' ? Math.round(40 + ((bitrateKbps - 128) / (256 - 128)) * 50) :
+                           tier === 'low' ? Math.round((bitrateKbps / 192) * 40) : 0
 
           // Check if bitrate is low (for lossy codecs, below 160kbps for MP3 or 128kbps for AAC)
           const isLossyCodec = !selectedTrackForQuality.is_lossless
@@ -855,45 +862,50 @@ export function MusicView({
                 {/* Content */}
                 <div className="p-4 space-y-4">
                   {/* Quality Score Card */}
-                  <div className="rounded-lg border border-border p-3">
+                  <div className="rounded-lg p-3">
                     <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 bg-muted/30 -ml-3 -mt-3 -mb-3 px-4 py-3 rounded-l-lg">
                         <div className="text-center">
                           <div className="text-2xl font-bold">{tierLabel}</div>
-                          <div className={`text-xs font-medium ${tierColor}`}>{tierDescription}</div>
+                          <div className="text-xs font-medium text-muted-foreground">{tierDescription}</div>
                         </div>
                         <div className="h-10 w-px bg-border" />
                         <div className="text-center">
                           <div className="text-2xl font-bold">{tierScore}</div>
-                          <div className="text-xs text-muted-foreground">Score</div>
+                          <div className="text-xs font-medium text-muted-foreground">Score</div>
                         </div>
                       </div>
 
-                      {/* Premium Badges */}
-                      <div className="flex flex-wrap gap-1.5">
-                        {!!selectedTrackForQuality.is_lossless && (
-                          <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-500/20 text-green-400">Lossless</span>
-                        )}
+                      {/* Quality Bar + Premium Badges */}
+                      <div className="flex-1 flex items-center gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-sm text-muted-foreground">Quality</span>
+                            <span className="text-sm font-medium tabular-nums">{tierScore}</span>
+                          </div>
+                          <div className="h-1 bg-muted rounded-full overflow-hidden mt-1">
+                            <div className="h-full bg-primary transition-all" style={{ width: `${tierScore}%` }} />
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-0.5">
+                            {selectedTrackForQuality.is_lossless
+                              ? `${selectedTrackForQuality.bit_depth || 16}-bit / ${((selectedTrackForQuality.sample_rate || 44100) / 1000).toFixed(1)} kHz`
+                              : `${Math.round(selectedTrackForQuality.bitrate || 0)} kbps`
+                            } · Target: {tier === 'ultra' ? '24-bit+ / 96+ kHz'
+                              : tier === 'high' ? '16-bit+ / 44.1+ kHz'
+                              : isHighLossy ? '256+ kbps'
+                              : tier === 'medium' ? '192-256 kbps'
+                              : '160+ kbps'}
+                          </div>
+                        </div>
                         {(selectedTrackForQuality.bit_depth ?? 0) >= 24 && (
                           <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-500/20 text-purple-400">Hi-Res</span>
                         )}
                       </div>
                     </div>
 
-                    {/* Score Bar */}
-                    <div className="mt-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground w-14">Quality</span>
-                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-primary transition-all" style={{ width: `${tierScore}%` }} />
-                        </div>
-                        <span className="text-xs w-8 text-right">{tierScore}</span>
-                      </div>
-                    </div>
-
-                    {/* Issue text - shown inside quality score card */}
+                    {/* Issue text */}
                     {issueText && (
-                      <div className="mt-3 pt-3 border-t border-border">
+                      <div className="mt-3">
                         <div className="text-sm text-muted-foreground">{issueText}</div>
                       </div>
                     )}
@@ -1506,9 +1518,10 @@ export function MusicView({
                           const bitDepth = track.bit_depth || 16
                           const isAAC = codecLower.includes('aac')
 
-                          let qualityTier: 'ultra' | 'high' | 'medium' | 'low' | null = null
+                          let qualityTier: 'ultra' | 'high' | 'high-lossy' | 'medium' | 'low' | null = null
                           if (isLossless && (bitDepth >= 24 || sampleRate > 48000)) qualityTier = 'ultra'
                           else if (isLossless) qualityTier = 'high'
+                          else if (bitrateKbps >= 256) qualityTier = 'high-lossy'
                           else if (isAAC && bitrateKbps >= 128) qualityTier = 'medium'
                           else if (!isAAC && bitrateKbps >= 160) qualityTier = 'medium'
                           else if (bitrateKbps > 0) qualityTier = 'low'
@@ -1556,19 +1569,23 @@ export function MusicView({
       {/* Track Quality Details Modal */}
       {selectedTrackForQuality && (() => {
         const tier = selectedTrackForQuality.qualityTier
-        const tierLabel = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : 'Unknown'
+        const bitrateKbps = selectedTrackForQuality.bitrate || 0
+        const isLossy = !selectedTrackForQuality.is_lossless
+        const isHighLossy = isLossy && bitrateKbps >= 256
+        const tierLabel = isHighLossy ? 'High' : tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : 'Unknown'
         const tierDescription = tier === 'ultra' ? 'Hi-Res Lossless' :
                                 tier === 'high' ? 'CD-Quality Lossless' :
+                                isHighLossy ? 'High Bitrate Lossy' :
                                 tier === 'medium' ? 'Transparent Lossy' :
                                 tier === 'low' ? 'Low Bitrate Lossy' : 'Unknown'
-        const tierColor = tier === 'ultra' ? 'text-purple-500' :
-                         tier === 'high' ? 'text-green-500' :
-                         tier === 'medium' ? 'text-blue-500' :
-                         tier === 'low' ? 'text-red-500' : 'text-muted-foreground'
+        // Calculate score within tier (not against global ceiling)
+        const sampleRate = selectedTrackForQuality.sample_rate || 44100
+        const bitDepth = selectedTrackForQuality.bit_depth || 16
         const tierScore = tier === 'ultra' ? 100 :
-                         tier === 'high' ? 85 :
-                         tier === 'medium' ? 60 :
-                         tier === 'low' ? 30 : 0
+                         tier === 'high' ? Math.round(70 + Math.min((sampleRate / 48000), 1) * 15 + Math.min((bitDepth / 24), 1) * 15) :
+                         isHighLossy ? Math.min(Math.round(90 + (bitrateKbps - 256) / 64 * 10), 100) :
+                         tier === 'medium' ? Math.round(40 + ((bitrateKbps - 128) / (256 - 128)) * 50) :
+                         tier === 'low' ? Math.round((bitrateKbps / 192) * 40) : 0
 
         // Check if bitrate is low (for lossy codecs, below 160kbps for MP3 or 128kbps for AAC)
         const isLossyCodec = !selectedTrackForQuality.is_lossless
@@ -1645,43 +1662,48 @@ export function MusicView({
               {/* Content */}
               <div className="p-4 space-y-4">
                 {/* Quality Score Card */}
-                <div className="rounded-lg border border-border p-3">
+                <div className="rounded-lg p-3">
                   <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 bg-muted/30 -ml-3 -mt-3 -mb-3 px-4 py-3 rounded-l-lg">
                       <div className="text-center">
                         <div className="text-2xl font-bold">{tierLabel}</div>
-                        <div className={`text-xs font-medium ${tierColor}`}>{tierDescription}</div>
+                        <div className="text-xs font-medium text-muted-foreground">{tierDescription}</div>
                       </div>
                       <div className="h-10 w-px bg-border" />
                       <div className="text-center">
                         <div className="text-2xl font-bold">{tierScore}</div>
-                        <div className="text-xs text-muted-foreground">Score</div>
+                        <div className="text-xs font-medium text-muted-foreground">Score</div>
                       </div>
                     </div>
 
-                    {/* Premium Badges */}
-                    <div className="flex flex-wrap gap-1.5">
-                      {!!selectedTrackForQuality.is_lossless && (
-                        <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-500/20 text-green-400">Lossless</span>
-                      )}
+                    {/* Quality Bar + Premium Badges */}
+                    <div className="flex-1 flex items-center gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-sm text-muted-foreground">Quality</span>
+                          <span className="text-sm font-medium tabular-nums">{tierScore}</span>
+                        </div>
+                        <div className="h-1 bg-muted rounded-full overflow-hidden mt-1">
+                          <div className="h-full bg-primary transition-all" style={{ width: `${tierScore}%` }} />
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-0.5">
+                          {selectedTrackForQuality.is_lossless
+                            ? `${selectedTrackForQuality.bit_depth || 16}-bit / ${((selectedTrackForQuality.sample_rate || 44100) / 1000).toFixed(1)} kHz`
+                            : `${Math.round(selectedTrackForQuality.bitrate || 0)} kbps`
+                          } · Target: {tier === 'ultra' ? '24-bit+ / 96+ kHz'
+                            : tier === 'high' ? '16-bit+ / 44.1+ kHz'
+                            : isHighLossy ? '256+ kbps'
+                            : tier === 'medium' ? '192-256 kbps'
+                            : '160+ kbps'}
+                        </div>
+                      </div>
                       {(selectedTrackForQuality.bit_depth ?? 0) >= 24 && (
                         <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-500/20 text-purple-400">Hi-Res</span>
                       )}
                     </div>
                   </div>
 
-                  {/* Score Bar */}
-                  <div className="mt-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground w-14">Quality</span>
-                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-primary transition-all" style={{ width: `${tierScore}%` }} />
-                      </div>
-                      <span className="text-xs w-8 text-right">{tierScore}</span>
-                    </div>
-                  </div>
-
-                  {/* Issue text - shown inside quality score card */}
+                  {/* Issue text */}
                   {issueText && (
                     <div className="mt-3 pt-3 border-t border-border">
                       <div className="text-sm text-muted-foreground">{issueText}</div>
@@ -2215,7 +2237,7 @@ const TrackListItem = memo(({ track, index, artistName, albumTitle, columnWidths
     return codec.toLowerCase().includes('aac')
   }
 
-  const getQualityTier = (): 'ultra' | 'high' | 'medium' | 'low' | null => {
+  const getQualityTier = (): 'ultra' | 'high' | 'high-lossy' | 'medium' | 'low' | null => {
     const bitrateKbps = track.audio_bitrate || 0
     const sampleRate = track.sample_rate || 0
     const bitDepth = track.bit_depth || 16
@@ -2223,6 +2245,7 @@ const TrackListItem = memo(({ track, index, artistName, albumTitle, columnWidths
 
     if (isLossless && (bitDepth >= 24 || sampleRate > 48000)) return 'ultra'
     if (isLossless) return 'high'
+    if (bitrateKbps >= 256) return 'high-lossy'
     if (isAACCodec(track.audio_codec)) {
       if (bitrateKbps >= 128) return 'medium'
     } else {
@@ -2242,6 +2265,7 @@ const TrackListItem = memo(({ track, index, artistName, albumTitle, columnWidths
   const qualityTierConfig: Record<string, { label: string; color: string }> = {
     ultra: { label: 'Ultra', color: 'bg-foreground text-background' },
     high: { label: 'High', color: 'bg-foreground text-background' },
+    'high-lossy': { label: 'High', color: 'bg-foreground text-background' },
     medium: { label: 'Mid', color: 'bg-foreground text-background' },
     low: { label: 'Low', color: 'bg-foreground text-background' }
   }

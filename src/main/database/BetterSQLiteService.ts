@@ -3178,7 +3178,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     if (sourceId) {
       // When filtering by source, only return completeness for artists that exist in that source
       const stmt = this.db.prepare(`
-        SELECT DISTINCT ac.*
+        SELECT DISTINCT ac.*, ma.thumb_url
         FROM artist_completeness ac
         INNER JOIN music_artists ma ON ac.artist_name = ma.name AND ma.source_id = ?
         ORDER BY ac.artist_name ASC
@@ -3186,7 +3186,12 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       return stmt.all(sourceId) as ArtistCompleteness[]
     }
 
-    const stmt = this.db.prepare('SELECT * FROM artist_completeness ORDER BY artist_name ASC')
+    const stmt = this.db.prepare(`
+      SELECT ac.*, ma.thumb_url
+      FROM artist_completeness ac
+      LEFT JOIN music_artists ma ON ac.artist_name = ma.name
+      ORDER BY ac.artist_name ASC
+    `)
     return stmt.all() as ArtistCompleteness[]
   }
 

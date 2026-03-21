@@ -162,15 +162,23 @@ export function Dashboard({
       // Filter by active source if one is selected
       const sourceId = activeSourceId || undefined
 
-      // Read completeness settings
-      const [epsSettingVal, singlesSettingVal] = await Promise.all([
+      // Read completeness settings and sort preferences
+      const [epsSettingVal, singlesSettingVal, upgSort, collSort, serSort, artSort] = await Promise.all([
         window.electronAPI.getSetting('completeness_include_eps'),
         window.electronAPI.getSetting('completeness_include_singles'),
+        window.electronAPI.getSetting('dashboard_upgrade_sort'),
+        window.electronAPI.getSetting('dashboard_collection_sort'),
+        window.electronAPI.getSetting('dashboard_series_sort'),
+        window.electronAPI.getSetting('dashboard_artist_sort'),
       ])
       const epsEnabled = epsSettingVal !== 'false'
       const singlesEnabled = singlesSettingVal !== 'false'
       setIncludeEps(epsEnabled)
       setIncludeSingles(singlesEnabled)
+      if (upgSort) setUpgradeSortBy(upgSort as 'quality' | 'recent' | 'title')
+      if (collSort) setCollectionSortBy(collSort as 'completeness' | 'name' | 'recent')
+      if (serSort) setSeriesSortBy(serSort as 'completeness' | 'name' | 'recent')
+      if (artSort) setArtistSortBy(artSort as 'completeness' | 'name')
 
       const [movieUpgradeData, tvUpgradeData, musicUpgradeData, collectionsData, seriesData, artistsData] = await Promise.all([
         window.electronAPI.getMediaItems({
@@ -740,7 +748,7 @@ export function Dashboard({
             <div className="font-medium text-sm truncate">{album.title}</div>
             <div className="text-xs text-muted-foreground truncate">{album.artist_name}</div>
             <div className="text-[10px] text-muted-foreground mt-1">
-              {album.quality_tier} · {album.tier_quality}
+              {album.quality_tier} · {album.tier_quality}{album.best_bitrate ? ` · ${Math.round(album.best_bitrate)} kbps` : ''}
             </div>
           </div>
           <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -1011,7 +1019,7 @@ export function Dashboard({
           aria-expanded={isExpanded}
           aria-label={`${artist.artist_name}, ${ownedReleases} of ${totalReleases} releases`}
         >
-          <div className="w-10 h-10 bg-muted rounded-full overflow-hidden shrink-0 flex items-center justify-center">
+          <div className="w-10 h-10 bg-muted rounded-full overflow-hidden shrink-0 flex items-center justify-center shadow-md shadow-black/40">
             {artist.thumb_url ? (
               <img src={artist.thumb_url} alt="" className="w-full h-full object-cover" />
             ) : (
@@ -1207,7 +1215,7 @@ export function Dashboard({
                 <div className="flex items-center gap-2">
                   <select
                     value={upgradeSortBy}
-                    onChange={e => setUpgradeSortBy(e.target.value as 'quality' | 'recent' | 'title')}
+                    onChange={e => { const v = e.target.value as 'quality' | 'recent' | 'title'; setUpgradeSortBy(v); window.electronAPI.setSetting('dashboard_upgrade_sort', v) }}
                     className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="quality">Quality</option>
@@ -1332,7 +1340,7 @@ export function Dashboard({
                 <div className="flex items-center gap-2">
                   <select
                     value={collectionSortBy}
-                    onChange={e => setCollectionSortBy(e.target.value as 'completeness' | 'name' | 'recent')}
+                    onChange={e => { const v = e.target.value as 'completeness' | 'name' | 'recent'; setCollectionSortBy(v); window.electronAPI.setSetting('dashboard_collection_sort', v) }}
                     className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="completeness">Completeness</option>
@@ -1375,7 +1383,7 @@ export function Dashboard({
                 <div className="flex items-center gap-2">
                   <select
                     value={seriesSortBy}
-                    onChange={e => setSeriesSortBy(e.target.value as 'completeness' | 'name' | 'recent')}
+                    onChange={e => { const v = e.target.value as 'completeness' | 'name' | 'recent'; setSeriesSortBy(v); window.electronAPI.setSetting('dashboard_series_sort', v) }}
                     className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="completeness">Completeness</option>
@@ -1418,7 +1426,7 @@ export function Dashboard({
                 <div className="flex items-center gap-2">
                   <select
                     value={artistSortBy}
-                    onChange={e => setArtistSortBy(e.target.value as 'completeness' | 'name')}
+                    onChange={e => { const v = e.target.value as 'completeness' | 'name'; setArtistSortBy(v); window.electronAPI.setSetting('dashboard_artist_sort', v) }}
                     className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="completeness">Completeness</option>

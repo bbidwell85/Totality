@@ -140,6 +140,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [thresholds, setThresholds] = useState<Record<string, QualityThresholds>>(DEFAULT_THRESHOLDS)
+  const [videoWeight, setVideoWeight] = useState(70)
   const [showMenu, setShowMenu] = useState(false)
   const [isRescanning, setIsRescanning] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -178,6 +179,17 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaId])
 
+  // Listen for settings changes to update weight display
+  useEffect(() => {
+    const cleanup = window.electronAPI.onSettingsChanged(async (data: { key: string }) => {
+      if (data.key === 'quality_video_weight') {
+        const val = await window.electronAPI.getSetting('quality_video_weight')
+        if (val) setVideoWeight(Math.max(0, Math.min(100, parseInt(val) || 70)))
+      }
+    })
+    return cleanup
+  }, [])
+
   const loadMediaDetails = async () => {
     try {
       setLoading(true)
@@ -209,6 +221,9 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
         }
       }
       setThresholds(loadedThresholds)
+
+      const weightVal = await window.electronAPI.getSetting('quality_video_weight')
+      if (weightVal) setVideoWeight(Math.max(0, Math.min(100, parseInt(weightVal) || 70)))
 
       const item = await window.electronAPI.getMediaItemById(mediaId) as MediaWithQuality | null
       if (!item) {
@@ -331,6 +346,31 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
     <span className="inline-block w-2 h-2 rounded-full bg-red-500 ml-1.5" title="Below quality threshold" />
   )
 
+  const getTrackDiagnostic = (track: AudioTrack, tier?: string): { message: string; severity: 'error' | 'warning' } | null => {
+    if (isCommentary(track)) return null
+    if (track.hasObjectAudio) return null
+    const c = (track.codec || '').toLowerCase()
+    const isLossless = c.includes('truehd') || c.includes('flac') || c.includes('pcm') || c.includes('lpcm') ||
+      c.includes('alac') || c.includes('dts-hd ma') || c.includes('dtshd_ma')
+    if (isLossless) return null
+    if (!track.bitrate || track.bitrate <= 0) return null
+
+    const channels = track.channels || 2
+    const minExpected = channels * 32
+
+    if (track.bitrate < minExpected) {
+      return { message: `Possibly corrupt — bitrate too low for ${channels >= 6 ? 'surround' : 'stereo'}`, severity: 'error' }
+    }
+
+    const t = thresholds[tier || 'SD'] || DEFAULT_THRESHOLDS['SD']
+    const threshold = channels <= 2 ? Math.round(t.audio.medium / 2) : t.audio.medium
+    if (track.bitrate < threshold) {
+      return { message: `Below ${tier || 'SD'} target (${threshold} kbps)`, severity: 'warning' }
+    }
+
+    return null
+  }
+
   // Parse quality issues and return abbreviated badge labels
   const tierRank = (tier?: string): number => {
     switch (tier) {
@@ -421,6 +461,12 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   }
 
   const getTrackScore = (track: AudioTrack): number => {
+    // Penalize suspiciously low bitrate tracks (likely corrupt)
+    const channels = track.channels || 2
+    const bitrate = track.bitrate || 0
+    const isLossless = ((track.codec || '').toLowerCase().match(/truehd|flac|pcm|lpcm|alac|dts-hd ma|dtshd_ma/))
+    if (!isLossless && !track.hasObjectAudio && bitrate > 0 && bitrate < channels * 32) return 0
+
     if (track.hasObjectAudio) return 5
     const c = (track.codec || '').toLowerCase()
     if (c.includes('truehd') || c.includes('flac') || c.includes('pcm') || c.includes('lpcm') || c.includes('alac') || c.includes('dts-hd ma') || c.includes('dtshd_ma')) return 4
@@ -463,6 +509,8 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   const svAudioTracks = sv ? parseVersionAudioTracks(sv) : audioTracks
   const svSubtitleTracks = sv ? parseVersionSubtitleTracks(sv) : subtitleTracks
   const svBestTrackIdx = getBestTrackIndex(svAudioTracks)
+  const bestAudioTrack = svAudioTracks.find(t => t.index === svBestTrackIdx)
+  const bestAudioBitrate = bestAudioTrack?.bitrate ?? sv?.audio_bitrate ?? media.audio_bitrate
 
   return createPortal(
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-150 p-6" role="dialog" aria-modal="true" onClick={onClose}>
@@ -634,59 +682,56 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
           {/* Quality Score Summary */}
-          <div className="rounded-lg border border-border p-3">
+          <div className="rounded-lg p-3">
             {(sv?.quality_tier ?? media.quality_tier) ? (
               <>
                 <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 bg-muted/30 -ml-3 -mt-3 -mb-3 px-4 py-3 rounded-l-lg">
                     <div className="text-center">
                       <div className="text-2xl font-bold">{sv?.quality_tier ?? media.quality_tier}</div>
-                      <div className={`text-xs font-medium ${
-                        (sv?.tier_quality ?? media.tier_quality) === 'HIGH' ? 'text-green-500' :
-                        (sv?.tier_quality ?? media.tier_quality) === 'MEDIUM' ? 'text-blue-500' :
-                        (sv?.tier_quality ?? media.tier_quality) === 'LOW' ? 'text-red-500' :
-                        'text-muted-foreground'
-                      }`}>{sv?.tier_quality ?? media.tier_quality}</div>
+                      <div className="text-xs font-medium text-muted-foreground">{sv?.tier_quality ?? media.tier_quality}</div>
                     </div>
                     {(sv?.tier_score ?? media.tier_score) != null && (
                       <>
                         <div className="h-10 w-px bg-border" />
                         <div className="text-center">
                           <div className="text-2xl font-bold">{sv?.tier_score ?? media.tier_score}</div>
-                          <div className="text-xs text-muted-foreground">Score</div>
+                          <div className="text-xs font-medium text-muted-foreground">Score</div>
                         </div>
                       </>
                     )}
                   </div>
 
-                  {/* Score Bars */}
+                  {/* Score Bars — Side by Side */}
                   {((sv?.bitrate_tier_score ?? media.bitrate_tier_score) != null || (sv?.audio_tier_score ?? media.audio_tier_score) != null) && (
-                    <div className="flex-1 max-w-sm space-y-2">
+                    <div className="flex-1 flex gap-4">
                       {(sv?.bitrate_tier_score ?? media.bitrate_tier_score) != null && (
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground w-12">Video</span>
-                            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv?.bitrate_tier_score ?? media.bitrate_tier_score ?? 0, 100)}%` }} />
-                            </div>
-                            <span className="text-xs w-8 text-right tabular-nums">{Math.min(sv?.bitrate_tier_score ?? media.bitrate_tier_score ?? 0, 100)}</span>
+                        <div className="flex-1">
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-sm text-muted-foreground">Video</span>
+                            <span className="text-sm font-medium tabular-nums">{Math.min(sv?.bitrate_tier_score ?? media.bitrate_tier_score ?? 0, 100)}</span>
+                            <span className="text-xs text-muted-foreground/60">· {videoWeight}%</span>
                           </div>
-                          <div className="text-xs text-muted-foreground ml-14 mt-0.5">
+                          <div className="h-1 bg-muted rounded-full overflow-hidden mt-1">
+                            <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv?.bitrate_tier_score ?? media.bitrate_tier_score ?? 0, 100)}%` }} />
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-0.5">
                             {formatBitrate(sv?.video_bitrate ?? media.video_bitrate)} · Target: {getVideoThresholdRange(sv?.quality_tier ?? media.quality_tier)}
                           </div>
                         </div>
                       )}
                       {(sv?.audio_tier_score ?? media.audio_tier_score) != null && (
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground w-12">Audio</span>
-                            <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv?.audio_tier_score ?? media.audio_tier_score ?? 0, 100)}%` }} />
-                            </div>
-                            <span className="text-xs w-8 text-right tabular-nums">{Math.min(sv?.audio_tier_score ?? media.audio_tier_score ?? 0, 100)}</span>
+                        <div className="flex-1">
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-sm text-muted-foreground">Audio</span>
+                            <span className="text-sm font-medium tabular-nums">{Math.min(sv?.audio_tier_score ?? media.audio_tier_score ?? 0, 100)}</span>
+                            <span className="text-xs text-muted-foreground/60">· {100 - videoWeight}%</span>
                           </div>
-                          <div className="text-xs text-muted-foreground ml-14 mt-0.5">
-                            {formatBitrate(sv?.audio_bitrate ?? media.audio_bitrate)} · Target: {getAudioThresholdRange(sv?.quality_tier ?? media.quality_tier)}
+                          <div className="h-1 bg-muted rounded-full overflow-hidden mt-1">
+                            <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv?.audio_tier_score ?? media.audio_tier_score ?? 0, 100)}%` }} />
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-0.5">
+                            {formatBitrate(bestAudioBitrate)} · Target: {getAudioThresholdRange(sv?.quality_tier ?? media.quality_tier)}
                           </div>
                         </div>
                       )}
@@ -784,16 +829,13 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                 <div className="space-y-2">
                   {svAudioTracks.map((track, idx) => {
                     const commentary = isCommentary(track)
-                    const isPrimary = track.index === svBestTrackIdx
                     return (
                       <div key={idx} className={`text-sm ${idx > 0 ? 'pt-2 border-t border-border' : ''} ${commentary ? 'opacity-50' : ''}`}>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{track.codec?.toUpperCase()} {formatChannels(track.channels)}</span>
+                          {isAudioBitrateLow(track, sv?.quality_tier ?? media.quality_tier) && <LowIndicator />}
                           {track.hasObjectAudio && (
                             <span className="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded">Atmos</span>
-                          )}
-                          {isPrimary && (
-                            <span className="px-1.5 py-0.5 text-xs bg-primary/20 text-primary rounded">Primary</span>
                           )}
                           {commentary && (
                             <span className="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-300 rounded">Commentary</span>
@@ -802,14 +844,20 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                         {track.title && (
                           <div className="text-xs text-muted-foreground mt-0.5 truncate" title={track.title}>{track.title}</div>
                         )}
-                        <div className="text-xs text-muted-foreground mt-0.5 flex items-center">
-                          <span>
-                            {track.bitrate > 0 ? formatBitrate(track.bitrate) : 'VBR'}
-                            {track.sampleRate && ` · ${(track.sampleRate / 1000).toFixed(1)}kHz`}
-                            {track.language && ` · ${track.language.toUpperCase()}`}
-                          </span>
-                          {isAudioBitrateLow(track, sv?.quality_tier ?? media.quality_tier) && <LowIndicator />}
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {track.bitrate > 0 ? formatBitrate(track.bitrate) : 'VBR'}
+                          {track.sampleRate && ` · ${(track.sampleRate / 1000).toFixed(1)}kHz`}
+                          {track.language && ` · ${track.language.toUpperCase()}`}
                         </div>
+                        {(() => {
+                          const diag = getTrackDiagnostic(track, sv?.quality_tier ?? media.quality_tier)
+                          if (!diag) return null
+                          return (
+                            <div className="text-xs mt-1 text-muted-foreground">
+                              {diag.message}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )
                   })}

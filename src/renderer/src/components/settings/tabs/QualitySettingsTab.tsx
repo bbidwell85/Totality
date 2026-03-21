@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS = {
   quality_codec_h265: 2.0,
   quality_codec_av1: 2.5,
   quality_codec_vp9: 1.8,
+  quality_video_weight: 70,
 }
 
 type SettingsState = typeof DEFAULT_SETTINGS
@@ -349,6 +350,34 @@ export function QualitySettingsTab() {
                 updateSetting(`quality_audio_${selectedTier}_high` as keyof SettingsState, high)
               }}
             />
+            <div className="bg-background/50 rounded-lg p-3 space-y-2 col-span-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium">Score Weighting</span>
+              </div>
+              <div className="relative h-4">
+                <div className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-1.5 rounded-full overflow-hidden">
+                  <div className="absolute h-full bg-accent/40" style={{ left: 0, width: `${settings.quality_video_weight}%` }} />
+                  <div className="absolute h-full bg-accent/70" style={{ left: `${settings.quality_video_weight}%`, width: `${100 - settings.quality_video_weight}%` }} />
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={settings.quality_video_weight}
+                  onChange={(e) => updateSetting('quality_video_weight', parseInt(e.target.value))}
+                  className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-md border-2 border-background z-10 pointer-events-none"
+                  style={{ left: `${settings.quality_video_weight}%`, marginLeft: '-6px' }}
+                />
+              </div>
+              <div className="flex justify-between text-[10px] font-medium">
+                <span className="text-accent/60">Video {settings.quality_video_weight}%</span>
+                <span className="text-accent">Audio {100 - settings.quality_video_weight}%</span>
+              </div>
+            </div>
           </div>
 
           {/* Codec Efficiency */}
@@ -405,6 +434,7 @@ export function QualitySettingsTab() {
               if scores seem too harsh.
             </p>
           </div>
+
         </div>
       </SettingsCard>
 

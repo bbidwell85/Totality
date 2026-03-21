@@ -179,8 +179,23 @@ export function MediaBrowser({
   const listViewRef = useRef<HTMLButtonElement>(null)
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null)
   const [detailRefreshKey, setDetailRefreshKey] = useState(0) // Increment to force detail view refresh
-  const [viewType, setViewType] = useState<'grid' | 'list'>('grid')
-  const [gridScale, setGridScale] = useState(4) // 1-7 scale for grid columns (4 = 50%)
+  const [viewType, setViewTypeState] = useState<'grid' | 'list'>('grid')
+  const [gridScale, setGridScaleState] = useState(4) // 1-7 scale for grid columns (4 = 50%)
+  const viewPrefsRef = useRef<Record<string, { viewType: 'grid' | 'list', gridScale: number }>>({})
+  const viewPrefsLoadedRef = useRef(false)
+
+  const setViewType = useCallback((vt: 'grid' | 'list') => {
+    setViewTypeState(vt)
+    viewPrefsRef.current[view] = { ...viewPrefsRef.current[view] || { viewType: 'grid', gridScale: 4 }, viewType: vt }
+    window.electronAPI.setSetting('library_view_prefs', JSON.stringify(viewPrefsRef.current))
+  }, [view])
+
+  const setGridScale = useCallback((gs: number) => {
+    setGridScaleState(gs)
+    viewPrefsRef.current[view] = { ...viewPrefsRef.current[view] || { viewType: 'grid', gridScale: 4 }, gridScale: gs }
+    window.electronAPI.setSetting('library_view_prefs', JSON.stringify(viewPrefsRef.current))
+  }, [view])
+
   const [collectionsOnly, setCollectionsOnly] = useState(false)
 
   // TV Show navigation
@@ -906,7 +921,8 @@ export function MediaBrowser({
       // Calculate stats with real-time EP/Singles filtering
       const effectiveEps = overrideEps ?? includeEps
       const effectiveSingles = overrideSingles ?? includeSingles
-      const totalArtists = musicStats?.totalArtists ?? musicArtists.length
+      const freshStats = await window.electronAPI.musicGetStats(activeSourceId || undefined) as MusicStats | null
+      const totalArtists = freshStats?.totalArtists ?? completenessData.length
       const analyzedArtists = completenessData.length
 
       // Recalculate completeness from raw counts using current settings
@@ -992,8 +1008,35 @@ export function MediaBrowser({
     loadMusicCompletenessData()
     loadEpSingleSettings()
     checkTmdbApiKey()
+    // Load per-tab view preferences
+    if (!viewPrefsLoadedRef.current) {
+      window.electronAPI.getSetting('library_view_prefs').then(val => {
+        if (val) {
+          try {
+            const prefs = JSON.parse(val)
+            viewPrefsRef.current = prefs
+            const tabPrefs = prefs[view]
+            if (tabPrefs) {
+              setViewTypeState(tabPrefs.viewType || 'grid')
+              setGridScaleState(tabPrefs.gridScale ?? 4)
+            }
+          } catch { /* ignore bad JSON */ }
+        }
+        viewPrefsLoadedRef.current = true
+      })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSourceId])
+
+  // Apply per-tab view preferences when switching tabs
+  useEffect(() => {
+    if (!viewPrefsLoadedRef.current) return
+    const tabPrefs = viewPrefsRef.current[view]
+    if (tabPrefs) {
+      setViewTypeState(tabPrefs.viewType || 'grid')
+      setGridScaleState(tabPrefs.gridScale ?? 4)
+    }
+  }, [view])
 
   // getCollectionForMovie, getOwnedMoviesForCollection, ownedMoviesForSelectedCollection
   // provided by useCollections hook above
