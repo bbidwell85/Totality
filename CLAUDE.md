@@ -17,6 +17,8 @@ npm run test             # Run Vitest in watch mode
 npm run test:run         # Run all tests once
 npm run test:coverage    # Run tests with coverage report
 npm run test:ui          # Open Vitest interactive UI in browser
+npm run generate-icons   # Generate app icons from source
+npm run electron:build   # Same as `npm run build` (alias)
 ```
 
 **Single test:** `npx vitest run tests/unit/FileNameParser.test.ts` or use `-t` to filter by test name: `npx vitest run -t "parses year"`
@@ -336,7 +338,7 @@ Automatic change detection:
 
 **Core Services:**
 - **GeminiService** (`src/main/services/GeminiService.ts`): Singleton API wrapper. Constructor reads API key synchronously from DB (must be sync — async init causes race condition where `isConfigured()` returns false). Provides `sendMessage()`, `streamMessage()`, and `sendMessageWithTools()` (agentic tool-use loop, max 10 rounds).
-- **GeminiTools** (`src/main/services/GeminiTools.ts`): 22 tool definitions + `executeTool()` dispatcher. Tools: `search_library`, `get_media_items`, `get_tv_shows`, `get_library_stats`, `get_quality_distribution`, `get_series_completeness`, `get_collection_completeness`, `get_music_stats`, `get_music_albums`, `get_music_quality_distribution`, `get_artist_completeness`, `get_album_details`, `check_music_ownership`, `get_source_list`, `get_wishlist`, `search_tmdb`, `discover_titles`, `get_similar_titles`, `check_ownership`, `get_item_details`, `add_to_wishlist`.
+- **GeminiTools** (`src/main/services/GeminiTools.ts`): 21 tool definitions + `executeTool()` dispatcher. Tools: `search_library`, `get_media_items`, `get_tv_shows`, `get_library_stats`, `get_quality_distribution`, `get_series_completeness`, `get_collection_completeness`, `get_music_stats`, `get_music_albums`, `get_music_quality_distribution`, `get_artist_completeness`, `get_album_details`, `check_music_ownership`, `get_source_list`, `get_wishlist`, `search_tmdb`, `discover_titles`, `get_similar_titles`, `check_ownership`, `get_item_details`, `add_to_wishlist`.
 - **GeminiAnalysisService** (`src/main/services/GeminiAnalysisService.ts`): 4 streaming report generators (quality, upgrades, completeness, wishlist). Each gathers data upfront and sends as context (not agentic).
 - **System Prompts** (`src/main/services/ai-system-prompts.ts`): Chat prompt has film/TV/music enthusiast personality with videophile/audiophile expertise. Separate prompts for each report type.
 
