@@ -1412,10 +1412,10 @@ export class DatabaseService {
         video_frame_rate, color_bit_depth, hdr_format, color_space, video_profile, video_level,
         audio_profile, audio_sample_rate, has_object_audio, audio_tracks,
         subtitle_tracks,
-        container,
+        container, file_mtime,
         imdb_id, tmdb_id, series_tmdb_id, poster_url, episode_thumb_url, season_poster_url, summary,
         user_fixed_match
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, plex_id) DO UPDATE SET
         source_type = excluded.source_type,
         library_id = excluded.library_id,
@@ -1449,7 +1449,8 @@ export class DatabaseService {
         audio_tracks = excluded.audio_tracks,
         subtitle_tracks = excluded.subtitle_tracks,
         container = excluded.container,
-        imdb_id = excluded.imdb_id,
+        file_mtime = excluded.file_mtime,
+        imdb_id = COALESCE(excluded.imdb_id, media_items.imdb_id),
         tmdb_id = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.tmdb_id ELSE COALESCE(excluded.tmdb_id, media_items.tmdb_id) END,
         series_tmdb_id = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.series_tmdb_id ELSE COALESCE(excluded.series_tmdb_id, media_items.series_tmdb_id) END,
         poster_url = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.poster_url ELSE COALESCE(excluded.poster_url, media_items.poster_url) END,
@@ -1499,6 +1500,7 @@ export class DatabaseService {
       item.audio_tracks || null,
       item.subtitle_tracks || null,
       item.container || null,
+      item.file_mtime || null,
       item.imdb_id || null,
       item.tmdb_id || null,
       item.series_tmdb_id || null,
@@ -2937,73 +2939,81 @@ export class DatabaseService {
 
     console.log(`[Database] Deleting source ${sourceId} and all associated data...`)
 
-    // Delete quality scores for media items from this source
-    this.db.run(
-      `DELETE FROM quality_scores WHERE media_item_id IN (
-        SELECT id FROM media_items WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+    this.db.run('BEGIN TRANSACTION')
+    try {
+      // Delete quality scores for media items from this source
+      this.db.run(
+        `DELETE FROM quality_scores WHERE media_item_id IN (
+          SELECT id FROM media_items WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete wishlist items that reference media items being deleted (upgrade items)
-    // Must be before media_items deletion since it references media_items
-    this.db.run(
-      `DELETE FROM wishlist_items WHERE media_item_id IN (
-        SELECT id FROM media_items WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+      // Delete wishlist items that reference media items being deleted (upgrade items)
+      // Must be before media_items deletion since it references media_items
+      this.db.run(
+        `DELETE FROM wishlist_items WHERE media_item_id IN (
+          SELECT id FROM media_items WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete media items
-    this.db.run('DELETE FROM media_items WHERE source_id = ?', [sourceId])
+      // Delete media items
+      this.db.run('DELETE FROM media_items WHERE source_id = ?', [sourceId])
 
-    // Delete music quality scores for albums from this source
-    this.db.run(
-      `DELETE FROM music_quality_scores WHERE album_id IN (
-        SELECT id FROM music_albums WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+      // Delete music quality scores for albums from this source
+      this.db.run(
+        `DELETE FROM music_quality_scores WHERE album_id IN (
+          SELECT id FROM music_albums WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete album completeness data for albums from this source
-    this.db.run(
-      `DELETE FROM album_completeness WHERE album_id IN (
-        SELECT id FROM music_albums WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+      // Delete album completeness data for albums from this source
+      this.db.run(
+        `DELETE FROM album_completeness WHERE album_id IN (
+          SELECT id FROM music_albums WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete artist completeness data for artists from this source
-    this.db.run(
-      `DELETE FROM artist_completeness WHERE artist_name IN (
-        SELECT name FROM music_artists WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+      // Delete artist completeness data for artists from this source
+      this.db.run(
+        `DELETE FROM artist_completeness WHERE artist_name IN (
+          SELECT name FROM music_artists WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete music tracks
-    this.db.run('DELETE FROM music_tracks WHERE source_id = ?', [sourceId])
+      // Delete music tracks
+      this.db.run('DELETE FROM music_tracks WHERE source_id = ?', [sourceId])
 
-    // Delete music albums
-    this.db.run('DELETE FROM music_albums WHERE source_id = ?', [sourceId])
+      // Delete music albums
+      this.db.run('DELETE FROM music_albums WHERE source_id = ?', [sourceId])
 
-    // Delete music artists
-    this.db.run('DELETE FROM music_artists WHERE source_id = ?', [sourceId])
+      // Delete music artists
+      this.db.run('DELETE FROM music_artists WHERE source_id = ?', [sourceId])
 
-    // Delete series completeness data for this source
-    this.db.run('DELETE FROM series_completeness WHERE source_id = ?', [sourceId])
+      // Delete series completeness data for this source
+      this.db.run('DELETE FROM series_completeness WHERE source_id = ?', [sourceId])
 
-    // Delete movie collections data for this source
-    this.db.run('DELETE FROM movie_collections WHERE source_id = ?', [sourceId])
+      // Delete movie collections data for this source
+      this.db.run('DELETE FROM movie_collections WHERE source_id = ?', [sourceId])
 
-    // Delete library scan timestamps
-    this.db.run('DELETE FROM library_scans WHERE source_id = ?', [sourceId])
+      // Delete library scan timestamps
+      this.db.run('DELETE FROM library_scans WHERE source_id = ?', [sourceId])
 
-    // Delete notifications for this source
-    this.db.run('DELETE FROM notifications WHERE source_id = ?', [sourceId])
+      // Delete notifications for this source
+      this.db.run('DELETE FROM notifications WHERE source_id = ?', [sourceId])
 
-    // Delete the source itself
-    this.db.run('DELETE FROM media_sources WHERE source_id = ?', [sourceId])
+      // Delete the source itself
+      this.db.run('DELETE FROM media_sources WHERE source_id = ?', [sourceId])
+
+      this.db.run('COMMIT')
+    } catch (error) {
+      this.db.run('ROLLBACK')
+      throw error
+    }
 
     await this.save()
     console.log(`[Database] Deleted media source and all data: ${sourceId}`)

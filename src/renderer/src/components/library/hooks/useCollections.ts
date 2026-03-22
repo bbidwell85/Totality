@@ -29,20 +29,23 @@ export function useCollections(
   const [showCollectionModal, setShowCollectionModal] = useState(false)
   const [selectedCollection, setSelectedCollection] = useState<MovieCollectionData | null>(null)
 
-  // Get collection data for a movie by checking owned_movie_ids
+  const tmdbToCollection = useMemo(() => {
+    const map = new Map<string, MovieCollectionData>()
+    movieCollections.forEach(c => {
+      try {
+        const ownedIds = JSON.parse(c.owned_movie_ids || '[]') as string[]
+        ownedIds.forEach(id => { if (!map.has(id)) map.set(id, c) })
+      } catch { /* skip malformed */ }
+    })
+    return map
+  }, [movieCollections])
+
   const getCollectionForMovie = useCallback(
     (movie: MediaItem): MovieCollectionData | undefined => {
       if (!movie.tmdb_id) return undefined
-      return movieCollections.find((c) => {
-        try {
-          const ownedIds = JSON.parse(c.owned_movie_ids || '[]')
-          return ownedIds.includes(movie.tmdb_id)
-        } catch {
-          return false
-        }
-      })
+      return tmdbToCollection.get(movie.tmdb_id)
     },
-    [movieCollections]
+    [tmdbToCollection]
   )
 
   // Get owned movies for a collection

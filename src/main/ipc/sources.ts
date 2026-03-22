@@ -32,6 +32,11 @@ import {
   OptionalProviderTypeSchema,
   LocalFolderConfigSchema,
   LocalFolderWithLibrariesSchema,
+  PlexAuthSchema,
+  PositiveIntSchema,
+  NonEmptyStringSchema,
+  OptionalSourceIdSchema,
+  LibraryToggleArraySchema,
 } from '../validation/schemas'
 
 /**
@@ -189,9 +194,10 @@ export function registerSourceHandlers(): void {
   /**
    * Check Plex auth PIN (poll for completion)
    */
-  ipcMain.handle('plex:checkAuth', async (_event, pinId: number) => {
+  ipcMain.handle('plex:checkAuth', async (_event, pinId: unknown) => {
     try {
-      return await manager.plexCompleteAuth(pinId)
+      const validPinId = validateInput(PositiveIntSchema, pinId, 'plex:checkAuth')
+      return await manager.plexCompleteAuth(validPinId)
     } catch (error: unknown) {
       console.error('Error checking Plex auth:', error)
       throw error
@@ -201,9 +207,10 @@ export function registerSourceHandlers(): void {
   /**
    * Authenticate with token and discover servers
    */
-  ipcMain.handle('plex:authenticateAndDiscover', async (_event, token: string, displayName: string) => {
+  ipcMain.handle('plex:authenticateAndDiscover', async (_event, token: unknown, displayName: unknown) => {
     try {
-      return await manager.plexAuthenticateAndDiscover(token, displayName)
+      const validated = validateInput(PlexAuthSchema, { token, displayName }, 'plex:authenticateAndDiscover')
+      return await manager.plexAuthenticateAndDiscover(validated.token, validated.displayName)
     } catch (error: unknown) {
       console.error('Error authenticating Plex:', error)
       throw error
@@ -216,16 +223,15 @@ export function registerSourceHandlers(): void {
    *   - Legacy: (serverId) - uses first Plex source or PlexService
    *   - New: (sourceId, serverId) - uses specified source
    */
-  ipcMain.handle('plex:selectServer', async (_event, sourceIdOrServerId: string, serverId?: string) => {
-    // New API: both sourceId and serverId provided
+  ipcMain.handle('plex:selectServer', async (_event, sourceIdOrServerId: unknown, serverId?: unknown) => {
+    const validFirst = validateInput(NonEmptyStringSchema, sourceIdOrServerId, 'plex:selectServer')
     if (serverId) {
-      return await manager.plexSelectServer(sourceIdOrServerId, serverId)
+      const validServerId = validateInput(NonEmptyStringSchema, serverId, 'plex:selectServer')
+      return await manager.plexSelectServer(validFirst, validServerId)
     }
 
-    // Legacy API: only serverId provided
-    const resolvedServerId = sourceIdOrServerId
+    const resolvedServerId = validFirst
 
-    // Try to find first Plex source
     const plexSources = await manager.getSources('plex')
     if (plexSources.length > 0) {
       const resolvedSourceId = plexSources[0].source_id
@@ -246,11 +252,11 @@ export function registerSourceHandlers(): void {
    *   1. The first Plex source in SourceManager
    *   2. The legacy PlexService (for backward compatibility)
    */
-  ipcMain.handle('plex:getServers', async (_event, sourceId?: string) => {
+  ipcMain.handle('plex:getServers', async (_event, sourceId?: unknown) => {
     try {
-      // If sourceId provided, use SourceManager
       if (sourceId) {
-        return await manager.plexGetServers(sourceId)
+        const validSourceId = validateInput(NonEmptyStringSchema, sourceId, 'plex:getServers')
+        return await manager.plexGetServers(validSourceId)
       }
 
       // Try to find first Plex source
@@ -355,16 +361,12 @@ export function registerSourceHandlers(): void {
   /**
    * Set multiple libraries' enabled status at once (used during source setup)
    */
-  ipcMain.handle('sources:setLibrariesEnabled', async (_event, sourceId: unknown, libraries: Array<{
-    id: string
-    name: string
-    type: string
-    enabled: boolean
-  }>) => {
+  ipcMain.handle('sources:setLibrariesEnabled', async (_event, sourceId: unknown, libraries: unknown) => {
     try {
       const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:setLibrariesEnabled')
+      const validLibraries = validateInput(LibraryToggleArraySchema, libraries, 'sources:setLibrariesEnabled')
       const db = getDatabase()
-      await db.setLibrariesEnabled(validSourceId, libraries)
+      await db.setLibrariesEnabled(validSourceId, validLibraries)
       return { success: true }
     } catch (error: unknown) {
       console.error('Error setting libraries enabled:', error)

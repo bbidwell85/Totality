@@ -107,7 +107,7 @@ export class MusicBrainzService extends CancellableOperation {
   private readonly RETRY_DELAY_MS = 5000
 
   // User-Agent per MusicBrainz guidelines
-  private readonly USER_AGENT = 'Totality/0.1.0 (https://github.com/totality-app/totality)'
+  private readonly USER_AGENT = 'Totality/0.3.0 (https://github.com/totality-app/totality)'
 
   // Cover Art Archive base URL
   private static readonly COVER_ART_BASE_URL = 'https://coverartarchive.org'
@@ -715,7 +715,7 @@ export class MusicBrainzService extends CancellableOperation {
       + (includeSingles ? ownedSinglesCount : 0)
 
     const completenessPercentage = totalItems > 0
-      ? Math.round((ownedItems / totalItems) * 100)
+      ? Math.min(100, Math.round((ownedItems / totalItems) * 100))
       : 100
 
     getLoggingService().verbose('[MusicBrainzService]',

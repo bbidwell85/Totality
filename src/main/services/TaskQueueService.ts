@@ -522,8 +522,9 @@ export class TaskQueueService {
     this.emitQueueUpdate()
     this.emitTaskComplete(task)
 
-    // Process next task (this will resume monitoring if queue is empty)
-    this.processNext()
+    this.processNext().catch(err => {
+      console.error('[TaskQueue] Error processing next task:', err)
+    })
   }
 
   /**

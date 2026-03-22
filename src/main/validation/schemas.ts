@@ -277,6 +277,15 @@ export const KodiMySQLConfigSchema = z.object({
   ssl: z.boolean().optional(),
 })
 
+export const QuickConnectSecretSchema = z.string().min(1).max(500)
+
+export const LibraryToggleArraySchema = z.array(z.object({
+  id: z.string().min(1).max(200),
+  name: z.string().min(1).max(200),
+  type: z.string().min(1).max(50),
+  enabled: z.boolean(),
+})).max(200)
+
 /**
  * Kodi MySQL test/detect connection config (no displayName required)
  */
