@@ -534,6 +534,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getMonitoringStatus: () => ipcRenderer.invoke('monitoring:getStatus'),
 
   // ============================================================================
+  // NOTIFICATIONS
+  // ============================================================================
+
+  notificationsGetAll: (options?: { limit?: number, offset?: number, type?: string, unreadOnly?: boolean }) =>
+    ipcRenderer.invoke('notifications:getAll', options),
+  notificationsGetCount: () => ipcRenderer.invoke('notifications:getCount'),
+  notificationsMarkRead: (ids: number[]) => ipcRenderer.invoke('notifications:markRead', ids),
+  notificationsMarkAllRead: () => ipcRenderer.invoke('notifications:markAllRead'),
+  notificationsDelete: (ids: number[]) => ipcRenderer.invoke('notifications:delete', ids),
+  notificationsClear: () => ipcRenderer.invoke('notifications:clear'),
+
+  // ============================================================================
   // TASK QUEUE
   // ============================================================================
 
@@ -1611,6 +1623,28 @@ export interface ElectronAPI {
   onMonitoringStatus: (callback: (status: { isActive: boolean }) => void) => () => void
   onMonitoringEvent: (callback: (event: { type: string; message: string }) => void) => () => void
   getMonitoringStatus: () => Promise<{ isActive: boolean }>
+
+  // ============================================================================
+  // NOTIFICATIONS
+  // ============================================================================
+
+  notificationsGetAll: (options?: { limit?: number, offset?: number, type?: string, unreadOnly?: boolean }) => Promise<Array<{
+    id: number
+    type: string
+    title: string
+    message: string
+    sourceId?: string
+    sourceName?: string
+    itemCount?: number
+    isRead: boolean
+    createdAt: string
+    readAt?: string
+  }>>
+  notificationsGetCount: () => Promise<{ total: number, unread: number }>
+  notificationsMarkRead: (ids: number[]) => Promise<void>
+  notificationsMarkAllRead: () => Promise<void>
+  notificationsDelete: (ids: number[]) => Promise<void>
+  notificationsClear: () => Promise<void>
 
   // ============================================================================
   // TASK QUEUE

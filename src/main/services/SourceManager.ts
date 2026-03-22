@@ -258,6 +258,9 @@ export class SourceManager {
     }
 
     console.log(`[SourceManager] Added source: ${config.displayName} (${sourceId})`)
+    try {
+      db.createNotification({ type: 'info', title: 'Source added', message: `${config.displayName} (${config.sourceType})`, sourceId, sourceName: config.displayName })
+    } catch { /* ignore */ }
     return source
   }
 
@@ -309,6 +312,8 @@ export class SourceManager {
     await this.initialize()
 
     const db = getDatabase()
+    const source = db.getMediaSourceById(sourceId)
+    const sourceName = source?.display_name || sourceId
 
     // 1. Stop live monitoring for this source
     getLiveMonitoringService().removeSource(sourceId)
@@ -325,6 +330,9 @@ export class SourceManager {
     // 5. Clean up cached artwork files
     await this.cleanupArtworkCache(sourceId)
 
+    try {
+      db.createNotification({ type: 'info', title: 'Source removed', message: sourceName })
+    } catch { /* ignore */ }
     console.log(`[SourceManager] Removed source: ${sourceId}`)
   }
 

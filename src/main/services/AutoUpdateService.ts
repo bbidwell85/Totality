@@ -69,6 +69,9 @@ export class AutoUpdateService {
           ? info.releaseNotes
           : undefined,
       })
+      try {
+        getDatabaseServiceSync().createNotification({ type: 'info', title: 'Update available', message: `Version ${info.version} is ready to download` })
+      } catch { /* ignore */ }
     })
 
     autoUpdater.on('update-not-available', (_info: UpdateInfo) => {
@@ -96,6 +99,9 @@ export class AutoUpdateService {
         version: info.version,
         lastChecked: new Date().toISOString(),
       })
+      try {
+        getDatabaseServiceSync().createNotification({ type: 'info', title: 'Update ready', message: `Version ${info.version} will install on restart` })
+      } catch { /* ignore */ }
     })
 
     autoUpdater.on('error', (err: Error) => {

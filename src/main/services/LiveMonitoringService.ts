@@ -713,6 +713,20 @@ export class LiveMonitoringService {
           }
 
           console.log(`[LiveMonitoring] Targeted scan complete for ${library.libraryName}: ${changeDescription}`)
+
+          // Create notification for library changes
+          if (totalChanges > 0) {
+            try {
+              getDatabase().createNotification({
+                type: 'source_change',
+                title: 'Library updated',
+                message: `${source.display_name}: ${changeDescription}`,
+                sourceId,
+                sourceName: source.display_name,
+                itemCount: totalChanges,
+              })
+            } catch { /* ignore */ }
+          }
         }
       } catch (error) {
         console.error(`[LiveMonitoring] Error in targeted scan for library ${library.libraryId}:`, error)
@@ -922,6 +936,27 @@ export class LiveMonitoringService {
       } catch (error) {
         console.error(`[LiveMonitoring] Error checking library ${library.libraryId}:`, error)
       }
+    }
+
+    // Create batched notification for polling changes
+    if (events.length > 0) {
+      const totalAdded = events.filter(e => e.changeType === 'added').reduce((sum, e) => sum + e.itemCount, 0)
+      const totalRemoved = events.filter(e => e.changeType === 'removed').reduce((sum, e) => sum + e.itemCount, 0)
+      const totalUpdated = events.filter(e => e.changeType === 'updated').reduce((sum, e) => sum + e.itemCount, 0)
+      const parts: string[] = []
+      if (totalAdded > 0) parts.push(`${totalAdded} added`)
+      if (totalUpdated > 0) parts.push(`${totalUpdated} updated`)
+      if (totalRemoved > 0) parts.push(`${totalRemoved} removed`)
+      try {
+        getDatabase().createNotification({
+          type: 'source_change',
+          title: 'Library updated',
+          message: `${source.display_name}: ${parts.join(', ')}`,
+          sourceId,
+          sourceName: source.display_name,
+          itemCount: totalAdded + totalUpdated + totalRemoved,
+        })
+      } catch { /* ignore */ }
     }
 
     // Notify renderer of source check completion

@@ -27,15 +27,13 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  Activity,
+  TowerControl,
+  Bell,
   X,
-  Trash2,
   Pause,
   Play,
   GripVertical,
   XCircle,
-  CheckCircle2,
-  AlertCircle,
   Clock,
   Loader2,
   Scaling,
@@ -90,20 +88,17 @@ interface QueueState {
   completedTasks: QueuedTask[]
 }
 
-interface ActivityLogEntry {
-  id: string
-  timestamp: string
-  type: 'task-complete' | 'task-failed' | 'task-cancelled' | 'monitoring'
-  message: string
-  taskId?: string
-  taskType?: TaskType
-}
-
-interface MonitoringEvent {
+interface AppNotification {
   id: number
-  timestamp: string
+  type: string
+  title: string
   message: string
-  type: 'poll' | 'added' | 'removed' | 'error' | 'info'
+  sourceId?: string
+  sourceName?: string
+  itemCount?: number
+  isRead: boolean
+  createdAt: string
+  readAt?: string
 }
 
 // ============================================================================
@@ -178,16 +173,14 @@ function SortableQueueItem({
 
 export function ActivityPanel() {
   const [isOpen, setIsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'tasks' | 'monitoring'>('tasks')
   const [queueState, setQueueState] = useState<QueueState>({
     currentTask: null,
     queue: [],
     isPaused: false,
     completedTasks: [],
   })
-  const [taskHistory, setTaskHistory] = useState<ActivityLogEntry[]>([])
-  const [monitoringEvents, setMonitoringEvents] = useState<MonitoringEvent[]>([])
-  const [isMonitoringActive, setIsMonitoringActive] = useState(false)
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
 
   // Configure dnd-kit sensors
   const sensors = useSensors(
@@ -205,7 +198,6 @@ export function ActivityPanel() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  const eventIdRef = useRef(0)
 
   // Calculate total pending tasks (queue + current)
   const pendingCount = queueState.queue.length + (queueState.currentTask ? 1 : 0)
@@ -232,58 +224,36 @@ export function ActivityPanel() {
   // Subscribe to task queue updates
   useEffect(() => {
     const unsubscribeQueue = window.electronAPI.onTaskQueueUpdated?.((state) => {
-      // Cast the IPC state to our local type
       setQueueState(state as unknown as QueueState)
     })
 
-    const unsubscribeComplete = window.electronAPI.onTaskQueueTaskComplete?.((_task) => {
-      // Task completed - could trigger notification here
-    })
-
-    const unsubscribeHistory = window.electronAPI.onTaskQueueHistoryUpdated?.(
-      (history) => {
-        // Cast the IPC history to our local type
-        setTaskHistory(history.taskHistory as unknown as ActivityLogEntry[])
-      }
-    )
-
-    // Get initial state
     window.electronAPI.taskQueueGetState?.().then(setQueueState)
-    window.electronAPI.taskQueueGetTaskHistory?.().then(setTaskHistory)
 
     return () => {
       unsubscribeQueue?.()
-      unsubscribeComplete?.()
-      unsubscribeHistory?.()
     }
   }, [])
 
-  // Subscribe to monitoring events (keeping the monitoring feature)
+  // Load notifications
+  const loadNotifications = useCallback(async () => {
+    try {
+      const [items, counts] = await Promise.all([
+        window.electronAPI.notificationsGetAll({ limit: 50 }),
+        window.electronAPI.notificationsGetCount(),
+      ])
+      setNotifications(items as AppNotification[])
+      setUnreadCount(counts.unread)
+    } catch { /* ignore */ }
+  }, [])
+
   useEffect(() => {
-    const unsubscribeStatus = window.electronAPI.onMonitoringStatus?.((status: { isActive: boolean }) => {
-      setIsMonitoringActive(status.isActive)
-    })
-
-    const unsubscribeEvent = window.electronAPI.onMonitoringEvent?.(
-      (event: { type: string; message: string }) => {
-        const newEvent: MonitoringEvent = {
-          id: eventIdRef.current++,
-          timestamp: new Date().toLocaleTimeString(),
-          message: event.message,
-          type: event.type as MonitoringEvent['type'],
-        }
-        setMonitoringEvents((prev) => [newEvent, ...prev].slice(0, 100))
-      }
-    )
-
-    // Request initial status
-    window.electronAPI.getMonitoringStatus?.()
-
-    return () => {
-      unsubscribeStatus?.()
-      unsubscribeEvent?.()
+    loadNotifications()
+    // Refresh notifications periodically when panel is open
+    if (isOpen) {
+      const interval = setInterval(loadNotifications, 10000)
+      return () => clearInterval(interval)
     }
-  }, [])
+  }, [isOpen, loadNotifications])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -397,14 +367,20 @@ export function ActivityPanel() {
     window.electronAPI.taskQueueClearQueue?.()
   }, [])
 
-  const handleClearTaskHistory = useCallback(() => {
-    window.electronAPI.taskQueueClearTaskHistory?.()
-    setTaskHistory([])
-  }, [])
+  const handleMarkAllRead = useCallback(async () => {
+    await window.electronAPI.notificationsMarkAllRead()
+    loadNotifications()
+  }, [loadNotifications])
 
-  const handleClearMonitoringEvents = useCallback(() => {
-    setMonitoringEvents([])
-  }, [])
+  const handleMarkRead = useCallback(async (id: number) => {
+    await window.electronAPI.notificationsMarkRead([id])
+    loadNotifications()
+  }, [loadNotifications])
+
+  const handleClearNotifications = useCallback(async () => {
+    await window.electronAPI.notificationsClear()
+    loadNotifications()
+  }, [loadNotifications])
 
   // dnd-kit drag handler
   const handleDragEnd = useCallback((event: DragEndEvent) => {
@@ -428,37 +404,24 @@ export function ActivityPanel() {
   // Helpers
   // ============================================================================
 
-  const getEventColor = (type: MonitoringEvent['type']) => {
+  const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'added':
-        return 'text-green-400'
-      case 'removed':
-        return 'text-red-400'
-      case 'error':
-        return 'text-red-500'
-      case 'poll':
-        return 'text-blue-400'
-      default:
-        return 'text-muted-foreground'
+      case 'scan_complete': return '✓'
+      case 'source_change': return '↻'
+      case 'error': return '!'
+      default: return 'i'
     }
   }
 
-  const getHistoryIcon = (type: ActivityLogEntry['type']) => {
+  const getNotificationIconColor = (type: string) => {
     switch (type) {
-      case 'task-complete':
-        return <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-      case 'task-failed':
-        return <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-      case 'task-cancelled':
-        return <XCircle className="w-3.5 h-3.5 text-yellow-400" />
-      default:
-        return <Activity className="w-3.5 h-3.5 text-blue-400" />
+      case 'scan_complete': return 'bg-green-500/20 text-green-400'
+      case 'source_change': return 'bg-blue-500/20 text-blue-400'
+      case 'error': return 'bg-red-500/20 text-red-400'
+      default: return 'bg-muted text-muted-foreground'
     }
   }
 
-  const formatTime = (isoString: string) => {
-    return new Date(isoString).toLocaleTimeString()
-  }
 
   // ============================================================================
   // Render
@@ -473,7 +436,7 @@ export function ActivityPanel() {
         className={`relative p-2 rounded-md transition-colors shrink-0 focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-black ${
           isOpen
             ? 'bg-primary text-primary-foreground'
-            : 'bg-card text-muted-foreground hover:bg-muted'
+            : 'text-white hover:bg-white/10'
         }`}
         aria-label="Activity Panel"
         aria-expanded={isOpen}
@@ -481,7 +444,7 @@ export function ActivityPanel() {
         {queueState.currentTask ? (
           <Loader2 className="w-5 h-5 animate-spin" />
         ) : (
-          <Activity className="w-5 h-5" />
+          <TowerControl className="w-5 h-5" />
         )}
         {pendingCount > 0 && (
           <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
@@ -634,113 +597,72 @@ export function ActivityPanel() {
           </div>
         </div>
 
-        {/* History Section - Fixed height, pl-6 to avoid resize handle */}
-        <div className="h-48 shrink-0 flex flex-col pl-6">
-          {/* Tabs */}
-          <div className="flex border-b border-border/30 shrink-0">
-            <button
-              onClick={() => setActiveTab('tasks')}
-              className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                activeTab === 'tasks'
-                  ? 'text-foreground border-b-2 border-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              History
-            </button>
-            <button
-              onClick={() => setActiveTab('monitoring')}
-              className={`flex-1 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                activeTab === 'monitoring'
-                  ? 'text-foreground border-b-2 border-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Monitoring
-              {isMonitoringActive && (
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+        {/* Notifications Section */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2 bg-muted/20 shrink-0">
+            <div className="flex items-center gap-2">
+              <Bell className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Notifications {unreadCount > 0 && `(${unreadCount})`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Mark all read
+                </button>
               )}
-            </button>
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleClearNotifications}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
-
-          {/* Tab Content - pb-6 to avoid overlap with resize handle */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 pb-6">
-            {activeTab === 'tasks' ? (
-              <div className="p-2">
-              {taskHistory.length === 0 ? (
-                <div className="py-6 text-center">
-                  <CheckCircle2 className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No completed tasks</p>
-                  <p className="text-xs text-muted-foreground/50 mt-1">
-                    Task completions will appear here
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex justify-end mb-2">
-                    <button
-                      onClick={handleClearTaskHistory}
-                      className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                      title="Clear history"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    {taskHistory.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="flex items-start gap-2 py-1.5 px-2 rounded hover:bg-muted/30 text-xs"
-                      >
-                        <span className="shrink-0 mt-0.5">{getHistoryIcon(entry.type)}</span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-foreground truncate">{entry.message}</p>
-                          <p className="text-muted-foreground/60">{formatTime(entry.timestamp)}</p>
+          <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 pb-6 p-2">
+            {notifications.length === 0 ? (
+              <div className="py-6 text-center">
+                <Bell className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">No notifications</p>
+                <p className="text-xs text-muted-foreground/50 mt-1">
+                  Scan completions and library changes will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    className={`py-2 px-2 rounded-lg cursor-pointer transition-colors ${
+                      n.isRead ? 'opacity-60 hover:opacity-80' : 'hover:bg-muted/30'
+                    }`}
+                    onClick={() => !n.isRead && handleMarkRead(n.id)}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${getNotificationIconColor(n.type)}`}>
+                        {getNotificationIcon(n.type)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium truncate">{n.title}</span>
+                          {!n.isRead && <span className="w-1.5 h-1.5 bg-accent rounded-full shrink-0" />}
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="p-2">
-              {monitoringEvents.length === 0 ? (
-                <div className="py-6 text-center">
-                  <Activity className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No monitoring events</p>
-                  <p className="text-xs text-muted-foreground/50 mt-1">
-                    Live monitoring activity will appear here
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex justify-end mb-2">
-                    <button
-                      onClick={handleClearMonitoringEvents}
-                      className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                      title="Clear log"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="space-y-0.5 font-mono">
-                    {monitoringEvents.map((event) => (
-                      <div
-                        key={event.id}
-                        className="py-1 px-2 rounded hover:bg-muted/30 flex gap-2 text-xs"
-                      >
-                        <span className="text-muted-foreground/50 shrink-0">
-                          {event.timestamp}
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
+                        <span className="text-[10px] text-muted-foreground/50 mt-0.5 block">
+                          {new Date(n.createdAt).toLocaleString()}
                         </span>
-                        <span className={getEventColor(event.type)}>{event.message}</span>
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </>
-              )}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

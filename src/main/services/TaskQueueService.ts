@@ -485,6 +485,15 @@ export class TaskQueueService {
         task.error = errorMsg
         this.addTaskHistoryEntry(task, 'task-failed', `Failed: ${task.label} - ${task.error}`)
         console.error(`[TaskQueue] Task failed: ${task.label}`, error)
+        try {
+          getDatabase().createNotification({
+            type: 'error',
+            title: 'Task failed',
+            message: `${task.label}: ${errorMsg}`,
+            sourceId: task.sourceId,
+            sourceName: task.label,
+          })
+        } catch { /* ignore */ }
       }
     }
 
@@ -561,20 +570,20 @@ export class TaskQueueService {
 
       case 'series-completeness':
         await this.executeSeriesCompleteness(task, progressCallback)
-        // Trigger UI refresh after completeness analysis
         this.sendLibraryUpdated()
+        try { getDatabase().createNotification({ type: 'info', title: 'Series completeness analyzed', message: task.label || 'TV series completeness analysis complete' }) } catch { /* ignore */ }
         break
 
       case 'collection-completeness':
         await this.executeCollectionCompleteness(task, progressCallback)
-        // Trigger UI refresh after completeness analysis
         this.sendLibraryUpdated()
+        try { getDatabase().createNotification({ type: 'info', title: 'Collection completeness analyzed', message: task.label || 'Movie collection completeness analysis complete' }) } catch { /* ignore */ }
         break
 
       case 'music-completeness':
         await this.executeMusicCompleteness(task, progressCallback)
-        // Trigger UI refresh after completeness analysis
         this.sendLibraryUpdated()
+        try { getDatabase().createNotification({ type: 'info', title: 'Music completeness analyzed', message: task.label || 'Artist completeness analysis complete' }) } catch { /* ignore */ }
         break
 
       case 'music-scan':
@@ -884,6 +893,25 @@ export class TaskQueueService {
         itemsScanned: task.result?.itemsScanned || 0,
         isFirstScan: task.result?.isFirstScan || false,
       })
+
+      // Create notification for scan completion
+      try {
+        const added = task.result?.itemsAdded || 0
+        const updated = task.result?.itemsUpdated || 0
+        const scanned = task.result?.itemsScanned || 0
+        const parts = []
+        if (added > 0) parts.push(`${added} added`)
+        if (updated > 0) parts.push(`${updated} updated`)
+        if (parts.length === 0) parts.push(`${scanned} scanned`)
+        getDatabase().createNotification({
+          type: 'scan_complete',
+          title: 'Library scan complete',
+          message: `${task.label}: ${parts.join(', ')}`,
+          sourceId: task.sourceId,
+          sourceName: task.label,
+          itemCount: scanned,
+        })
+      } catch { /* ignore notification errors */ }
 
       // Check wishlist for auto-completion after items were added or updated
       if ((task.result?.itemsAdded || 0) > 0 || (task.result?.itemsUpdated || 0) > 0) {
