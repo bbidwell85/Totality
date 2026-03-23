@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   validateInput,
+  safeValidateInput,
   PositiveIntSchema,
   NonEmptyStringSchema,
   SettingKeySchema,
@@ -534,6 +535,18 @@ describe('IPC Validation Schemas', () => {
       } catch (error) {
         expect((error as Error).message).toContain('Validation failed')
       }
+    })
+  })
+
+  describe('safeValidateInput', () => {
+    it('should return parsed data on valid input', () => {
+      expect(safeValidateInput(PositiveIntSchema, 42)).toBe(42)
+    })
+
+    it('should return null on invalid input', () => {
+      expect(safeValidateInput(PositiveIntSchema, 'bad')).toBeNull()
+      expect(safeValidateInput(PositiveIntSchema, -1)).toBeNull()
+      expect(safeValidateInput(PositiveIntSchema, null)).toBeNull()
     })
   })
 })
