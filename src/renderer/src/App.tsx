@@ -10,7 +10,7 @@ import type { ViewContext } from './hooks/useChat'
 import { AIInsightsPanel } from './components/library/AIInsightsPanel'
 import { SourceProvider, useSources } from './contexts/SourceContext'
 import { WishlistProvider } from './contexts/WishlistContext'
-import { NavigationProvider } from './contexts/NavigationContext'
+import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
 import { ToastProvider } from './contexts/ToastContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { AddSourceModal } from './components/sources/AddSourceModal'
@@ -36,6 +36,10 @@ function AppContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true')
   const [currentView, setCurrentView] = useState<AppView>('dashboard')
   const [libraryTab, setLibraryTab] = useState<MediaViewType>('movies')
+
+  // Navigation history
+  const { pushNavState, goBack, goForward, canGoBack, canGoForward } = useNavigation()
+  const isRestoringRef = useRef(false)
 
   // Panel states - managed at app level for TopBar to control
   const [showCompletenessPanel, setShowCompletenessPanel] = useState(false)
@@ -287,13 +291,61 @@ function AppContent() {
   }
 
   const handleNavigateToLibrary = (tab?: MediaViewType) => {
+    const newTab = tab || libraryTab
+    if (!isRestoringRef.current) {
+      pushNavState({ view: 'library', tab: newTab })
+    }
     if (tab) setLibraryTab(tab)
     setCurrentView('library')
   }
 
   const handleNavigateToDashboard = () => {
+    if (!isRestoringRef.current) {
+      pushNavState({ view: 'dashboard' })
+    }
     setCurrentView('dashboard')
   }
+
+  const handleBack = useCallback(() => {
+    const restored = goBack()
+    if (!restored) return
+    isRestoringRef.current = true
+    setCurrentView(restored.view)
+    if (restored.view === 'library' && restored.tab) {
+      setLibraryTab(restored.tab)
+    }
+    window.dispatchEvent(new CustomEvent('navigate-restore', { detail: restored }))
+    isRestoringRef.current = false
+  }, [goBack])
+
+  const handleForward = useCallback(() => {
+    const restored = goForward()
+    if (!restored) return
+    isRestoringRef.current = true
+    setCurrentView(restored.view)
+    if (restored.view === 'library' && restored.tab) {
+      setLibraryTab(restored.tab)
+    }
+    window.dispatchEvent(new CustomEvent('navigate-restore', { detail: restored }))
+    isRestoringRef.current = false
+  }, [goForward])
+
+  // Keyboard shortcuts for back/forward
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault()
+        handleBack()
+      } else if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault()
+        handleForward()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleBack, handleForward])
 
   const handleOpenSettings = (initialTab?: string) => {
     setSettingsInitialTab(initialTab)
@@ -387,8 +439,10 @@ function AppContent() {
           hasMovies={hasMovies}
           hasTV={hasTV}
           hasMusic={hasMusic}
-          onBack={() => window.dispatchEvent(new CustomEvent('navigate-back'))}
-          canGoBack={currentView === 'library'}
+          onBack={handleBack}
+          canGoBack={canGoBack}
+          onForward={handleForward}
+          canGoForward={canGoForward}
         />
 
         {currentView === 'dashboard' ? (

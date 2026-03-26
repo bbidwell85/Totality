@@ -74,7 +74,7 @@ export function MediaBrowser({
   const { sources, activeSourceId, scanProgress, setActiveSource, markLibraryAsNew } = useSources()
   const { addToast } = useToast()
   const { count: wishlistCount } = useWishlist()
-  const { pendingNavigation, clearNavigation } = useNavigation()
+  const { pendingNavigation, clearNavigation, pushNavState } = useNavigation()
 
   // Use extracted hooks
   const themeAccentColor = useThemeAccent()
@@ -271,28 +271,39 @@ export function MediaBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Handle back navigation from TopBar
+  // Handle navigation state restore (back/forward from history stack)
   useEffect(() => {
-    const handleBack = () => {
-      if (view === 'music') {
-        if (selectedAlbum) {
-          setSelectedAlbum(null)
-          setAlbumTracks([])
-          setSelectedAlbumCompleteness(null)
-        } else if (selectedArtist) {
-          setSelectedArtist(null)
+    const handleRestore = (e: Event) => {
+      const state = (e as CustomEvent).detail
+      if (!state || state.view !== 'library') return
+
+      // Restore TV state
+      setSelectedShow(state.selectedShow ?? null)
+      setSelectedSeason(state.selectedSeason ?? null)
+
+      // Restore Music state
+      if (state.selectedArtist?.id) {
+        const artist = musicArtists.find((a: { id?: number }) => a.id === state.selectedArtist.id)
+        setSelectedArtist(artist || null)
+      } else {
+        setSelectedArtist(null)
+      }
+
+      if (state.selectedAlbum?.id) {
+        const album = musicAlbums.find((a: { id?: number }) => a.id === state.selectedAlbum.id)
+        setSelectedAlbum(album || null)
+        if (album?.id) {
+          window.electronAPI.musicGetTracksByAlbum(album.id).then((tracks: unknown[]) => setAlbumTracks(tracks as never[]))
         }
-      } else if (view === 'tv') {
-        if (selectedSeason !== null) {
-          setSelectedSeason(null)
-        } else if (selectedShow) {
-          setSelectedShow(null)
-        }
+      } else {
+        setSelectedAlbum(null)
+        setAlbumTracks([])
+        setSelectedAlbumCompleteness(null)
       }
     }
-    window.addEventListener('navigate-back', handleBack)
-    return () => window.removeEventListener('navigate-back', handleBack)
-  }, [view, selectedAlbum, selectedArtist, selectedShow, selectedSeason])
+    window.addEventListener('navigate-restore', handleRestore)
+    return () => window.removeEventListener('navigate-restore', handleRestore)
+  }, [musicArtists, musicAlbums])
 
   // Handle initialTab prop from dashboard navigation
   useEffect(() => {
@@ -517,6 +528,7 @@ export function MediaBrowser({
       if (activeLibraryId) filters.libraryId = activeLibraryId
 
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
+      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
 
       const [artists, count] = await Promise.all([
         window.electronAPI.musicGetArtists(filters),
@@ -536,7 +548,7 @@ export function MediaBrowser({
     } finally {
       setArtistsLoading(false)
     }
-  }, [activeSourceId, activeLibraryId,searchQuery, artistsLoading])
+  }, [activeSourceId, activeLibraryId,searchQuery, alphabetFilter, artistsLoading])
 
   // Load more artists (infinite scroll callback)
   const loadMoreArtists = useCallback(() => {
@@ -613,7 +625,11 @@ export function MediaBrowser({
       if (activeLibraryId) filters.libraryId = activeLibraryId
 
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      if (selectedArtist) filters.artistId = selectedArtist.id
+      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      if (selectedArtist) {
+        filters.artistId = selectedArtist.id
+        filters.artistName = selectedArtist.name
+      }
 
       const [albums, count] = await Promise.all([
         window.electronAPI.musicGetAlbums(filters),
@@ -633,7 +649,7 @@ export function MediaBrowser({
     } finally {
       setAlbumsLoading(false)
     }
-  }, [activeSourceId, activeLibraryId,searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
+  }, [activeSourceId, activeLibraryId,searchQuery, alphabetFilter, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
 
   // Load more albums (infinite scroll callback)
   const loadMoreAlbums = useCallback(() => {
@@ -648,7 +664,7 @@ export function MediaBrowser({
       loadPaginatedArtists(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, activeLibraryId,searchQuery])
+  }, [view, musicViewMode, activeSourceId, activeLibraryId,searchQuery, alphabetFilter])
 
   // Trigger server-side album loading when albums tab is active and filters change
   useEffect(() => {
@@ -656,7 +672,7 @@ export function MediaBrowser({
       loadPaginatedAlbums(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, activeLibraryId,searchQuery, albumSortColumn, albumSortDirection, selectedArtist])
+  }, [view, musicViewMode, activeSourceId, activeLibraryId,searchQuery, alphabetFilter, albumSortColumn, albumSortDirection, selectedArtist])
 
   // Load paginated movies from server with current filters/sorting
   const loadPaginatedMovies = useCallback(async (reset = true, startOffset?: number) => {
@@ -677,6 +693,7 @@ export function MediaBrowser({
       if (debouncedTierFilter !== 'all') filters.qualityTier = debouncedTierFilter
       if (debouncedQualityFilter !== 'all') filters.tierQuality = debouncedQualityFilter.toUpperCase()
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
+      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
 
       const [movieItems, count] = await Promise.all([
         window.electronAPI.getMediaItems(filters),
@@ -696,7 +713,7 @@ export function MediaBrowser({
     } finally {
       setMoviesLoading(false)
     }
-  }, [activeSourceId, activeLibraryId,debouncedTierFilter, debouncedQualityFilter, searchQuery, moviesLoading])
+  }, [activeSourceId, activeLibraryId,debouncedTierFilter, debouncedQualityFilter, searchQuery, alphabetFilter, moviesLoading])
 
   // Load more movies (infinite scroll callback)
   const loadMoreMovies = useCallback(() => {
@@ -711,7 +728,7 @@ export function MediaBrowser({
       loadPaginatedMovies(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, activeSourceId, activeLibraryId,debouncedTierFilter, debouncedQualityFilter, searchQuery])
+  }, [view, activeSourceId, activeLibraryId,debouncedTierFilter, debouncedQualityFilter, searchQuery, alphabetFilter])
 
   // Load paginated TV shows from server with current filters
   const loadPaginatedShows = useCallback(async (reset = true, startOffset?: number) => {
@@ -729,6 +746,7 @@ export function MediaBrowser({
       if (activeLibraryId) filters.libraryId = activeLibraryId
 
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
+      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
 
       const [newShows, count, episodeCount] = await Promise.all([
         window.electronAPI.getTVShows(filters),
@@ -750,7 +768,7 @@ export function MediaBrowser({
     } finally {
       setShowsLoading(false)
     }
-  }, [showsLoading, activeSourceId, activeLibraryId,searchQuery])
+  }, [showsLoading, activeSourceId, activeLibraryId,searchQuery, alphabetFilter])
 
   const loadMoreShows = useCallback(() => {
     if (showsOffsetRef.current < totalShowCount && !showsLoading) {
@@ -778,7 +796,7 @@ export function MediaBrowser({
       loadPaginatedShows(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, activeSourceId, activeLibraryId,searchQuery])
+  }, [view, activeSourceId, activeLibraryId,searchQuery, alphabetFilter])
 
   // Load episodes when a show is selected
   useEffect(() => {
@@ -835,17 +853,19 @@ export function MediaBrowser({
     }
   }
 
-  // Analyze a single artist for missing albums
+  // Analyze a single artist for missing albums (queued via task queue)
   const analyzeArtistCompleteness = async (artistId: number) => {
     try {
-      console.log(`[MediaBrowser] Analyzing artist ${artistId} for missing albums...`)
-      const result = await window.electronAPI.musicAnalyzeArtistCompleteness(artistId)
-      console.log(`[MediaBrowser] Artist analysis result:`, result)
-
-      // Reload all artist completeness data to refresh the UI
-      await loadMusicCompletenessData()
+      // Look up artist name for the task label
+      const artist = musicArtists.find(a => a.id === artistId)
+      const artistName = artist?.name || `Artist #${artistId}`
+      await window.electronAPI.taskQueueAddTask({
+        type: 'music-completeness',
+        label: `Analyze ${artistName}`,
+        artistId,
+      })
     } catch (err) {
-      console.error('Failed to analyze artist completeness:', err)
+      console.error('Failed to queue artist completeness analysis:', err)
     }
   }
 
@@ -1096,47 +1116,28 @@ export function MediaBrowser({
     return true
   }, [searchQuery, debouncedTierFilter, debouncedQualityFilter])
 
-  // Scroll to the first item starting with the given letter (DB-backed offset)
-  const scrollToLetter = useCallback(async (letter: string | null) => {
-    setAlphabetFilter(letter)
-    const container = scrollContainerRef.current
-
-    if (!letter || letter === '#') {
-      // '#' (non-alpha) and 'All' are at the top — reload from offset 0
-      if (view === 'movies') loadPaginatedMovies(true, 0)
-      else if (view === 'tv') loadPaginatedShows(true, 0)
-      else if (view === 'music' && musicViewMode === 'artists') loadPaginatedArtists(true, 0)
-      else if (view === 'music' && musicViewMode === 'albums') loadPaginatedAlbums(true, 0)
-      container?.scrollTo({ top: 0, behavior: 'smooth' })
+  // Alphabet navigation — jump-to for collections-only (all in DOM), filter for paginated views
+  const scrollToLetter = useCallback((letter: string | null) => {
+    // Collections-only: all items in DOM, so scroll to the matching element
+    if (collectionsOnly && letter && letter !== '#') {
+      const container = scrollContainerRef.current
+      if (container) {
+        const upperLetter = letter.toUpperCase()
+        const allTitled = container.querySelectorAll('[data-title]')
+        for (const el of allTitled) {
+          const title = (el as HTMLElement).dataset.title || ''
+          if (title.toUpperCase().startsWith(upperLetter)) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            return
+          }
+        }
+      }
       return
     }
-
-    // Determine table for DB query
-    let table: 'movies' | 'tvshows' | 'artists' | 'albums'
-    if (view === 'movies') table = 'movies'
-    else if (view === 'tv') table = 'tvshows'
-    else if (view === 'music' && musicViewMode === 'albums') table = 'albums'
-    else table = 'artists'
-
-    try {
-      const offset = await window.electronAPI.getLetterOffset({
-        table,
-        letter,
-        sourceId: activeSourceId || undefined,
-        libraryId: activeLibraryId || undefined,
-      })
-
-      // Reload from that offset
-      if (view === 'movies') loadPaginatedMovies(true, offset)
-      else if (view === 'tv') loadPaginatedShows(true, offset)
-      else if (view === 'music' && musicViewMode === 'artists') loadPaginatedArtists(true, offset)
-      else if (view === 'music' && musicViewMode === 'albums') loadPaginatedAlbums(true, offset)
-
-      container?.scrollTo({ top: 0, behavior: 'smooth' })
-    } catch (err) {
-      console.warn('Failed to get letter offset:', err)
-    }
-  }, [setAlphabetFilter, view, musicViewMode, activeSourceId, activeLibraryId, loadPaginatedMovies, loadPaginatedShows, loadPaginatedArtists, loadPaginatedAlbums])
+    // Paginated views: filter by letter via backend query
+    setAlphabetFilter(letter)
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [setAlphabetFilter, collectionsOnly])
 
   // Movies are now loaded from the server pre-filtered/sorted/paginated
   const movies = paginatedMovies
@@ -2189,8 +2190,14 @@ export function MediaBrowser({
             selectedSeason={selectedSeason}
             selectedShowData={selectedShowData}
             selectedShowLoading={selectedShowEpisodesLoading}
-            onSelectShow={setSelectedShow}
-            onSelectSeason={setSelectedSeason}
+            onSelectShow={(show) => {
+              pushNavState({ view: 'library', tab: 'tv', selectedShow: show })
+              setSelectedShow(show)
+            }}
+            onSelectSeason={(season) => {
+              pushNavState({ view: 'library', tab: 'tv', selectedShow, selectedSeason: season })
+              setSelectedSeason(season)
+            }}
             onSelectEpisode={setSelectedMediaId}
             filterItem={filterItem}
             gridScale={gridScale}
@@ -2242,22 +2249,30 @@ export function MediaBrowser({
             trackSortDirection={trackSortDirection}
             onTrackSortChange={(col, dir) => { setTrackSortColumn(col); setTrackSortDirection(dir) }}
             onSelectArtist={(artist) => {
+              pushNavState({ view: 'library', tab: 'music', selectedArtist: artist ? { id: artist.id!, name: artist.name } : null })
               setSelectedArtist(artist)
               setSelectedAlbum(null)
               setAlbumTracks([])
               setSelectedAlbumCompleteness(null)
             }}
             onSelectAlbum={(album) => {
+              pushNavState({
+                view: 'library', tab: 'music',
+                selectedArtist: selectedArtist ? { id: selectedArtist.id!, name: selectedArtist.name } : null,
+                selectedAlbum: album ? { id: album.id!, title: album.title } : null,
+              })
               setSelectedAlbum(album)
               loadAlbumTracks(album.id)
               loadAlbumCompleteness(album.id)
             }}
             onBack={() => {
               if (selectedAlbum) {
+                pushNavState({ view: 'library', tab: 'music', selectedArtist: selectedArtist ? { id: selectedArtist.id!, name: selectedArtist.name } : null })
                 setSelectedAlbum(null)
                 setAlbumTracks([])
                 setSelectedAlbumCompleteness(null)
               } else if (selectedArtist) {
+                pushNavState({ view: 'library', tab: 'music' })
                 setSelectedArtist(null)
               }
             }}

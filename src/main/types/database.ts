@@ -631,6 +631,7 @@ export interface AlbumCompleteness {
 // Music query filters
 export interface MusicFilters {
   artistId?: number
+  artistName?: string
   albumId?: number
   qualityTier?: MusicQualityTier
   needsUpgrade?: boolean

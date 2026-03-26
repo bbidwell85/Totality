@@ -12,6 +12,7 @@ import axios, { AxiosInstance } from 'axios'
 import { getDatabase } from '../../database/getDatabase'
 import { getQualityAnalyzer } from '../../services/QualityAnalyzer'
 import { getMovieCollectionService } from '../../services/MovieCollectionService'
+import { getTMDBService } from '../../services/TMDBService'
 import {
   normalizeVideoCodec,
   normalizeAudioCodec,
@@ -849,26 +850,44 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
             .filter(Boolean) as string[]
 
           if (ownedTmdbIds.length > 0) {
-            const tmdbCollectionId = boxset.ProviderIds?.Tmdb
-              || `${this.providerType}-boxset-${boxset.Id}`
+            let resolvedTmdbCollectionId = boxset.ProviderIds?.Tmdb
 
             const boxsetPosterUrl = boxset.ImageTags?.Primary
               ? this.buildImageUrl(boxset.Id, 'Primary', boxset.ImageTags.Primary)
+              : undefined
+
+            // Fallback: use first child movie's poster if BoxSet has no poster
+            const firstMoviePosterUrl = movieResponse.data.Items[0]?.ImageTags?.Primary
+              ? this.buildImageUrl(movieResponse.data.Items[0].Id, 'Primary', movieResponse.data.Items[0].ImageTags.Primary)
               : undefined
 
             let totalMovies = ownedTmdbIds.length
             let ownedCount = ownedTmdbIds.length
             let missingMovies: unknown[] = []
             let completenessPercentage = 100
-            let collectionPosterUrl = boxsetPosterUrl
+            let collectionPosterUrl = boxsetPosterUrl || firstMoviePosterUrl
             let collectionBackdropUrl: string | undefined
 
-            // If we have a real TMDB collection ID, look up full membership
-            if (boxset.ProviderIds?.Tmdb) {
+            // If BoxSet doesn't have a TMDB collection ID, try to derive it from owned movies
+            if (!resolvedTmdbCollectionId && ownedTmdbIds.length > 0) {
+              try {
+                const tmdb = getTMDBService()
+                const movieDetails = await tmdb.getMovieDetails(ownedTmdbIds[0])
+                if (movieDetails?.belongs_to_collection?.id) {
+                  resolvedTmdbCollectionId = movieDetails.belongs_to_collection.id.toString()
+                  console.log(`[${this.providerType}Provider] Derived TMDB collection ID ${resolvedTmdbCollectionId} for BoxSet "${boxset.Name}" from movie ${ownedTmdbIds[0]}`)
+                }
+              } catch (error) {
+                console.warn(`[${this.providerType}Provider] Failed to derive TMDB collection ID for BoxSet "${boxset.Name}":`, error)
+              }
+            }
+
+            // If we have a TMDB collection ID (direct or derived), look up full membership
+            if (resolvedTmdbCollectionId) {
               try {
                 const collectionService = getMovieCollectionService()
                 const result = await collectionService.lookupCollectionCompleteness(
-                  boxset.ProviderIds.Tmdb,
+                  resolvedTmdbCollectionId,
                   ownedTmdbIds,
                 )
                 if (result) {
@@ -876,13 +895,16 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
                   ownedCount = result.ownedMovies
                   missingMovies = result.missingMovies
                   completenessPercentage = result.completenessPercentage
-                  collectionPosterUrl = result.posterUrl || boxsetPosterUrl
+                  collectionPosterUrl = result.posterUrl || boxsetPosterUrl || firstMoviePosterUrl
                   collectionBackdropUrl = result.backdropUrl
                 }
               } catch (error) {
                 console.warn(`[${this.providerType}Provider] Failed TMDB lookup for BoxSet "${boxset.Name}":`, error)
               }
             }
+
+            const tmdbCollectionId = resolvedTmdbCollectionId
+              || `${this.providerType}-boxset-${boxset.Id}`
 
             const db = getDatabase()
             await db.upsertMovieCollection({

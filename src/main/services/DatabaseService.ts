@@ -3673,8 +3673,8 @@ export class DatabaseService {
           missing_movies = ?,
           owned_movie_ids = ?,
           completeness_percentage = ?,
-          poster_url = ?,
-          backdrop_url = ?
+          poster_url = COALESCE(?, poster_url),
+          backdrop_url = COALESCE(?, backdrop_url)
         WHERE id = ?
       `
       this.db.run(updateSql, [

@@ -331,7 +331,7 @@ export function MusicView({
   // Filter albums for selected artist or all albums
   const filteredAlbums = useMemo(() => {
     let filtered = selectedArtist
-      ? albums.filter(a => a.artist_id === selectedArtist.id)
+      ? albums.filter(a => a.artist_id === selectedArtist.id || a.artist_name === selectedArtist.name)
       : albums
 
     // Apply search filter when not viewing a specific artist

@@ -441,9 +441,15 @@ export class MusicRepository {
       params.push(filters.libraryId)
     }
 
-    if (filters?.artistId) {
+    if (filters?.artistId && filters?.artistName) {
+      sql += ' AND (artist_id = ? OR LOWER(artist_name) = LOWER(?))'
+      params.push(filters.artistId, filters.artistName)
+    } else if (filters?.artistId) {
       sql += ' AND artist_id = ?'
       params.push(filters.artistId)
+    } else if (filters?.artistName) {
+      sql += ' AND LOWER(artist_name) = LOWER(?)'
+      params.push(filters.artistName)
     }
 
     if (filters?.searchQuery) {
@@ -509,9 +515,15 @@ export class MusicRepository {
       params.push(filters.libraryId)
     }
 
-    if (filters?.artistId) {
+    if (filters?.artistId && filters?.artistName) {
+      sql += ' AND (artist_id = ? OR LOWER(artist_name) = LOWER(?))'
+      params.push(filters.artistId, filters.artistName)
+    } else if (filters?.artistId) {
       sql += ' AND artist_id = ?'
       params.push(filters.artistId)
+    } else if (filters?.artistName) {
+      sql += ' AND LOWER(artist_name) = LOWER(?)'
+      params.push(filters.artistName)
     }
 
     if (filters?.searchQuery) {

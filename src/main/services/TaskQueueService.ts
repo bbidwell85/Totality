@@ -56,6 +56,7 @@ export interface QueuedTask {
   label: string
   sourceId?: string
   libraryId?: string
+  artistId?: number
   status: TaskStatus
   progress?: TaskProgress
   createdAt: string
@@ -76,6 +77,7 @@ export interface TaskDefinition {
   label: string
   sourceId?: string
   libraryId?: string
+  artistId?: number
 }
 
 export interface QueueState {
@@ -133,6 +135,7 @@ export class TaskQueueService {
       label: definition.label,
       sourceId: definition.sourceId,
       libraryId: definition.libraryId,
+      artistId: definition.artistId,
       status: 'queued',
       createdAt: new Date().toISOString(),
     }
@@ -704,6 +707,58 @@ export class TaskQueueService {
 
   private async executeMusicCompleteness(task: QueuedTask, onProgress: (p: { current?: number; total?: number; percentage?: number; phase?: string; currentItem?: string }) => void): Promise<void> {
     const mbService = getMusicBrainzService()
+
+    // Single artist analysis
+    if (task.artistId) {
+      const db = getDatabase()
+      const artist = db.getMusicArtistById(task.artistId)
+      if (!artist) throw new Error(`Artist not found: ${task.artistId}`)
+
+      // Get albums by FK and name (same logic as music:analyzeArtistCompleteness IPC handler)
+      const albumsById = db.getMusicAlbums({ artistId: task.artistId })
+      const albumsByName = db.getMusicAlbumsByArtistName(artist.name)
+      const albumMap = new Map<number, typeof albumsById[0]>()
+      for (const album of [...albumsById, ...albumsByName]) {
+        if (album.id !== undefined) albumMap.set(album.id, album)
+      }
+      const albums = Array.from(albumMap.values())
+
+      onProgress({ phase: 'Analyzing artist', currentItem: artist.name, percentage: 5 })
+
+      const ownedTitles = albums.map(a => a.title)
+      const ownedMbIds = albums.filter(a => a.musicbrainz_id).map(a => a.musicbrainz_id!)
+      const completeness = await mbService.analyzeArtistCompleteness(
+        artist.name, artist.musicbrainz_id, ownedTitles, ownedMbIds
+      )
+      await db.upsertArtistCompleteness(completeness)
+
+      // Analyze track completeness for each album
+      for (let i = 0; i < albums.length; i++) {
+        if (this.cancelRequested) break
+        const album = albums[i]
+        if (!album.id) continue
+
+        onProgress({ current: i + 1, total: albums.length, phase: 'Analyzing albums', currentItem: album.title })
+
+        try {
+          const tracks = db.getMusicTracks({ albumId: album.id })
+          const trackTitles = tracks.map((t: { title: string }) => t.title)
+          const albumCompleteness = await mbService.analyzeAlbumTrackCompleteness(
+            album.id, album.artist_name, album.title, album.musicbrainz_id, trackTitles
+          )
+          if (albumCompleteness) {
+            await db.upsertAlbumCompleteness(albumCompleteness)
+          }
+        } catch (albumError) {
+          console.warn(`[TaskQueue] Failed to analyze album "${album.title}":`, albumError)
+        }
+      }
+
+      task.result = { itemsScanned: 1 + albums.length }
+      return
+    }
+
+    // Full music completeness analysis
     const result = await mbService.analyzeAllMusic(onProgress, task.sourceId)
 
     task.result = {

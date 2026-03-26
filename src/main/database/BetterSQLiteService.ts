@@ -2121,9 +2121,15 @@ export class BetterSQLiteService {
     let sql = 'SELECT * FROM music_albums WHERE 1=1'
     const params: unknown[] = []
 
-    if (filters?.artistId) {
+    if (filters?.artistId && filters?.artistName) {
+      sql += ' AND (artist_id = ? OR artist_name = ?)'
+      params.push(filters.artistId, filters.artistName)
+    } else if (filters?.artistId) {
       sql += ' AND artist_id = ?'
       params.push(filters.artistId)
+    } else if (filters?.artistName) {
+      sql += ' AND artist_name = ?'
+      params.push(filters.artistName)
     }
     if (filters?.sourceId) {
       sql += ' AND source_id = ?'
@@ -2173,7 +2179,10 @@ export class BetterSQLiteService {
     if (!this.db) throw new Error('Database not initialized')
     let sql = 'SELECT COUNT(*) as count FROM music_albums WHERE 1=1'
     const params: unknown[] = []
-    if (filters?.artistId) { sql += ' AND artist_id = ?'; params.push(filters.artistId) }
+    if (filters?.artistId && filters?.artistName) {
+      sql += ' AND (artist_id = ? OR artist_name = ?)'; params.push(filters.artistId, filters.artistName)
+    } else if (filters?.artistId) { sql += ' AND artist_id = ?'; params.push(filters.artistId) }
+    else if (filters?.artistName) { sql += ' AND artist_name = ?'; params.push(filters.artistName) }
     if (filters?.sourceId) { sql += ' AND source_id = ?'; params.push(filters.sourceId) }
     if (filters?.libraryId) { sql += ' AND library_id = ?'; params.push(filters.libraryId) }
     if (filters?.searchQuery) { sql += ' AND (title LIKE ? OR artist_name LIKE ?)'; params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`) }
@@ -2900,7 +2909,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
         UPDATE movie_collections SET
           collection_name = ?, total_movies = ?, owned_movies = ?,
           missing_movies = ?, owned_movie_ids = ?, completeness_percentage = ?,
-          poster_url = ?, backdrop_url = ?, updated_at = datetime('now')
+          poster_url = COALESCE(?, poster_url), backdrop_url = COALESCE(?, backdrop_url), updated_at = datetime('now')
         WHERE id = ?
       `).run(
         data.collection_name, data.total_movies, data.owned_movies,

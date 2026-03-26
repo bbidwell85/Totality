@@ -59,9 +59,9 @@ export function MoviesView({
 
   const movieSentinelRef = useRef<HTMLDivElement>(null)
 
-  // IntersectionObserver for movie grid infinite scroll
+  // IntersectionObserver for movie grid infinite scroll (skip when collectionsOnly — all loaded)
   useEffect(() => {
-    if (!movieSentinelRef.current) return
+    if (!movieSentinelRef.current || collectionsOnly) return
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
@@ -72,17 +72,25 @@ export function MoviesView({
     )
     observer.observe(movieSentinelRef.current)
     return () => observer.disconnect()
-  }, [onLoadMoreMovies])
+  }, [onLoadMoreMovies, collectionsOnly])
 
-  // Group movies by collection - show collections as single items
-  const displayItems = useMemo<MovieDisplayItem[]>(() => {
-    // Build a set of movie IDs that belong to collections
+  // Track previous movies length to detect append vs reset
+  const prevMoviesLenRef = useRef(0)
+  const prevDisplayItemsRef = useRef<MovieDisplayItem[]>([])
+  const prevCollectionsIdRef = useRef<MovieCollectionData[]>([])
+
+  // Helper: build sorted display items from a set of movies and collections
+  const buildDisplayItems = useCallback((
+    movieList: MediaItem[],
+    collections: MovieCollectionData[],
+    collectionLookup: (movie: MediaItem) => MovieCollectionData | undefined,
+    onlyCollections: boolean
+  ): MovieDisplayItem[] => {
     const moviesInCollections = new Set<number>()
     const collectionMovieMap = new Map<string, MediaItem[]>()
 
-    // Find which movies belong to which collection
-    for (const movie of movies) {
-      const collection = getCollectionForMovie(movie)
+    for (const movie of movieList) {
+      const collection = collectionLookup(movie)
       if (collection) {
         moviesInCollections.add(movie.id)
         const existing = collectionMovieMap.get(collection.tmdb_collection_id) || []
@@ -91,28 +99,23 @@ export function MoviesView({
       }
     }
 
-    // Build display items
     const items: MovieDisplayItem[] = []
-
-    // Add collections (only those that have at least one movie in current filtered view)
     const addedCollections = new Set<string>()
-    for (const collection of movieCollections) {
+    for (const collection of collections) {
       if (collectionMovieMap.has(collection.tmdb_collection_id) && !addedCollections.has(collection.tmdb_collection_id)) {
         items.push({ type: 'collection', collection })
         addedCollections.add(collection.tmdb_collection_id)
       }
     }
 
-    // Add individual movies not in any collection (unless collections-only filter is active)
-    if (!collectionsOnly) {
-      for (const movie of movies) {
+    if (!onlyCollections) {
+      for (const movie of movieList) {
         if (!moviesInCollections.has(movie.id)) {
           items.push({ type: 'movie', movie })
         }
       }
     }
 
-    // Sort all items alphabetically together (collections and movies interleaved)
     items.sort((a, b) => {
       const titleA = a.type === 'collection' ? a.collection.collection_name : a.movie.title
       const titleB = b.type === 'collection' ? b.collection.collection_name : b.movie.title
@@ -120,7 +123,57 @@ export function MoviesView({
     })
 
     return items
-  }, [movies, movieCollections, getCollectionForMovie, collectionsOnly])
+  }, [])
+
+  // Group movies by collection - show collections as single items
+  // Uses append-aware logic to avoid reshuffling on infinite scroll
+  const displayItems = useMemo<MovieDisplayItem[]>(() => {
+    // Collections-only: show all collections, no pagination needed
+    if (collectionsOnly) {
+      const items: MovieDisplayItem[] = movieCollections.map(c => ({ type: 'collection' as const, collection: c }))
+      items.sort((a, b) => {
+        const titleA = a.type === 'collection' ? a.collection.collection_name : a.movie.title
+        const titleB = b.type === 'collection' ? b.collection.collection_name : b.movie.title
+        return titleA.localeCompare(titleB)
+      })
+      prevMoviesLenRef.current = movies.length
+      prevDisplayItemsRef.current = items
+      prevCollectionsIdRef.current = movieCollections
+      return items
+    }
+
+    const isAppend = movies.length > prevMoviesLenRef.current
+      && prevMoviesLenRef.current > 0
+      && movieCollections === prevCollectionsIdRef.current
+
+    let result: MovieDisplayItem[]
+
+    if (isAppend) {
+      // Only process newly appended movies — don't rebuild the full list
+      const newMovies = movies.slice(prevMoviesLenRef.current)
+      const newItems = buildDisplayItems(newMovies, movieCollections, getCollectionForMovie, false)
+
+      // Filter out collections already shown in previous items
+      const existingCollectionIds = new Set(
+        prevDisplayItemsRef.current
+          .filter(item => item.type === 'collection')
+          .map(item => item.collection.id)
+      )
+      const dedupedNewItems = newItems.filter(
+        item => item.type !== 'collection' || !existingCollectionIds.has(item.collection.id)
+      )
+
+      result = [...prevDisplayItemsRef.current, ...dedupedNewItems]
+    } else {
+      // Full rebuild (initial load, filter change, or reset)
+      result = buildDisplayItems(movies, movieCollections, getCollectionForMovie, false)
+    }
+
+    prevMoviesLenRef.current = movies.length
+    prevDisplayItemsRef.current = result
+    prevCollectionsIdRef.current = movieCollections
+    return result
+  }, [movies, movieCollections, getCollectionForMovie, collectionsOnly, buildDisplayItems])
 
   if (displayItems.length === 0) {
     return (

@@ -263,19 +263,39 @@ export function Dashboard({
         .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
       setSeries(sortedSeries)
 
-      // Filter artists: remove excluded missing albums from JSON
+      // Filter artists: remove excluded missing albums from JSON, recalculate completeness
       const incompleteArtists = (artistsData || [])
         .map(a => {
           const parentKey = a.musicbrainz_id || a.artist_name
-          const filterJson = (json: string | undefined): string => {
+          const filterJson = (json: string | undefined): { filtered: string; removedCount: number } => {
             try {
               const parsed = JSON.parse(json || '[]') as Array<{ musicbrainz_id?: string }>
               const filtered = parsed.filter(item => !excludedArtistAlbums.has(`${parentKey}:${item.musicbrainz_id}`))
-              if (filtered.length !== parsed.length) return JSON.stringify(filtered)
+              if (filtered.length !== parsed.length) {
+                return { filtered: JSON.stringify(filtered), removedCount: parsed.length - filtered.length }
+              }
             } catch { /* keep original */ }
-            return json || '[]'
+            return { filtered: json || '[]', removedCount: 0 }
           }
-          return { ...a, missing_albums: filterJson(a.missing_albums), missing_eps: filterJson(a.missing_eps), missing_singles: filterJson(a.missing_singles) }
+          const albums = filterJson(a.missing_albums)
+          const eps = filterJson(a.missing_eps)
+          const singles = filterJson(a.missing_singles)
+
+          // Recalculate completeness after exclusions
+          const adjTotalAlbums = a.total_albums - albums.removedCount
+          const adjTotalEps = a.total_eps - eps.removedCount
+          const adjTotalSingles = a.total_singles - singles.removedCount
+          const totalItems = adjTotalAlbums + (includeEps ? adjTotalEps : 0) + (includeSingles ? adjTotalSingles : 0)
+          const ownedItems = a.owned_albums + (includeEps ? a.owned_eps : 0) + (includeSingles ? a.owned_singles : 0)
+          const pct = totalItems > 0 ? Math.round((ownedItems / totalItems) * 100) : 100
+
+          return {
+            ...a,
+            missing_albums: albums.filtered,
+            missing_eps: eps.filtered,
+            missing_singles: singles.filtered,
+            completeness_percentage: pct,
+          }
         })
         .filter(a => a.completeness_percentage < 100)
         .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
@@ -300,6 +320,21 @@ export function Dashboard({
       }
     })
     return () => cleanup?.()
+  }, [loadDashboardData])
+
+  // Reload dashboard when a scan completes (items may have been added/removed)
+  useEffect(() => {
+    const cleanup = window.electronAPI.onScanCompleted?.(() => {
+      loadDashboardData()
+    })
+    return () => cleanup?.()
+  }, [loadDashboardData])
+
+  // Reload dashboard when exclusions change (items dismissed/restored in settings)
+  useEffect(() => {
+    const handler = () => loadDashboardData()
+    window.addEventListener('exclusions-changed', handler)
+    return () => window.removeEventListener('exclusions-changed', handler)
   }, [loadDashboardData])
 
   // Parse functions for missing items with basic validation

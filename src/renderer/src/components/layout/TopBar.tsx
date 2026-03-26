@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, X, Home, Film, Tv, Music, Library, Star, Settings, RefreshCw, Disc3, User, Bot, ArrowBigLeft } from 'lucide-react'
+import { Search, X, Home, Film, Tv, Music, Library, Star, Settings, RefreshCw, Disc3, User, Bot, ArrowLeft, ArrowRight } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { useNavigation } from '../../contexts/NavigationContext'
@@ -41,6 +41,8 @@ interface TopBarProps {
   hasMusic?: boolean
   onBack?: () => void
   canGoBack?: boolean
+  onForward?: () => void
+  canGoForward?: boolean
 }
 
 export function TopBar({
@@ -61,6 +63,8 @@ export function TopBar({
   hasMusic = false,
   onBack,
   canGoBack = false,
+  onForward,
+  canGoForward = false,
 }: TopBarProps) {
   const { sources } = useSources()
   const { count: wishlistCount } = useWishlist()
@@ -518,11 +522,25 @@ export function TopBar({
             className={`p-1.5 rounded-md transition-colors shrink-0 ${
               canGoBack
                 ? 'text-white hover:bg-white/10 cursor-pointer'
-                : 'text-white/20 cursor-default'
+                : 'text-neutral-600 cursor-default'
             }`}
-            title="Go back"
+            title="Go back (Alt+Left)"
           >
-            <ArrowBigLeft className="w-5 h-5 fill-current" />
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+
+          {/* Forward Button */}
+          <button
+            onClick={canGoForward && onForward ? onForward : undefined}
+            disabled={!canGoForward}
+            className={`p-1.5 rounded-md transition-colors shrink-0 ${
+              canGoForward
+                ? 'text-white hover:bg-white/10 cursor-pointer'
+                : 'text-neutral-600 cursor-default'
+            }`}
+            title="Go forward (Alt+Right)"
+          >
+            <ArrowRight className="w-5 h-5" />
           </button>
 
         </div>
@@ -536,7 +554,7 @@ export function TopBar({
                 onClick={onNavigateHome}
                 className={`px-3 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                   isDashboard
-                    ? 'bg-primary text-primary-foreground'
+                    ? 'bg-white text-black'
                     : 'text-white hover:bg-white/10'
                 }`}
                 role="tab"
@@ -557,7 +575,7 @@ export function TopBar({
                   onClick={() => onNavigateToLibrary('movies')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                     !isDashboard && libraryTab === 'movies'
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-white text-black'
                       : 'text-white hover:bg-white/10'
                   }`}
                   role="tab"
@@ -574,7 +592,7 @@ export function TopBar({
                   onClick={() => onNavigateToLibrary('tv')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                     !isDashboard && libraryTab === 'tv'
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-white text-black'
                       : 'text-white hover:bg-white/10'
                   }`}
                   role="tab"
@@ -591,7 +609,7 @@ export function TopBar({
                   onClick={() => onNavigateToLibrary('music')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors focus:outline-hidden flex items-center gap-2 ${
                     !isDashboard && libraryTab === 'music'
-                      ? 'bg-primary text-primary-foreground'
+                      ? 'bg-white text-black'
                       : 'text-white hover:bg-white/10'
                   }`}
                   role="tab"
@@ -620,7 +638,7 @@ export function TopBar({
             onClick={onToggleCompleteness}
             className={`relative p-2 rounded-md transition-colors ${
               showCompletenessPanel
-                ? 'bg-primary text-primary-foreground'
+                ? 'bg-white text-black'
                 : 'text-white hover:bg-white/10'
             }`}
             title={!tmdbApiKeySet ? "TMDB API key needed for completeness" : "Collection Completeness"}
@@ -641,7 +659,7 @@ export function TopBar({
             onClick={onToggleWishlist}
             className={`relative p-2 rounded-md transition-colors ${
               showWishlistPanel
-                ? 'bg-primary text-primary-foreground'
+                ? 'bg-white text-black'
                 : 'text-white hover:bg-white/10'
             }`}
             title="Wishlist (W)"
@@ -650,7 +668,7 @@ export function TopBar({
           >
             <Star className="w-5 h-5" />
             {wishlistCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+              <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                 {wishlistCount > 99 ? '99+' : wishlistCount}
               </span>
             )}
@@ -661,7 +679,7 @@ export function TopBar({
             onClick={onToggleChat}
             className={`p-2 rounded-md transition-colors ${
               showChatPanel
-                ? 'bg-primary text-primary-foreground'
+                ? 'bg-white text-black'
                 : 'text-white hover:bg-white/10'
             }`}
             title="AI Assistant"
