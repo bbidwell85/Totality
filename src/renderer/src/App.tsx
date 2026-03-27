@@ -545,14 +545,13 @@ function AppContent() {
                 }}
               />
             </SectionErrorBoundary>
-            <SectionErrorBoundary section="Mood Sync Panel" compact>
-              <MoodSyncPanel
-                isOpen={showMoodSyncPanel}
-                onClose={() => setShowMoodSyncPanel(false)}
-              />
-            </SectionErrorBoundary>
           </>
         )}
+        {/* Mood Sync Panel - rendered at App level, available in all views */}
+        <MoodSyncPanel
+          isOpen={showMoodSyncPanel}
+          onClose={() => setShowMoodSyncPanel(false)}
+        />
         {/* Chat Panel - rendered at App level, available in all views */}
         <ChatPanel
           isOpen={showChatPanel}
