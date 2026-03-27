@@ -217,7 +217,7 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
           <h4 className="font-semibold truncate">{episode.title}</h4>
         </div>
         <div className="flex items-center gap-1 mt-0.5 text-xs text-muted-foreground">
-          <span>{episode.resolution} • {(episode.video_bitrate / 1000).toFixed(1)} Mbps • {episode.audio_channels}.0 Audio</span>
+          <span>{episode.resolution}{episode.video_bitrate ? ` • ${(episode.video_bitrate / 1000).toFixed(1)} Mbps` : ''}{episode.audio_channels ? ` • ${episode.audio_channels}.0 Audio` : ''}</span>
           {needsUpgrade && (
             <>
               <span>•</span>

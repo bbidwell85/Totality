@@ -65,10 +65,10 @@ export class MusicRepository {
   async upsertArtist(artist: MusicArtist): Promise<number> {
     const sql = `
       INSERT INTO music_artists (
-        source_id, source_type, provider_id, name, sort_name,
+        source_id, source_type, library_id, provider_id, name, sort_name,
         musicbrainz_id, genres, country, biography,
-        thumb_url, art_url, album_count, track_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        thumb_url, art_url, album_count, track_count, user_fixed_match
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, provider_id) DO UPDATE SET
         source_type = excluded.source_type,
         name = excluded.name,
@@ -86,6 +86,7 @@ export class MusicRepository {
     this.db.run(sql, [
       artist.source_id,
       artist.source_type,
+      artist.library_id || null,
       artist.provider_id,
       artist.name,
       artist.sort_name || artist.name,
@@ -97,6 +98,7 @@ export class MusicRepository {
       artist.art_url || null,
       artist.album_count || 0,
       artist.track_count || 0,
+      artist.user_fixed_match ? 1 : 0,
     ])
 
     await this.save()
@@ -291,12 +293,12 @@ export class MusicRepository {
   async upsertAlbum(album: MusicAlbum): Promise<number> {
     const sql = `
       INSERT INTO music_albums (
-        source_id, source_type, provider_id, artist_id, artist_name,
+        source_id, source_type, library_id, provider_id, artist_id, artist_name,
         title, sort_title, year, musicbrainz_id, musicbrainz_release_group_id,
         genres, studio, album_type, track_count, total_duration, total_size,
         best_audio_codec, best_audio_bitrate, best_sample_rate, best_bit_depth,
-        avg_audio_bitrate, thumb_url, art_url, release_date, added_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        avg_audio_bitrate, thumb_url, art_url, release_date, added_at, user_fixed_match
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, provider_id) DO UPDATE SET
         source_type = excluded.source_type,
         artist_id = excluded.artist_id,
@@ -326,6 +328,7 @@ export class MusicRepository {
     this.db.run(sql, [
       album.source_id,
       album.source_type,
+      album.library_id || null,
       album.provider_id,
       album.artist_id || null,
       album.artist_name,
@@ -349,6 +352,7 @@ export class MusicRepository {
       album.art_url || null,
       album.release_date || null,
       album.added_at || null,
+      album.user_fixed_match ? 1 : 0,
     ])
 
     await this.save()

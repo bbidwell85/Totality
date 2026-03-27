@@ -13,7 +13,10 @@ import { getErrorMessage } from './utils'
 import {
   validateInput,
   JellyfinApiKeyAuthSchema,
+  JellyfinCredentialsAuthSchema,
   SafeUrlSchema,
+  NonEmptyStringSchema,
+  QuickConnectSecretSchema,
 } from '../validation/schemas'
 
 export function registerJellyfinHandlers(): void {
@@ -201,14 +204,14 @@ export function registerJellyfinHandlers(): void {
   /**
    * Check if Quick Connect is enabled for a Jellyfin source
    */
-  ipcMain.handle('jellyfin:isQuickConnectEnabled', async (_event, serverUrl: string) => {
+  ipcMain.handle('jellyfin:isQuickConnectEnabled', async (_event, serverUrl: unknown) => {
     try {
-      // Create a temporary provider to check Quick Connect
+      const validUrl = validateInput(SafeUrlSchema, serverUrl, 'jellyfin:isQuickConnectEnabled')
       const tempProvider = new JellyfinProvider({
         sourceId: 'temp-qc-check',
         sourceType: 'jellyfin',
         displayName: 'Temp',
-        connectionConfig: { serverUrl },
+        connectionConfig: { serverUrl: validUrl },
       })
 
       return await tempProvider.isQuickConnectEnabled()
@@ -221,13 +224,14 @@ export function registerJellyfinHandlers(): void {
   /**
    * Initiate Quick Connect - returns code for user to enter in another client
    */
-  ipcMain.handle('jellyfin:initiateQuickConnect', async (_event, serverUrl: string) => {
+  ipcMain.handle('jellyfin:initiateQuickConnect', async (_event, serverUrl: unknown) => {
     try {
+      const validUrl = validateInput(SafeUrlSchema, serverUrl, 'jellyfin:initiateQuickConnect')
       const tempProvider = new JellyfinProvider({
         sourceId: 'temp-qc-init',
         sourceType: 'jellyfin',
         displayName: 'Temp',
-        connectionConfig: { serverUrl },
+        connectionConfig: { serverUrl: validUrl },
       })
 
       return await tempProvider.initiateQuickConnect()
@@ -240,16 +244,18 @@ export function registerJellyfinHandlers(): void {
   /**
    * Check Quick Connect status - poll until authenticated
    */
-  ipcMain.handle('jellyfin:checkQuickConnectStatus', async (_event, serverUrl: string, secret: string) => {
+  ipcMain.handle('jellyfin:checkQuickConnectStatus', async (_event, serverUrl: unknown, secret: unknown) => {
     try {
+      const validUrl = validateInput(SafeUrlSchema, serverUrl, 'jellyfin:checkQuickConnectStatus')
+      const validSecret = validateInput(QuickConnectSecretSchema, secret, 'jellyfin:checkQuickConnectStatus')
       const tempProvider = new JellyfinProvider({
         sourceId: 'temp-qc-check',
         sourceType: 'jellyfin',
         displayName: 'Temp',
-        connectionConfig: { serverUrl },
+        connectionConfig: { serverUrl: validUrl },
       })
 
-      return await tempProvider.checkQuickConnectStatus(secret)
+      return await tempProvider.checkQuickConnectStatus(validSecret)
     } catch (error: unknown) {
       console.error('Error checking Quick Connect status:', error)
       return { authenticated: false, error: getErrorMessage(error) }
@@ -261,41 +267,42 @@ export function registerJellyfinHandlers(): void {
    */
   ipcMain.handle('jellyfin:authenticateCredentials', async (
     _event,
-    serverUrl: string,
-    username: string,
-    password: string,
-    displayName: string,
-    isEmby: boolean = false
+    serverUrl: unknown,
+    username: unknown,
+    password: unknown,
+    displayName: unknown,
+    isEmby: unknown
   ) => {
     try {
-      const providerType = isEmby ? 'emby' : 'jellyfin'
+      const validated = validateInput(JellyfinCredentialsAuthSchema, {
+        serverUrl, username, password, displayName, isEmby: isEmby ?? false,
+      }, 'jellyfin:authenticateCredentials')
+      const providerType = validated.isEmby ? 'emby' : 'jellyfin'
       const { EmbyProvider } = await import('../providers/jellyfin-emby/EmbyProvider')
 
-      const ProviderClass = isEmby ? EmbyProvider : JellyfinProvider
+      const ProviderClass = validated.isEmby ? EmbyProvider : JellyfinProvider
       const provider = new ProviderClass({
-        sourceId: undefined, // Will be generated
+        sourceId: undefined,
         sourceType: providerType,
-        displayName,
-        connectionConfig: { serverUrl },
+        displayName: validated.displayName,
+        connectionConfig: { serverUrl: validated.serverUrl },
       })
 
-      // Authenticate to get access token
       const authResult = await provider.authenticate({
-        serverUrl,
-        username,
-        password,
+        serverUrl: validated.serverUrl,
+        username: validated.username,
+        password: validated.password,
       })
 
       if (!authResult.success) {
         throw new Error(authResult.error || 'Authentication failed')
       }
 
-      // Add the source with the access token (not password)
       const source = await manager.addSource({
         sourceType: providerType,
-        displayName,
+        displayName: validated.displayName,
         connectionConfig: {
-          serverUrl,
+          serverUrl: validated.serverUrl,
           accessToken: authResult.token,
           userId: authResult.userId,
         },
@@ -320,30 +327,32 @@ export function registerJellyfinHandlers(): void {
    */
   ipcMain.handle('jellyfin:completeQuickConnect', async (
     _event,
-    serverUrl: string,
-    secret: string,
-    displayName: string
+    serverUrl: unknown,
+    secret: unknown,
+    displayName: unknown
   ) => {
     try {
+      const validUrl = validateInput(SafeUrlSchema, serverUrl, 'jellyfin:completeQuickConnect')
+      const validSecret = validateInput(QuickConnectSecretSchema, secret, 'jellyfin:completeQuickConnect')
+      const validDisplayName = validateInput(NonEmptyStringSchema, displayName, 'jellyfin:completeQuickConnect')
       const provider = new JellyfinProvider({
-        sourceId: undefined, // Will be generated
+        sourceId: undefined,
         sourceType: 'jellyfin',
-        displayName,
-        connectionConfig: { serverUrl },
+        displayName: validDisplayName,
+        connectionConfig: { serverUrl: validUrl },
       })
 
-      const authResult = await provider.completeQuickConnect(secret)
+      const authResult = await provider.completeQuickConnect(validSecret)
 
       if (!authResult.success) {
         throw new Error(authResult.error || 'Quick Connect failed')
       }
 
-      // Add the source with the access token
       const source = await manager.addSource({
         sourceType: 'jellyfin',
-        displayName,
+        displayName: validDisplayName,
         connectionConfig: {
-          serverUrl,
+          serverUrl: validUrl,
           accessToken: authResult.token,
           userId: authResult.userId,
         },

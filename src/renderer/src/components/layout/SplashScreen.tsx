@@ -5,7 +5,7 @@
  * Fades out after the animation completes.
  */
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTheme } from '../../contexts/ThemeContext'
 import logoAnimation from '../../assets/totality_anim.webm'
 import logoAnimationBlack from '../../assets/totality_anim_black.webm'
@@ -21,31 +21,31 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
   const [fadeOut, setFadeOut] = useState(false)
   const [videoReady, setVideoReady] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
   const { effectiveIsDark } = useTheme()
 
-  // Start video playback after a delay to ensure window is fully visible
   useEffect(() => {
     const timer = setTimeout(() => {
       if (videoRef.current) {
         videoRef.current.play().catch(() => {
-          // If play fails, skip to end
           setVideoEnded(true)
           setFadeOut(true)
         })
       }
       setVideoReady(true)
-    }, 500) // Wait 500ms for window to be fully ready
-    return () => clearTimeout(timer)
+    }, 500)
+    return () => {
+      clearTimeout(timer)
+      if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current)
+    }
   }, [])
 
-  // Handle video end
-  const handleVideoEnd = () => {
+  const handleVideoEnd = useCallback(() => {
     setVideoEnded(true)
-    // Hold on static logo for 3 seconds before fading out
-    setTimeout(() => {
+    fadeTimeoutRef.current = setTimeout(() => {
       setFadeOut(true)
     }, 3000)
-  }
+  }, [])
 
   // Handle video error - skip to end
   const handleVideoError = () => {

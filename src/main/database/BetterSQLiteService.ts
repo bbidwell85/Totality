@@ -941,9 +941,9 @@ export class BetterSQLiteService {
         container = excluded.container,
         file_mtime = excluded.file_mtime,
         imdb_id = COALESCE(excluded.imdb_id, media_items.imdb_id),
-        tmdb_id = COALESCE(excluded.tmdb_id, media_items.tmdb_id),
-        series_tmdb_id = COALESCE(excluded.series_tmdb_id, media_items.series_tmdb_id),
-        poster_url = COALESCE(excluded.poster_url, media_items.poster_url),
+        tmdb_id = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.tmdb_id ELSE COALESCE(excluded.tmdb_id, media_items.tmdb_id) END,
+        series_tmdb_id = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.series_tmdb_id ELSE COALESCE(excluded.series_tmdb_id, media_items.series_tmdb_id) END,
+        poster_url = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.poster_url ELSE COALESCE(excluded.poster_url, media_items.poster_url) END,
         episode_thumb_url = COALESCE(excluded.episode_thumb_url, media_items.episode_thumb_url),
         season_poster_url = COALESCE(excluded.season_poster_url, media_items.season_poster_url),
         summary = COALESCE(excluded.summary, media_items.summary),
@@ -1129,7 +1129,10 @@ export class BetterSQLiteService {
       version.is_best ? 1 : 0
     )
 
-    return Number(result.lastInsertRowid)
+    const existing = this.db.prepare(
+      'SELECT id FROM media_item_versions WHERE media_item_id = ? AND file_path = ?'
+    ).get(version.media_item_id, version.file_path) as { id: number } | undefined
+    return existing?.id || 0
   }
 
   /**
@@ -1487,52 +1490,56 @@ export class BetterSQLiteService {
 
     console.log(`[BetterSQLite] Deleting source ${sourceId} and all associated data...`)
 
-    // Delete media item related data (versions, quality scores, collections)
-    this.deleteMediaItemsForSource(sourceId)
+    const deleteAll = this.db.transaction(() => {
+      // Delete wishlist items BEFORE media_items (subquery references media_items)
+      this.db!.prepare(`
+        DELETE FROM wishlist_items WHERE media_item_id IN (
+          SELECT id FROM media_items WHERE source_id = ?
+        )
+      `).run(sourceId)
 
-    // Delete wishlist items referencing media items from this source
-    this.db.prepare(`
-      DELETE FROM wishlist_items WHERE media_item_id IN (
-        SELECT id FROM media_items WHERE source_id = ?
-      )
-    `).run(sourceId)
+      // Delete media item related data (versions, quality scores, collections)
+      this.deleteMediaItemsForSource(sourceId)
 
-    // Delete music quality scores for albums from this source
-    this.db.prepare(`
-      DELETE FROM music_quality_scores WHERE album_id IN (
-        SELECT id FROM music_albums WHERE source_id = ?
-      )
-    `).run(sourceId)
+      // Delete music quality scores for albums from this source
+      this.db!.prepare(`
+        DELETE FROM music_quality_scores WHERE album_id IN (
+          SELECT id FROM music_albums WHERE source_id = ?
+        )
+      `).run(sourceId)
 
-    // Delete album completeness data for albums from this source
-    this.db.prepare(`
-      DELETE FROM album_completeness WHERE album_id IN (
-        SELECT id FROM music_albums WHERE source_id = ?
-      )
-    `).run(sourceId)
+      // Delete album completeness data for albums from this source
+      this.db!.prepare(`
+        DELETE FROM album_completeness WHERE album_id IN (
+          SELECT id FROM music_albums WHERE source_id = ?
+        )
+      `).run(sourceId)
 
-    // Delete artist completeness data for artists from this source
-    this.db.prepare(`
-      DELETE FROM artist_completeness WHERE artist_name IN (
-        SELECT name FROM music_artists WHERE source_id = ?
-      )
-    `).run(sourceId)
+      // Delete artist completeness data for artists from this source
+      this.db!.prepare(`
+        DELETE FROM artist_completeness WHERE artist_name IN (
+          SELECT name FROM music_artists WHERE source_id = ?
+        )
+      `).run(sourceId)
 
-    // Delete music tracks, albums, artists
-    this.db.prepare('DELETE FROM music_tracks WHERE source_id = ?').run(sourceId)
-    this.db.prepare('DELETE FROM music_albums WHERE source_id = ?').run(sourceId)
-    this.db.prepare('DELETE FROM music_artists WHERE source_id = ?').run(sourceId)
+      // Delete music tracks, albums, artists
+      this.db!.prepare('DELETE FROM music_tracks WHERE source_id = ?').run(sourceId)
+      this.db!.prepare('DELETE FROM music_albums WHERE source_id = ?').run(sourceId)
+      this.db!.prepare('DELETE FROM music_artists WHERE source_id = ?').run(sourceId)
 
-    // Delete completeness and scan data
-    this.db.prepare('DELETE FROM series_completeness WHERE source_id = ?').run(sourceId)
-    this.db.prepare('DELETE FROM movie_collections WHERE source_id = ?').run(sourceId)
-    this.db.prepare('DELETE FROM library_scans WHERE source_id = ?').run(sourceId)
+      // Delete completeness and scan data
+      this.db!.prepare('DELETE FROM series_completeness WHERE source_id = ?').run(sourceId)
+      this.db!.prepare('DELETE FROM movie_collections WHERE source_id = ?').run(sourceId)
+      this.db!.prepare('DELETE FROM library_scans WHERE source_id = ?').run(sourceId)
 
-    // Delete notifications for this source
-    this.db.prepare('DELETE FROM notifications WHERE source_id = ?').run(sourceId)
+      // Delete notifications for this source
+      this.db!.prepare('DELETE FROM notifications WHERE source_id = ?').run(sourceId)
 
-    // Delete the source itself
-    this.db.prepare('DELETE FROM media_sources WHERE source_id = ?').run(sourceId)
+      // Delete the source itself
+      this.db!.prepare('DELETE FROM media_sources WHERE source_id = ?').run(sourceId)
+    })
+
+    deleteAll()
 
     console.log(`[BetterSQLite] Deleted source and all data: ${sourceId}`)
   }
@@ -1897,12 +1904,12 @@ export class BetterSQLiteService {
         library_id = excluded.library_id,
         name = excluded.name,
         sort_name = excluded.sort_name,
-        musicbrainz_id = COALESCE(excluded.musicbrainz_id, music_artists.musicbrainz_id),
+        musicbrainz_id = CASE WHEN music_artists.user_fixed_match = 1 THEN music_artists.musicbrainz_id ELSE COALESCE(excluded.musicbrainz_id, music_artists.musicbrainz_id) END,
         genres = excluded.genres,
         country = excluded.country,
         biography = excluded.biography,
-        thumb_url = COALESCE(excluded.thumb_url, music_artists.thumb_url),
-        art_url = COALESCE(excluded.art_url, music_artists.art_url),
+        thumb_url = CASE WHEN music_artists.user_fixed_match = 1 AND music_artists.thumb_url IS NOT NULL THEN music_artists.thumb_url ELSE COALESCE(excluded.thumb_url, music_artists.thumb_url) END,
+        art_url = CASE WHEN music_artists.user_fixed_match = 1 AND music_artists.art_url IS NOT NULL THEN music_artists.art_url ELSE COALESCE(excluded.art_url, music_artists.art_url) END,
         album_count = excluded.album_count,
         track_count = excluded.track_count,
         user_fixed_match = CASE WHEN music_artists.user_fixed_match = 1 THEN 1 ELSE excluded.user_fixed_match END,
@@ -1957,8 +1964,8 @@ export class BetterSQLiteService {
         title = excluded.title,
         sort_title = excluded.sort_title,
         year = excluded.year,
-        musicbrainz_id = COALESCE(excluded.musicbrainz_id, music_albums.musicbrainz_id),
-        musicbrainz_release_group_id = COALESCE(excluded.musicbrainz_release_group_id, music_albums.musicbrainz_release_group_id),
+        musicbrainz_id = CASE WHEN music_albums.user_fixed_match = 1 THEN music_albums.musicbrainz_id ELSE COALESCE(excluded.musicbrainz_id, music_albums.musicbrainz_id) END,
+        musicbrainz_release_group_id = CASE WHEN music_albums.user_fixed_match = 1 THEN music_albums.musicbrainz_release_group_id ELSE COALESCE(excluded.musicbrainz_release_group_id, music_albums.musicbrainz_release_group_id) END,
         genres = excluded.genres,
         studio = excluded.studio,
         album_type = excluded.album_type,
@@ -1970,8 +1977,8 @@ export class BetterSQLiteService {
         best_sample_rate = excluded.best_sample_rate,
         best_bit_depth = excluded.best_bit_depth,
         avg_audio_bitrate = excluded.avg_audio_bitrate,
-        thumb_url = COALESCE(excluded.thumb_url, music_albums.thumb_url),
-        art_url = COALESCE(excluded.art_url, music_albums.art_url),
+        thumb_url = CASE WHEN music_albums.user_fixed_match = 1 AND music_albums.thumb_url IS NOT NULL THEN music_albums.thumb_url ELSE COALESCE(excluded.thumb_url, music_albums.thumb_url) END,
+        art_url = CASE WHEN music_albums.user_fixed_match = 1 AND music_albums.art_url IS NOT NULL THEN music_albums.art_url ELSE COALESCE(excluded.art_url, music_albums.art_url) END,
         release_date = excluded.release_date,
         user_fixed_match = CASE WHEN music_albums.user_fixed_match = 1 THEN 1 ELSE excluded.user_fixed_match END,
         updated_at = datetime('now')
@@ -3115,11 +3122,14 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     sql += ` ORDER BY q.tier_score ASC`
 
     if (limit) {
-      sql += ` LIMIT ${limit}`
+      sql += ` LIMIT ?`
     }
 
     const stmt = this.db.prepare(sql)
-    return sourceId ? (stmt.all(sourceId) as MusicAlbum[]) : (stmt.all() as MusicAlbum[])
+    const params: (string | number)[] = []
+    if (sourceId) params.push(sourceId)
+    if (limit) params.push(limit)
+    return stmt.all(...params) as MusicAlbum[]
   }
 
   // ============================================================================
@@ -3845,9 +3855,13 @@ WHERE m.type = 'episode' AND m.series_title = ?`
 
         const rows = data[table] as Record<string, unknown>[]
 
+        const tableInfo = this.db!.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+        const validColumns = new Set(tableInfo.map(col => col.name))
+
         for (const row of rows) {
           try {
-            const columns = Object.keys(row).filter(k => row[k] !== undefined)
+            const columns = Object.keys(row).filter(k => row[k] !== undefined && validColumns.has(k))
+            if (columns.length === 0) continue
             const values = columns.map(k => row[k])
             const placeholders = columns.map(() => '?').join(', ')
 
