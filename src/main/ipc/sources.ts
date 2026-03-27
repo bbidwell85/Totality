@@ -12,6 +12,7 @@ import { getDatabase } from '../database/getDatabase'
 import { getPlexService } from '../services/PlexService'
 import { getKodiLocalDiscoveryService } from '../services/KodiLocalDiscoveryService'
 import { getKodiMySQLConnectionService, type KodiMySQLConfig } from '../services/KodiMySQLConnectionService'
+import { getMediaMonkeyDiscoveryService } from '../services/MediaMonkeyDiscoveryService'
 import { getMediaFileAnalyzer } from '../services/MediaFileAnalyzer'
 import type { ProviderType } from '../providers/base/MediaProvider'
 import type { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
@@ -615,6 +616,53 @@ export function registerSourceHandlers(): void {
   })
 
   /**
+   * Detect local MediaMonkey installation
+   * Returns detection result with found installations
+   */
+  ipcMain.handle('mediamonkey:detectLocal', async () => {
+    try {
+      const discovery = getMediaMonkeyDiscoveryService()
+      return await discovery.detect()
+    } catch (error: unknown) {
+      console.error('Error detecting local MediaMonkey:', error)
+      return null
+    }
+  })
+
+  /**
+   * Open file picker for MediaMonkey database
+   */
+  ipcMain.handle('mediamonkey:selectDatabase', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Select MediaMonkey Database',
+        filters: [{ name: 'SQLite Database', extensions: ['db', 'DB'] }],
+        properties: ['openFile'],
+      })
+      if (result.canceled || result.filePaths.length === 0) {
+        return null
+      }
+      return result.filePaths[0]
+    } catch (error: unknown) {
+      console.error('Error opening file dialog:', error)
+      return null
+    }
+  })
+
+  /**
+   * Check if MediaMonkey process is currently running
+   */
+  ipcMain.handle('mediamonkey:isRunning', async () => {
+    try {
+      const discovery = getMediaMonkeyDiscoveryService()
+      return await discovery.isMediaMonkeyRunning()
+    } catch (error: unknown) {
+      console.error('Error checking if MediaMonkey is running:', error)
+      return false
+    }
+  })
+
+  /**
    * Import collections from Kodi local database
    */
   ipcMain.handle('kodi:importCollections', async (event, sourceId: unknown) => {
@@ -984,6 +1032,19 @@ export function registerSourceHandlers(): void {
       return await analyzer.isBundledVersion()
     } catch (error: unknown) {
       console.error('Error checking FFprobe bundle status:', error)
+      return false
+    }
+  })
+
+  /**
+   * Check if FFmpeg is available (needed for embedded artwork extraction)
+   */
+  ipcMain.handle('ffmpeg:isAvailable', async () => {
+    try {
+      const analyzer = getMediaFileAnalyzer()
+      await analyzer.isAvailable()
+      return analyzer.isFFmpegAvailable()
+    } catch {
       return false
     }
   })

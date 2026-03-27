@@ -225,6 +225,7 @@ SELECT
   s.iTrack,
   s.iDuration,
   s.strFileName,
+  s.mood,
   p.strPath,
   s.strMusicBrainzTrackID,
   al.strAlbum AS albumTitle,
@@ -1082,6 +1083,7 @@ export class KodiMySQLProvider implements MediaProvider {
       is_lossless: lossless,
       is_hi_res: false,
       musicbrainz_id: item.strMusicBrainzTrackID || undefined,
+      mood: item.mood ? JSON.stringify(item.mood.split(' / ').map(m => m.trim()).filter(Boolean)) : undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

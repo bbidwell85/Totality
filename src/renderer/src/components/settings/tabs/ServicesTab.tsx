@@ -129,6 +129,7 @@ export function ServicesTab() {
   const [ffprobeBundled, setFfprobeBundled] = useState(false)
   const [ffprobeVersion, setFfprobeVersion] = useState<string | null>(null)
   const [ffprobeEnabled, setFfprobeEnabled] = useState(false)
+  const [ffmpegAvailable, setFfmpegAvailable] = useState(false)
   const [isInstalling, setIsInstalling] = useState(false)
   const [isUninstalling, setIsUninstalling] = useState(false)
   const [installProgress, setInstallProgress] = useState<{ stage: string; percent: number } | null>(
@@ -242,6 +243,12 @@ export function ServicesTab() {
       setFfprobeBundled(ffBundled)
       setFfprobeVersion(ffVersion)
       setFfprobeEnabled(allSettings.ffprobe_enabled === 'true')
+
+      // Check FFmpeg availability (installed alongside FFprobe)
+      try {
+        const ffmpegOk = await window.electronAPI.ffmpegIsAvailable()
+        setFfmpegAvailable(ffmpegOk)
+      } catch { setFfmpegAvailable(false) }
 
       setNfsMappings(nfsMaps || {})
       setOriginalNfsMappings(nfsMaps || {})
@@ -640,6 +647,28 @@ export function ServicesTab() {
           {ffprobeError && (
             <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
               {ffprobeError}
+            </div>
+          )}
+
+          {/* FFmpeg status */}
+          {ffprobeAvailable && (
+            <div className={`p-3 rounded-lg text-sm ${
+              ffmpegAvailable
+                ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+                : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span>
+                  {ffmpegAvailable
+                    ? 'FFmpeg installed — embedded artwork extraction enabled'
+                    : 'FFmpeg not found — embedded artwork extraction unavailable'}
+                </span>
+              </div>
+              {!ffmpegAvailable && ffprobeBundled && (
+                <p className="text-xs mt-1 text-muted-foreground">
+                  Reinstall FFprobe above to also install FFmpeg.
+                </p>
+              )}
             </div>
           )}
 

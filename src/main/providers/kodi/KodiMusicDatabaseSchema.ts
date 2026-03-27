@@ -122,6 +122,7 @@ export interface KodiMusicSongResult {
   strMusicBrainzTrackID: string | null
   albumTitle: string | null
   artistDisp: string | null
+  mood: string | null
 }
 
 // ============================================================================
@@ -214,6 +215,7 @@ export const QUERY_MUSIC_SONGS = `
     s.iTrack,
     s.iDuration,
     s.strFileName,
+    s.mood,
     p.strPath,
     s.strMusicBrainzTrackID,
     al.strAlbum as albumTitle,
@@ -236,6 +238,7 @@ export const QUERY_MUSIC_SONGS_BY_ALBUM = `
     s.iTrack,
     s.iDuration,
     s.strFileName,
+    s.mood,
     p.strPath,
     s.strMusicBrainzTrackID,
     al.strAlbum as albumTitle,

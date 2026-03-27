@@ -1607,6 +1607,7 @@ export class PlexProvider implements MediaProvider {
       is_lossless: isLossless,
       is_hi_res: isHiRes,
       musicbrainz_id: musicbrainzId,
+      mood: item.Mood?.length ? JSON.stringify(item.Mood.map(m => m.tag)) : undefined,
       added_at: item.addedAt ? new Date(item.addedAt * 1000).toISOString() : undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

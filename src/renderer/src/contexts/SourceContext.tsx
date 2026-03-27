@@ -17,7 +17,7 @@ import type {
 } from '../../../preload/index'
 
 // Types for source context
-export type ProviderType = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'kodi-local' | 'local'
+export type ProviderType = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'kodi-local' | 'local' | 'mediamonkey'
 
 export interface ScanProgress {
   sourceId: string

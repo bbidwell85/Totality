@@ -117,6 +117,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   kodiDetectLocal: () => ipcRenderer.invoke('kodi:detectLocal'),
   kodiIsRunning: () => ipcRenderer.invoke('kodi:isRunning'),
 
+  // Detect local MediaMonkey installation
+  mediamonkeyDetectLocal: () => ipcRenderer.invoke('mediamonkey:detectLocal'),
+  mediamonkeySelectDatabase: () => ipcRenderer.invoke('mediamonkey:selectDatabase'),
+  mediamonkeyIsRunning: () => ipcRenderer.invoke('mediamonkey:isRunning'),
+
   // Kodi Collections
   kodiImportCollections: (sourceId: string) => ipcRenderer.invoke('kodi:importCollections', sourceId),
   kodiGetCollections: (sourceId: string) => ipcRenderer.invoke('kodi:getCollections', sourceId),
@@ -192,6 +197,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Check if current FFprobe is the bundled version
   ffprobeIsBundled: () => ipcRenderer.invoke('ffprobe:isBundled'),
+  ffmpegIsAvailable: () => ipcRenderer.invoke('ffmpeg:isAvailable'),
 
   // Check for FFprobe updates
   ffprobeCheckForUpdate: () => ipcRenderer.invoke('ffprobe:checkForUpdate'),
@@ -922,6 +928,18 @@ export interface ElectronAPI {
   } | null>
   kodiIsRunning: () => Promise<boolean>
 
+  // MediaMonkey Detection
+  mediamonkeyDetectLocal: () => Promise<{
+    installations: Array<{
+      version: 4 | 5
+      databasePath: string
+      exists: boolean
+    }>
+    isRunning: boolean
+  } | null>
+  mediamonkeySelectDatabase: () => Promise<string | null>
+  mediamonkeyIsRunning: () => Promise<boolean>
+
   // Kodi Collections
   kodiImportCollections: (sourceId: string) => Promise<{ imported: number; skipped: number }>
   kodiGetCollections: (sourceId: string) => Promise<Array<{
@@ -1070,6 +1088,7 @@ export interface ElectronAPI {
 
   // Check if current FFprobe is the bundled version
   ffprobeIsBundled: () => Promise<boolean>
+  ffmpegIsAvailable: () => Promise<boolean>
 
   // Check for FFprobe updates
   ffprobeCheckForUpdate: () => Promise<{

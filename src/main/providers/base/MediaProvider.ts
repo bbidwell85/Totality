@@ -10,7 +10,7 @@ import type { ConnectionTestResult } from '../../types/ipc'
 export type { ConnectionTestResult }
 
 // Provider types supported by the application
-export type ProviderType = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'kodi-local' | 'kodi-mysql' | 'local'
+export type ProviderType = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'kodi-local' | 'kodi-mysql' | 'local' | 'mediamonkey'
 
 // Credentials for different provider types
 export interface ProviderCredentials {
@@ -42,6 +42,10 @@ export interface ProviderCredentials {
   musicDatabasePath?: string
   includeVideo?: boolean
   includeMusic?: boolean
+
+  // MediaMonkey: Local database access
+  mediamonkeyDatabasePath?: string
+  mediamonkeyVersion?: 4 | 5
 
   // Local folder
   folderPath?: string

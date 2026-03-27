@@ -631,8 +631,8 @@ export class MusicRepository {
         album_name, artist_name, title, track_number, disc_number, duration,
         file_path, file_size, container, file_mtime, audio_codec, audio_bitrate,
         sample_rate, bit_depth, channels, is_lossless, is_hi_res,
-        musicbrainz_id, genres, added_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        musicbrainz_id, genres, mood, added_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, provider_id) DO UPDATE SET
         source_type = excluded.source_type,
         album_id = excluded.album_id,
@@ -656,6 +656,7 @@ export class MusicRepository {
         is_hi_res = excluded.is_hi_res,
         musicbrainz_id = COALESCE(excluded.musicbrainz_id, music_tracks.musicbrainz_id),
         genres = excluded.genres,
+        mood = excluded.mood,
         added_at = excluded.added_at
     `
 
@@ -684,6 +685,7 @@ export class MusicRepository {
       track.is_hi_res ? 1 : 0,
       track.musicbrainz_id || null,
       track.genres || null,
+      track.mood || null,
       track.added_at || null,
     ])
 

@@ -21,7 +21,8 @@ export const ProviderTypeSchema = z.enum([
   'kodi',
   'kodi-local',
   'kodi-mysql',
-  'local'
+  'local',
+  'mediamonkey'
 ])
 
 /**

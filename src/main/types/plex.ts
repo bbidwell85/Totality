@@ -326,6 +326,9 @@ export interface PlexMusicTrack {
   // External IDs
   Guid?: PlexGuid[]
 
+  // Mood tags
+  Mood?: { tag: string }[]
+
   // Audio stream info
   Media?: PlexMusicMedia[]
 }

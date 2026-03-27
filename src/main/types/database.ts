@@ -1,7 +1,7 @@
 // Database type definitions
 
 // Provider types supported by the application
-export type ProviderType = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'kodi-local' | 'kodi-mysql' | 'local'
+export type ProviderType = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'kodi-local' | 'kodi-mysql' | 'local' | 'mediamonkey'
 
 // Media source configuration (Plex, Jellyfin, Emby, Kodi servers)
 export interface MediaSource {
@@ -531,6 +531,7 @@ export interface MusicTrack {
   // Metadata
   musicbrainz_id?: string
   genres?: string // JSON array
+  mood?: string // JSON array of mood strings
 
   // Timestamps
   added_at?: string

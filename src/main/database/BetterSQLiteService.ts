@@ -206,6 +206,8 @@ export class BetterSQLiteService {
 
       // Media item summary/description
       'ALTER TABLE media_items ADD COLUMN summary TEXT',
+      // Music track mood
+      'ALTER TABLE music_tracks ADD COLUMN mood TEXT',
     ]
 
     for (const statement of alterStatements) {
@@ -254,6 +256,69 @@ export class BetterSQLiteService {
       }
     } catch (error: unknown) {
       console.log('[BetterSQLite] kodi-mysql CHECK migration note:', getErrorMessage(error))
+    }
+
+    // Migration: Add 'mediamonkey' to source_type CHECK constraints for existing databases.
+    // Uses table recreation — PRAGMA writable_schema doesn't work with better-sqlite3's schema cache.
+    // Test with an actual INSERT to detect if the compiled constraint accepts 'mediamonkey'.
+    try {
+      let needsMigration = false
+      try {
+        this.db.exec("INSERT INTO music_tracks (source_id, source_type, provider_id, artist_name, title, audio_codec) VALUES ('__test__', 'mediamonkey', '__test__', 'test', 'test', 'test')")
+        this.db.exec("DELETE FROM music_tracks WHERE source_id = '__test__'")
+      } catch {
+        needsMigration = true
+      }
+      if (needsMigration) {
+        console.log('[BetterSQLite] Recreating tables to add mediamonkey to CHECK constraints...')
+        this.db.pragma('foreign_keys = OFF')
+        this.db.exec('BEGIN TRANSACTION')
+        try {
+          const tablesToMigrate = ['media_sources', 'media_items', 'music_artists', 'music_albums', 'music_tracks',
+            'series_completeness', 'movie_collections']
+          for (const table of tablesToMigrate) {
+            const row = this.db.prepare(
+              "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+            ).get(table) as { sql: string } | undefined
+            if (!row?.sql || row.sql.includes('mediamonkey')) continue
+            // Build new CREATE TABLE SQL with 'mediamonkey' added to the CHECK constraint
+            const newSql = row.sql.replace(
+              /CHECK\s*\(\s*source_type\s+IN\s*\([^)]+\)\s*\)/i,
+              "CHECK(source_type IN ('plex','jellyfin','emby','kodi','kodi-local','kodi-mysql','local','mediamonkey'))"
+            )
+            if (newSql === row.sql) continue // No change needed
+            // Replace "CREATE TABLE tablename" with "CREATE TABLE tablename_new"
+            const createNewSql = newSql.replace(
+              new RegExp(`CREATE\\s+TABLE\\s+(IF\\s+NOT\\s+EXISTS\\s+)?${table}`, 'i'),
+              `CREATE TABLE ${table}_new`
+            )
+            this.db.exec(createNewSql)
+            // Copy data
+            const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+            const newCols = this.db.prepare(`PRAGMA table_info(${table}_new)`).all() as Array<{ name: string }>
+            const newColSet = new Set(newCols.map(c => c.name))
+            const commonCols = cols.filter(c => newColSet.has(c.name)).map(c => c.name).join(', ')
+            this.db.exec(`INSERT INTO ${table}_new (${commonCols}) SELECT ${commonCols} FROM ${table}`)
+            this.db.exec(`DROP TABLE ${table}`)
+            this.db.exec(`ALTER TABLE ${table}_new RENAME TO ${table}`)
+            console.log(`[BetterSQLite] Recreated ${table} with mediamonkey CHECK constraint`)
+          }
+          // Recreate indexes that were dropped with the tables
+          this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_media_sources_source_id ON media_sources(source_id)')
+          this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_music_tracks_source_provider ON music_tracks(source_id, provider_id)')
+          this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_music_artists_source_provider ON music_artists(source_id, provider_id)')
+          this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_music_albums_source_provider ON music_albums(source_id, provider_id)')
+          this.db.exec('COMMIT')
+          console.log('[BetterSQLite] Migration: All tables updated with mediamonkey CHECK constraint')
+        } catch (e) {
+          this.db.exec('ROLLBACK')
+          throw e
+        } finally {
+          this.db.pragma('foreign_keys = ON')
+        }
+      }
+    } catch (error: unknown) {
+      console.log('[BetterSQLite] mediamonkey CHECK migration error:', getErrorMessage(error))
     }
 
     // Create indexes for performance
@@ -1816,8 +1881,8 @@ export class BetterSQLiteService {
         album_name, artist_name, title, track_number, disc_number, duration,
         file_path, file_size, container, file_mtime, audio_codec, audio_bitrate,
         sample_rate, bit_depth, channels, is_lossless, is_hi_res,
-        musicbrainz_id, genres, added_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        musicbrainz_id, genres, mood, added_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       ON CONFLICT(source_id, provider_id) DO UPDATE SET
         library_id = excluded.library_id,
         album_id = excluded.album_id,
@@ -1841,6 +1906,7 @@ export class BetterSQLiteService {
         is_hi_res = excluded.is_hi_res,
         musicbrainz_id = COALESCE(excluded.musicbrainz_id, music_tracks.musicbrainz_id),
         genres = excluded.genres,
+        mood = excluded.mood,
         updated_at = datetime('now')
     `)
 
@@ -1870,6 +1936,7 @@ export class BetterSQLiteService {
       track.is_hi_res ? 1 : 0,
       track.musicbrainz_id || null,
       track.genres || null,
+      track.mood || null,
       track.added_at || null
     )
 

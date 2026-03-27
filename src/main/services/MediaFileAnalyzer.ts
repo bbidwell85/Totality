@@ -633,6 +633,18 @@ export class MediaFileAnalyzer {
         throw new Error('ffprobe.exe not found in archive')
       }
       fs.copyFileSync(ffprobeSource, destPath)
+
+      // Also extract ffmpeg.exe if present (same archive on Windows)
+      try {
+        const ffmpegSource = await this.findFileInDir(tempDir, 'ffmpeg.exe')
+        if (ffmpegSource) {
+          const ffmpegDest = destPath.replace(/ffprobe\.exe$/i, 'ffmpeg.exe')
+          fs.copyFileSync(ffmpegSource, ffmpegDest)
+          console.log('[MediaFileAnalyzer] Also extracted ffmpeg.exe alongside ffprobe')
+        }
+      } catch {
+        // FFmpeg extraction is best-effort — ffprobe is the primary binary
+      }
     } else if (platform === 'darwin') {
       // Use unzip on macOS
       await this.runCommand('unzip', ['-o', archivePath, '-d', tempDir])
@@ -644,6 +656,17 @@ export class MediaFileAnalyzer {
       }
       fs.copyFileSync(ffprobeSource, destPath)
       fs.chmodSync(destPath, 0o755) // Make executable
+
+      // Also extract ffmpeg if present
+      try {
+        const ffmpegSource = await this.findFileInDir(tempDir, 'ffmpeg')
+        if (ffmpegSource && !ffmpegSource.includes('ffprobe')) {
+          const ffmpegDest = destPath.replace(/ffprobe$/, 'ffmpeg')
+          fs.copyFileSync(ffmpegSource, ffmpegDest)
+          fs.chmodSync(ffmpegDest, 0o755)
+          console.log('[MediaFileAnalyzer] Also extracted ffmpeg alongside ffprobe')
+        }
+      } catch { /* best-effort */ }
     } else {
       // Use tar on Linux
       await this.runCommand('tar', ['-xf', archivePath, '-C', tempDir])
@@ -655,6 +678,17 @@ export class MediaFileAnalyzer {
       }
       fs.copyFileSync(ffprobeSource, destPath)
       fs.chmodSync(destPath, 0o755) // Make executable
+
+      // Also extract ffmpeg if present
+      try {
+        const ffmpegSource = await this.findFileInDir(tempDir, 'ffmpeg')
+        if (ffmpegSource && !ffmpegSource.includes('ffprobe')) {
+          const ffmpegDest = destPath.replace(/ffprobe$/, 'ffmpeg')
+          fs.copyFileSync(ffmpegSource, ffmpegDest)
+          fs.chmodSync(ffmpegDest, 0o755)
+          console.log('[MediaFileAnalyzer] Also extracted ffmpeg alongside ffprobe')
+        }
+      } catch { /* best-effort */ }
     }
   }
 
@@ -725,12 +759,32 @@ export class MediaFileAnalyzer {
   /**
    * Uninstall bundled FFprobe
    */
+  /**
+   * Check if FFmpeg is available (needed for artwork extraction)
+   */
+  isFFmpegAvailable(): boolean {
+    if (!this.ffprobePath) return false
+    const ffmpegPath = this.ffprobePath.replace(/ffprobe(\.exe)?$/i, (match) =>
+      match.toLowerCase().includes('.exe') ? 'ffmpeg.exe' : 'ffmpeg'
+    )
+    return fs.existsSync(ffmpegPath)
+  }
+
   async uninstallFFprobe(): Promise<boolean> {
     const bundledPath = this.getBundledFFprobePath()
 
     try {
       if (fs.existsSync(bundledPath)) {
         fs.unlinkSync(bundledPath)
+      }
+
+      // Also remove ffmpeg if it was installed alongside ffprobe
+      const ffmpegPath = bundledPath.replace(/ffprobe(\.exe)?$/, (m) =>
+        m.includes('.exe') ? 'ffmpeg.exe' : 'ffmpeg'
+      )
+      if (fs.existsSync(ffmpegPath)) {
+        fs.unlinkSync(ffmpegPath)
+        console.log('[MediaFileAnalyzer] FFmpeg also uninstalled')
       }
 
       // Reset cached state

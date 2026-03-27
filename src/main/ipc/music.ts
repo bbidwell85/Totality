@@ -91,6 +91,10 @@ export function registerMusicHandlers(): void {
         console.log(`[music:scanLibrary] Kodi-Local provider`)
 
         result = await kodiLocalProvider.scanMusicLibrary(progressCallback)
+      } else if (provider.providerType === 'mediamonkey') {
+        // MediaMonkey SQLite provider
+        console.log(`[music:scanLibrary] MediaMonkey provider`)
+        result = await provider.scanLibrary('music', { onProgress: progressCallback })
       } else {
         throw new Error(`Music scanning is not supported for provider type: ${provider.providerType}`)
       }
@@ -644,6 +648,9 @@ export function registerMusicHandlers(): void {
       } else if (provider.providerType === 'kodi-local') {
         const kodiLocalProvider = provider as KodiLocalProvider
         kodiLocalProvider.cancelMusicScan()
+      } else if (provider.providerType === 'mediamonkey') {
+        const mmProvider = provider as import('../providers/mediamonkey/MediaMonkeyProvider').MediaMonkeyProvider
+        mmProvider.cancelScan()
       } else {
         throw new Error(`Music scan cancellation is not supported for provider type: ${provider.providerType}`)
       }

@@ -12,6 +12,7 @@ import { PlexAuthFlow } from './PlexAuthFlow'
 import { JellyfinAuthFlow } from './JellyfinAuthFlow'
 import { KodiConnectionFlow } from './KodiConnectionFlow'
 import { LocalFolderFlow } from './LocalFolderFlow'
+import { MediaMonkeyConnectionFlow } from './MediaMonkeyConnectionFlow'
 
 interface AddSourceModalProps {
   onClose: () => void
@@ -48,6 +49,12 @@ const providers: Array<{
     name: 'Kodi',
     description: 'Connect to Kodi via JSON-RPC',
     color: 'bg-blue-500',
+  },
+  {
+    type: 'mediamonkey',
+    name: 'MediaMonkey',
+    description: 'Connect to MediaMonkey music library',
+    color: 'bg-orange-500',
   },
   {
     type: 'local',
@@ -129,6 +136,8 @@ export function AddSourceModal({ onClose, onSuccess }: AddSourceModalProps) {
         return <JellyfinAuthFlow onSuccess={handleSuccess} onBack={() => setSelectedProvider(null)} isEmby />
       case 'kodi':
         return <KodiConnectionFlow onSuccess={handleSuccess} onBack={() => setSelectedProvider(null)} />
+      case 'mediamonkey':
+        return <MediaMonkeyConnectionFlow onSuccess={handleSuccess} onBack={() => setSelectedProvider(null)} />
       case 'local':
         return <LocalFolderFlow onSuccess={handleSuccess} onBack={() => setSelectedProvider(null)} />
       default:

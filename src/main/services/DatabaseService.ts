@@ -382,6 +382,37 @@ export class DatabaseService {
         console.log('[Database] kodi-mysql CHECK migration note:', getErrorMessage(e))
       }
 
+      // Migration: Add 'mediamonkey' to source_type CHECK constraints for existing databases
+      try {
+        const checkInfo2 = this.db.exec(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name='media_sources'"
+        )
+        if (checkInfo2.length > 0 && checkInfo2[0].values.length > 0) {
+          const schemaSQL2 = checkInfo2[0].values[0][0] as string
+          if (schemaSQL2 && !schemaSQL2.includes('mediamonkey')) {
+            this.db.run('PRAGMA writable_schema = ON')
+            const tables = ['media_sources', 'media_items', 'series_completeness', 'movie_collections', 'music_tracks']
+            for (const table of tables) {
+              const oldCheck = `'kodi-mysql', 'local'))`
+              const newCheck = `'kodi-mysql', 'local', 'mediamonkey'))`
+              this.db.run(
+                `UPDATE sqlite_master SET sql = replace(sql, '${oldCheck}', '${newCheck}') WHERE type = 'table' AND name = '${table}'`
+              )
+              const oldCheck2 = `'kodi-local', 'local'))`
+              const newCheck2 = `'kodi-local', 'kodi-mysql', 'local', 'mediamonkey'))`
+              this.db.run(
+                `UPDATE sqlite_master SET sql = replace(sql, '${oldCheck2}', '${newCheck2}') WHERE type = 'table' AND name = '${table}'`
+              )
+            }
+            this.db.run('PRAGMA writable_schema = OFF')
+            this.db.run('PRAGMA integrity_check')
+            console.log('[Database] Migration: Added mediamonkey to source_type CHECK constraints')
+          }
+        }
+      } catch (e: unknown) {
+        console.log('[Database] mediamonkey CHECK migration note:', getErrorMessage(e))
+      }
+
       // Execute main schema (CREATE TABLE IF NOT EXISTS)
       this.db.run(DATABASE_SCHEMA)
 
@@ -703,6 +734,11 @@ export class DatabaseService {
       // Add summary column to media_items
       try {
         this.db.run('ALTER TABLE media_items ADD COLUMN summary TEXT')
+      } catch { /* column may already exist */ }
+
+      // Add mood column to music_tracks
+      try {
+        this.db.run('ALTER TABLE music_tracks ADD COLUMN mood TEXT')
       } catch { /* column may already exist */ }
 
       // Migrate existing plain-text credentials to encrypted format

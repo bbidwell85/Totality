@@ -23,7 +23,6 @@ import { PlexProvider } from '../providers/plex/PlexProvider'
 import { JellyfinEmbyBase } from '../providers/jellyfin-emby/JellyfinEmbyBase'
 import { KodiProvider } from '../providers/kodi/KodiProvider'
 import { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
-import { LocalFolderProvider } from '../providers/local/LocalFolderProvider'
 import type { ScanResult } from '../providers/base/MediaProvider'
 import type { MusicTrack } from '../types/database'
 import { getWishlistCompletionService } from './WishlistCompletionService'
@@ -796,10 +795,9 @@ export class TaskQueueService {
     } else if (provider.providerType === 'kodi-local') {
       const kodiLocalProvider = provider as KodiLocalProvider
       result = await kodiLocalProvider.scanMusicLibrary(onProgress)
-    } else if (provider.providerType === 'local') {
-      // Local folder provider routes music through scanLibrary internally
-      const localProvider = provider as LocalFolderProvider
-      result = await localProvider.scanLibrary(task.libraryId, { onProgress })
+    } else if (provider.providerType === 'local' || provider.providerType === 'mediamonkey') {
+      // Local folder / MediaMonkey providers route music through scanLibrary
+      result = await provider.scanLibrary(task.libraryId, { onProgress })
     } else {
       throw new Error(`Music scanning not supported for provider type: ${provider.providerType}`)
     }

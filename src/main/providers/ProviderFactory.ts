@@ -12,6 +12,7 @@ import { KodiProvider } from './kodi/KodiProvider'
 import { KodiLocalProvider } from './kodi/KodiLocalProvider'
 import { KodiMySQLProvider } from './kodi/KodiMySQLProvider'
 import { LocalFolderProvider } from './local/LocalFolderProvider'
+import { MediaMonkeyProvider } from './mediamonkey/MediaMonkeyProvider'
 
 /**
  * Create a MediaProvider instance based on the provider type
@@ -39,6 +40,9 @@ export function createProvider(type: ProviderType, config: SourceConfig): MediaP
     case 'local':
       return new LocalFolderProvider(config)
 
+    case 'mediamonkey':
+      return new MediaMonkeyProvider(config)
+
     default:
       throw new Error(`Unknown provider type: ${type}`)
   }
@@ -48,7 +52,7 @@ export function createProvider(type: ProviderType, config: SourceConfig): MediaP
  * Check if a provider type is supported
  */
 export function isProviderSupported(type: ProviderType): boolean {
-  const supportedProviders: ProviderType[] = ['plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local']
+  const supportedProviders: ProviderType[] = ['plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local', 'mediamonkey']
   return supportedProviders.includes(type)
 }
 
@@ -56,7 +60,7 @@ export function isProviderSupported(type: ProviderType): boolean {
  * Get list of all supported provider types
  */
 export function getSupportedProviders(): ProviderType[] {
-  return ['plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local']
+  return ['plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local', 'mediamonkey']
 }
 
 /**
@@ -71,6 +75,7 @@ export function getProviderDisplayName(type: ProviderType): string {
     'kodi-local': 'Kodi (Local)',
     'kodi-mysql': 'Kodi (MySQL)',
     local: 'Local Folder',
+    mediamonkey: 'MediaMonkey',
   }
   return names[type] || type
 }
@@ -87,6 +92,7 @@ export function getProviderIcon(type: ProviderType): string {
     'kodi-local': 'kodi',
     'kodi-mysql': 'kodi',
     local: 'folder',
+    mediamonkey: 'music',
   }
   return icons[type] || 'server'
 }

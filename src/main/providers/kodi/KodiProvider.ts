@@ -159,6 +159,7 @@ interface KodiMusicSong {
   samplerate?: number
   bitrate?: number
   channels?: number
+  mood?: string
 }
 
 export class KodiProvider implements MediaProvider {
@@ -1310,7 +1311,7 @@ export class KodiProvider implements MediaProvider {
         properties: [
           'title', 'albumid', 'album', 'artistid', 'artist', 'displayartist',
           'track', 'disc', 'duration', 'file', 'musicbrainztrackid',
-          'samplerate', 'bitrate', 'channels'
+          'samplerate', 'bitrate', 'channels', 'mood'
         ],
       }
 
@@ -1441,6 +1442,7 @@ export class KodiProvider implements MediaProvider {
       is_lossless: lossless,
       is_hi_res: hiRes,
       musicbrainz_id: item.musicbrainztrackid,
+      mood: item.mood ? JSON.stringify(item.mood.split(' / ').map(m => m.trim()).filter(Boolean)) : undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

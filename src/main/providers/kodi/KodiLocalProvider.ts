@@ -1968,6 +1968,7 @@ export class KodiLocalProvider implements MediaProvider {
       is_lossless: lossless,
       is_hi_res: false, // Will be updated by FFprobe if available
       musicbrainz_id: item.strMusicBrainzTrackID || undefined,
+      mood: item.mood ? JSON.stringify(item.mood.split(' / ').map(m => m.trim()).filter(Boolean)) : undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

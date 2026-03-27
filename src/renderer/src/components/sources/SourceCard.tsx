@@ -23,6 +23,7 @@ const providerColors: Record<ProviderType, string> = {
   emby: 'bg-green-500',
   kodi: 'bg-blue-500',
   'kodi-local': 'bg-blue-500',
+  mediamonkey: 'bg-orange-500',
   local: 'bg-slate-600',
 }
 

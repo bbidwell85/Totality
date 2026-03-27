@@ -9,7 +9,7 @@ export const DATABASE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS media_sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source_id TEXT NOT NULL UNIQUE,
-  source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local')),
+  source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local', 'mediamonkey')),
   display_name TEXT NOT NULL,
 
   -- Connection details (JSON for flexibility)
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS media_items (
 
   -- Source tracking (for multi-provider support)
   source_id TEXT NOT NULL DEFAULT 'legacy',
-  source_type TEXT NOT NULL DEFAULT 'plex' CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local')),
+  source_type TEXT NOT NULL DEFAULT 'plex' CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local', 'mediamonkey')),
   library_id TEXT, -- Library ID within the source (e.g., Plex library key)
 
   -- Provider item ID (was plex_id, now generic)
@@ -283,7 +283,7 @@ CREATE TABLE IF NOT EXISTS music_artists (
 
   -- Source tracking
   source_id TEXT NOT NULL,
-  source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local')),
+  source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local', 'mediamonkey')),
   library_id TEXT, -- Library ID within the source
 
   -- Provider item ID
@@ -317,7 +317,7 @@ CREATE TABLE IF NOT EXISTS music_albums (
 
   -- Source tracking
   source_id TEXT NOT NULL,
-  source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local')),
+  source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local', 'mediamonkey')),
   library_id TEXT, -- Library ID within the source
 
   -- Provider item ID
@@ -373,7 +373,7 @@ CREATE TABLE IF NOT EXISTS music_tracks (
 
   -- Source tracking
   source_id TEXT NOT NULL,
-  source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local')),
+  source_type TEXT NOT NULL CHECK(source_type IN ('plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local', 'mediamonkey')),
   library_id TEXT, -- Library ID within the source
 
   -- Provider item ID
@@ -412,6 +412,7 @@ CREATE TABLE IF NOT EXISTS music_tracks (
   -- Metadata
   musicbrainz_id TEXT,
   genres TEXT, -- JSON array
+  mood TEXT, -- JSON array of mood strings
 
   -- Timestamps
   added_at TEXT,
