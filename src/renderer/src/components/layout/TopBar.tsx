@@ -32,9 +32,11 @@ interface TopBarProps {
   onToggleCompleteness: () => void
   onToggleWishlist: () => void
   onToggleChat: () => void
+  onToggleMoodSync: () => void
   showCompletenessPanel: boolean
   showWishlistPanel: boolean
   showChatPanel: boolean
+  showMoodSyncPanel: boolean
   isAutoRefreshing?: boolean
   hasMovies?: boolean
   hasTV?: boolean
@@ -54,9 +56,11 @@ export function TopBar({
   onToggleCompleteness,
   onToggleWishlist,
   onToggleChat,
+  onToggleMoodSync,
   showCompletenessPanel,
   showWishlistPanel,
   showChatPanel,
+  showMoodSyncPanel,
   isAutoRefreshing = false,
   hasMovies = false,
   hasTV = false,
@@ -672,6 +676,21 @@ export function TopBar({
                 {wishlistCount > 99 ? '99+' : wishlistCount}
               </span>
             )}
+          </button>
+
+          {/* Mood Sync Panel Toggle */}
+          <button
+            onClick={onToggleMoodSync}
+            className={`relative p-2 rounded-md transition-colors ${
+              showMoodSyncPanel
+                ? 'bg-white text-black'
+                : 'text-white hover:bg-white/10'
+            }`}
+            title="Mood Sync"
+            aria-label="Toggle mood sync panel"
+            aria-pressed={showMoodSyncPanel}
+          >
+            <Music className="w-5 h-5" />
           </button>
 
           {/* AI Chat Toggle */}

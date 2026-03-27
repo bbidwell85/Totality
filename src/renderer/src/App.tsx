@@ -6,6 +6,7 @@ import { Dashboard } from './components/dashboard'
 import { WishlistPanel } from './components/wishlist/WishlistPanel'
 import { CompletenessPanel } from './components/library/CompletenessPanel'
 import { ChatPanel } from './components/chat/ChatPanel'
+import { MoodSyncPanel } from './components/mood/MoodSyncPanel'
 import type { ViewContext } from './hooks/useChat'
 import { AIInsightsPanel } from './components/library/AIInsightsPanel'
 import { SourceProvider, useSources } from './contexts/SourceContext'
@@ -45,6 +46,7 @@ function AppContent() {
   const [showCompletenessPanel, setShowCompletenessPanel] = useState(false)
   const [showWishlistPanel, setShowWishlistPanel] = useState(false)
   const [showChatPanel, setShowChatPanel] = useState(false)
+  const [showMoodSyncPanel, setShowMoodSyncPanel] = useState(false)
   const [showAIInsights, setShowAIInsights] = useState(false)
   const [aiInsightsInitialReport, setAiInsightsInitialReport] = useState<string | undefined>(undefined)
 
@@ -371,7 +373,15 @@ function AppContent() {
   const handleToggleChat = () => {
     setShowChatPanel(prev => {
       const newState = !prev
-      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false) }
+      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowMoodSyncPanel(false) }
+      return newState
+    })
+  }
+
+  const handleToggleMoodSync = () => {
+    setShowMoodSyncPanel(prev => {
+      const newState = !prev
+      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowChatPanel(false) }
       return newState
     })
   }
@@ -432,9 +442,11 @@ function AppContent() {
           onToggleCompleteness={handleToggleCompleteness}
           onToggleWishlist={handleToggleWishlist}
           onToggleChat={handleToggleChat}
+          onToggleMoodSync={handleToggleMoodSync}
           showCompletenessPanel={showCompletenessPanel}
           showWishlistPanel={showWishlistPanel}
           showChatPanel={showChatPanel}
+          showMoodSyncPanel={showMoodSyncPanel}
           isAutoRefreshing={isAutoRefreshing}
           hasMovies={hasMovies}
           hasTV={hasTV}
@@ -531,6 +543,12 @@ function AppContent() {
                   setAiInsightsInitialReport('wishlist')
                   setShowAIInsights(true)
                 }}
+              />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary section="Mood Sync Panel" compact>
+              <MoodSyncPanel
+                isOpen={showMoodSyncPanel}
+                onClose={() => setShowMoodSyncPanel(false)}
               />
             </SectionErrorBoundary>
           </>

@@ -1,12 +1,12 @@
 /**
  * MoodSyncPanel
  *
- * Settings tab for comparing and syncing mood tags across music sources.
- * Follows the same design patterns as other Settings tabs (GeneralTab, ServicesTab, etc.)
+ * Slide-out panel for comparing and syncing mood tags across music sources.
+ * Follows the same panel pattern as WishlistPanel.
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import { Music, RefreshCw, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { X, Music, RefreshCw, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react'
 
 interface MoodSource {
   sourceId: string
@@ -35,7 +35,12 @@ interface MoodComparison {
   targets: MoodTarget[]
 }
 
-export function MoodSyncPanel() {
+export interface MoodSyncPanelProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
+export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const [sources, setSources] = useState<MoodSource[]>([])
   const [sourceOfTruthId, setSourceOfTruthId] = useState<string>('')
   const [comparisons, setComparisons] = useState<MoodComparison[]>([])
@@ -45,10 +50,18 @@ export function MoodSyncPanel() {
   const [syncResult, setSyncResult] = useState<{ synced: number; failed: number; errors: string[] } | null>(null)
   const [showMismatchOnly, setShowMismatchOnly] = useState(true)
 
-  useEffect(() => {
-    loadSources()
-  }, [])
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
+  // Auto-focus close button when panel opens
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => closeButtonRef.current?.focus(), 100)
+      loadSources()
+    }
+  }, [isOpen])
+
+  // Listen for sync progress
   useEffect(() => {
     const cleanup = window.electronAPI.onMoodSyncProgress((progress) => {
       setSyncProgress(progress)
@@ -56,13 +69,20 @@ export function MoodSyncPanel() {
     return cleanup
   }, [])
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+    }
+  }, [onClose])
+
   const loadSources = async () => {
     try {
       const result = await window.electronAPI.moodGetSources()
       setSources(result)
-      const withMoods = result.find(s => s.tracksWithMoods > 0)
-      if (withMoods && !sourceOfTruthId) {
-        setSourceOfTruthId(withMoods.sourceId)
+      if (!sourceOfTruthId) {
+        const withMoods = result.find(s => s.tracksWithMoods > 0)
+        if (withMoods) setSourceOfTruthId(withMoods.sourceId)
       }
     } catch (error) {
       console.error('Failed to load mood sources:', error)
@@ -84,10 +104,10 @@ export function MoodSyncPanel() {
   }, [sourceOfTruthId])
 
   useEffect(() => {
-    if (sourceOfTruthId) {
+    if (sourceOfTruthId && isOpen) {
       loadComparison()
     }
-  }, [sourceOfTruthId, loadComparison])
+  }, [sourceOfTruthId, loadComparison, isOpen])
 
   const handleSync = async (targetSourceId: string) => {
     if (!sourceOfTruthId) return
@@ -113,16 +133,11 @@ export function MoodSyncPanel() {
     ? comparisons.filter(c => c.targets.some(t => t.hasMismatch))
     : comparisons
 
-  const targetSources = new Map<string, { sourceId: string; sourceName: string; sourceType: string; mismatchCount: number }>()
+  const targetSources = new Map<string, { sourceId: string; sourceName: string; mismatchCount: number }>()
   for (const comp of comparisons) {
     for (const target of comp.targets) {
       if (!targetSources.has(target.sourceId)) {
-        targetSources.set(target.sourceId, {
-          sourceId: target.sourceId,
-          sourceName: target.sourceName,
-          sourceType: target.sourceType,
-          mismatchCount: 0,
-        })
+        targetSources.set(target.sourceId, { sourceId: target.sourceId, sourceName: target.sourceName, mismatchCount: 0 })
       }
       if (target.hasMismatch) {
         targetSources.get(target.sourceId)!.mismatchCount++
@@ -130,245 +145,193 @@ export function MoodSyncPanel() {
     }
   }
 
-  const selectedSource = sources.find(s => s.sourceId === sourceOfTruthId)
+  const mismatchTotal = Array.from(targetSources.values()).reduce((sum, t) => sum + t.mismatchCount, 0)
 
   return (
-    <div className="space-y-5">
-      {/* Source of Truth Section */}
-      <div className="border border-border/40 rounded-lg overflow-hidden bg-card/30">
-        <div className="p-4">
-          <div className="flex items-center gap-3 mb-4">
-            <Music className="w-5 h-5 shrink-0 text-muted-foreground" />
-            <div>
-              <p className="font-medium text-sm">Source of Truth</p>
-              <p className="text-xs text-muted-foreground">Select which source has the authoritative mood tags</p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <select
-                value={sourceOfTruthId}
-                onChange={(e) => setSourceOfTruthId(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-lg bg-background border border-border/30 text-foreground text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
-              >
-                <option value="">Select a source...</option>
-                {sources.map(s => (
-                  <option key={s.sourceId} value={s.sourceId}>
-                    {s.sourceName} ({s.tracksWithMoods} tracks with moods / {s.totalTracks} total)
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={loadComparison}
-                disabled={loading || !sourceOfTruthId}
-                className="p-2 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 text-muted-foreground"
-                title="Refresh comparison"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-            {selectedSource && (
-              <p className="text-xs text-muted-foreground">
-                {selectedSource.tracksWithMoods} of {selectedSource.totalTracks} tracks have mood tags
-              </p>
-            )}
-          </div>
+    <div
+      ref={panelRef}
+      id="mood-sync-panel"
+      className={`fixed top-[88px] bottom-4 right-4 w-96 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
+        isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
+      }`}
+      onKeyDown={handleKeyDown}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
+        <div className="flex items-center gap-2">
+          <Music className="w-4 h-4 text-muted-foreground" />
+          <h2 className="font-semibold text-sm">Mood Sync</h2>
+          {mismatchTotal > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-medium">
+              {mismatchTotal}
+            </span>
+          )}
         </div>
+        <button
+          ref={closeButtonRef}
+          onClick={onClose}
+          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
+          aria-label="Close mood sync panel"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
-      {/* Sync Targets Section */}
-      {targetSources.size > 0 && (
-        <div className="border border-border/40 rounded-lg overflow-hidden bg-card/30">
-          <div className="p-4">
-            <div className="flex items-center gap-3 mb-4">
-              <ArrowRight className="w-5 h-5 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="font-medium text-sm">Sync Targets</p>
-                <p className="text-xs text-muted-foreground">Push mood tags from source of truth to these sources</p>
-              </div>
-            </div>
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Source of Truth */}
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Source of Truth</label>
+          <div className="flex items-center gap-2">
+            <select
+              value={sourceOfTruthId}
+              onChange={(e) => setSourceOfTruthId(e.target.value)}
+              className="flex-1 px-2.5 py-1.5 rounded-lg bg-background border border-border/30 text-foreground text-xs focus:outline-hidden focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Select a source...</option>
+              {sources.map(s => (
+                <option key={s.sourceId} value={s.sourceId}>
+                  {s.sourceName} ({s.tracksWithMoods}/{s.totalTracks} moods)
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={loadComparison}
+              disabled={loading || !sourceOfTruthId}
+              className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 text-muted-foreground"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
 
+        {/* Sync Targets */}
+        {targetSources.size > 0 && (
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Targets</label>
             <div className="bg-background/50 rounded-lg divide-y divide-border/30">
               {Array.from(targetSources.values()).map(target => (
-                <div
-                  key={target.sourceId}
-                  className="flex items-center justify-between px-4 py-3"
-                >
+                <div key={target.sourceId} className="flex items-center justify-between px-3 py-2.5">
                   <div>
-                    <span className="text-sm font-medium">{target.sourceName}</span>
-                    <span className="text-xs text-muted-foreground ml-2">
-                      {target.mismatchCount > 0
-                        ? `${target.mismatchCount} mismatches`
-                        : 'In sync'}
+                    <span className="text-xs font-medium">{target.sourceName}</span>
+                    <span className="text-[10px] text-muted-foreground ml-1.5">
+                      {target.mismatchCount > 0 ? `${target.mismatchCount} mismatches` : 'In sync'}
                     </span>
                   </div>
                   <button
                     onClick={() => handleSync(target.sourceId)}
                     disabled={syncing || target.mismatchCount === 0}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-hidden focus:ring-2 focus:ring-primary"
+                    className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium rounded-md bg-primary text-primary-foreground hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {syncing ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    )}
-                    Sync {target.mismatchCount} tracks
+                    {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRight className="w-3 h-3" />}
+                    Sync
                   </button>
                 </div>
               ))}
             </div>
+          </div>
+        )}
 
-            {/* Sync Progress */}
-            {syncProgress && (
-              <div className="mt-3 space-y-2">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>{syncProgress.currentTrack}</span>
-                  <span>{syncProgress.current}/{syncProgress.total}</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${(syncProgress.current / syncProgress.total) * 100}%` }}
-                  />
-                </div>
-              </div>
-            )}
+        {/* Sync Progress */}
+        {syncProgress && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span className="truncate pr-2">{syncProgress.currentTrack}</span>
+              <span className="shrink-0">{syncProgress.current}/{syncProgress.total}</span>
+            </div>
+            <div className="h-1 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{ width: `${(syncProgress.current / syncProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
 
-            {/* Sync Result */}
-            {syncResult && (
-              <div className={`mt-3 p-3 rounded-lg text-sm ${
-                syncResult.failed === 0
-                  ? 'bg-green-500/10 border border-green-500/30 text-green-400'
-                  : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {syncResult.failed === 0 ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+        {/* Sync Result */}
+        {syncResult && (
+          <div className={`p-2.5 rounded-lg text-xs ${
+            syncResult.failed === 0
+              ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+              : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+          }`}>
+            <div className="flex items-center gap-1.5">
+              {syncResult.failed === 0 ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
+              <span>Synced {syncResult.synced} tracks{syncResult.failed > 0 ? `, ${syncResult.failed} failed` : ''}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Filter */}
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-muted-foreground">
+            {filteredComparisons.length} of {comparisons.length} matched tracks
+          </span>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <span className="text-[10px] text-muted-foreground">Mismatches only</span>
+            <button
+              role="switch"
+              aria-checked={showMismatchOnly}
+              onClick={() => setShowMismatchOnly(!showMismatchOnly)}
+              className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-1 focus:ring-offset-background ${
+                showMismatchOnly ? 'bg-primary' : 'bg-muted'
+              }`}
+            >
+              <span className={`inline-block h-3 w-3 rounded-full bg-background shadow-sm ring-1 ring-border/50 transition-transform ${
+                showMismatchOnly ? 'translate-x-4' : 'translate-x-0.5'
+              }`} />
+            </button>
+          </label>
+        </div>
+
+        {/* Comparison List */}
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredComparisons.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+            <Music className="w-6 h-6 mb-2 opacity-50" />
+            <p className="text-xs">
+              {sourceOfTruthId
+                ? comparisons.length === 0
+                  ? 'No matched tracks found'
+                  : 'All moods are in sync!'
+                : 'Select a source of truth'}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-background/50 rounded-lg divide-y divide-border/30">
+            {filteredComparisons.slice(0, 100).map((comp, i) => (
+              <div key={i} className="px-3 py-2.5 space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium truncate">{comp.trackTitle}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{comp.artist}</p>
+                  </div>
+                  {comp.targets.some(t => t.hasMismatch) ? (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] shrink-0 ml-2">Mismatch</span>
                   ) : (
-                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span className="px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 text-[10px] shrink-0 ml-2">Synced</span>
                   )}
-                  <span>Synced {syncResult.synced} tracks{syncResult.failed > 0 ? `, ${syncResult.failed} failed` : ''}</span>
                 </div>
-                {syncResult.errors.length > 0 && (
-                  <ul className="mt-2 text-xs space-y-1">
-                    {syncResult.errors.slice(0, 5).map((err, i) => (
-                      <li key={i}>{err}</li>
-                    ))}
-                  </ul>
-                )}
+                <div className="flex flex-wrap gap-1">
+                  {comp.sourceOfTruthMoods.map((mood, j) => (
+                    <span key={j} className="px-1.5 py-0.5 rounded-full bg-primary/20 text-primary text-[10px]">
+                      {mood}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {filteredComparisons.length > 100 && (
+              <div className="px-3 py-2 text-[10px] text-muted-foreground text-center">
+                Showing 100 of {filteredComparisons.length}
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Comparison Results Section */}
-      <div className="border border-border/40 rounded-lg overflow-hidden bg-card/30">
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Music className="w-5 h-5 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="font-medium text-sm">Comparison Results</p>
-                <p className="text-xs text-muted-foreground">
-                  {filteredComparisons.length} of {comparisons.length} matched tracks
-                </p>
-              </div>
-            </div>
-
-            {/* Filter toggle */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <span className="text-xs text-muted-foreground">Mismatches only</span>
-              <button
-                role="switch"
-                aria-checked={showMismatchOnly}
-                onClick={() => setShowMismatchOnly(!showMismatchOnly)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
-                  showMismatchOnly ? 'bg-primary' : 'bg-muted'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 rounded-full bg-background shadow-md ring-1 ring-border/50 transition-transform ${
-                  showMismatchOnly ? 'translate-x-6' : 'translate-x-1'
-                }`} />
-              </button>
-            </label>
-          </div>
-
-          {/* Table */}
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredComparisons.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <Music className="w-8 h-8 mb-3 opacity-50" />
-              <p className="text-sm">
-                {sourceOfTruthId
-                  ? comparisons.length === 0
-                    ? 'No matched tracks found between sources'
-                    : 'All moods are in sync!'
-                  : 'Select a source of truth to begin'}
-              </p>
-            </div>
-          ) : (
-            <div className="bg-background/50 rounded-lg overflow-hidden">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-border/30">
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Track</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Artist</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Source Moods</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Target Moods</th>
-                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/30">
-                  {filteredComparisons.slice(0, 100).map((comp, i) => (
-                    <tr key={i} className="hover:bg-muted/30 transition-colors">
-                      <td className="px-3 py-2.5 text-foreground">{comp.trackTitle}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground">{comp.artist}</td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap gap-1">
-                          {comp.sourceOfTruthMoods.map((mood, j) => (
-                            <span key={j} className="px-1.5 py-0.5 rounded-full bg-primary/20 text-primary text-xs">
-                              {mood}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        {comp.targets.map((target, j) => (
-                          <div key={j} className="flex flex-wrap gap-1">
-                            {target.moods.length > 0 ? target.moods.map((mood, k) => (
-                              <span key={k} className="px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground text-xs">
-                                {mood}
-                              </span>
-                            )) : (
-                              <span className="text-muted-foreground/50 italic">No moods</span>
-                            )}
-                          </div>
-                        ))}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        {comp.targets.some(t => t.hasMismatch) ? (
-                          <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs">Mismatch</span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400 text-xs">In sync</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filteredComparisons.length > 100 && (
-                <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border/30">
-                  Showing first 100 of {filteredComparisons.length} tracks
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   )

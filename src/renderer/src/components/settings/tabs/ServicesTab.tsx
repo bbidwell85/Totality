@@ -16,6 +16,7 @@ import {
   Network,
   Circle,
   Bot,
+  Music,
 } from 'lucide-react'
 
 interface ServiceCardProps {
@@ -169,6 +170,10 @@ export function ServicesTab() {
   const [originalGeminiModel, setOriginalGeminiModel] = useState('gemini-2.5-flash')
   const [aiEnabled, setAiEnabled] = useState(true)
 
+  // Mood sync state
+  const [moodSources, setMoodSources] = useState<Array<{ sourceId: string; sourceName: string; tracksWithMoods: number; totalTracks: number }>>([])
+  const [moodSourceOfTruth, setMoodSourceOfTruth] = useState('')
+
   // General state
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -249,6 +254,14 @@ export function ServicesTab() {
         const ffmpegOk = await window.electronAPI.ffmpegIsAvailable()
         setFfmpegAvailable(ffmpegOk)
       } catch { setFfmpegAvailable(false) }
+
+      // Load mood sync sources
+      try {
+        const ms = await window.electronAPI.moodGetSources()
+        setMoodSources(ms)
+        const savedSot = allSettings.mood_source_of_truth || ''
+        setMoodSourceOfTruth(savedSot)
+      } catch { /* ignore */ }
 
       setNfsMappings(nfsMaps || {})
       setOriginalNfsMappings(nfsMaps || {})
@@ -893,6 +906,41 @@ export function ServicesTab() {
               No NFS mappings configured. Only needed if you use NFS shares with Kodi.
             </p>
           )}
+        </div>
+      </ServiceCard>
+
+      {/* Mood Sync Card */}
+      <ServiceCard
+        title="Mood Sync"
+        description="Sync mood tags between music sources"
+        icon={<Music className="w-5 h-5" />}
+        status={moodSourceOfTruth ? 'configured' : 'not-configured'}
+        statusText={moodSourceOfTruth ? 'Source of truth set' : 'Not configured'}
+        expanded={expandedCards.has('mood-sync')}
+        onToggle={() => toggleCard('mood-sync')}
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm font-medium text-foreground">Source of Truth</label>
+            <p className="text-xs text-muted-foreground mb-2">
+              The source with authoritative mood tags. Use the Mood Sync panel in the top bar to compare and push moods to other sources.
+            </p>
+            <select
+              value={moodSourceOfTruth}
+              onChange={(e) => {
+                setMoodSourceOfTruth(e.target.value)
+                window.electronAPI.setSetting('mood_source_of_truth', e.target.value)
+              }}
+              className="w-full px-3 py-2 rounded-lg bg-background border border-border/30 text-foreground text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
+            >
+              <option value="">None selected</option>
+              {moodSources.map(s => (
+                <option key={s.sourceId} value={s.sourceId}>
+                  {s.sourceName} ({s.tracksWithMoods}/{s.totalTracks} tracks with moods)
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </ServiceCard>
 
