@@ -1,5 +1,5 @@
 import { useState, useCallback, useId, useRef, useEffect } from 'react'
-import { X, Settings, Sliders, Wrench, Palette, Database, Bug, ArrowUpCircle, Library } from 'lucide-react'
+import { X, Settings, Sliders, Wrench, Palette, Database, Bug, ArrowUpCircle, Library, Music } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { GeneralTab } from './tabs/GeneralTab'
 import { QualitySettingsTab } from './tabs/QualitySettingsTab'
@@ -9,8 +9,9 @@ import { DataManagementTab } from './tabs/DataManagementTab'
 import { TroubleshootTab } from './tabs/TroubleshootTab'
 import { UpdateTab } from './tabs/UpdateTab'
 import { LibrarySettingsTab } from './tabs/LibrarySettingsTab'
+import { MoodSyncPanel } from '../mood/MoodSyncPanel'
 
-type TabId = 'general' | 'library' | 'quality' | 'services' | 'appearance' | 'data' | 'update' | 'troubleshoot'
+type TabId = 'general' | 'library' | 'quality' | 'services' | 'mood-sync' | 'appearance' | 'data' | 'update' | 'troubleshoot'
 
 interface SettingsPanelProps {
   isOpen: boolean
@@ -29,6 +30,7 @@ const TABS: Tab[] = [
   { id: 'library', label: 'Library', icon: Library },
   { id: 'quality', label: 'Quality', icon: Sliders },
   { id: 'services', label: 'Services', icon: Wrench },
+  { id: 'mood-sync', label: 'Mood Sync', icon: Music },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'data', label: 'Data', icon: Database },
   { id: 'update', label: 'Update', icon: ArrowUpCircle },
@@ -114,6 +116,8 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
         return <QualitySettingsTab />
       case 'services':
         return <ServicesTab />
+      case 'mood-sync':
+        return <MoodSyncPanel />
       case 'appearance':
         return <AppearanceTab />
       case 'data':

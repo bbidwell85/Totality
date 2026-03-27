@@ -42,6 +42,7 @@ import { registerTaskQueueHandlers } from './ipc/taskQueue'
 import { registerLoggingHandlers } from './ipc/logging'
 import { registerAutoUpdateHandlers } from './ipc/autoUpdate'
 import { registerGeminiHandlers } from './ipc/gemini'
+import { registerMoodHandlers, setMoodMainWindow } from './ipc/mood'
 import { getLiveMonitoringService } from './services/LiveMonitoringService'
 import { getTaskQueueService } from './services/TaskQueueService'
 import { getLoggingService } from './services/LoggingService'
@@ -401,6 +402,7 @@ app.whenReady().then(async () => {
     registerLoggingHandlers()
     registerAutoUpdateHandlers()
     registerGeminiHandlers()
+    registerMoodHandlers()
 
     // Initialize live monitoring service
     const liveMonitoringService = getLiveMonitoringService()
@@ -432,6 +434,7 @@ app.whenReady().then(async () => {
       getLoggingService().setMainWindow(win)
       autoUpdateService.setMainWindow(win)
       getWishlistCompletionService().setMainWindow(win)
+      setMoodMainWindow(win)
     }
 
   } catch (error) {

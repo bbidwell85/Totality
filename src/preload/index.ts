@@ -122,6 +122,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mediamonkeySelectDatabase: () => ipcRenderer.invoke('mediamonkey:selectDatabase'),
   mediamonkeyIsRunning: () => ipcRenderer.invoke('mediamonkey:isRunning'),
 
+  // Mood sync
+  moodGetSources: () => ipcRenderer.invoke('mood:getSources'),
+  moodGetComparison: (sourceOfTruthId: string) => ipcRenderer.invoke('mood:getComparison', sourceOfTruthId),
+  moodSyncToTarget: (args: { sourceOfTruthId: string; targetSourceId: string; trackIds?: number[] }) =>
+    ipcRenderer.invoke('mood:syncToTarget', args),
+  onMoodSyncProgress: (callback: (progress: { current: number; total: number; currentTrack: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: { current: number; total: number; currentTrack: string }) => callback(progress)
+    ipcRenderer.on('mood:syncProgress', handler)
+    return () => ipcRenderer.removeListener('mood:syncProgress', handler)
+  },
+
   // Kodi Collections
   kodiImportCollections: (sourceId: string) => ipcRenderer.invoke('kodi:importCollections', sourceId),
   kodiGetCollections: (sourceId: string) => ipcRenderer.invoke('kodi:getCollections', sourceId),
@@ -939,6 +950,35 @@ export interface ElectronAPI {
   } | null>
   mediamonkeySelectDatabase: () => Promise<string | null>
   mediamonkeyIsRunning: () => Promise<boolean>
+
+  // Mood sync
+  moodGetSources: () => Promise<Array<{
+    sourceId: string
+    sourceName: string
+    sourceType: string
+    tracksWithMoods: number
+    totalTracks: number
+  }>>
+  moodGetComparison: (sourceOfTruthId: string) => Promise<Array<{
+    trackTitle: string
+    artist: string
+    album: string
+    sourceOfTruthMoods: string[]
+    sourceOfTruthTrackId: number
+    targets: Array<{
+      sourceId: string
+      sourceName: string
+      sourceType: string
+      moods: string[]
+      trackId: number
+      trackProviderId: string
+      libraryId?: string
+      hasMismatch: boolean
+    }>
+  }>>
+  moodSyncToTarget: (args: { sourceOfTruthId: string; targetSourceId: string; trackIds?: number[] }) =>
+    Promise<{ synced: number; failed: number; skipped: number; errors: string[] }>
+  onMoodSyncProgress: (callback: (progress: { current: number; total: number; currentTrack: string }) => void) => () => void
 
   // Kodi Collections
   kodiImportCollections: (sourceId: string) => Promise<{ imported: number; skipped: number }>

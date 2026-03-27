@@ -1614,6 +1614,57 @@ export class PlexProvider implements MediaProvider {
     }
   }
 
+  // ============================================================================
+  // Mood Tag Operations
+  // ============================================================================
+
+  /**
+   * Read mood tags from a Plex music track
+   */
+  async getTrackMoods(ratingKey: string): Promise<string[]> {
+    if (!this.selectedServer) throw new Error('No Plex server selected')
+
+    const response = await this.api.get(
+      `${this.selectedServer.uri}/library/metadata/${ratingKey}`,
+      {
+        headers: {
+          'X-Plex-Token': this.selectedServer.accessToken,
+          Accept: 'application/json',
+        },
+      }
+    )
+    const item = response.data?.MediaContainer?.Metadata?.[0]
+    return item?.Mood?.map((m: { tag: string }) => m.tag) || []
+  }
+
+  /**
+   * Write mood tags to a Plex music track.
+   * Replaces all moods on the track with the given list.
+   * Sets mood.locked=1 to prevent metadata agents from overwriting.
+   */
+  async setTrackMoods(ratingKey: string, moods: string[], sectionId: string): Promise<boolean> {
+    if (!this.selectedServer) throw new Error('No Plex server selected')
+
+    const params = new URLSearchParams()
+    params.set('type', '10') // Track type
+    params.set('id', ratingKey)
+    params.set('mood.locked', '1')
+    moods.forEach((mood, i) => {
+      params.set(`mood[${i}].tag.tag`, mood)
+    })
+
+    await this.api.put(
+      `${this.selectedServer.uri}/library/sections/${sectionId}/all?${params.toString()}`,
+      null,
+      {
+        headers: {
+          'X-Plex-Token': this.selectedServer.accessToken,
+        },
+      }
+    )
+    return true
+  }
+
   /**
    * Scan a music library
    */
