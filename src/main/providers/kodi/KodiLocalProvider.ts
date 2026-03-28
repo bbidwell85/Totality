@@ -2400,7 +2400,7 @@ export class KodiLocalProvider implements MediaProvider {
         // Write back to disk
         const finalBuffer = db.export()
         fs.writeFileSync(this.musicDatabasePath, Buffer.from(finalBuffer))
-        console.warn(`[KodiLocalProvider] Wrote ${result.written} mood updates to ${path.basename(this.musicDatabasePath)}`)
+        console.log(`[KodiLocalProvider] Wrote ${result.written} tag updates to ${path.basename(this.musicDatabasePath)}`)
 
       } catch (txError) {
         try { db.run('ROLLBACK') } catch { /* ignore */ }

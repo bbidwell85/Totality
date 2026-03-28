@@ -762,7 +762,7 @@ export class MediaMonkeyProvider implements MediaProvider {
         const finalBuffer = db.export()
         console.log('[MediaMonkeyProvider] Writing database to disk...')
         fs.writeFileSync(this.databasePath, Buffer.from(finalBuffer))
-        console.warn(`[MediaMonkeyProvider] Wrote ${result.written} mood updates to ${path.basename(this.databasePath)}`)
+        console.log(`[MediaMonkeyProvider] Wrote ${result.written} tag updates to ${path.basename(this.databasePath)}`)
 
       } catch (txError) {
         console.warn(`[MediaMonkeyProvider] Transaction error: ${getErrorMessage(txError)}`)
