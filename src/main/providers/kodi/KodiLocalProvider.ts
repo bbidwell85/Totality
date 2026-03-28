@@ -104,6 +104,8 @@ export class KodiLocalProvider implements MediaProvider {
   // Music database support
   private musicDatabasePath: string = ''
   private musicDb: Database | null = null
+
+  getMusicDatabasePath(): string { return this.musicDatabasePath }
   private musicScanCancelled = false
   private scanCancelled = false
 

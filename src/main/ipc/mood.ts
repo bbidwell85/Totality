@@ -5,6 +5,7 @@
  */
 
 import { ipcMain, BrowserWindow } from 'electron'
+import * as path from 'path'
 import { getMoodSyncService } from '../services/MoodSyncService'
 import { getSourceManager } from '../services/SourceManager'
 import { getDatabase } from '../database/getDatabase'
@@ -14,12 +15,7 @@ import { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
 import { getMediaMonkeyDiscoveryService } from '../services/MediaMonkeyDiscoveryService'
 import { getKodiLocalDiscoveryService } from '../services/KodiLocalDiscoveryService'
 import { getErrorMessage } from '../services/utils/errorUtils'
-
-function safeSend(win: BrowserWindow | null, channel: string, ...args: unknown[]) {
-  if (win && !win.isDestroyed()) {
-    win.webContents.send(channel, ...args)
-  }
-}
+import { safeSend } from './utils/safeSend'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -27,10 +23,23 @@ export function setMoodMainWindow(win: BrowserWindow) {
   mainWindow = win
 }
 
+/**
+ * Helper: update local DB moods for a batch of tracks
+ */
+function updateLocalDbMoods(tracks: Array<{ targetTrackId: number; moods: string[] }>) {
+  const db = getDatabase()
+  for (const track of tracks) {
+    try {
+      db.updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
+    } catch { /* best effort */ }
+  }
+}
+
 export function registerMoodHandlers() {
   /**
    * Pre-sync safety check for database write targets (MediaMonkey, Kodi-Local).
    * Returns status info for the confirmation dialog.
+   * Only sends basename of database path to renderer (not full filesystem path).
    */
   ipcMain.handle('mood:checkMediaMonkeyWrite', async (_event, sourceId: string) => {
     try {
@@ -41,11 +50,11 @@ export function registerMoodHandlers() {
       if (provider.providerType === 'mediamonkey') {
         const discovery = getMediaMonkeyDiscoveryService()
         const isRunning = await discovery.isMediaMonkeyRunning()
-        const dbPath = (provider as unknown as { databasePath: string }).databasePath
+        const mmProvider = provider as MediaMonkeyProvider
         return {
           canWrite: !isRunning,
           isRunning,
-          databasePath: dbPath,
+          databasePath: path.basename(mmProvider.getDatabasePath()),
           appName: 'MediaMonkey',
           reason: isRunning ? 'MediaMonkey is currently running. Close it before syncing.' : undefined,
         }
@@ -54,11 +63,11 @@ export function registerMoodHandlers() {
       if (provider.providerType === 'kodi-local') {
         const discovery = getKodiLocalDiscoveryService()
         const isRunning = await discovery.isKodiRunning()
-        const dbPath = (provider as unknown as { musicDatabasePath: string }).musicDatabasePath
+        const kodiProvider = provider as KodiLocalProvider
         return {
           canWrite: !isRunning,
           isRunning,
-          databasePath: dbPath,
+          databasePath: path.basename(kodiProvider.getMusicDatabasePath()),
           appName: 'Kodi',
           reason: isRunning ? 'Kodi is currently running. Close it before syncing.' : undefined,
         }
@@ -71,30 +80,12 @@ export function registerMoodHandlers() {
     }
   })
 
-  // Debug: fetch moods for a specific Plex track by ratingKey
-  ipcMain.handle('mood:debugFetchTrack', async (_event, args: { sourceId: string; ratingKey: string }) => {
-    try {
-      const manager = getSourceManager()
-      const provider = manager.getProvider(args.sourceId)
-      if (!provider || provider.providerType !== 'plex') return { error: 'Plex provider not found' }
-      const plexProvider = provider as PlexProvider
-      const moods = await plexProvider.getTrackMoods(args.ratingKey)
-      console.warn(`[mood:debugFetchTrack] ratingKey=${args.ratingKey} moods=${JSON.stringify(moods)}`)
-      return { ratingKey: args.ratingKey, moods }
-    } catch (error) {
-      console.warn(`[mood:debugFetchTrack] Error: ${getErrorMessage(error)}`)
-      return { error: getErrorMessage(error) }
-    }
-  })
-
   /**
    * Get sources that have music tracks (with mood counts)
    */
   ipcMain.handle('mood:getSources', async () => {
     try {
-      const sources = getMoodSyncService().getSources()
-      console.log('[mood:getSources] Found sources:', sources.map(s => `${s.sourceName} (${s.tracksWithMoods}/${s.totalTracks} moods)`).join(', '))
-      return sources
+      return getMoodSyncService().getSources()
     } catch (error) {
       console.error('[mood:getSources] Error:', getErrorMessage(error))
       return []
@@ -106,12 +97,7 @@ export function registerMoodHandlers() {
    */
   ipcMain.handle('mood:getComparison', async (_event, sourceOfTruthId: string) => {
     try {
-      const result = getMoodSyncService().getComparison(sourceOfTruthId)
-      console.warn(`[mood:getComparison] Source: ${sourceOfTruthId}, found ${result.length} matched tracks with moods`)
-      if (result.length > 0) {
-        console.warn(`[mood:getComparison] Sample: ${result[0].trackTitle} by ${result[0].artist} — moods: ${result[0].sourceOfTruthMoods.join(', ')}`)
-      }
-      return result
+      return getMoodSyncService().getComparison(sourceOfTruthId)
     } catch (error) {
       console.error('[mood:getComparison] Error:', getErrorMessage(error))
       return []
@@ -131,17 +117,13 @@ export function registerMoodHandlers() {
     const result = { synced: 0, failed: 0, skipped: 0, errors: [] as string[] }
 
     try {
-      console.warn(`[mood:syncToTarget] Starting sync: SOT=${sourceOfTruthId}, target=${targetSourceId}`)
       const comparison = getMoodSyncService().getComparison(sourceOfTruthId)
-      console.warn(`[mood:syncToTarget] Comparison returned ${comparison.length} tracks`)
       const manager = getSourceManager()
       const provider = manager.getProvider(targetSourceId)
 
       if (!provider) {
-        console.log('[mood:syncToTarget] Target provider not found!')
         return { ...result, errors: ['Target provider not found'] }
       }
-      console.warn(`[mood:syncToTarget] Provider type: ${provider.providerType}`)
 
       // Filter to only tracks targeting this source with mismatches
       const tracksToSync = comparison.flatMap(c =>
@@ -149,7 +131,6 @@ export function registerMoodHandlers() {
           .filter(t => t.sourceId === targetSourceId && t.hasMismatch)
           .filter(t => !trackIds || trackIds.includes(t.trackId))
           .map(t => {
-            // In append mode, merge source moods with existing target moods
             const finalMoods = mode === 'append'
               ? [...new Set([...t.moods, ...c.sourceOfTruthMoods])]
               : c.sourceOfTruthMoods
@@ -164,10 +145,11 @@ export function registerMoodHandlers() {
           })
       )
 
-      console.warn(`[mood:syncToTarget] Tracks to sync: ${tracksToSync.length}`)
       if (tracksToSync.length === 0) {
         return { ...result, skipped: comparison.length }
       }
+
+      console.log(`[mood:syncToTarget] Syncing ${tracksToSync.length} tracks to ${provider.providerType}`)
 
       // Sync based on target provider type
       if (provider.providerType === 'plex') {
@@ -188,13 +170,9 @@ export function registerMoodHandlers() {
               track.moods,
               track.libraryId || ''
             )
-            // Update local DB so comparison reflects the change
-            try {
-              getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
-            } catch { /* best effort */ }
+            updateLocalDbMoods([track])
             result.synced++
 
-            // Notify track completed
             safeSend(mainWindow, 'mood:syncProgress', {
               current: i + 1,
               total: tracksToSync.length,
@@ -203,8 +181,8 @@ export function registerMoodHandlers() {
               status: 'done',
             })
 
-            // Delay between requests for visual feedback + server breathing room
-            await new Promise(r => setTimeout(r, 200))
+            // Small delay between Plex API requests
+            await new Promise(r => setTimeout(r, 50))
           } catch (error) {
             result.failed++
             result.errors.push(`${track.artist} - ${track.title}: ${getErrorMessage(error)}`)
@@ -217,11 +195,10 @@ export function registerMoodHandlers() {
               status: 'failed',
             })
 
-            await new Promise(r => setTimeout(r, 200))
+            await new Promise(r => setTimeout(r, 50))
           }
         }
       } else if (provider.providerType === 'mediamonkey') {
-        // Write moods to MediaMonkey's SQLite database
         const mmProvider = provider as MediaMonkeyProvider
         const trackUpdates = tracksToSync.map(t => ({
           songId: parseInt(t.targetProviderId),
@@ -233,30 +210,14 @@ export function registerMoodHandlers() {
 
         const writeResult = await mmProvider.writeMoods(
           trackUpdates.map(t => ({ songId: t.songId, moods: t.moods })),
-          (current, total, trackName) => {
-            const track = trackUpdates[current]
-            safeSend(mainWindow, 'mood:syncProgress', {
-              current,
-              total,
-              currentTrack: track ? `${track.artist} - ${track.title}` : trackName,
-              trackId: track?.targetTrackId,
-              status: 'syncing',
-            })
-          }
         )
 
         result.synced = writeResult.written
         result.failed = writeResult.failed
         result.errors = writeResult.errors
 
-        // Update local DB to match what we wrote
         if (writeResult.written > 0) {
-          for (const track of trackUpdates) {
-            try {
-              getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
-            } catch { /* best effort */ }
-          }
-          // Send final done status for all tracks
+          updateLocalDbMoods(trackUpdates)
           for (let i = 0; i < trackUpdates.length; i++) {
             safeSend(mainWindow, 'mood:syncProgress', {
               current: i + 1,
@@ -268,7 +229,6 @@ export function registerMoodHandlers() {
           }
         }
       } else if (provider.providerType === 'kodi-local') {
-        // Write moods to Kodi's SQLite database
         const kodiProvider = provider as KodiLocalProvider
         const trackUpdates = tracksToSync.map(t => ({
           songId: parseInt(t.targetProviderId),
@@ -280,36 +240,20 @@ export function registerMoodHandlers() {
 
         const writeResult = await kodiProvider.writeMoods(
           trackUpdates.map(t => ({ songId: t.songId, moods: t.moods })),
-          (current, total) => {
-            const track = trackUpdates[current - 1]
-            if (track) {
-              safeSend(mainWindow, 'mood:syncProgress', {
-                current,
-                total,
-                currentTrack: `${track.artist} - ${track.title}`,
-                trackId: track.targetTrackId,
-                status: 'done',
-              })
-            }
-          }
         )
 
         result.synced = writeResult.written
         result.failed = writeResult.failed
         result.errors = writeResult.errors
 
-        // Update local DB to match and send done status
         if (writeResult.written > 0) {
+          updateLocalDbMoods(trackUpdates)
           for (let i = 0; i < trackUpdates.length; i++) {
-            const track = trackUpdates[i]
-            try {
-              getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
-            } catch { /* best effort */ }
             safeSend(mainWindow, 'mood:syncProgress', {
               current: i + 1,
               total: trackUpdates.length,
-              currentTrack: `${track.artist} - ${track.title}`,
-              trackId: track.targetTrackId,
+              currentTrack: `${trackUpdates[i].artist} - ${trackUpdates[i].title}`,
+              trackId: trackUpdates[i].targetTrackId,
               status: writeResult.errors.length === 0 ? 'done' : 'failed',
             })
           }

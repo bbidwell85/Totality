@@ -5,7 +5,7 @@
  * Follows WishlistPanel design patterns exactly.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { X, Music, RefreshCw, ArrowRight, CheckCircle2, AlertCircle, Loader2, Circle } from 'lucide-react'
 
 interface MoodSource {
@@ -176,24 +176,29 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     }
   }
 
-  const filteredComparisons = showMismatchOnly
-    ? comparisons.filter(c => c.targets.some(t => t.hasMismatch))
-    : comparisons
+  const filteredComparisons = useMemo(() =>
+    showMismatchOnly
+      ? comparisons.filter(c => c.targets.some(t => t.hasMismatch))
+      : comparisons,
+    [comparisons, showMismatchOnly]
+  )
 
   // Build target source summary
-  const targetSources = new Map<string, { sourceId: string; sourceName: string; sourceType: string; mismatchCount: number; matchedCount: number }>()
-  for (const comp of comparisons) {
-    for (const target of comp.targets) {
-      if (!targetSources.has(target.sourceId)) {
-        targetSources.set(target.sourceId, { sourceId: target.sourceId, sourceName: target.sourceName, sourceType: target.sourceType, mismatchCount: 0, matchedCount: 0 })
+  const { targetSources, totalMismatches } = useMemo(() => {
+    const targets = new Map<string, { sourceId: string; sourceName: string; sourceType: string; mismatchCount: number; matchedCount: number }>()
+    for (const comp of comparisons) {
+      for (const target of comp.targets) {
+        if (!targets.has(target.sourceId)) {
+          targets.set(target.sourceId, { sourceId: target.sourceId, sourceName: target.sourceName, sourceType: target.sourceType, mismatchCount: 0, matchedCount: 0 })
+        }
+        const ts = targets.get(target.sourceId)!
+        ts.matchedCount++
+        if (target.hasMismatch) ts.mismatchCount++
       }
-      const ts = targetSources.get(target.sourceId)!
-      ts.matchedCount++
-      if (target.hasMismatch) ts.mismatchCount++
     }
-  }
-
-  const totalMismatches = Array.from(targetSources.values()).reduce((sum, t) => sum + t.mismatchCount, 0)
+    const total = Array.from(targets.values()).reduce((sum, t) => sum + t.mismatchCount, 0)
+    return { targetSources: targets, totalMismatches: total }
+  }, [comparisons])
 
   return (
     <div
@@ -237,8 +242,9 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
 
       {/* Source selector */}
       <div className="px-3 pt-3 pb-2 border-b border-border/30">
-        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Source of Truth</label>
+        <label htmlFor="mood-source-select" className="text-xs font-medium text-muted-foreground mb-1.5 block">Source of Truth</label>
         <select
+          id="mood-source-select"
           value={sourceOfTruthId}
           onChange={(e) => setSourceOfTruthId(e.target.value)}
           className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/30 text-foreground text-xs focus:outline-hidden focus:ring-2 focus:ring-primary"
@@ -255,8 +261,10 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       {/* Sync mode */}
       {targetSources.size > 0 && (
         <div className="px-3 pt-2 pb-2 border-b border-border/30">
-          <div className="flex gap-1">
+          <div className="flex gap-1" role="radiogroup" aria-label="Sync mode">
             <button
+              role="radio"
+              aria-checked={syncMode === 'overwrite'}
               onClick={() => setSyncMode('overwrite')}
               className={`flex-1 px-2 py-1.5 text-[10px] font-medium rounded-md transition-colors ${
                 syncMode === 'overwrite'
@@ -267,6 +275,8 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
               Overwrite
             </button>
             <button
+              role="radio"
+              aria-checked={syncMode === 'append'}
               onClick={() => setSyncMode('append')}
               className={`flex-1 px-2 py-1.5 text-[10px] font-medium rounded-md transition-colors ${
                 syncMode === 'append'
@@ -304,6 +314,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
               <button
                 onClick={() => handleSyncClick(target.sourceId)}
                 disabled={syncing || target.mismatchCount === 0}
+                aria-label={`Sync moods to ${target.sourceName}`}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ml-2 focus:outline-hidden focus:ring-2 focus:ring-primary"
               >
                 {syncingTarget === target.sourceId ? (
@@ -347,7 +358,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
             <span className="truncate pr-2">{syncProgress.currentTrack}</span>
             <span className="shrink-0">{syncProgress.current}/{syncProgress.total}</span>
           </div>
-          <div className="h-1 bg-muted rounded-full overflow-hidden">
+          <div className="h-1 bg-muted rounded-full overflow-hidden" role="progressbar" aria-valuenow={Math.round((syncProgress.current / syncProgress.total) * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="Sync progress">
             <div
               className="h-full bg-primary transition-all duration-300"
               style={{ width: `${(syncProgress.current / syncProgress.total) * 100}%` }}
@@ -400,7 +411,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           </div>
         ) : (
           <div className="p-2 space-y-1">
-            {filteredComparisons.slice(0, 200).map((comp, i) => {
+            {filteredComparisons.slice(0, 200).map((comp) => {
               const hasMismatch = comp.targets.some(t => t.hasMismatch)
               const wasSynced = comp.targets.some(t => syncedTrackIds.has(t.trackId))
               const hasFailed = comp.targets.some(t => failedTrackIds.has(t.trackId))
@@ -408,7 +419,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
 
               return (
                 <div
-                  key={i}
+                  key={comp.sourceOfTruthTrackId}
                   className={`p-2 rounded-lg transition-all duration-300 ${
                     hasFailed ? 'bg-destructive/10' :
                     wasSynced ? 'bg-green-500/10' :
@@ -477,11 +488,11 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
 
       {/* MediaMonkey write confirmation dialog */}
       {confirmDialog && (
-        <div className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center p-4 z-10">
+        <div className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center p-4 z-10" role="alertdialog" aria-modal="true" aria-labelledby="mood-confirm-title">
           <div className="bg-card rounded-xl p-4 w-full max-w-[300px] space-y-3 shadow-lg border border-border/30">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-              <h3 className="text-sm font-semibold">Write to {confirmDialog.targetName}</h3>
+              <h3 id="mood-confirm-title" className="text-sm font-semibold">Write to {confirmDialog.targetName}</h3>
             </div>
 
             {confirmDialog.isRunning ? (

@@ -63,6 +63,8 @@ export class MediaMonkeyProvider implements MediaProvider {
   private db: Database | null = null
   private databasePath: string = ''
   private mmVersion: 4 | 5 = 4
+
+  getDatabasePath(): string { return this.databasePath }
   private musicScanCancelled = false
 
   constructor(config: SourceConfig) {

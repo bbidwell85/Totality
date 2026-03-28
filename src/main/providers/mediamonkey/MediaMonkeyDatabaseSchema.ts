@@ -281,10 +281,3 @@ export function guessCodecFromPath(filePath: string): string {
   return codecMap[ext] || 'unknown'
 }
 
-/**
- * Determine if a codec is lossless
- */
-export function isLosslessCodec(codec: string): boolean {
-  const lossless = ['flac', 'alac', 'wav', 'aiff', 'pcm', 'ape', 'wavpack', 'dsd']
-  return lossless.includes(codec.toLowerCase())
-}
