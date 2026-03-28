@@ -252,5 +252,26 @@ export const QUERY_MM_INSERT_SONG_MOOD = `
   INSERT INTO ListsSongs (IDSong, IDListType, IDList) VALUES (?, 2, ?)
 `
 
+// Genre write queries
+export const QUERY_MM_UPDATE_SONG_GENRE = `
+  UPDATE Songs SET Genre = ? WHERE ID = ?
+`
+
+export const QUERY_MM_DELETE_SONG_GENRES = `
+  DELETE FROM GenresSongs WHERE IDSong = ?
+`
+
+export const QUERY_MM_FIND_GENRE = `
+  SELECT IDGenre FROM Genres WHERE GenreName COLLATE NOCASE = ?
+`
+
+export const QUERY_MM_INSERT_GENRE = `
+  INSERT INTO Genres (GenreName, UsageCount) VALUES (?, 0)
+`
+
+export const QUERY_MM_INSERT_SONG_GENRE = `
+  INSERT INTO GenresSongs (IDSong, IDGenre, TrackType) VALUES (?, ?, 0)
+`
+
 
 

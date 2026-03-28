@@ -44,6 +44,11 @@ import {
   QUERY_MM_FIND_MOOD,
   QUERY_MM_INSERT_MOOD,
   QUERY_MM_INSERT_SONG_MOOD,
+  QUERY_MM_UPDATE_SONG_GENRE,
+  QUERY_MM_DELETE_SONG_GENRES,
+  QUERY_MM_FIND_GENRE,
+  QUERY_MM_INSERT_GENRE,
+  QUERY_MM_INSERT_SONG_GENRE,
   type MMDbSong,
   type MMDbAlbum,
   type MMDbMoodEntry,
@@ -605,14 +610,13 @@ export class MediaMonkeyProvider implements MediaProvider {
    * - MediaMonkey must NOT be running (concurrent writes corrupt the DB)
    * - A backup of the database is created before writing
    *
-   * Updates three locations:
-   * 1. Songs.Mood column (semicolon-separated text)
-   * 2. ListsSongs junction table (links songs to mood entries)
-   * 3. Lists table (creates new mood entries if needed)
+   * For mood: Updates Songs.Mood + Lists/ListsSongs (IDListType=2)
+   * For genre: Updates Songs.Genre + Genres/GenresSongs
    */
   async writeMoods(
     trackUpdates: Array<{ songId: number; moods: string[] }>,
-    onProgress?: (current: number, total: number, trackName: string) => void
+    onProgress?: (current: number, total: number, trackName: string) => void,
+    field: 'mood' | 'genre' = 'mood'
   ): Promise<{ written: number; failed: number; errors: string[] }> {
     const result = { written: 0, failed: 0, errors: [] as string[] }
 
@@ -668,12 +672,12 @@ export class MediaMonkeyProvider implements MediaProvider {
       const db = new SQL.Database(fixedBuffer)
       console.log('[MediaMonkeyProvider] Database ready for writing')
 
-      // Prepare statements for performance (reuse across all tracks)
-      const stmtUpdateMood = db.prepare(QUERY_MM_UPDATE_SONG_MOOD)
-      const stmtDeleteLinks = db.prepare(QUERY_MM_DELETE_SONG_MOODS)
-      const stmtFindMood = db.prepare(QUERY_MM_FIND_MOOD)
-      const stmtInsertMood = db.prepare(QUERY_MM_INSERT_MOOD)
-      const stmtInsertLink = db.prepare(QUERY_MM_INSERT_SONG_MOOD)
+      // Prepare statements based on field type
+      const stmtUpdateColumn = db.prepare(field === 'genre' ? QUERY_MM_UPDATE_SONG_GENRE : QUERY_MM_UPDATE_SONG_MOOD)
+      const stmtDeleteLinks = db.prepare(field === 'genre' ? QUERY_MM_DELETE_SONG_GENRES : QUERY_MM_DELETE_SONG_MOODS)
+      const stmtFindTag = db.prepare(field === 'genre' ? QUERY_MM_FIND_GENRE : QUERY_MM_FIND_MOOD)
+      const stmtInsertTag = db.prepare(field === 'genre' ? QUERY_MM_INSERT_GENRE : QUERY_MM_INSERT_MOOD)
+      const stmtInsertLink = db.prepare(field === 'genre' ? QUERY_MM_INSERT_SONG_GENRE : QUERY_MM_INSERT_SONG_MOOD)
 
       // Cache mood name → Lists.ID to avoid repeated lookups
       const moodIdCache = new Map<string, number>()
@@ -688,9 +692,9 @@ export class MediaMonkeyProvider implements MediaProvider {
 
           // 1. Update Songs.Mood column (semicolon-separated, matching MM format)
           const moodStr = moods.join('; ')
-          stmtUpdateMood.bind([moodStr, songId])
-          stmtUpdateMood.step()
-          stmtUpdateMood.reset()
+          stmtUpdateColumn.bind([moodStr, songId])
+          stmtUpdateColumn.step()
+          stmtUpdateColumn.reset()
 
           // 2. Clear existing mood links for this song
           stmtDeleteLinks.bind([songId])
@@ -706,17 +710,17 @@ export class MediaMonkeyProvider implements MediaProvider {
 
             if (moodListId === undefined) {
               // Find existing mood in Lists table
-              stmtFindMood.bind([trimmed])
-              if (stmtFindMood.step()) {
-                moodListId = stmtFindMood.get()[0] as number
+              stmtFindTag.bind([trimmed])
+              if (stmtFindTag.step()) {
+                moodListId = stmtFindTag.get()[0] as number
               }
-              stmtFindMood.reset()
+              stmtFindTag.reset()
 
               if (moodListId === undefined) {
                 // Create new mood entry
-                stmtInsertMood.bind([trimmed])
-                stmtInsertMood.step()
-                stmtInsertMood.reset()
+                stmtInsertTag.bind([trimmed])
+                stmtInsertTag.step()
+                stmtInsertTag.reset()
                 const newId = db.exec('SELECT last_insert_rowid()')
                 moodListId = newId[0].values[0][0] as number
               }
@@ -734,10 +738,10 @@ export class MediaMonkeyProvider implements MediaProvider {
         }
 
         // Free prepared statements before commit
-        stmtUpdateMood.free()
+        stmtUpdateColumn.free()
         stmtDeleteLinks.free()
-        stmtFindMood.free()
-        stmtInsertMood.free()
+        stmtFindTag.free()
+        stmtInsertTag.free()
         stmtInsertLink.free()
 
         db.run('COMMIT')

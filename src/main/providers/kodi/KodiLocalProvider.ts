@@ -2348,7 +2348,8 @@ export class KodiLocalProvider implements MediaProvider {
    */
   async writeMoods(
     trackUpdates: Array<{ songId: number; moods: string[] }>,
-    onProgress?: (current: number, total: number) => void
+    onProgress?: (current: number, total: number) => void,
+    field: 'mood' | 'genre' = 'mood'
   ): Promise<{ written: number; failed: number; errors: string[] }> {
     const result = { written: 0, failed: 0, errors: [] as string[] }
 
@@ -2381,20 +2382,62 @@ export class KodiLocalProvider implements MediaProvider {
       db.run('BEGIN TRANSACTION')
 
       try {
-        // Kodi stores moods as ` / ` separated text on the song table
-        const stmt = db.prepare('UPDATE song SET mood = ? WHERE idSong = ?')
+        if (field === 'genre') {
+          // Genre: update song_genre junction table
+          const stmtDelete = db.prepare('DELETE FROM song_genre WHERE idSong = ?')
+          const stmtFind = db.prepare('SELECT idGenre FROM genre WHERE strGenre = ?')
+          const stmtInsertGenre = db.prepare('INSERT INTO genre (strGenre) VALUES (?)')
+          const stmtLink = db.prepare('INSERT INTO song_genre (idGenre, idSong, iOrder) VALUES (?, ?, ?)')
+          const genreCache = new Map<string, number>()
 
-        for (let i = 0; i < trackUpdates.length; i++) {
-          const { songId, moods } = trackUpdates[i]
-          const moodStr = moods.join(' / ')
-          stmt.bind([moodStr, songId])
-          stmt.step()
-          stmt.reset()
-          result.written++
-          onProgress?.(i + 1, trackUpdates.length)
+          for (let i = 0; i < trackUpdates.length; i++) {
+            const { songId, moods: genres } = trackUpdates[i]
+
+            stmtDelete.bind([songId]); stmtDelete.step(); stmtDelete.reset()
+
+            for (let order = 0; order < genres.length; order++) {
+              const name = genres[order].trim()
+              if (!name) continue
+
+              let genreId = genreCache.get(name.toLowerCase())
+              if (genreId === undefined) {
+                stmtFind.bind([name])
+                if (stmtFind.step()) {
+                  genreId = stmtFind.get()[0] as number
+                }
+                stmtFind.reset()
+
+                if (genreId === undefined) {
+                  stmtInsertGenre.bind([name]); stmtInsertGenre.step(); stmtInsertGenre.reset()
+                  const newId = db.exec('SELECT last_insert_rowid()')
+                  genreId = newId[0].values[0][0] as number
+                }
+                genreCache.set(name.toLowerCase(), genreId)
+              }
+
+              stmtLink.bind([genreId, songId, order]); stmtLink.step(); stmtLink.reset()
+            }
+            result.written++
+            onProgress?.(i + 1, trackUpdates.length)
+          }
+
+          stmtDelete.free(); stmtFind.free(); stmtInsertGenre.free(); stmtLink.free()
+        } else {
+          // Mood: simple column update
+          const stmt = db.prepare('UPDATE song SET mood = ? WHERE idSong = ?')
+
+          for (let i = 0; i < trackUpdates.length; i++) {
+            const { songId, moods } = trackUpdates[i]
+            const moodStr = moods.join(' / ')
+            stmt.bind([moodStr, songId])
+            stmt.step()
+            stmt.reset()
+            result.written++
+            onProgress?.(i + 1, trackUpdates.length)
+          }
+
+          stmt.free()
         }
-
-        stmt.free()
         db.run('COMMIT')
 
         // Write back to disk

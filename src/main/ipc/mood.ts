@@ -215,6 +215,8 @@ export function registerMoodHandlers() {
 
         const writeResult = await mmProvider.writeMoods(
           trackUpdates.map(t => ({ songId: t.songId, moods: t.moods })),
+          undefined,
+          field,
         )
 
         result.synced = writeResult.written
@@ -245,6 +247,8 @@ export function registerMoodHandlers() {
 
         const writeResult = await kodiProvider.writeMoods(
           trackUpdates.map(t => ({ songId: t.songId, moods: t.moods })),
+          undefined,
+          field,
         )
 
         result.synced = writeResult.written
