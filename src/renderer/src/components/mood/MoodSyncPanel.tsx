@@ -254,7 +254,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
         <div className="flex items-center gap-2">
           <Music className="w-4 h-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold">Mood Sync</h2>
+          <h2 className="text-sm font-semibold">Tag Sync</h2>
           {totalMismatches > 0 && (
             <span className="text-xs text-muted-foreground">{totalMismatches}</span>
           )}
@@ -279,21 +279,28 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
         </div>
       </div>
 
-      {/* Field selector */}
-      <div className="px-3 pt-2 pb-2 border-b border-border/30">
-        <div className="flex gap-1">
+      {/* Field selector + Source selector */}
+      <div className="px-3 pt-3 pb-2 border-b border-border/30 space-y-2">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-muted-foreground">Field</span>
           {(['mood', 'genre'] as const).map(f => (
-            <button
-              key={f}
-              onClick={() => { setSyncField(f); setComparisons([]); setSourceOfTruthId(''); loadSources() }}
-              className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs rounded-lg transition-colors ${
-                syncField === f
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
-              }`}
-            >
-              {f === 'mood' ? 'Mood' : 'Genre'}
-            </button>
+            <label key={f} className="flex items-center gap-1.5 cursor-pointer">
+              <button
+                role="radio"
+                aria-checked={syncField === f}
+                onClick={() => { setSyncField(f); setComparisons([]); setSourceOfTruthId('') }}
+                className={`w-3.5 h-3.5 rounded-full border-2 transition-colors flex items-center justify-center ${
+                  syncField === f
+                    ? 'border-primary bg-primary'
+                    : 'border-muted-foreground/40'
+                }`}
+              >
+                {syncField === f && <span className="w-1.5 h-1.5 rounded-full bg-background" />}
+              </button>
+              <span className={`text-xs ${syncField === f ? 'text-foreground' : 'text-muted-foreground'}`}>
+                {f === 'mood' ? 'Mood' : 'Genre'}
+              </span>
+            </label>
           ))}
         </div>
       </div>
@@ -310,7 +317,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           <option value="">Select a source...</option>
           {sources.map(s => (
             <option key={s.sourceId} value={s.sourceId}>
-              {s.sourceName} — {s.tracksWithMoods} moods
+              {s.sourceName} — {s.tracksWithMoods} {syncField === 'genre' ? 'genres' : 'moods'}
             </option>
           ))}
         </select>
@@ -319,7 +326,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       {/* Summary stats */}
       {selectedSource && comparisons.length > 0 && (
         <div className="px-3 py-2 border-b border-border/30 text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5">
-          <span>{selectedSource.tracksWithMoods} source moods</span>
+          <span>{selectedSource.tracksWithMoods} source {syncField === 'genre' ? 'genres' : 'moods'}</span>
           <span>{comparisons.length} matched</span>
           <span>{totalMismatches} mismatched</span>
           {selectedTrackIds.size > 0 && <span className="text-primary">{selectedTrackIds.size} selected</span>}
@@ -357,8 +364,8 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">
             {syncMode === 'overwrite'
-              ? 'Replace target moods with source moods'
-              : 'Add source moods to existing target moods'}
+              ? `Replace target ${syncField === 'genre' ? 'genres' : 'moods'} with source values`
+              : `Add source values to existing target ${syncField === 'genre' ? 'genres' : 'moods'}`}
           </p>
         </div>
       )}
@@ -382,7 +389,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
               <button
                 onClick={() => handleSyncClick(target.sourceId)}
                 disabled={syncing || target.mismatchCount === 0}
-                aria-label={`Sync moods to ${target.sourceName}`}
+                aria-label={`Sync ${syncField === 'genre' ? 'genres' : 'moods'} to ${target.sourceName}`}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ml-2 focus:outline-hidden focus:ring-2 focus:ring-primary"
               >
                 {syncingTarget === target.sourceId ? (
@@ -503,7 +510,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
             <p className="text-xs text-muted-foreground max-w-[220px]">
               {sourceOfTruthId
                 ? comparisons.length === 0
-                  ? 'No tracks with moods were found in both sources'
+                  ? `No tracks with ${syncField === 'genre' ? 'genres' : 'moods'} were found in both sources`
                   : searchQuery ? `No tracks match "${searchQuery}"` : 'All mood tags are in sync across your sources'
                 : 'Select a source of truth above to compare mood tags'}
             </p>
@@ -573,7 +580,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                         {target.trackId === syncingTrackId && <Loader2 className="w-2 h-2 text-primary animate-spin inline ml-1" />}
                       </p>
                       <p className={`text-[10px] ${target.hasMismatch && !wasSynced ? 'text-muted-foreground/50 italic' : 'text-foreground'}`}>
-                        {target.moods.length > 0 ? target.moods.join(' / ') : 'No moods'}
+                        {target.moods.length > 0 ? target.moods.join(' / ') : `No ${syncField === 'genre' ? 'genres' : 'moods'}`}
                       </p>
                     </div>
                   ))}
@@ -617,7 +624,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                   <ul className="space-y-1 ml-3">
                     <li>Update mood tags on {confirmDialog.trackCount} tracks</li>
                     <li>A backup will be created before writing</li>
-                    <li>{syncMode === 'overwrite' ? 'Existing moods will be replaced' : 'New moods will be added to existing'}</li>
+                    <li>{syncMode === 'overwrite' ? `Existing ${syncField === 'genre' ? 'genres' : 'moods'} will be replaced` : `New values will be added to existing ${syncField === 'genre' ? 'genres' : 'moods'}`}</li>
                   </ul>
                   {confirmDialog.databasePath && (
                     <p className="text-[10px] text-muted-foreground/70 truncate mt-2">
