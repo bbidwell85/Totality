@@ -7,6 +7,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { getMoodSyncService } from '../services/MoodSyncService'
 import { getSourceManager } from '../services/SourceManager'
+import { getDatabase } from '../database/getDatabase'
 import { PlexProvider } from '../providers/plex/PlexProvider'
 import { getErrorMessage } from '../services/utils/errorUtils'
 
@@ -28,7 +29,9 @@ export function registerMoodHandlers() {
    */
   ipcMain.handle('mood:getSources', async () => {
     try {
-      return getMoodSyncService().getSources()
+      const sources = getMoodSyncService().getSources()
+      console.warn('[mood:getSources] Found sources:', sources.map(s => `${s.sourceName} (${s.tracksWithMoods}/${s.totalTracks} moods)`).join(', '))
+      return sources
     } catch (error) {
       console.error('[mood:getSources] Error:', getErrorMessage(error))
       return []
@@ -40,7 +43,12 @@ export function registerMoodHandlers() {
    */
   ipcMain.handle('mood:getComparison', async (_event, sourceOfTruthId: string) => {
     try {
-      return getMoodSyncService().getComparison(sourceOfTruthId)
+      const result = getMoodSyncService().getComparison(sourceOfTruthId)
+      console.warn(`[mood:getComparison] Source: ${sourceOfTruthId}, found ${result.length} matched tracks with moods`)
+      if (result.length > 0) {
+        console.warn(`[mood:getComparison] Sample: ${result[0].trackTitle} by ${result[0].artist} — moods: ${result[0].sourceOfTruthMoods.join(', ')}`)
+      }
+      return result
     } catch (error) {
       console.error('[mood:getComparison] Error:', getErrorMessage(error))
       return []
@@ -59,13 +67,17 @@ export function registerMoodHandlers() {
     const result = { synced: 0, failed: 0, skipped: 0, errors: [] as string[] }
 
     try {
+      console.warn(`[mood:syncToTarget] Starting sync: SOT=${sourceOfTruthId}, target=${targetSourceId}`)
       const comparison = getMoodSyncService().getComparison(sourceOfTruthId)
+      console.warn(`[mood:syncToTarget] Comparison returned ${comparison.length} tracks`)
       const manager = getSourceManager()
       const provider = manager.getProvider(targetSourceId)
 
       if (!provider) {
+        console.warn('[mood:syncToTarget] Target provider not found!')
         return { ...result, errors: ['Target provider not found'] }
       }
+      console.warn(`[mood:syncToTarget] Provider type: ${provider.providerType}`)
 
       // Filter to only tracks targeting this source with mismatches
       const tracksToSync = comparison.flatMap(c =>
@@ -77,10 +89,12 @@ export function registerMoodHandlers() {
             artist: c.artist,
             moods: c.sourceOfTruthMoods,
             targetProviderId: t.trackProviderId,
+            targetTrackId: t.trackId,
             libraryId: t.libraryId,
           }))
       )
 
+      console.warn(`[mood:syncToTarget] Tracks to sync: ${tracksToSync.length}`)
       if (tracksToSync.length === 0) {
         return { ...result, skipped: comparison.length }
       }
@@ -102,6 +116,10 @@ export function registerMoodHandlers() {
               track.moods,
               track.libraryId || ''
             )
+            // Update local DB so comparison reflects the change
+            try {
+              getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
+            } catch { /* best effort */ }
             result.synced++
             // Small delay between requests
             if (i < tracksToSync.length - 1) {

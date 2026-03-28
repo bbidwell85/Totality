@@ -2087,6 +2087,11 @@ export class BetterSQLiteService {
   /**
    * Update music album artwork
    */
+  updateMusicTrackMood(trackId: number, mood: string): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.prepare('UPDATE music_tracks SET mood = ?, updated_at = datetime(\'now\') WHERE id = ?').run(mood, trackId)
+  }
+
   updateMusicAlbumArtwork(albumId: number, artworkUrl: string): void {
     if (!this.db) throw new Error('Database not initialized')
 

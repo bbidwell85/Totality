@@ -4033,6 +4033,12 @@ export class DatabaseService {
   }
 
   /** Update artwork URLs for a music album */
+  async updateMusicTrackMood(trackId: number, mood: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.run("UPDATE music_tracks SET mood = ?, updated_at = datetime('now') WHERE id = ?", [mood, trackId])
+    await this.save()
+  }
+
   async updateMusicAlbumArtwork(
     sourceIdOrAlbumId: string | number,
     providerIdOrThumbUrl?: string,
