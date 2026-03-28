@@ -173,6 +173,47 @@ export function registerMoodHandlers() {
             await new Promise(r => setTimeout(r, 200))
           }
         }
+      } else if (provider.providerType === 'mediamonkey' || provider.providerType === 'kodi-local') {
+        // Read-only sources: update local DB only (can't write to external database)
+        for (let i = 0; i < tracksToSync.length; i++) {
+          const track = tracksToSync[i]
+          safeSend(mainWindow, 'mood:syncProgress', {
+            current: i,
+            total: tracksToSync.length,
+            currentTrack: `${track.artist} - ${track.title}`,
+            trackId: track.targetTrackId,
+            status: 'syncing',
+          })
+
+          try {
+            getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
+            result.synced++
+
+            safeSend(mainWindow, 'mood:syncProgress', {
+              current: i + 1,
+              total: tracksToSync.length,
+              currentTrack: `${track.artist} - ${track.title}`,
+              trackId: track.targetTrackId,
+              status: 'done',
+            })
+
+            // Small delay for visual feedback
+            if (tracksToSync.length <= 50) {
+              await new Promise(r => setTimeout(r, 50))
+            }
+          } catch (error) {
+            result.failed++
+            result.errors.push(`${track.artist} - ${track.title}: ${getErrorMessage(error)}`)
+
+            safeSend(mainWindow, 'mood:syncProgress', {
+              current: i + 1,
+              total: tracksToSync.length,
+              currentTrack: `${track.artist} - ${track.title}`,
+              trackId: track.targetTrackId,
+              status: 'failed',
+            })
+          }
+        }
       } else {
         return { ...result, errors: [`Mood sync not yet supported for ${provider.providerType}`] }
       }
