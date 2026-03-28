@@ -424,8 +424,10 @@ export class MediaMonkeyProvider implements MediaProvider {
     const hiRes = isHiRes(song.SamplingFrequency, song.BPS, lossless)
 
     // Merge mood from junction table and Songs.Mood column
-    const junctionMoods = moodMap.get(song.ID) || []
-    const columnMood = song.Mood ? song.Mood.split(';').map(m => m.trim()).filter(Boolean) : []
+    // MediaMonkey stores comma-separated moods as single entries (e.g., "Dreamy, Ethereal, Cinematic")
+    // Split on commas to get individual mood tags for Plex compatibility
+    const junctionMoods = (moodMap.get(song.ID) || []).flatMap(m => m.split(',').map(v => v.trim()).filter(Boolean))
+    const columnMood = song.Mood ? song.Mood.split(/[;,]/).map(m => m.trim()).filter(Boolean) : []
     const allMoods = [...new Set([...junctionMoods, ...columnMood])]
 
     return {
