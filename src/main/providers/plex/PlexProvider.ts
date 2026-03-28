@@ -1361,12 +1361,16 @@ export class PlexProvider implements MediaProvider {
 
     // Request tracks with Media information included
     // Using includeFields to ensure we get all track data
+    // Fetch tracks with includeMeta to get Mood and other tag data
     const response = await this.api.get(
       `${this.selectedServer.uri}/library/metadata/${albumKey}/children`,
       {
         headers: {
           'X-Plex-Token': this.selectedServer.accessToken,
           Accept: 'application/json',
+        },
+        params: {
+          includeMeta: 1,
         },
       }
     )
@@ -1379,9 +1383,10 @@ export class PlexProvider implements MediaProvider {
     if (tracks.length > 0) {
       const firstTrack = tracks[0]
       console.log(`[PlexProvider] First track sample:`, JSON.stringify(firstTrack, null, 2).substring(0, 800))
-      console.log(`[PlexProvider] First track has Media: ${!!firstTrack.Media}`)
+      console.log(`[PlexProvider] First track has Media: ${!!firstTrack.Media}, has Mood: ${!!firstTrack.Mood}`)
 
       // If no Media data, we may need to fetch each track individually
+      // (individual metadata includes Mood tags that children endpoint may omit)
       if (!firstTrack.Media) {
         console.log(`[PlexProvider] Tracks missing Media data, fetching individual metadata...`)
         const detailedTracks: PlexMusicTrack[] = []

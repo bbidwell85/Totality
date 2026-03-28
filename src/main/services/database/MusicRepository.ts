@@ -656,7 +656,7 @@ export class MusicRepository {
         is_hi_res = excluded.is_hi_res,
         musicbrainz_id = COALESCE(excluded.musicbrainz_id, music_tracks.musicbrainz_id),
         genres = excluded.genres,
-        mood = excluded.mood,
+        mood = COALESCE(excluded.mood, music_tracks.mood),
         added_at = excluded.added_at
     `
 
