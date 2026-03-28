@@ -2,11 +2,11 @@
  * MoodSyncPanel
  *
  * Slide-out panel for comparing and syncing mood tags across music sources.
- * Follows WishlistPanel design patterns exactly.
+ * Features: source comparison, search filter, selective sync, per-track animation.
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { X, Music, RefreshCw, ArrowRight, CheckCircle2, AlertCircle, Loader2, Circle } from 'lucide-react'
+import { X, Music, RefreshCw, ArrowRight, CheckCircle2, AlertCircle, Loader2, Circle, Search } from 'lucide-react'
 
 interface MoodSource {
   sourceId: string
@@ -54,6 +54,8 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const [failedTrackIds, setFailedTrackIds] = useState<Set<number>>(new Set())
   const [syncMode, setSyncMode] = useState<'overwrite' | 'append'>('overwrite')
   const [showMismatchOnly, setShowMismatchOnly] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<number>>(new Set())
   const [confirmDialog, setConfirmDialog] = useState<{
     targetSourceId: string
     targetName: string
@@ -115,6 +117,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     setLoading(true)
     if (!preserveResult) setSyncResult(null)
     setSyncedTrackIds(new Set())
+    setSelectedTrackIds(new Set())
     try {
       const result = await window.electronAPI.moodGetComparison(sourceOfTruthId)
       setComparisons(result)
@@ -134,14 +137,14 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const handleSyncClick = async (targetSourceId: string) => {
     if (!sourceOfTruthId) return
 
-    // Check if target needs database write confirmation (MediaMonkey, Kodi-Local)
     const target = targetSources.get(targetSourceId)
     if (target?.sourceType === 'mediamonkey' || target?.sourceType === 'kodi-local') {
       const check = await window.electronAPI.moodCheckMediaMonkeyWrite(targetSourceId)
+      const trackCount = selectedTrackIds.size > 0 ? selectedTrackIds.size : target.mismatchCount
       setConfirmDialog({
         targetSourceId,
         targetName: target.sourceName,
-        trackCount: target.mismatchCount,
+        trackCount,
         databasePath: check.databasePath,
         isRunning: check.isRunning,
       })
@@ -160,9 +163,12 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     setSyncResult(null)
     setFailedTrackIds(new Set())
     try {
+      // Pass selected track IDs if user made a selection
+      const trackIds = selectedTrackIds.size > 0 ? Array.from(selectedTrackIds) : undefined
       const result = await window.electronAPI.moodSyncToTarget({
         sourceOfTruthId,
         targetSourceId,
+        trackIds,
         mode: syncMode,
       })
       setSyncResult(result)
@@ -176,12 +182,22 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     }
   }
 
-  const filteredComparisons = useMemo(() =>
-    showMismatchOnly
-      ? comparisons.filter(c => c.targets.some(t => t.hasMismatch))
-      : comparisons,
-    [comparisons, showMismatchOnly]
-  )
+  // Filter and search
+  const filteredComparisons = useMemo(() => {
+    let result = comparisons
+    if (showMismatchOnly) {
+      result = result.filter(c => c.targets.some(t => t.hasMismatch))
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim()
+      result = result.filter(c =>
+        c.trackTitle.toLowerCase().includes(q) ||
+        c.artist.toLowerCase().includes(q) ||
+        c.album.toLowerCase().includes(q)
+      )
+    }
+    return result
+  }, [comparisons, showMismatchOnly, searchQuery])
 
   // Build target source summary
   const { targetSources, totalMismatches } = useMemo(() => {
@@ -200,13 +216,34 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     return { targetSources: targets, totalMismatches: total }
   }, [comparisons])
 
+  const selectedSource = sources.find(s => s.sourceId === sourceOfTruthId)
+
+  // Selection helpers
+  const toggleTrackSelection = (trackId: number) => {
+    setSelectedTrackIds(prev => {
+      const next = new Set(prev)
+      if (next.has(trackId)) next.delete(trackId)
+      else next.add(trackId)
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    const ids = filteredComparisons
+      .filter(c => c.targets.some(t => t.hasMismatch))
+      .flatMap(c => c.targets.filter(t => t.hasMismatch).map(t => t.trackId))
+    setSelectedTrackIds(new Set(ids))
+  }
+
+  const selectNone = () => setSelectedTrackIds(new Set())
+
   return (
     <div
       ref={panelRef}
       id="mood-sync-panel"
       role="complementary"
       aria-label="Mood Sync"
-      className={`fixed top-[88px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
+      className={`fixed top-[88px] bottom-4 right-4 w-96 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
         isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
       }`}
       onKeyDown={handleKeyDown}
@@ -258,6 +295,16 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
         </select>
       </div>
 
+      {/* Summary stats */}
+      {selectedSource && comparisons.length > 0 && (
+        <div className="px-3 py-2 border-b border-border/30 text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5">
+          <span>{selectedSource.tracksWithMoods} source moods</span>
+          <span>{comparisons.length} matched</span>
+          <span>{totalMismatches} mismatched</span>
+          {selectedTrackIds.size > 0 && <span className="text-primary">{selectedTrackIds.size} selected</span>}
+        </div>
+      )}
+
       {/* Sync mode */}
       {targetSources.size > 0 && (
         <div className="px-3 pt-2 pb-2 border-b border-border/30">
@@ -295,7 +342,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
         </div>
       )}
 
-      {/* Targets & filter bar */}
+      {/* Targets */}
       {targetSources.size > 0 && (
         <div className="px-3 pt-2 pb-2 border-b border-border/30 space-y-2">
           {Array.from(targetSources.values()).map(target => (
@@ -322,18 +369,49 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                 ) : (
                   <ArrowRight className="w-3 h-3" />
                 )}
-                Sync
+                {selectedTrackIds.size > 0 ? `Sync ${selectedTrackIds.size}` : 'Sync'}
               </button>
             </div>
           ))}
+        </div>
+      )}
 
-          {/* Filter toggle */}
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-[10px] text-muted-foreground">
-              {filteredComparisons.length} of {comparisons.length} tracks
-            </span>
+      {/* Search + filter bar */}
+      {comparisons.length > 0 && (
+        <div className="px-3 pt-2 pb-2 border-b border-border/30 space-y-2">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search artist, track, album..."
+              className="w-full pl-6 pr-2 py-1.5 rounded-lg bg-background border border-border/30 text-foreground text-[10px] focus:outline-hidden focus:ring-2 focus:ring-primary placeholder:text-muted-foreground/50"
+            />
+          </div>
+
+          {/* Filter + selection controls */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={selectAll}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Select all
+              </button>
+              <button
+                onClick={selectNone}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Clear
+              </button>
+              <span className="text-[10px] text-muted-foreground">
+                {filteredComparisons.length} tracks
+              </span>
+            </div>
             <label className="flex items-center gap-1.5 cursor-pointer">
-              <span className="text-[10px] text-muted-foreground">Mismatches only</span>
+              <span className="text-[10px] text-muted-foreground">Mismatches</span>
               <button
                 role="switch"
                 aria-checked={showMismatchOnly}
@@ -398,34 +476,44 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
               {sourceOfTruthId
                 ? comparisons.length === 0
                   ? 'No matched tracks'
-                  : 'All synced'
+                  : searchQuery ? 'No results' : 'All synced'
                 : 'No source selected'}
             </p>
-            <p className="text-xs text-muted-foreground max-w-[200px]">
+            <p className="text-xs text-muted-foreground max-w-[220px]">
               {sourceOfTruthId
                 ? comparisons.length === 0
                   ? 'No tracks with moods were found in both sources'
-                  : 'All mood tags are in sync across your sources'
+                  : searchQuery ? `No tracks match "${searchQuery}"` : 'All mood tags are in sync across your sources'
                 : 'Select a source of truth above to compare mood tags'}
             </p>
           </div>
         ) : (
-          <div className="p-2 space-y-1">
+          <div className="p-2 space-y-1" role="list" aria-label="Track comparison list">
             {filteredComparisons.slice(0, 200).map((comp) => {
               const hasMismatch = comp.targets.some(t => t.hasMismatch)
               const wasSynced = comp.targets.some(t => syncedTrackIds.has(t.trackId))
               const hasFailed = comp.targets.some(t => failedTrackIds.has(t.trackId))
               const isSyncing = comp.targets.some(t => t.trackId === syncingTrackId)
+              const isSelected = comp.targets.some(t => selectedTrackIds.has(t.trackId))
 
               return (
                 <div
                   key={comp.sourceOfTruthTrackId}
-                  className={`p-2 rounded-lg transition-all duration-300 ${
+                  role="listitem"
+                  className={`p-2 rounded-lg transition-all duration-300 cursor-pointer ${
                     hasFailed ? 'bg-destructive/10' :
                     wasSynced ? 'bg-green-500/10' :
                     isSyncing ? 'bg-primary/10' :
+                    isSelected ? 'bg-primary/5' :
                     'bg-muted/30 hover:bg-muted/50'
                   }`}
+                  onClick={() => {
+                    if (!syncing && hasMismatch) {
+                      comp.targets.forEach(t => {
+                        if (t.hasMismatch) toggleTrackSelection(t.trackId)
+                      })
+                    }
+                  }}
                 >
                   {/* Track info row */}
                   <div className="flex items-start gap-2">
@@ -436,6 +524,8 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                         <AlertCircle className="w-3.5 h-3.5 text-destructive" />
                       ) : !hasMismatch || wasSynced ? (
                         <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                      ) : isSelected ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
                       ) : (
                         <Circle className="w-3.5 h-3.5 text-muted-foreground/50" />
                       )}
@@ -446,34 +536,26 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                     </div>
                   </div>
 
-                  {/* Moods */}
-                  <div className="mt-1.5 ml-5.5 flex flex-wrap gap-1">
-                    {comp.sourceOfTruthMoods.map((mood, j) => (
-                      <span key={j} className="text-[10px] text-muted-foreground">
-                        {j > 0 && <span className="mr-1">/</span>}{mood}
-                      </span>
-                    ))}
+                  {/* Source moods */}
+                  <div className="mt-1.5 ml-5.5">
+                    <p className="text-[10px] text-muted-foreground/60 mb-0.5">Source</p>
+                    <p className="text-[10px] text-foreground">
+                      {comp.sourceOfTruthMoods.join(' / ')}
+                    </p>
                   </div>
 
-                  {/* Per-target status (only when multiple targets) */}
-                  {comp.targets.length > 1 && (
-                    <div className="mt-1 ml-5.5 space-y-0.5">
-                      {comp.targets.map((target, j) => (
-                        <div key={j} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                          {target.trackId === syncingTrackId ? (
-                            <Loader2 className="w-2.5 h-2.5 text-primary animate-spin shrink-0" />
-                          ) : failedTrackIds.has(target.trackId) ? (
-                            <AlertCircle className="w-2.5 h-2.5 text-destructive shrink-0" />
-                          ) : !target.hasMismatch || syncedTrackIds.has(target.trackId) ? (
-                            <CheckCircle2 className="w-2.5 h-2.5 text-green-500 shrink-0" />
-                          ) : (
-                            <Circle className="w-2.5 h-2.5 text-muted-foreground/40 shrink-0" />
-                          )}
-                          <span className="truncate">{target.sourceName}</span>
-                        </div>
-                      ))}
+                  {/* Target moods (per target) */}
+                  {comp.targets.map((target, j) => (
+                    <div key={j} className="mt-1 ml-5.5">
+                      <p className="text-[10px] text-muted-foreground/60 mb-0.5">
+                        {target.sourceName}
+                        {target.trackId === syncingTrackId && <Loader2 className="w-2 h-2 text-primary animate-spin inline ml-1" />}
+                      </p>
+                      <p className={`text-[10px] ${target.hasMismatch && !wasSynced ? 'text-muted-foreground/50 italic' : 'text-foreground'}`}>
+                        {target.moods.length > 0 ? target.moods.join(' / ') : 'No moods'}
+                      </p>
                     </div>
-                  )}
+                  ))}
                 </div>
               )
             })}
@@ -486,7 +568,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
         )}
       </div>
 
-      {/* MediaMonkey write confirmation dialog */}
+      {/* Confirmation dialog */}
       {confirmDialog && (
         <div className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center p-4 z-10" role="alertdialog" aria-modal="true" aria-labelledby="mood-confirm-title">
           <div className="bg-card rounded-xl p-4 w-full max-w-[300px] space-y-3 shadow-lg border border-border/30">
