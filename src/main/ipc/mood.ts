@@ -93,7 +93,7 @@ export function registerMoodHandlers() {
   ipcMain.handle('mood:getSources', async () => {
     try {
       const sources = getMoodSyncService().getSources()
-      console.warn('[mood:getSources] Found sources:', sources.map(s => `${s.sourceName} (${s.tracksWithMoods}/${s.totalTracks} moods)`).join(', '))
+      console.log('[mood:getSources] Found sources:', sources.map(s => `${s.sourceName} (${s.tracksWithMoods}/${s.totalTracks} moods)`).join(', '))
       return sources
     } catch (error) {
       console.error('[mood:getSources] Error:', getErrorMessage(error))
@@ -138,7 +138,7 @@ export function registerMoodHandlers() {
       const provider = manager.getProvider(targetSourceId)
 
       if (!provider) {
-        console.warn('[mood:syncToTarget] Target provider not found!')
+        console.log('[mood:syncToTarget] Target provider not found!')
         return { ...result, errors: ['Target provider not found'] }
       }
       console.warn(`[mood:syncToTarget] Provider type: ${provider.providerType}`)

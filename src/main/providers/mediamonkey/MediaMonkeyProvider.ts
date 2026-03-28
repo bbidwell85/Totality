@@ -387,7 +387,7 @@ export class MediaMonkeyProvider implements MediaProvider {
       }
     } catch (e) {
       // Lists/ListsSongs tables may not exist in all MM versions — fall back to Songs.Mood column
-      console.warn('[MediaMonkeyProvider] Could not load mood junction table, falling back to Songs.Mood column:', getErrorMessage(e))
+      console.log('[MediaMonkeyProvider] Could not load mood junction table, falling back to Songs.Mood column:', getErrorMessage(e))
     }
 
     return moodMap
@@ -409,7 +409,7 @@ export class MediaMonkeyProvider implements MediaProvider {
         }
       }
     } catch {
-      console.warn('[MediaMonkeyProvider] Could not load album covers')
+      console.log('[MediaMonkeyProvider] Could not load album covers')
     }
 
     return coverMap
@@ -640,12 +640,12 @@ export class MediaMonkeyProvider implements MediaProvider {
 
     try {
       // Open database for writing via sql.js
-      console.warn('[MediaMonkeyProvider] Opening database for write...')
+      console.log('[MediaMonkeyProvider] Opening database for write...')
       const initSqlJs = (await import('sql.js')).default
       const SQL = await initSqlJs()
       const buffer = fs.readFileSync(this.databasePath)
       const writeDb = new SQL.Database(buffer)
-      console.warn('[MediaMonkeyProvider] Applying IUNICODE fix...')
+      console.log('[MediaMonkeyProvider] Applying IUNICODE fix...')
 
       // Fix schema so sql.js can open: replace IUNICODE collation, disable FTS 'mm' tokenizer
       writeDb.run('PRAGMA writable_schema = ON')
@@ -664,7 +664,7 @@ export class MediaMonkeyProvider implements MediaProvider {
       const fixedBuffer = writeDb.export()
       writeDb.close()
       const db = new SQL.Database(fixedBuffer)
-      console.warn('[MediaMonkeyProvider] Database ready for writing')
+      console.log('[MediaMonkeyProvider] Database ready for writing')
 
       // Prepare statements for performance (reuse across all tracks)
       const stmtUpdateMood = db.prepare(QUERY_MM_UPDATE_SONG_MOOD)
@@ -758,7 +758,7 @@ export class MediaMonkeyProvider implements MediaProvider {
         db.run('PRAGMA writable_schema = OFF')
 
         const finalBuffer = db.export()
-        console.warn('[MediaMonkeyProvider] Writing database to disk...')
+        console.log('[MediaMonkeyProvider] Writing database to disk...')
         fs.writeFileSync(this.databasePath, Buffer.from(finalBuffer))
         console.warn(`[MediaMonkeyProvider] Wrote ${result.written} mood updates to ${path.basename(this.databasePath)}`)
 

@@ -630,7 +630,7 @@ export class KodiLocalProvider implements MediaProvider {
         await this.openDatabase()
 
         if (!this.db) {
-          console.warn('[KodiLocalProvider] Video database not ready yet')
+          console.log('[KodiLocalProvider] Video database not ready yet')
         } else {
           const movieCount = this.query<{ count: number }>(QUERY_MOVIE_COUNT)
           const episodeCount = this.query<{ count: number }>(QUERY_EPISODE_COUNT)
@@ -662,7 +662,7 @@ export class KodiLocalProvider implements MediaProvider {
         if (!videoWasAlreadyOpen) {
           this.closeDatabase()
         }
-        console.warn('[KodiLocalProvider] Could not read video libraries:', getErrorMessage(error))
+        console.log('[KodiLocalProvider] Could not read video libraries:', getErrorMessage(error))
       }
     }
 
