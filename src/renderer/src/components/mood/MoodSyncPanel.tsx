@@ -134,9 +134,9 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const handleSyncClick = async (targetSourceId: string) => {
     if (!sourceOfTruthId) return
 
-    // Check if target is MediaMonkey — needs confirmation
+    // Check if target needs database write confirmation (MediaMonkey, Kodi-Local)
     const target = targetSources.get(targetSourceId)
-    if (target?.sourceType === 'mediamonkey') {
+    if (target?.sourceType === 'mediamonkey' || target?.sourceType === 'kodi-local') {
       const check = await window.electronAPI.moodCheckMediaMonkeyWrite(targetSourceId)
       setConfirmDialog({
         targetSourceId,
@@ -481,13 +481,13 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           <div className="bg-card rounded-xl p-4 w-full max-w-[300px] space-y-3 shadow-lg border border-border/30">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-              <h3 className="text-sm font-semibold">Write to MediaMonkey</h3>
+              <h3 className="text-sm font-semibold">Write to {confirmDialog.targetName}</h3>
             </div>
 
             {confirmDialog.isRunning ? (
               <div className="space-y-2">
                 <p className="text-xs text-destructive">
-                  MediaMonkey is currently running. Close it before syncing to prevent database corruption.
+                  {confirmDialog.targetName} is currently running. Close it before syncing to prevent database corruption.
                 </p>
                 <button
                   onClick={() => setConfirmDialog(null)}
@@ -499,7 +499,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
             ) : (
               <div className="space-y-3">
                 <div className="text-xs text-muted-foreground space-y-1.5">
-                  <p>This will modify the MediaMonkey database directly:</p>
+                  <p>This will modify the {confirmDialog.targetName} database directly:</p>
                   <ul className="space-y-1 ml-3">
                     <li>Update mood tags on {confirmDialog.trackCount} tracks</li>
                     <li>A backup will be created before writing</li>

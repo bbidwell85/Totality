@@ -2289,4 +2289,93 @@ export class KodiLocalProvider implements MediaProvider {
   isScanCancelled(): boolean {
     return this.scanCancelled
   }
+
+  // ============================================================================
+  // WRITE: Mood Sync to Kodi Database
+  // ============================================================================
+
+  /**
+   * Write moods to Kodi's music database.
+   * Kodi stores moods as a simple TEXT column on the song table (` / ` separated).
+   * Safety: Kodi must NOT be running, backup created before write.
+   */
+  async writeMoods(
+    trackUpdates: Array<{ songId: number; moods: string[] }>,
+    onProgress?: (current: number, total: number) => void
+  ): Promise<{ written: number; failed: number; errors: string[] }> {
+    const result = { written: 0, failed: 0, errors: [] as string[] }
+
+    // Safety: check if Kodi is running
+    const discovery = getKodiLocalDiscoveryService()
+    const isRunning = await discovery.isKodiRunning()
+    if (isRunning) {
+      return { ...result, errors: ['Kodi is currently running. Close Kodi before syncing moods to its database.'] }
+    }
+
+    if (!this.musicDatabasePath || !fs.existsSync(this.musicDatabasePath)) {
+      return { ...result, errors: ['Kodi music database not found'] }
+    }
+
+    // Create backup
+    const backupPath = this.musicDatabasePath + '.backup'
+    try {
+      fs.copyFileSync(this.musicDatabasePath, backupPath)
+      console.warn(`[KodiLocalProvider] Backup created: ${backupPath}`)
+    } catch (backupError) {
+      return { ...result, errors: [`Failed to create backup: ${getErrorMessage(backupError)}`] }
+    }
+
+    try {
+      const initSqlJs = (await import('sql.js')).default
+      const SQL = await initSqlJs()
+      const buffer = fs.readFileSync(this.musicDatabasePath)
+      const db = new SQL.Database(buffer)
+
+      db.run('BEGIN TRANSACTION')
+
+      try {
+        // Kodi stores moods as ` / ` separated text on the song table
+        const stmt = db.prepare('UPDATE song SET mood = ? WHERE idSong = ?')
+
+        for (let i = 0; i < trackUpdates.length; i++) {
+          const { songId, moods } = trackUpdates[i]
+          const moodStr = moods.join(' / ')
+          stmt.bind([moodStr, songId])
+          stmt.step()
+          stmt.reset()
+          result.written++
+          onProgress?.(i + 1, trackUpdates.length)
+        }
+
+        stmt.free()
+        db.run('COMMIT')
+
+        // Write back to disk
+        const finalBuffer = db.export()
+        fs.writeFileSync(this.musicDatabasePath, Buffer.from(finalBuffer))
+        console.warn(`[KodiLocalProvider] Wrote ${result.written} mood updates to ${path.basename(this.musicDatabasePath)}`)
+
+      } catch (txError) {
+        try { db.run('ROLLBACK') } catch { /* ignore */ }
+        throw txError
+      } finally {
+        db.close()
+      }
+
+      // Clean up backup on success
+      try { fs.unlinkSync(backupPath) } catch { /* keep if delete fails */ }
+
+    } catch (error) {
+      console.warn(`[KodiLocalProvider] Write failed: ${getErrorMessage(error)}`)
+      result.errors.push(`Database write failed: ${getErrorMessage(error)}. Backup at ${backupPath}`)
+      try {
+        if (fs.existsSync(backupPath)) {
+          fs.copyFileSync(backupPath, this.musicDatabasePath)
+          console.warn('[KodiLocalProvider] Restored from backup')
+        }
+      } catch { /* backup restore failed */ }
+    }
+
+    return result
+  }
 }

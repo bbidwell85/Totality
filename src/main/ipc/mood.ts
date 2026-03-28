@@ -10,7 +10,9 @@ import { getSourceManager } from '../services/SourceManager'
 import { getDatabase } from '../database/getDatabase'
 import { PlexProvider } from '../providers/plex/PlexProvider'
 import { MediaMonkeyProvider } from '../providers/mediamonkey/MediaMonkeyProvider'
+import { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
 import { getMediaMonkeyDiscoveryService } from '../services/MediaMonkeyDiscoveryService'
+import { getKodiLocalDiscoveryService } from '../services/KodiLocalDiscoveryService'
 import { getErrorMessage } from '../services/utils/errorUtils'
 
 function safeSend(win: BrowserWindow | null, channel: string, ...args: unknown[]) {
@@ -27,29 +29,43 @@ export function setMoodMainWindow(win: BrowserWindow) {
 
 export function registerMoodHandlers() {
   /**
-   * Pre-sync safety check for MediaMonkey target.
+   * Pre-sync safety check for database write targets (MediaMonkey, Kodi-Local).
    * Returns status info for the confirmation dialog.
    */
   ipcMain.handle('mood:checkMediaMonkeyWrite', async (_event, sourceId: string) => {
     try {
       const manager = getSourceManager()
       const provider = manager.getProvider(sourceId)
-      if (!provider || provider.providerType !== 'mediamonkey') {
-        return { canWrite: false, reason: 'Not a MediaMonkey source' }
+      if (!provider) return { canWrite: false, reason: 'Source not found' }
+
+      if (provider.providerType === 'mediamonkey') {
+        const discovery = getMediaMonkeyDiscoveryService()
+        const isRunning = await discovery.isMediaMonkeyRunning()
+        const dbPath = (provider as unknown as { databasePath: string }).databasePath
+        return {
+          canWrite: !isRunning,
+          isRunning,
+          databasePath: dbPath,
+          appName: 'MediaMonkey',
+          reason: isRunning ? 'MediaMonkey is currently running. Close it before syncing.' : undefined,
+        }
       }
 
-      const discovery = getMediaMonkeyDiscoveryService()
-      const isRunning = await discovery.isMediaMonkeyRunning()
-
-      const mmProvider = provider as MediaMonkeyProvider
-      const dbPath = (mmProvider as unknown as { databasePath: string }).databasePath
-
-      return {
-        canWrite: !isRunning,
-        isRunning,
-        databasePath: dbPath,
-        reason: isRunning ? 'MediaMonkey is currently running. Close it before syncing.' : undefined,
+      if (provider.providerType === 'kodi-local') {
+        const discovery = getKodiLocalDiscoveryService()
+        const isRunning = await discovery.isKodiRunning()
+        const dbPath = (provider as unknown as { musicDatabasePath: string }).musicDatabasePath
+        return {
+          canWrite: !isRunning,
+          isRunning,
+          databasePath: dbPath,
+          appName: 'Kodi',
+          reason: isRunning ? 'Kodi is currently running. Close it before syncing.' : undefined,
+        }
       }
+
+      // Plex and other API-based targets don't need safety checks
+      return { canWrite: true }
     } catch (error) {
       return { canWrite: false, reason: getErrorMessage(error) }
     }
@@ -252,20 +268,42 @@ export function registerMoodHandlers() {
           }
         }
       } else if (provider.providerType === 'kodi-local') {
-        // Kodi-Local: update local DB only for now
-        for (let i = 0; i < tracksToSync.length; i++) {
-          const track = tracksToSync[i]
-          try {
-            getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
-            result.synced++
-            safeSend(mainWindow, 'mood:syncProgress', {
-              current: i + 1, total: tracksToSync.length,
-              currentTrack: `${track.artist} - ${track.title}`,
-              trackId: track.targetTrackId, status: 'done',
-            })
-          } catch (error) {
-            result.failed++
-            result.errors.push(`${track.artist} - ${track.title}: ${getErrorMessage(error)}`)
+        // Write moods to Kodi's SQLite database
+        const kodiProvider = provider as KodiLocalProvider
+        const trackUpdates = tracksToSync.map(t => ({
+          songId: parseInt(t.targetProviderId),
+          moods: t.moods,
+          title: t.title,
+          artist: t.artist,
+          targetTrackId: t.targetTrackId,
+        }))
+
+        const writeResult = await kodiProvider.writeMoods(
+          trackUpdates.map(t => ({ songId: t.songId, moods: t.moods })),
+          (current, total) => {
+            const track = trackUpdates[current - 1]
+            if (track) {
+              safeSend(mainWindow, 'mood:syncProgress', {
+                current,
+                total,
+                currentTrack: `${track.artist} - ${track.title}`,
+                trackId: track.targetTrackId,
+                status: 'done',
+              })
+            }
+          }
+        )
+
+        result.synced = writeResult.written
+        result.failed = writeResult.failed
+        result.errors = writeResult.errors
+
+        // Update local DB to match
+        if (writeResult.written > 0) {
+          for (const track of trackUpdates) {
+            try {
+              getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
+            } catch { /* best effort */ }
           }
         }
       } else {
