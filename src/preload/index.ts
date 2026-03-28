@@ -125,7 +125,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Mood sync
   moodGetSources: () => ipcRenderer.invoke('mood:getSources'),
   moodGetComparison: (sourceOfTruthId: string) => ipcRenderer.invoke('mood:getComparison', sourceOfTruthId),
-  moodSyncToTarget: (args: { sourceOfTruthId: string; targetSourceId: string; trackIds?: number[] }) =>
+  moodSyncToTarget: (args: { sourceOfTruthId: string; targetSourceId: string; trackIds?: number[]; mode?: 'overwrite' | 'append' }) =>
     ipcRenderer.invoke('mood:syncToTarget', args),
   onMoodSyncProgress: (callback: (progress: { current: number; total: number; currentTrack: string; trackId?: number; status?: 'syncing' | 'done' | 'failed' }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: { current: number; total: number; currentTrack: string; trackId?: number; status?: 'done' | 'syncing' }) => callback(progress)
@@ -976,7 +976,7 @@ export interface ElectronAPI {
       hasMismatch: boolean
     }>
   }>>
-  moodSyncToTarget: (args: { sourceOfTruthId: string; targetSourceId: string; trackIds?: number[] }) =>
+  moodSyncToTarget: (args: { sourceOfTruthId: string; targetSourceId: string; trackIds?: number[]; mode?: 'overwrite' | 'append' }) =>
     Promise<{ synced: number; failed: number; skipped: number; errors: string[] }>
   onMoodSyncProgress: (callback: (progress: { current: number; total: number; currentTrack: string; trackId?: number; status?: 'syncing' | 'done' | 'failed' }) => void) => () => void
 

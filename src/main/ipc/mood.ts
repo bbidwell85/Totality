@@ -78,8 +78,9 @@ export function registerMoodHandlers() {
     sourceOfTruthId: string
     targetSourceId: string
     trackIds?: number[]
+    mode?: 'overwrite' | 'append'
   }) => {
-    const { sourceOfTruthId, targetSourceId, trackIds } = args
+    const { sourceOfTruthId, targetSourceId, trackIds, mode = 'overwrite' } = args
     const result = { synced: 0, failed: 0, skipped: 0, errors: [] as string[] }
 
     try {
@@ -100,14 +101,20 @@ export function registerMoodHandlers() {
         c.targets
           .filter(t => t.sourceId === targetSourceId && t.hasMismatch)
           .filter(t => !trackIds || trackIds.includes(t.trackId))
-          .map(t => ({
-            title: c.trackTitle,
-            artist: c.artist,
-            moods: c.sourceOfTruthMoods,
-            targetProviderId: t.trackProviderId,
-            targetTrackId: t.trackId,
-            libraryId: t.libraryId,
-          }))
+          .map(t => {
+            // In append mode, merge source moods with existing target moods
+            const finalMoods = mode === 'append'
+              ? [...new Set([...t.moods, ...c.sourceOfTruthMoods])]
+              : c.sourceOfTruthMoods
+            return {
+              title: c.trackTitle,
+              artist: c.artist,
+              moods: finalMoods,
+              targetProviderId: t.trackProviderId,
+              targetTrackId: t.trackId,
+              libraryId: t.libraryId,
+            }
+          })
       )
 
       console.warn(`[mood:syncToTarget] Tracks to sync: ${tracksToSync.length}`)

@@ -52,6 +52,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const [syncedTrackIds, setSyncedTrackIds] = useState<Set<number>>(new Set())
   const [syncingTrackId, setSyncingTrackId] = useState<number | null>(null)
   const [failedTrackIds, setFailedTrackIds] = useState<Set<number>>(new Set())
+  const [syncMode, setSyncMode] = useState<'overwrite' | 'append'>('overwrite')
   const [showMismatchOnly, setShowMismatchOnly] = useState(true)
 
   const closeButtonRef = useRef<HTMLButtonElement>(null)
@@ -134,6 +135,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       const result = await window.electronAPI.moodSyncToTarget({
         sourceOfTruthId,
         targetSourceId,
+        mode: syncMode,
       })
       setSyncResult(result)
       await loadComparison()
@@ -221,6 +223,39 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           ))}
         </select>
       </div>
+
+      {/* Sync mode */}
+      {targetSources.size > 0 && (
+        <div className="px-3 pt-2 pb-2 border-b border-border/30">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setSyncMode('overwrite')}
+              className={`flex-1 px-2 py-1.5 text-[10px] font-medium rounded-md transition-colors ${
+                syncMode === 'overwrite'
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-muted/20 text-muted-foreground hover:bg-muted/30'
+              }`}
+            >
+              Overwrite
+            </button>
+            <button
+              onClick={() => setSyncMode('append')}
+              className={`flex-1 px-2 py-1.5 text-[10px] font-medium rounded-md transition-colors ${
+                syncMode === 'append'
+                  ? 'bg-primary/20 text-primary'
+                  : 'bg-muted/20 text-muted-foreground hover:bg-muted/30'
+              }`}
+            >
+              Append
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {syncMode === 'overwrite'
+              ? 'Replace target moods with source moods'
+              : 'Add source moods to existing target moods'}
+          </p>
+        </div>
+      )}
 
       {/* Targets & filter bar */}
       {targetSources.size > 0 && (
