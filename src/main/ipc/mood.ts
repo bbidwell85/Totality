@@ -24,6 +24,22 @@ export function setMoodMainWindow(win: BrowserWindow) {
 }
 
 export function registerMoodHandlers() {
+  // Debug: fetch moods for a specific Plex track by ratingKey
+  ipcMain.handle('mood:debugFetchTrack', async (_event, args: { sourceId: string; ratingKey: string }) => {
+    try {
+      const manager = getSourceManager()
+      const provider = manager.getProvider(args.sourceId)
+      if (!provider || provider.providerType !== 'plex') return { error: 'Plex provider not found' }
+      const plexProvider = provider as PlexProvider
+      const moods = await plexProvider.getTrackMoods(args.ratingKey)
+      console.warn(`[mood:debugFetchTrack] ratingKey=${args.ratingKey} moods=${JSON.stringify(moods)}`)
+      return { ratingKey: args.ratingKey, moods }
+    } catch (error) {
+      console.warn(`[mood:debugFetchTrack] Error: ${getErrorMessage(error)}`)
+      return { error: getErrorMessage(error) }
+    }
+  })
+
   /**
    * Get sources that have music tracks (with mood counts)
    */

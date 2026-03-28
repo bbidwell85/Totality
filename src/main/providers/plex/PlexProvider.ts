@@ -1683,31 +1683,70 @@ export class PlexProvider implements MediaProvider {
 
     console.log(`[PlexProvider ${this.sourceId}] Fetching mood tags for library ${libraryId}...`)
 
-    const url = `${this.selectedServer.uri}/library/sections/${libraryId}/all`
-    const allTracks = await this.paginatedPlexFetch<PlexMusicTrack>(url, { type: 10 })
+    // Strategy: Plex's bulk /all?type=10 endpoint doesn't include Mood in JSON responses.
+    // Instead, use /library/sections/{id}/mood to get all mood tags, then for each mood,
+    // query which tracks have it via /all?type=10&mood={moodId}
+    const moodTagsUrl = `${this.selectedServer.uri}/library/sections/${libraryId}/mood`
+    const moodTagsResponse = await this.api.get(moodTagsUrl, {
+      headers: {
+        'X-Plex-Token': this.selectedServer.accessToken,
+        Accept: 'application/json',
+      },
+      params: { type: 10 },
+    })
+
+    const moodTags = (moodTagsResponse.data as {
+      MediaContainer?: { Directory?: Array<{ key: string; title: string; tag?: string }> }
+    })?.MediaContainer?.Directory || []
+
+    console.log(`[PlexProvider ${this.sourceId}] Found ${moodTags.length} mood tags in library`)
+
+    if (moodTags.length === 0) {
+      console.log(`[PlexProvider ${this.sourceId}] No mood tags found, skipping mood fetch`)
+      return
+    }
 
     // Build provider_id → db id lookup map
     const existingTracks = db.getMusicTracks({ sourceId: this.sourceId }) as MusicTrack[]
     const providerIdToDbId = new Map<string, number>()
+    const providerIdToMoods = new Map<string, string[]>()
     for (const t of existingTracks) {
       if (t.id && t.provider_id) providerIdToDbId.set(t.provider_id, t.id)
     }
 
-    let moodCount = 0
-    for (const track of allTracks) {
-      if (track.Mood && track.Mood.length > 0) {
-        const moods = track.Mood.map(m => m.tag).filter(Boolean)
-        if (moods.length > 0) {
-          const dbId = providerIdToDbId.get(track.ratingKey)
-          if (dbId) {
-            db.updateMusicTrackMood(dbId, JSON.stringify(moods))
-            moodCount++
-          }
+    // For each mood tag, fetch tracks that have it
+    for (const moodTag of moodTags) {
+      const moodName = moodTag.title || moodTag.tag || ''
+      if (!moodName) continue
+
+      try {
+        const tracksUrl = `${this.selectedServer.uri}/library/sections/${libraryId}/all`
+        const tracksWithMood = await this.paginatedPlexFetch<PlexMusicTrack>(tracksUrl, {
+          type: 10,
+          mood: moodTag.key?.replace(/.*\//, '') || moodName,
+        })
+
+        for (const track of tracksWithMood) {
+          const existing = providerIdToMoods.get(track.ratingKey) || []
+          existing.push(moodName)
+          providerIdToMoods.set(track.ratingKey, existing)
         }
+      } catch {
+        console.warn(`[PlexProvider] Failed to fetch tracks for mood "${moodName}"`)
       }
     }
 
-    console.log(`[PlexProvider ${this.sourceId}] Updated mood tags for ${moodCount} tracks`)
+    // Write moods to DB
+    let moodCount = 0
+    for (const [ratingKey, moods] of providerIdToMoods) {
+      const dbId = providerIdToDbId.get(ratingKey)
+      if (dbId) {
+        db.updateMusicTrackMood(dbId, JSON.stringify(moods))
+        moodCount++
+      }
+    }
+
+    console.log(`[PlexProvider ${this.sourceId}] Updated mood tags for ${moodCount} tracks (from ${moodTags.length} mood categories)`)
   }
 
   /**
