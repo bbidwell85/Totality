@@ -127,8 +127,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   moodGetComparison: (sourceOfTruthId: string) => ipcRenderer.invoke('mood:getComparison', sourceOfTruthId),
   moodSyncToTarget: (args: { sourceOfTruthId: string; targetSourceId: string; trackIds?: number[] }) =>
     ipcRenderer.invoke('mood:syncToTarget', args),
-  onMoodSyncProgress: (callback: (progress: { current: number; total: number; currentTrack: string }) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, progress: { current: number; total: number; currentTrack: string }) => callback(progress)
+  onMoodSyncProgress: (callback: (progress: { current: number; total: number; currentTrack: string; trackId?: number; status?: 'syncing' | 'done' | 'failed' }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: { current: number; total: number; currentTrack: string; trackId?: number; status?: 'done' | 'syncing' }) => callback(progress)
     ipcRenderer.on('mood:syncProgress', handler)
     return () => ipcRenderer.removeListener('mood:syncProgress', handler)
   },
@@ -978,7 +978,7 @@ export interface ElectronAPI {
   }>>
   moodSyncToTarget: (args: { sourceOfTruthId: string; targetSourceId: string; trackIds?: number[] }) =>
     Promise<{ synced: number; failed: number; skipped: number; errors: string[] }>
-  onMoodSyncProgress: (callback: (progress: { current: number; total: number; currentTrack: string }) => void) => () => void
+  onMoodSyncProgress: (callback: (progress: { current: number; total: number; currentTrack: string; trackId?: number; status?: 'syncing' | 'done' | 'failed' }) => void) => () => void
 
   // Kodi Collections
   kodiImportCollections: (sourceId: string) => Promise<{ imported: number; skipped: number }>

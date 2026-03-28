@@ -105,9 +105,11 @@ export function registerMoodHandlers() {
         for (let i = 0; i < tracksToSync.length; i++) {
           const track = tracksToSync[i]
           safeSend(mainWindow, 'mood:syncProgress', {
-            current: i + 1,
+            current: i,
             total: tracksToSync.length,
             currentTrack: `${track.artist} - ${track.title}`,
+            trackId: track.targetTrackId,
+            status: 'syncing',
           })
 
           try {
@@ -121,13 +123,31 @@ export function registerMoodHandlers() {
               getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
             } catch { /* best effort */ }
             result.synced++
-            // Small delay between requests
-            if (i < tracksToSync.length - 1) {
-              await new Promise(r => setTimeout(r, 75))
-            }
+
+            // Notify track completed
+            safeSend(mainWindow, 'mood:syncProgress', {
+              current: i + 1,
+              total: tracksToSync.length,
+              currentTrack: `${track.artist} - ${track.title}`,
+              trackId: track.targetTrackId,
+              status: 'done',
+            })
+
+            // Delay between requests for visual feedback + server breathing room
+            await new Promise(r => setTimeout(r, 200))
           } catch (error) {
             result.failed++
             result.errors.push(`${track.artist} - ${track.title}: ${getErrorMessage(error)}`)
+
+            safeSend(mainWindow, 'mood:syncProgress', {
+              current: i + 1,
+              total: tracksToSync.length,
+              currentTrack: `${track.artist} - ${track.title}`,
+              trackId: track.targetTrackId,
+              status: 'failed',
+            })
+
+            await new Promise(r => setTimeout(r, 200))
           }
         }
       } else {

@@ -50,6 +50,8 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; currentTrack: string } | null>(null)
   const [syncResult, setSyncResult] = useState<{ synced: number; failed: number; errors: string[] } | null>(null)
   const [syncedTrackIds, setSyncedTrackIds] = useState<Set<number>>(new Set())
+  const [syncingTrackId, setSyncingTrackId] = useState<number | null>(null)
+  const [failedTrackIds, setFailedTrackIds] = useState<Set<number>>(new Set())
   const [showMismatchOnly, setShowMismatchOnly] = useState(true)
 
   const closeButtonRef = useRef<HTMLButtonElement>(null)
@@ -65,6 +67,17 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   useEffect(() => {
     const cleanup = window.electronAPI.onMoodSyncProgress((progress) => {
       setSyncProgress(progress)
+      if (progress.trackId) {
+        if (progress.status === 'syncing') {
+          setSyncingTrackId(progress.trackId)
+        } else if (progress.status === 'done') {
+          setSyncingTrackId(null)
+          setSyncedTrackIds(prev => new Set([...prev, progress.trackId!]))
+        } else if (progress.status === 'failed') {
+          setSyncingTrackId(null)
+          setFailedTrackIds(prev => new Set([...prev, progress.trackId!]))
+        }
+      }
     })
     return cleanup
   }, [])
@@ -116,24 +129,13 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     setSyncingTarget(targetSourceId)
     setSyncProgress(null)
     setSyncResult(null)
+    setFailedTrackIds(new Set())
     try {
       const result = await window.electronAPI.moodSyncToTarget({
         sourceOfTruthId,
         targetSourceId,
       })
       setSyncResult(result)
-      // Mark synced tracks
-      if (result.synced > 0) {
-        const newSynced = new Set(syncedTrackIds)
-        comparisons.forEach(c => {
-          c.targets.forEach(t => {
-            if (t.sourceId === targetSourceId && t.hasMismatch) {
-              newSynced.add(t.trackId)
-            }
-          })
-        })
-        setSyncedTrackIds(newSynced)
-      }
       await loadComparison()
     } catch (err) {
       setSyncResult({ synced: 0, failed: 0, errors: [(err as Error).message] })
@@ -338,13 +340,27 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
             {filteredComparisons.slice(0, 200).map((comp, i) => {
               const hasMismatch = comp.targets.some(t => t.hasMismatch)
               const wasSynced = comp.targets.some(t => syncedTrackIds.has(t.trackId))
+              const hasFailed = comp.targets.some(t => failedTrackIds.has(t.trackId))
+              const isSyncing = comp.targets.some(t => t.trackId === syncingTrackId)
 
               return (
-                <div key={i} className="p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                <div
+                  key={i}
+                  className={`p-2 rounded-lg transition-all duration-300 ${
+                    hasFailed ? 'bg-destructive/10' :
+                    wasSynced ? 'bg-green-500/10' :
+                    isSyncing ? 'bg-primary/10' :
+                    'bg-muted/30 hover:bg-muted/50'
+                  }`}
+                >
                   {/* Track info row */}
                   <div className="flex items-start gap-2">
                     <div className="shrink-0 mt-0.5">
-                      {!hasMismatch || wasSynced ? (
+                      {isSyncing ? (
+                        <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
+                      ) : hasFailed ? (
+                        <AlertCircle className="w-3.5 h-3.5 text-destructive" />
+                      ) : !hasMismatch || wasSynced ? (
                         <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
                       ) : (
                         <Circle className="w-3.5 h-3.5 text-muted-foreground/50" />
@@ -365,12 +381,16 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                     ))}
                   </div>
 
-                  {/* Per-target status */}
+                  {/* Per-target status (only when multiple targets) */}
                   {comp.targets.length > 1 && (
                     <div className="mt-1 ml-5.5 space-y-0.5">
                       {comp.targets.map((target, j) => (
                         <div key={j} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                          {!target.hasMismatch || syncedTrackIds.has(target.trackId) ? (
+                          {target.trackId === syncingTrackId ? (
+                            <Loader2 className="w-2.5 h-2.5 text-primary animate-spin shrink-0" />
+                          ) : failedTrackIds.has(target.trackId) ? (
+                            <AlertCircle className="w-2.5 h-2.5 text-destructive shrink-0" />
+                          ) : !target.hasMismatch || syncedTrackIds.has(target.trackId) ? (
                             <CheckCircle2 className="w-2.5 h-2.5 text-green-500 shrink-0" />
                           ) : (
                             <Circle className="w-2.5 h-2.5 text-muted-foreground/40 shrink-0" />
