@@ -649,6 +649,8 @@ export interface MusicFilters {
   alphabetFilter?: string
   // Album type exclusion filter
   excludeAlbumTypes?: string[]
+  // Mood filter
+  hasMood?: boolean
 }
 
 // ============================================================================

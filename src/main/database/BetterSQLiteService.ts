@@ -2328,6 +2328,8 @@ export class BetterSQLiteService {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
       else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
     }
+    if (filters?.hasMood === true) { sql += " AND mood IS NOT NULL AND mood != '' AND mood != '[]'" }
+    if (filters?.hasMood === false) { sql += " AND (mood IS NULL OR mood = '' OR mood = '[]')" }
 
     const trackSortMap: Record<string, string> = { 'title': 'title', 'artist': 'artist_name', 'album': 'album_name', 'codec': 'audio_codec', 'duration': 'duration', 'added_at': 'created_at' }
     if (filters?.sortBy && trackSortMap[filters.sortBy]) {
@@ -2390,6 +2392,8 @@ export class BetterSQLiteService {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
       else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
     }
+    if (filters?.hasMood === true) { sql += " AND mood IS NOT NULL AND mood != '' AND mood != '[]'" }
+    if (filters?.hasMood === false) { sql += " AND (mood IS NULL OR mood = '' OR mood = '[]')" }
     const stmt = this.db.prepare(sql)
     const row = stmt.get(...params) as { count: number } | undefined
     return row?.count || 0

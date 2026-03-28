@@ -252,32 +252,5 @@ export const QUERY_MM_INSERT_SONG_MOOD = `
   INSERT INTO ListsSongs (IDSong, IDListType, IDList) VALUES (?, 2, ?)
 `
 
-// ============================================================================
-// HELPERS
-// ============================================================================
 
-/**
- * Guess audio codec from file extension
- */
-export function guessCodecFromPath(filePath: string): string {
-  const ext = filePath.split('.').pop()?.toLowerCase() || ''
-  const codecMap: Record<string, string> = {
-    flac: 'flac',
-    mp3: 'mp3',
-    m4a: 'aac',
-    aac: 'aac',
-    ogg: 'vorbis',
-    opus: 'opus',
-    wav: 'pcm',
-    wma: 'wma',
-    ape: 'ape',
-    wv: 'wavpack',
-    aiff: 'aiff',
-    aif: 'aiff',
-    alac: 'alac',
-    dsf: 'dsd',
-    dff: 'dsd',
-  }
-  return codecMap[ext] || 'unknown'
-}
 

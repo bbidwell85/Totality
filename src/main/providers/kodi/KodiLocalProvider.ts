@@ -66,6 +66,7 @@ import {
 import {
   isLosslessCodec,
   calculateAlbumStats,
+  parseKodiMoodString,
 } from '../base/MusicScannerUtils'
 import {
   normalizeVideoCodec,
@@ -1970,7 +1971,7 @@ export class KodiLocalProvider implements MediaProvider {
       is_lossless: lossless,
       is_hi_res: false, // Will be updated by FFprobe if available
       musicbrainz_id: item.strMusicBrainzTrackID || undefined,
-      mood: item.mood ? JSON.stringify(item.mood.split(' / ').map(m => m.trim()).filter(Boolean)) : undefined,
+      mood: parseKodiMoodString(item.mood),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

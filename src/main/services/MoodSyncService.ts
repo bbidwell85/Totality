@@ -56,25 +56,26 @@ export function getMoodSyncService(): MoodSyncService {
 
 export class MoodSyncService {
   /**
-   * Get all sources that have music tracks (with mood count for each)
+   * Get all sources that have music tracks (with mood count for each).
+   * Uses count queries — does NOT load track data into memory.
    */
   getSources(): MoodSourceInfo[] {
     const db = getDatabase()
-    const sources = db.getMediaSources()
+    const sources = db.getMediaSources() as Array<{ source_id: string; display_name: string; source_type: string }>
     const result: MoodSourceInfo[] = []
 
     for (const source of sources) {
-      const tracks = db.getMusicTracks({ sourceId: source.source_id })
-      if (!tracks || tracks.length === 0) continue
+      const totalTracks = db.countMusicTracks({ sourceId: source.source_id })
+      if (totalTracks === 0) continue
 
-      const tracksWithMoods = (tracks as MusicTrack[]).filter((t: MusicTrack) => t.mood && t.mood !== '[]').length
+      const tracksWithMoods = db.countMusicTracks({ sourceId: source.source_id, hasMood: true })
 
       result.push({
         sourceId: source.source_id,
         sourceName: source.display_name,
         sourceType: source.source_type as ProviderType,
         tracksWithMoods,
-        totalTracks: tracks.length,
+        totalTracks,
       })
     }
 
@@ -83,34 +84,34 @@ export class MoodSyncService {
 
   /**
    * Compare moods between a source of truth and all other sources.
-   * Returns only tracks that exist in both the source of truth AND at least one target.
+   * Only loads tracks with moods from SOT, and all tracks from targets for matching.
    */
   getComparison(sourceOfTruthId: string): MoodComparison[] {
     const db = getDatabase()
 
-    // Get all tracks from source of truth that have moods
-    const sotTracks = db.getMusicTracks({ sourceId: sourceOfTruthId }) as MusicTrack[]
+    // Only load tracks WITH moods from source of truth (not the entire library)
+    const sotTracks = db.getMusicTracks({ sourceId: sourceOfTruthId, hasMood: true }) as MusicTrack[]
     if (!sotTracks || sotTracks.length === 0) return []
 
-    const sotTracksWithMoods = sotTracks.filter((t: MusicTrack) => t.mood && t.mood !== '[]')
-    if (sotTracksWithMoods.length === 0) return []
-
     // Get all other sources
-    const sources = db.getMediaSources()
-    const otherSources = (sources as Array<{ source_id: string; display_name: string; source_type: string }>).filter(s => s.source_id !== sourceOfTruthId)
+    const sources = db.getMediaSources() as Array<{ source_id: string; display_name: string; source_type: string }>
+    const otherSources = sources.filter(s => s.source_id !== sourceOfTruthId)
     if (otherSources.length === 0) return []
 
     // Build lookup maps for other sources: key → track
+    // Only load tracks from sources that actually have music
     const targetTrackMaps = new Map<string, Map<string, {
-      track: typeof sotTracks[0]
+      track: MusicTrack
       sourceId: string
       sourceName: string
       sourceType: ProviderType
     }>>()
 
     for (const source of otherSources) {
-      const tracks = db.getMusicTracks({ sourceId: source.source_id })
-      if (!tracks || tracks.length === 0) continue
+      const trackCount = db.countMusicTracks({ sourceId: source.source_id })
+      if (trackCount === 0) continue
+
+      const tracks = db.getMusicTracks({ sourceId: source.source_id }) as MusicTrack[]
 
       for (const track of tracks) {
         const keys = this.getMatchKeys(track.title, track.artist_name, track.musicbrainz_id)
@@ -118,7 +119,6 @@ export class MoodSyncService {
           if (!targetTrackMaps.has(key)) {
             targetTrackMaps.set(key, new Map())
           }
-          // Only keep one per source per key
           const keyMap = targetTrackMaps.get(key)!
           if (!keyMap.has(source.source_id)) {
             keyMap.set(source.source_id, {
@@ -135,7 +135,7 @@ export class MoodSyncService {
     // Match source of truth tracks against targets
     const comparisons: MoodComparison[] = []
 
-    for (const sotTrack of sotTracksWithMoods) {
+    for (const sotTrack of sotTracks) {
       const sotMoods = this.parseMoods(sotTrack.mood)
       if (sotMoods.length === 0) continue
 
@@ -208,7 +208,6 @@ export class MoodSyncService {
 
   /**
    * Generate match keys for a track. Returns multiple keys for fallback matching.
-   * Priority: MusicBrainz ID (if available), then normalized title+artist
    */
   private getMatchKeys(title: string, artist: string, musicbrainzId?: string | null): string[] {
     const keys: string[] = []
@@ -217,7 +216,6 @@ export class MoodSyncService {
       keys.push(`mbid:${musicbrainzId}`)
     }
 
-    // Normalize for fuzzy matching: lowercase, trim, collapse whitespace
     const normTitle = title.toLowerCase().trim().replace(/\s+/g, ' ')
     const normArtist = artist.toLowerCase().trim().replace(/\s+/g, ' ')
     keys.push(`ta:${normTitle}|${normArtist}`)

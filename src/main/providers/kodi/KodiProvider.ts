@@ -32,6 +32,7 @@ import {
   isLosslessCodec,
   isHiRes,
   calculateAlbumStats,
+  parseKodiMoodString,
 } from '../base/MusicScannerUtils'
 import {
   normalizeResolution,
@@ -1442,7 +1443,7 @@ export class KodiProvider implements MediaProvider {
       is_lossless: lossless,
       is_hi_res: hiRes,
       musicbrainz_id: item.musicbrainztrackid,
-      mood: item.mood ? JSON.stringify(item.mood.split(' / ').map(m => m.trim()).filter(Boolean)) : undefined,
+      mood: parseKodiMoodString(item.mood),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

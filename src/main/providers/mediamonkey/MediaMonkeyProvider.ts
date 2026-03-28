@@ -48,12 +48,12 @@ import {
   type MMDbAlbum,
   type MMDbMoodEntry,
   type MMDbCover,
-  guessCodecFromPath,
 } from './MediaMonkeyDatabaseSchema'
 import {
   isLosslessCodec,
   isHiRes,
   calculateAlbumStats,
+  guessCodecFromExtension,
 } from '../base/MusicScannerUtils'
 
 export class MediaMonkeyProvider implements MediaProvider {
@@ -426,7 +426,7 @@ export class MediaMonkeyProvider implements MediaProvider {
     artistId: number,
     moodMap: Map<number, string[]>
   ): MusicTrack {
-    const audioCodec = guessCodecFromPath(song.SongPath)
+    const audioCodec = guessCodecFromExtension(song.SongPath)
     const lossless = isLosslessCodec(audioCodec)
     const hiRes = isHiRes(song.SamplingFrequency, song.BPS, lossless)
 
