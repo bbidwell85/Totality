@@ -1906,7 +1906,7 @@ export class BetterSQLiteService {
         is_hi_res = excluded.is_hi_res,
         musicbrainz_id = COALESCE(excluded.musicbrainz_id, music_tracks.musicbrainz_id),
         genres = excluded.genres,
-        mood = COALESCE(excluded.mood, music_tracks.mood),
+        mood = excluded.mood,
         updated_at = datetime('now')
     `)
 
