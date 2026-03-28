@@ -1671,6 +1671,46 @@ export class PlexProvider implements MediaProvider {
   }
 
   /**
+   * Fetch mood tags for all tracks in a Plex music library.
+   * Uses /library/sections/{id}/all?type=10 which returns Mood tags
+   * (unlike the per-album children endpoint which strips them).
+   */
+  private async fetchAndUpdateMoods(
+    libraryId: string,
+    db: ReturnType<typeof getDatabase>
+  ): Promise<void> {
+    if (!this.selectedServer) return
+
+    console.log(`[PlexProvider ${this.sourceId}] Fetching mood tags for library ${libraryId}...`)
+
+    const url = `${this.selectedServer.uri}/library/sections/${libraryId}/all`
+    const allTracks = await this.paginatedPlexFetch<PlexMusicTrack>(url, { type: 10 })
+
+    // Build provider_id → db id lookup map
+    const existingTracks = db.getMusicTracks({ sourceId: this.sourceId }) as MusicTrack[]
+    const providerIdToDbId = new Map<string, number>()
+    for (const t of existingTracks) {
+      if (t.id && t.provider_id) providerIdToDbId.set(t.provider_id, t.id)
+    }
+
+    let moodCount = 0
+    for (const track of allTracks) {
+      if (track.Mood && track.Mood.length > 0) {
+        const moods = track.Mood.map(m => m.tag).filter(Boolean)
+        if (moods.length > 0) {
+          const dbId = providerIdToDbId.get(track.ratingKey)
+          if (dbId) {
+            db.updateMusicTrackMood(dbId, JSON.stringify(moods))
+            moodCount++
+          }
+        }
+      }
+    }
+
+    console.log(`[PlexProvider ${this.sourceId}] Updated mood tags for ${moodCount} tracks`)
+  }
+
+  /**
    * Scan a music library
    */
   async scanMusicLibrary(libraryId: string, onProgress?: ProgressCallback): Promise<ScanResult> {
@@ -1914,6 +1954,13 @@ export class PlexProvider implements MediaProvider {
       result.durationMs = Date.now() - startTime
 
       console.log(`[PlexProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks (including ${totalCompilations} compilation albums)`)
+
+      // Post-scan: fetch mood tags from Plex (the children endpoint doesn't include them)
+      try {
+        await this.fetchAndUpdateMoods(libraryId, db)
+      } catch (moodError) {
+        console.warn(`[PlexProvider ${this.sourceId}] Mood fetch failed:`, getErrorMessage(moodError))
+      }
 
       return result
     } catch (error: unknown) {
