@@ -169,10 +169,11 @@ export function registerMoodHandlers() {
           })
 
           try {
-            await plexProvider.setTrackMoods(
+            await plexProvider.setTrackTags(
               track.targetProviderId,
               track.moods,
-              track.libraryId || ''
+              track.libraryId || '',
+              field
             )
             updateLocalDbTags([track], field)
             result.synced++

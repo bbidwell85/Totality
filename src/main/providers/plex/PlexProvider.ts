@@ -1644,18 +1644,25 @@ export class PlexProvider implements MediaProvider {
 
   /**
    * Write mood tags to a Plex music track.
-   * Replaces all moods on the track with the given list.
-   * Sets mood.locked=1 to prevent metadata agents from overwriting.
    */
   async setTrackMoods(ratingKey: string, moods: string[], sectionId: string): Promise<boolean> {
+    return this.setTrackTags(ratingKey, moods, sectionId, 'mood')
+  }
+
+  /**
+   * Write tags (mood or genre) to a Plex music track.
+   * Replaces all tags of the given type with the provided list.
+   * Sets {tagType}.locked=1 to prevent metadata agents from overwriting.
+   */
+  async setTrackTags(ratingKey: string, tags: string[], sectionId: string, tagType: 'mood' | 'genre' = 'mood'): Promise<boolean> {
     if (!this.selectedServer) throw new Error('No Plex server selected')
 
     const params = new URLSearchParams()
-    params.set('type', '10') // Track type
+    params.set('type', '10')
     params.set('id', ratingKey)
-    params.set('mood.locked', '1')
-    moods.forEach((mood, i) => {
-      params.set(`mood[${i}].tag.tag`, mood)
+    params.set(`${tagType}.locked`, '1')
+    tags.forEach((tag, i) => {
+      params.set(`${tagType}[${i}].tag.tag`, tag)
     })
 
     await this.api.put(
@@ -1671,23 +1678,25 @@ export class PlexProvider implements MediaProvider {
   }
 
   /**
-   * Fetch mood tags for all tracks in a Plex music library.
-   * Uses /library/sections/{id}/all?type=10 which returns Mood tags
-   * (unlike the per-album children endpoint which strips them).
+   * Fetch tag data (mood or genre) for all tracks in a Plex music library.
+   * Uses per-tag-category approach since bulk endpoint strips tags from JSON.
+   * Endpoint: /library/sections/{id}/{tagType}?type=10 for tag list,
+   *           /library/sections/{id}/all?type=10&{tagType}={id} for tracks per tag
    */
-  private async fetchAndUpdateMoods(
+  private async fetchAndUpdateTags(
     libraryId: string,
-    db: ReturnType<typeof getDatabase>
+    db: ReturnType<typeof getDatabase>,
+    field: 'mood' | 'genre' = 'mood'
   ): Promise<void> {
     if (!this.selectedServer) return
 
-    console.log(`[PlexProvider ${this.sourceId}] Fetching mood tags for library ${libraryId}...`)
+    const tagEndpoint = field === 'genre' ? 'genre' : 'mood'
+    const dbField = field
 
-    // Strategy: Plex's bulk /all?type=10 endpoint doesn't include Mood in JSON responses.
-    // Instead, use /library/sections/{id}/mood to get all mood tags, then for each mood,
-    // query which tracks have it via /all?type=10&mood={moodId}
-    const moodTagsUrl = `${this.selectedServer.uri}/library/sections/${libraryId}/mood`
-    const moodTagsResponse = await this.api.get(moodTagsUrl, {
+    console.log(`[PlexProvider ${this.sourceId}] Fetching ${field} tags for library ${libraryId}...`)
+
+    const tagsUrl = `${this.selectedServer.uri}/library/sections/${libraryId}/${tagEndpoint}`
+    const tagsResponse = await this.api.get(tagsUrl, {
       headers: {
         'X-Plex-Token': this.selectedServer.accessToken,
         Accept: 'application/json',
@@ -1695,58 +1704,55 @@ export class PlexProvider implements MediaProvider {
       params: { type: 10 },
     })
 
-    const moodTags = (moodTagsResponse.data as {
+    const tags = (tagsResponse.data as {
       MediaContainer?: { Directory?: Array<{ key: string; title: string; tag?: string }> }
     })?.MediaContainer?.Directory || []
 
-    console.log(`[PlexProvider ${this.sourceId}] Found ${moodTags.length} mood tags in library`)
+    console.log(`[PlexProvider ${this.sourceId}] Found ${tags.length} ${field} tags in library`)
 
-    if (moodTags.length === 0) {
-      console.log(`[PlexProvider ${this.sourceId}] No mood tags found, skipping mood fetch`)
-      return
-    }
+    if (tags.length === 0) return
 
     // Build provider_id → db id lookup map
     const existingTracks = db.getMusicTracks({ sourceId: this.sourceId }) as MusicTrack[]
     const providerIdToDbId = new Map<string, number>()
-    const providerIdToMoods = new Map<string, string[]>()
+    const providerIdToTags = new Map<string, string[]>()
     for (const t of existingTracks) {
       if (t.id && t.provider_id) providerIdToDbId.set(t.provider_id, t.id)
     }
 
-    // For each mood tag, fetch tracks that have it
-    for (const moodTag of moodTags) {
-      const moodName = moodTag.title || moodTag.tag || ''
-      if (!moodName) continue
+    // For each tag, fetch tracks that have it
+    for (const tag of tags) {
+      const tagName = tag.title || tag.tag || ''
+      if (!tagName) continue
 
       try {
         const tracksUrl = `${this.selectedServer.uri}/library/sections/${libraryId}/all`
-        const tracksWithMood = await this.paginatedPlexFetch<PlexMusicTrack>(tracksUrl, {
+        const tracksWithTag = await this.paginatedPlexFetch<PlexMusicTrack>(tracksUrl, {
           type: 10,
-          mood: moodTag.key?.replace(/.*\//, '') || moodName,
+          [tagEndpoint]: tag.key?.replace(/.*\//, '') || tagName,
         })
 
-        for (const track of tracksWithMood) {
-          const existing = providerIdToMoods.get(track.ratingKey) || []
-          existing.push(moodName)
-          providerIdToMoods.set(track.ratingKey, existing)
+        for (const track of tracksWithTag) {
+          const existing = providerIdToTags.get(track.ratingKey) || []
+          existing.push(tagName)
+          providerIdToTags.set(track.ratingKey, existing)
         }
       } catch {
-        console.warn(`[PlexProvider] Failed to fetch tracks for mood "${moodName}"`)
+        console.warn(`[PlexProvider] Failed to fetch tracks for ${field} "${tagName}"`)
       }
     }
 
-    // Write moods to DB
-    let moodCount = 0
-    for (const [ratingKey, moods] of providerIdToMoods) {
+    // Write to DB
+    let count = 0
+    for (const [ratingKey, tagValues] of providerIdToTags) {
       const dbId = providerIdToDbId.get(ratingKey)
       if (dbId) {
-        db.updateMusicTrackMood(dbId, JSON.stringify(moods))
-        moodCount++
+        db.updateMusicTrackTag(dbId, dbField, JSON.stringify(tagValues))
+        count++
       }
     }
 
-    console.log(`[PlexProvider ${this.sourceId}] Updated mood tags for ${moodCount} tracks (from ${moodTags.length} mood categories)`)
+    console.log(`[PlexProvider ${this.sourceId}] Updated ${field} tags for ${count} tracks (from ${tags.length} categories)`)
   }
 
   /**
@@ -1996,9 +2002,10 @@ export class PlexProvider implements MediaProvider {
 
       // Post-scan: fetch mood tags from Plex (the children endpoint doesn't include them)
       try {
-        await this.fetchAndUpdateMoods(libraryId, db)
-      } catch (moodError) {
-        console.warn(`[PlexProvider ${this.sourceId}] Mood fetch failed:`, getErrorMessage(moodError))
+        await this.fetchAndUpdateTags(libraryId, db, 'mood')
+        await this.fetchAndUpdateTags(libraryId, db, 'genre')
+      } catch (tagError) {
+        console.warn(`[PlexProvider ${this.sourceId}] Tag fetch failed:`, getErrorMessage(tagError))
       }
 
       return result

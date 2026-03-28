@@ -2258,6 +2258,13 @@ export class KodiLocalProvider implements MediaProvider {
         }
       }
 
+      // Extract genre data from song_genre junction table (before closing music DB)
+      try {
+        this.fetchAndUpdateGenres(db)
+      } catch (genreError) {
+        console.warn(`[KodiLocalProvider ${this.sourceId}] Genre fetch failed:`, getErrorMessage(genreError))
+      }
+
       this.closeMusicDatabase()
 
       result.success = true
@@ -2291,6 +2298,43 @@ export class KodiLocalProvider implements MediaProvider {
 
   isScanCancelled(): boolean {
     return this.scanCancelled
+  }
+
+  /**
+   * Post-scan: extract genre data from Kodi's song_genre junction table
+   * and update Totality's music_tracks.genres field.
+   */
+  private fetchAndUpdateGenres(db: ReturnType<typeof getDatabase>): void {
+    if (!this.musicDb) return
+
+    const genreQuery = `
+      SELECT sg.idSong, GROUP_CONCAT(g.strGenre, '|||') as genres
+      FROM song_genre sg
+      JOIN genre g ON sg.idGenre = g.idGenre
+      GROUP BY sg.idSong
+    `
+    const results = this.queryMusicDb<{ idSong: number; genres: string }>(genreQuery)
+
+    // Build provider_id → db id lookup
+    const existingTracks = db.getMusicTracks({ sourceId: this.sourceId }) as MusicTrack[]
+    const providerIdToDbId = new Map<string, number>()
+    for (const t of existingTracks) {
+      if (t.id && t.provider_id) providerIdToDbId.set(t.provider_id, t.id)
+    }
+
+    let count = 0
+    for (const row of results) {
+      const dbId = providerIdToDbId.get(String(row.idSong))
+      if (dbId && row.genres) {
+        const genreArray = row.genres.split('|||').map(g => g.trim()).filter(Boolean)
+        if (genreArray.length > 0) {
+          db.updateMusicTrackTag(dbId, 'genre', JSON.stringify(genreArray))
+          count++
+        }
+      }
+    }
+
+    console.log(`[KodiLocalProvider ${this.sourceId}] Updated genre tags for ${count} tracks`)
   }
 
   // ============================================================================
