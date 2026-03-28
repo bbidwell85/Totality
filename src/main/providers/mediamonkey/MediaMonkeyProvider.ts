@@ -633,27 +633,49 @@ export class MediaMonkeyProvider implements MediaProvider {
     const backupPath = this.databasePath + '.backup'
     try {
       fs.copyFileSync(this.databasePath, backupPath)
-      console.log(`[MediaMonkeyProvider] Backup created: ${backupPath}`)
+      console.warn(`[MediaMonkeyProvider] Backup created: ${backupPath}`)
     } catch (backupError) {
       return { ...result, errors: [`Failed to create backup: ${getErrorMessage(backupError)}`] }
     }
 
     try {
       // Open database for writing via sql.js
+      console.warn('[MediaMonkeyProvider] Opening database for write...')
       const initSqlJs = (await import('sql.js')).default
       const SQL = await initSqlJs()
       const buffer = fs.readFileSync(this.databasePath)
       const writeDb = new SQL.Database(buffer)
+      console.warn('[MediaMonkeyProvider] Applying IUNICODE fix...')
 
-      // Apply IUNICODE collation fix
+      // Fix schema so sql.js can open: replace IUNICODE collation, disable FTS 'mm' tokenizer
       writeDb.run('PRAGMA writable_schema = ON')
+      // Save original schema SQL for all tables we'll modify
+      const originalSchemas = writeDb.exec(
+        "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL"
+      )
+      // Replace IUNICODE with NOCASE (built-in)
       writeDb.run("UPDATE sqlite_master SET sql = replace(sql, 'IUNICODE', 'NOCASE') WHERE sql LIKE '%IUNICODE%'")
+      // Neutralize FTS tables with custom tokenizers AND ALL related objects
+      // (tables, indexes, triggers — anything referencing SongsText or custom tokenizers)
+      writeDb.run("DELETE FROM sqlite_master WHERE name LIKE '%SongsText%'")
+      writeDb.run("DELETE FROM sqlite_master WHERE sql LIKE '%SongsText%'")
+      writeDb.run("DELETE FROM sqlite_master WHERE sql LIKE '%tokenize%mm%'")
       writeDb.run('PRAGMA writable_schema = OFF')
       const fixedBuffer = writeDb.export()
       writeDb.close()
       const db = new SQL.Database(fixedBuffer)
+      console.warn('[MediaMonkeyProvider] Database ready for writing')
 
-      // Write in a transaction for atomicity
+      // Prepare statements for performance (reuse across all tracks)
+      const stmtUpdateMood = db.prepare(QUERY_MM_UPDATE_SONG_MOOD)
+      const stmtDeleteLinks = db.prepare(QUERY_MM_DELETE_SONG_MOODS)
+      const stmtFindMood = db.prepare(QUERY_MM_FIND_MOOD)
+      const stmtInsertMood = db.prepare(QUERY_MM_INSERT_MOOD)
+      const stmtInsertLink = db.prepare(QUERY_MM_INSERT_SONG_MOOD)
+
+      // Cache mood name → Lists.ID to avoid repeated lookups
+      const moodIdCache = new Map<string, number>()
+
       db.run('BEGIN TRANSACTION')
 
       try {
@@ -664,56 +686,85 @@ export class MediaMonkeyProvider implements MediaProvider {
 
           // 1. Update Songs.Mood column (semicolon-separated, matching MM format)
           const moodStr = moods.join('; ')
-          db.run(QUERY_MM_UPDATE_SONG_MOOD, [moodStr, songId])
+          stmtUpdateMood.bind([moodStr, songId])
+          stmtUpdateMood.step()
+          stmtUpdateMood.reset()
 
           // 2. Clear existing mood links for this song
-          db.run(QUERY_MM_DELETE_SONG_MOODS, [songId])
+          stmtDeleteLinks.bind([songId])
+          stmtDeleteLinks.step()
+          stmtDeleteLinks.reset()
 
           // 3. For each mood, find or create the Lists entry and link it
           for (const mood of moods) {
             const trimmed = mood.trim()
             if (!trimmed) continue
 
-            // Find existing mood in Lists table
-            const existing = db.exec(QUERY_MM_FIND_MOOD, [trimmed])
-            let moodListId: number
+            let moodListId = moodIdCache.get(trimmed.toLowerCase())
 
-            if (existing.length > 0 && existing[0].values.length > 0) {
-              moodListId = existing[0].values[0][0] as number
-            } else {
-              // Create new mood entry
-              db.run(QUERY_MM_INSERT_MOOD, [trimmed])
-              const newId = db.exec('SELECT last_insert_rowid()')
-              moodListId = newId[0].values[0][0] as number
+            if (moodListId === undefined) {
+              // Find existing mood in Lists table
+              stmtFindMood.bind([trimmed])
+              if (stmtFindMood.step()) {
+                moodListId = stmtFindMood.get()[0] as number
+              }
+              stmtFindMood.reset()
+
+              if (moodListId === undefined) {
+                // Create new mood entry
+                stmtInsertMood.bind([trimmed])
+                stmtInsertMood.step()
+                stmtInsertMood.reset()
+                const newId = db.exec('SELECT last_insert_rowid()')
+                moodListId = newId[0].values[0][0] as number
+              }
+
+              moodIdCache.set(trimmed.toLowerCase(), moodListId)
             }
 
             // Link song to mood
-            db.run(QUERY_MM_INSERT_SONG_MOOD, [songId, moodListId])
+            stmtInsertLink.bind([songId, moodListId])
+            stmtInsertLink.step()
+            stmtInsertLink.reset()
           }
 
           result.written++
         }
 
+        // Free prepared statements before commit
+        stmtUpdateMood.free()
+        stmtDeleteLinks.free()
+        stmtFindMood.free()
+        stmtInsertMood.free()
+        stmtInsertLink.free()
+
         db.run('COMMIT')
+        console.warn(`[MediaMonkeyProvider] Transaction committed: ${result.written} tracks`)
 
-        // Write the modified database back to disk
-        const outputBuffer = db.export()
-        const uint8 = new Uint8Array(outputBuffer)
+        // Restore ALL original schema SQL (FTS tables, IUNICODE collation, everything)
+        db.run('PRAGMA writable_schema = ON')
+        if (originalSchemas.length > 0) {
+          const restoreStmt = db.prepare("UPDATE sqlite_master SET sql = ? WHERE name = ?")
+          for (const row of originalSchemas[0].values) {
+            const [name, sql] = row as [string, string]
+            if (sql) {
+              restoreStmt.bind([sql, name])
+              restoreStmt.step()
+              restoreStmt.reset()
+            }
+          }
+          restoreStmt.free()
+        }
+        db.run('PRAGMA writable_schema = OFF')
 
-        // Restore IUNICODE collation in the schema before saving
-        // (we replaced it with NOCASE for our queries, but MM expects IUNICODE)
-        const restoreDb = new SQL.Database(uint8)
-        restoreDb.run('PRAGMA writable_schema = ON')
-        restoreDb.run("UPDATE sqlite_master SET sql = replace(sql, 'NOCASE', 'IUNICODE') WHERE sql LIKE '%NOCASE%' AND name NOT LIKE 'sqlite_%'")
-        restoreDb.run('PRAGMA writable_schema = OFF')
-        const finalBuffer = restoreDb.export()
-        restoreDb.close()
-
+        const finalBuffer = db.export()
+        console.warn('[MediaMonkeyProvider] Writing database to disk...')
         fs.writeFileSync(this.databasePath, Buffer.from(finalBuffer))
-        console.log(`[MediaMonkeyProvider] Wrote ${result.written} mood updates to ${path.basename(this.databasePath)}`)
+        console.warn(`[MediaMonkeyProvider] Wrote ${result.written} mood updates to ${path.basename(this.databasePath)}`)
 
       } catch (txError) {
-        db.run('ROLLBACK')
+        console.warn(`[MediaMonkeyProvider] Transaction error: ${getErrorMessage(txError)}`)
+        try { db.run('ROLLBACK') } catch { /* ignore rollback error */ }
         throw txError
       } finally {
         db.close()
@@ -723,12 +774,13 @@ export class MediaMonkeyProvider implements MediaProvider {
       try { fs.unlinkSync(backupPath) } catch { /* keep backup if delete fails */ }
 
     } catch (error) {
+      console.warn(`[MediaMonkeyProvider] Write failed: ${getErrorMessage(error)}`)
       result.errors.push(`Database write failed: ${getErrorMessage(error)}. Backup available at ${backupPath}`)
       // Restore from backup on failure
       try {
         if (fs.existsSync(backupPath)) {
           fs.copyFileSync(backupPath, this.databasePath)
-          console.log('[MediaMonkeyProvider] Restored database from backup after write failure')
+          console.warn('[MediaMonkeyProvider] Restored database from backup after write failure')
         }
       } catch { /* backup restore failed */ }
     }
