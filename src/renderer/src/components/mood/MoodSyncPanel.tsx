@@ -52,6 +52,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const [syncedTrackIds, setSyncedTrackIds] = useState<Set<number>>(new Set())
   const [syncingTrackId, setSyncingTrackId] = useState<number | null>(null)
   const [failedTrackIds, setFailedTrackIds] = useState<Set<number>>(new Set())
+  const [syncField, setSyncField] = useState<'mood' | 'genre'>('mood')
   const [syncMode, setSyncMode] = useState<'overwrite' | 'append'>('overwrite')
   const [showMismatchOnly, setShowMismatchOnly] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -72,7 +73,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       setTimeout(() => closeButtonRef.current?.focus(), 100)
       loadSources()
     }
-  }, [isOpen])
+  }, [isOpen, syncField])
 
   useEffect(() => {
     const cleanup = window.electronAPI.onMoodSyncProgress((progress) => {
@@ -101,7 +102,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
 
   const loadSources = async () => {
     try {
-      const result = await window.electronAPI.moodGetSources()
+      const result = await window.electronAPI.moodGetSources(syncField)
       setSources(result)
       if (!sourceOfTruthId) {
         const withMoods = result.find(s => s.tracksWithMoods > 0)
@@ -119,14 +120,14 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     setSyncedTrackIds(new Set())
     setSelectedTrackIds(new Set())
     try {
-      const result = await window.electronAPI.moodGetComparison(sourceOfTruthId)
+      const result = await window.electronAPI.moodGetComparison({ sourceOfTruthId, field: syncField })
       setComparisons(result)
     } catch (err) {
       console.error('Failed to load comparison:', err)
     } finally {
       setLoading(false)
     }
-  }, [sourceOfTruthId])
+  }, [sourceOfTruthId, syncField])
 
   useEffect(() => {
     if (sourceOfTruthId && isOpen) {
@@ -170,6 +171,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
         targetSourceId,
         trackIds,
         mode: syncMode,
+        field: syncField,
       })
       setSyncResult(result)
       await loadComparison(true)
@@ -274,6 +276,25 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+      </div>
+
+      {/* Field selector */}
+      <div className="px-3 pt-2 pb-2 border-b border-border/30">
+        <div className="flex gap-1">
+          {(['mood', 'genre'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => { setSyncField(f); setComparisons([]); setSourceOfTruthId(''); loadSources() }}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs rounded-lg transition-colors ${
+                syncField === f
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              {f === 'mood' ? 'Mood' : 'Genre'}
+            </button>
+          ))}
         </div>
       </div>
 

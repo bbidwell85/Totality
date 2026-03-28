@@ -26,11 +26,11 @@ export function setMoodMainWindow(win: BrowserWindow) {
 /**
  * Helper: update local DB moods for a batch of tracks
  */
-function updateLocalDbMoods(tracks: Array<{ targetTrackId: number; moods: string[] }>) {
+function updateLocalDbTags(tracks: Array<{ targetTrackId: number; moods: string[] }>, field: 'mood' | 'genre' = 'mood') {
   const db = getDatabase()
   for (const track of tracks) {
     try {
-      db.updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
+      db.updateMusicTrackTag(track.targetTrackId, field, JSON.stringify(track.moods))
     } catch { /* best effort */ }
   }
 }
@@ -81,11 +81,11 @@ export function registerMoodHandlers() {
   })
 
   /**
-   * Get sources that have music tracks (with mood counts)
+   * Get sources that have music tracks (with tag counts for a specific field)
    */
-  ipcMain.handle('mood:getSources', async () => {
+  ipcMain.handle('mood:getSources', async (_event, field?: 'mood' | 'genre') => {
     try {
-      return getMoodSyncService().getSources()
+      return getMoodSyncService().getSources(field || 'mood')
     } catch (error) {
       console.error('[mood:getSources] Error:', getErrorMessage(error))
       return []
@@ -93,11 +93,14 @@ export function registerMoodHandlers() {
   })
 
   /**
-   * Get mood comparison between source of truth and all other sources
+   * Get tag comparison between source of truth and all other sources
    */
-  ipcMain.handle('mood:getComparison', async (_event, sourceOfTruthId: string) => {
+  ipcMain.handle('mood:getComparison', async (_event, args: string | { sourceOfTruthId: string; field?: 'mood' | 'genre' }) => {
     try {
-      return getMoodSyncService().getComparison(sourceOfTruthId)
+      // Support both old (string) and new (object) call signatures
+      const sourceOfTruthId = typeof args === 'string' ? args : args.sourceOfTruthId
+      const field = typeof args === 'string' ? 'mood' : (args.field || 'mood')
+      return getMoodSyncService().getComparison(sourceOfTruthId, field)
     } catch (error) {
       console.error('[mood:getComparison] Error:', getErrorMessage(error))
       return []
@@ -112,12 +115,13 @@ export function registerMoodHandlers() {
     targetSourceId: string
     trackIds?: number[]
     mode?: 'overwrite' | 'append'
+    field?: 'mood' | 'genre'
   }) => {
-    const { sourceOfTruthId, targetSourceId, trackIds, mode = 'overwrite' } = args
+    const { sourceOfTruthId, targetSourceId, trackIds, mode = 'overwrite', field = 'mood' } = args
     const result = { synced: 0, failed: 0, skipped: 0, errors: [] as string[] }
 
     try {
-      const comparison = getMoodSyncService().getComparison(sourceOfTruthId)
+      const comparison = getMoodSyncService().getComparison(sourceOfTruthId, field)
       const manager = getSourceManager()
       const provider = manager.getProvider(targetSourceId)
 
@@ -170,7 +174,7 @@ export function registerMoodHandlers() {
               track.moods,
               track.libraryId || ''
             )
-            updateLocalDbMoods([track])
+            updateLocalDbTags([track], field)
             result.synced++
 
             safeSend(mainWindow, 'mood:syncProgress', {
@@ -217,7 +221,7 @@ export function registerMoodHandlers() {
         result.errors = writeResult.errors
 
         if (writeResult.written > 0) {
-          updateLocalDbMoods(trackUpdates)
+          updateLocalDbTags(trackUpdates, field)
           for (let i = 0; i < trackUpdates.length; i++) {
             safeSend(mainWindow, 'mood:syncProgress', {
               current: i + 1,
@@ -247,7 +251,7 @@ export function registerMoodHandlers() {
         result.errors = writeResult.errors
 
         if (writeResult.written > 0) {
-          updateLocalDbMoods(trackUpdates)
+          updateLocalDbTags(trackUpdates, field)
           for (let i = 0; i < trackUpdates.length; i++) {
             safeSend(mainWindow, 'mood:syncProgress', {
               current: i + 1,

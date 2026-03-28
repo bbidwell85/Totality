@@ -2088,8 +2088,13 @@ export class BetterSQLiteService {
    * Update music album artwork
    */
   updateMusicTrackMood(trackId: number, mood: string): void {
+    this.updateMusicTrackTag(trackId, 'mood', mood)
+  }
+
+  updateMusicTrackTag(trackId: number, field: 'mood' | 'genre', value: string): void {
     if (!this.db) throw new Error('Database not initialized')
-    this.db.prepare('UPDATE music_tracks SET mood = ?, updated_at = datetime(\'now\') WHERE id = ?').run(mood, trackId)
+    const col = field === 'genre' ? 'genres' : 'mood'
+    this.db.prepare(`UPDATE music_tracks SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`).run(value, trackId)
   }
 
   updateMusicAlbumArtwork(albumId: number, artworkUrl: string): void {
@@ -2328,8 +2333,10 @@ export class BetterSQLiteService {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
       else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
     }
-    if (filters?.hasMood === true) { sql += " AND mood IS NOT NULL AND mood != '' AND mood != '[]'" }
-    if (filters?.hasMood === false) { sql += " AND (mood IS NULL OR mood = '' OR mood = '[]')" }
+        if (filters?.hasTagField) {
+      const col = filters.hasTagField === 'genre' ? 'genres' : 'mood'
+      sql += ` AND ${col} IS NOT NULL AND ${col} != '' AND ${col} != '[]'`
+    }
 
     const trackSortMap: Record<string, string> = { 'title': 'title', 'artist': 'artist_name', 'album': 'album_name', 'codec': 'audio_codec', 'duration': 'duration', 'added_at': 'created_at' }
     if (filters?.sortBy && trackSortMap[filters.sortBy]) {
@@ -2392,8 +2399,10 @@ export class BetterSQLiteService {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
       else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
     }
-    if (filters?.hasMood === true) { sql += " AND mood IS NOT NULL AND mood != '' AND mood != '[]'" }
-    if (filters?.hasMood === false) { sql += " AND (mood IS NULL OR mood = '' OR mood = '[]')" }
+        if (filters?.hasTagField) {
+      const col = filters.hasTagField === 'genre' ? 'genres' : 'mood'
+      sql += ` AND ${col} IS NOT NULL AND ${col} != '' AND ${col} != '[]'`
+    }
     const stmt = this.db.prepare(sql)
     const row = stmt.get(...params) as { count: number } | undefined
     return row?.count || 0

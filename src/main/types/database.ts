@@ -3,6 +3,9 @@
 // Provider types supported by the application
 export type ProviderType = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'kodi-local' | 'kodi-mysql' | 'local' | 'mediamonkey'
 
+// Syncable tag fields on music tracks
+export type SyncField = 'mood' | 'genre'
+
 // Media source configuration (Plex, Jellyfin, Emby, Kodi servers)
 export interface MediaSource {
   id?: number
@@ -649,8 +652,8 @@ export interface MusicFilters {
   alphabetFilter?: string
   // Album type exclusion filter
   excludeAlbumTypes?: string[]
-  // Mood filter
-  hasMood?: boolean
+  // Tag field filter (mood, genre)
+  hasTagField?: 'mood' | 'genre'
 }
 
 // ============================================================================

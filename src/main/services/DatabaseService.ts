@@ -4034,8 +4034,13 @@ export class DatabaseService {
 
   /** Update artwork URLs for a music album */
   async updateMusicTrackMood(trackId: number, mood: string): Promise<void> {
+    return this.updateMusicTrackTag(trackId, 'mood', mood)
+  }
+
+  async updateMusicTrackTag(trackId: number, field: 'mood' | 'genre', value: string): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
-    this.db.run("UPDATE music_tracks SET mood = ?, updated_at = datetime('now') WHERE id = ?", [mood, trackId])
+    const col = field === 'genre' ? 'genres' : 'mood'
+    this.db.run(`UPDATE music_tracks SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`, [value, trackId])
     await this.save()
   }
 
