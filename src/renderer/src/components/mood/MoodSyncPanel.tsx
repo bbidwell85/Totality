@@ -54,6 +54,13 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const [failedTrackIds, setFailedTrackIds] = useState<Set<number>>(new Set())
   const [syncMode, setSyncMode] = useState<'overwrite' | 'append'>('overwrite')
   const [showMismatchOnly, setShowMismatchOnly] = useState(true)
+  const [confirmDialog, setConfirmDialog] = useState<{
+    targetSourceId: string
+    targetName: string
+    trackCount: number
+    databasePath?: string
+    isRunning?: boolean
+  } | null>(null)
 
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -124,8 +131,29 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     }
   }, [sourceOfTruthId, loadComparison, isOpen])
 
-  const handleSync = async (targetSourceId: string) => {
+  const handleSyncClick = async (targetSourceId: string) => {
     if (!sourceOfTruthId) return
+
+    // Check if target is MediaMonkey — needs confirmation
+    const target = targetSources.get(targetSourceId)
+    if (target?.sourceType === 'mediamonkey') {
+      const check = await window.electronAPI.moodCheckMediaMonkeyWrite(targetSourceId)
+      setConfirmDialog({
+        targetSourceId,
+        targetName: target.sourceName,
+        trackCount: target.mismatchCount,
+        databasePath: check.databasePath,
+        isRunning: check.isRunning,
+      })
+      return
+    }
+
+    executeSync(targetSourceId)
+  }
+
+  const executeSync = async (targetSourceId: string) => {
+    if (!sourceOfTruthId) return
+    setConfirmDialog(null)
     setSyncing(true)
     setSyncingTarget(targetSourceId)
     setSyncProgress(null)
@@ -153,11 +181,11 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     : comparisons
 
   // Build target source summary
-  const targetSources = new Map<string, { sourceId: string; sourceName: string; mismatchCount: number; matchedCount: number }>()
+  const targetSources = new Map<string, { sourceId: string; sourceName: string; sourceType: string; mismatchCount: number; matchedCount: number }>()
   for (const comp of comparisons) {
     for (const target of comp.targets) {
       if (!targetSources.has(target.sourceId)) {
-        targetSources.set(target.sourceId, { sourceId: target.sourceId, sourceName: target.sourceName, mismatchCount: 0, matchedCount: 0 })
+        targetSources.set(target.sourceId, { sourceId: target.sourceId, sourceName: target.sourceName, sourceType: target.sourceType, mismatchCount: 0, matchedCount: 0 })
       }
       const ts = targetSources.get(target.sourceId)!
       ts.matchedCount++
@@ -274,7 +302,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                 </span>
               </div>
               <button
-                onClick={() => handleSync(target.sourceId)}
+                onClick={() => handleSyncClick(target.sourceId)}
                 disabled={syncing || target.mismatchCount === 0}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ml-2 focus:outline-hidden focus:ring-2 focus:ring-primary"
               >
@@ -446,6 +474,63 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           </div>
         )}
       </div>
+
+      {/* MediaMonkey write confirmation dialog */}
+      {confirmDialog && (
+        <div className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center p-4 z-10">
+          <div className="bg-card rounded-xl p-4 w-full max-w-[300px] space-y-3 shadow-lg border border-border/30">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+              <h3 className="text-sm font-semibold">Write to MediaMonkey</h3>
+            </div>
+
+            {confirmDialog.isRunning ? (
+              <div className="space-y-2">
+                <p className="text-xs text-destructive">
+                  MediaMonkey is currently running. Close it before syncing to prevent database corruption.
+                </p>
+                <button
+                  onClick={() => setConfirmDialog(null)}
+                  className="w-full px-3 py-1.5 text-xs font-medium rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="text-xs text-muted-foreground space-y-1.5">
+                  <p>This will modify the MediaMonkey database directly:</p>
+                  <ul className="space-y-1 ml-3">
+                    <li>Update mood tags on {confirmDialog.trackCount} tracks</li>
+                    <li>A backup will be created before writing</li>
+                    <li>{syncMode === 'overwrite' ? 'Existing moods will be replaced' : 'New moods will be added to existing'}</li>
+                  </ul>
+                  {confirmDialog.databasePath && (
+                    <p className="text-[10px] text-muted-foreground/70 truncate mt-2">
+                      {confirmDialog.databasePath}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirmDialog(null)}
+                    className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md bg-muted text-foreground hover:bg-muted/80 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => executeSync(confirmDialog.targetSourceId)}
+                    className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    Write {confirmDialog.trackCount} tracks
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

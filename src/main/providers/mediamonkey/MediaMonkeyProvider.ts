@@ -39,6 +39,11 @@ import {
   QUERY_MM_SONG_COUNT,
   QUERY_MM_ALL_MOODS,
   QUERY_MM_ALBUM_COVERS,
+  QUERY_MM_UPDATE_SONG_MOOD,
+  QUERY_MM_DELETE_SONG_MOODS,
+  QUERY_MM_FIND_MOOD,
+  QUERY_MM_INSERT_MOOD,
+  QUERY_MM_INSERT_SONG_MOOD,
   type MMDbSong,
   type MMDbAlbum,
   type MMDbMoodEntry,
@@ -586,5 +591,148 @@ export class MediaMonkeyProvider implements MediaProvider {
     } catch {
       return null
     }
+  }
+
+  // ============================================================================
+  // WRITE: Mood Sync to MediaMonkey Database
+  // ============================================================================
+
+  /**
+   * Write moods to the MediaMonkey database for a batch of tracks.
+   * Safety requirements:
+   * - MediaMonkey must NOT be running (concurrent writes corrupt the DB)
+   * - A backup of the database is created before writing
+   *
+   * Updates three locations:
+   * 1. Songs.Mood column (semicolon-separated text)
+   * 2. ListsSongs junction table (links songs to mood entries)
+   * 3. Lists table (creates new mood entries if needed)
+   */
+  async writeMoods(
+    trackUpdates: Array<{ songId: number; moods: string[] }>,
+    onProgress?: (current: number, total: number, trackName: string) => void
+  ): Promise<{ written: number; failed: number; errors: string[] }> {
+    const result = { written: 0, failed: 0, errors: [] as string[] }
+
+    // Safety check: MediaMonkey must not be running
+    const discovery = getMediaMonkeyDiscoveryService()
+    const isRunning = await discovery.isMediaMonkeyRunning()
+    if (isRunning) {
+      return {
+        ...result,
+        errors: ['MediaMonkey is currently running. Close MediaMonkey before syncing moods to its database.'],
+      }
+    }
+
+    // Validate database path
+    if (!this.databasePath || !fs.existsSync(this.databasePath)) {
+      return { ...result, errors: ['MediaMonkey database file not found'] }
+    }
+
+    // Create backup before writing
+    const backupPath = this.databasePath + '.backup'
+    try {
+      fs.copyFileSync(this.databasePath, backupPath)
+      console.log(`[MediaMonkeyProvider] Backup created: ${backupPath}`)
+    } catch (backupError) {
+      return { ...result, errors: [`Failed to create backup: ${getErrorMessage(backupError)}`] }
+    }
+
+    try {
+      // Open database for writing via sql.js
+      const initSqlJs = (await import('sql.js')).default
+      const SQL = await initSqlJs()
+      const buffer = fs.readFileSync(this.databasePath)
+      const writeDb = new SQL.Database(buffer)
+
+      // Apply IUNICODE collation fix
+      writeDb.run('PRAGMA writable_schema = ON')
+      writeDb.run("UPDATE sqlite_master SET sql = replace(sql, 'IUNICODE', 'NOCASE') WHERE sql LIKE '%IUNICODE%'")
+      writeDb.run('PRAGMA writable_schema = OFF')
+      const fixedBuffer = writeDb.export()
+      writeDb.close()
+      const db = new SQL.Database(fixedBuffer)
+
+      // Write in a transaction for atomicity
+      db.run('BEGIN TRANSACTION')
+
+      try {
+        for (let i = 0; i < trackUpdates.length; i++) {
+          const { songId, moods } = trackUpdates[i]
+
+          onProgress?.(i, trackUpdates.length, `Song ID ${songId}`)
+
+          // 1. Update Songs.Mood column (semicolon-separated, matching MM format)
+          const moodStr = moods.join('; ')
+          db.run(QUERY_MM_UPDATE_SONG_MOOD, [moodStr, songId])
+
+          // 2. Clear existing mood links for this song
+          db.run(QUERY_MM_DELETE_SONG_MOODS, [songId])
+
+          // 3. For each mood, find or create the Lists entry and link it
+          for (const mood of moods) {
+            const trimmed = mood.trim()
+            if (!trimmed) continue
+
+            // Find existing mood in Lists table
+            const existing = db.exec(QUERY_MM_FIND_MOOD, [trimmed])
+            let moodListId: number
+
+            if (existing.length > 0 && existing[0].values.length > 0) {
+              moodListId = existing[0].values[0][0] as number
+            } else {
+              // Create new mood entry
+              db.run(QUERY_MM_INSERT_MOOD, [trimmed])
+              const newId = db.exec('SELECT last_insert_rowid()')
+              moodListId = newId[0].values[0][0] as number
+            }
+
+            // Link song to mood
+            db.run(QUERY_MM_INSERT_SONG_MOOD, [songId, moodListId])
+          }
+
+          result.written++
+        }
+
+        db.run('COMMIT')
+
+        // Write the modified database back to disk
+        const outputBuffer = db.export()
+        const uint8 = new Uint8Array(outputBuffer)
+
+        // Restore IUNICODE collation in the schema before saving
+        // (we replaced it with NOCASE for our queries, but MM expects IUNICODE)
+        const restoreDb = new SQL.Database(uint8)
+        restoreDb.run('PRAGMA writable_schema = ON')
+        restoreDb.run("UPDATE sqlite_master SET sql = replace(sql, 'NOCASE', 'IUNICODE') WHERE sql LIKE '%NOCASE%' AND name NOT LIKE 'sqlite_%'")
+        restoreDb.run('PRAGMA writable_schema = OFF')
+        const finalBuffer = restoreDb.export()
+        restoreDb.close()
+
+        fs.writeFileSync(this.databasePath, Buffer.from(finalBuffer))
+        console.log(`[MediaMonkeyProvider] Wrote ${result.written} mood updates to ${path.basename(this.databasePath)}`)
+
+      } catch (txError) {
+        db.run('ROLLBACK')
+        throw txError
+      } finally {
+        db.close()
+      }
+
+      // Clean up backup on success
+      try { fs.unlinkSync(backupPath) } catch { /* keep backup if delete fails */ }
+
+    } catch (error) {
+      result.errors.push(`Database write failed: ${getErrorMessage(error)}. Backup available at ${backupPath}`)
+      // Restore from backup on failure
+      try {
+        if (fs.existsSync(backupPath)) {
+          fs.copyFileSync(backupPath, this.databasePath)
+          console.log('[MediaMonkeyProvider] Restored database from backup after write failure')
+        }
+      } catch { /* backup restore failed */ }
+    }
+
+    return result
   }
 }

@@ -123,6 +123,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mediamonkeyIsRunning: () => ipcRenderer.invoke('mediamonkey:isRunning'),
 
   // Mood sync
+  moodCheckMediaMonkeyWrite: (sourceId: string) => ipcRenderer.invoke('mood:checkMediaMonkeyWrite', sourceId),
   moodGetSources: () => ipcRenderer.invoke('mood:getSources'),
   moodGetComparison: (sourceOfTruthId: string) => ipcRenderer.invoke('mood:getComparison', sourceOfTruthId),
   moodSyncToTarget: (args: { sourceOfTruthId: string; targetSourceId: string; trackIds?: number[]; mode?: 'overwrite' | 'append' }) =>
@@ -952,6 +953,12 @@ export interface ElectronAPI {
   mediamonkeyIsRunning: () => Promise<boolean>
 
   // Mood sync
+  moodCheckMediaMonkeyWrite: (sourceId: string) => Promise<{
+    canWrite: boolean
+    isRunning?: boolean
+    databasePath?: string
+    reason?: string
+  }>
   moodGetSources: () => Promise<Array<{
     sourceId: string
     sourceName: string

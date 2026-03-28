@@ -213,6 +213,46 @@ export interface MMDbCover {
 }
 
 // ============================================================================
+// WRITE QUERIES (for mood sync to MediaMonkey)
+// ============================================================================
+
+/**
+ * Update the Songs.Mood column for a track.
+ * MediaMonkey stores moods as semicolon-separated text.
+ */
+export const QUERY_MM_UPDATE_SONG_MOOD = `
+  UPDATE Songs SET Mood = ? WHERE ID = ?
+`
+
+/**
+ * Delete all mood associations for a song from the junction table.
+ */
+export const QUERY_MM_DELETE_SONG_MOODS = `
+  DELETE FROM ListsSongs WHERE IDSong = ? AND IDListType = 2
+`
+
+/**
+ * Get or find an existing mood entry in the Lists table.
+ */
+export const QUERY_MM_FIND_MOOD = `
+  SELECT ID FROM Lists WHERE IDListType = 2 AND TextData COLLATE NOCASE = ?
+`
+
+/**
+ * Insert a new mood entry into the Lists table.
+ */
+export const QUERY_MM_INSERT_MOOD = `
+  INSERT INTO Lists (IDListType, TextData, SortOrder) VALUES (2, ?, 0)
+`
+
+/**
+ * Link a song to a mood in the junction table.
+ */
+export const QUERY_MM_INSERT_SONG_MOOD = `
+  INSERT INTO ListsSongs (IDSong, IDListType, IDList) VALUES (?, 2, ?)
+`
+
+// ============================================================================
 // HELPERS
 // ============================================================================
 

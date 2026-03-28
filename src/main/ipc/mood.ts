@@ -9,6 +9,8 @@ import { getMoodSyncService } from '../services/MoodSyncService'
 import { getSourceManager } from '../services/SourceManager'
 import { getDatabase } from '../database/getDatabase'
 import { PlexProvider } from '../providers/plex/PlexProvider'
+import { MediaMonkeyProvider } from '../providers/mediamonkey/MediaMonkeyProvider'
+import { getMediaMonkeyDiscoveryService } from '../services/MediaMonkeyDiscoveryService'
 import { getErrorMessage } from '../services/utils/errorUtils'
 
 function safeSend(win: BrowserWindow | null, channel: string, ...args: unknown[]) {
@@ -24,6 +26,35 @@ export function setMoodMainWindow(win: BrowserWindow) {
 }
 
 export function registerMoodHandlers() {
+  /**
+   * Pre-sync safety check for MediaMonkey target.
+   * Returns status info for the confirmation dialog.
+   */
+  ipcMain.handle('mood:checkMediaMonkeyWrite', async (_event, sourceId: string) => {
+    try {
+      const manager = getSourceManager()
+      const provider = manager.getProvider(sourceId)
+      if (!provider || provider.providerType !== 'mediamonkey') {
+        return { canWrite: false, reason: 'Not a MediaMonkey source' }
+      }
+
+      const discovery = getMediaMonkeyDiscoveryService()
+      const isRunning = await discovery.isMediaMonkeyRunning()
+
+      const mmProvider = provider as MediaMonkeyProvider
+      const dbPath = (mmProvider as unknown as { databasePath: string }).databasePath
+
+      return {
+        canWrite: !isRunning,
+        isRunning,
+        databasePath: dbPath,
+        reason: isRunning ? 'MediaMonkey is currently running. Close it before syncing.' : undefined,
+      }
+    } catch (error) {
+      return { canWrite: false, reason: getErrorMessage(error) }
+    }
+  })
+
   // Debug: fetch moods for a specific Plex track by ratingKey
   ipcMain.handle('mood:debugFetchTrack', async (_event, args: { sourceId: string; ratingKey: string }) => {
     try {
@@ -173,45 +204,68 @@ export function registerMoodHandlers() {
             await new Promise(r => setTimeout(r, 200))
           }
         }
-      } else if (provider.providerType === 'mediamonkey' || provider.providerType === 'kodi-local') {
-        // Read-only sources: update local DB only (can't write to external database)
+      } else if (provider.providerType === 'mediamonkey') {
+        // Write moods to MediaMonkey's SQLite database
+        const mmProvider = provider as MediaMonkeyProvider
+        const trackUpdates = tracksToSync.map(t => ({
+          songId: parseInt(t.targetProviderId),
+          moods: t.moods,
+          title: t.title,
+          artist: t.artist,
+          targetTrackId: t.targetTrackId,
+        }))
+
+        const writeResult = await mmProvider.writeMoods(
+          trackUpdates.map(t => ({ songId: t.songId, moods: t.moods })),
+          (current, total, trackName) => {
+            const track = trackUpdates[current]
+            safeSend(mainWindow, 'mood:syncProgress', {
+              current,
+              total,
+              currentTrack: track ? `${track.artist} - ${track.title}` : trackName,
+              trackId: track?.targetTrackId,
+              status: 'syncing',
+            })
+          }
+        )
+
+        result.synced = writeResult.written
+        result.failed = writeResult.failed
+        result.errors = writeResult.errors
+
+        // Update local DB to match what we wrote
+        if (writeResult.written > 0) {
+          for (const track of trackUpdates) {
+            try {
+              getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
+            } catch { /* best effort */ }
+          }
+          // Send final done status for all tracks
+          for (let i = 0; i < trackUpdates.length; i++) {
+            safeSend(mainWindow, 'mood:syncProgress', {
+              current: i + 1,
+              total: trackUpdates.length,
+              currentTrack: `${trackUpdates[i].artist} - ${trackUpdates[i].title}`,
+              trackId: trackUpdates[i].targetTrackId,
+              status: writeResult.errors.length === 0 ? 'done' : 'failed',
+            })
+          }
+        }
+      } else if (provider.providerType === 'kodi-local') {
+        // Kodi-Local: update local DB only for now
         for (let i = 0; i < tracksToSync.length; i++) {
           const track = tracksToSync[i]
-          safeSend(mainWindow, 'mood:syncProgress', {
-            current: i,
-            total: tracksToSync.length,
-            currentTrack: `${track.artist} - ${track.title}`,
-            trackId: track.targetTrackId,
-            status: 'syncing',
-          })
-
           try {
             getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
             result.synced++
-
             safeSend(mainWindow, 'mood:syncProgress', {
-              current: i + 1,
-              total: tracksToSync.length,
+              current: i + 1, total: tracksToSync.length,
               currentTrack: `${track.artist} - ${track.title}`,
-              trackId: track.targetTrackId,
-              status: 'done',
+              trackId: track.targetTrackId, status: 'done',
             })
-
-            // Small delay for visual feedback
-            if (tracksToSync.length <= 50) {
-              await new Promise(r => setTimeout(r, 50))
-            }
           } catch (error) {
             result.failed++
             result.errors.push(`${track.artist} - ${track.title}: ${getErrorMessage(error)}`)
-
-            safeSend(mainWindow, 'mood:syncProgress', {
-              current: i + 1,
-              total: tracksToSync.length,
-              currentTrack: `${track.artist} - ${track.title}`,
-              trackId: track.targetTrackId,
-              status: 'failed',
-            })
           }
         }
       } else {
