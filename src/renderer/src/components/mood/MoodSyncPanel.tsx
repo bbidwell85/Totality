@@ -110,10 +110,10 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     }
   }
 
-  const loadComparison = useCallback(async () => {
+  const loadComparison = useCallback(async (preserveResult = false) => {
     if (!sourceOfTruthId) return
     setLoading(true)
-    setSyncResult(null)
+    if (!preserveResult) setSyncResult(null)
     setSyncedTrackIds(new Set())
     try {
       const result = await window.electronAPI.moodGetComparison(sourceOfTruthId)
@@ -166,7 +166,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
         mode: syncMode,
       })
       setSyncResult(result)
-      await loadComparison()
+      await loadComparison(true)
     } catch (err) {
       setSyncResult({ synced: 0, failed: 0, errors: [(err as Error).message] })
     } finally {
@@ -217,7 +217,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={loadComparison}
+            onClick={() => loadComparison()}
             disabled={loading || !sourceOfTruthId}
             className="p-1.5 rounded-md hover:bg-muted transition-colors disabled:opacity-50 text-muted-foreground hover:text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
             title="Refresh"

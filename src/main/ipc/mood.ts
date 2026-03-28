@@ -298,12 +298,20 @@ export function registerMoodHandlers() {
         result.failed = writeResult.failed
         result.errors = writeResult.errors
 
-        // Update local DB to match
+        // Update local DB to match and send done status
         if (writeResult.written > 0) {
-          for (const track of trackUpdates) {
+          for (let i = 0; i < trackUpdates.length; i++) {
+            const track = trackUpdates[i]
             try {
               getDatabase().updateMusicTrackMood(track.targetTrackId, JSON.stringify(track.moods))
             } catch { /* best effort */ }
+            safeSend(mainWindow, 'mood:syncProgress', {
+              current: i + 1,
+              total: trackUpdates.length,
+              currentTrack: `${track.artist} - ${track.title}`,
+              trackId: track.targetTrackId,
+              status: writeResult.errors.length === 0 ? 'done' : 'failed',
+            })
           }
         }
       } else {
