@@ -1863,20 +1863,6 @@ export class DatabaseService {
     return cleaned
   }
 
-  async recalculateCollectionStats(_sourceId?: string): Promise<number> {
-    if (!this.db) throw new Error('Database not initialized')
-    this.db.run(`UPDATE movie_collections SET owned_movies = (
-      SELECT COUNT(DISTINCT mic.media_item_id) FROM media_item_collections mic
-      JOIN media_items mi ON mic.media_item_id = mi.id
-      WHERE mic.collection_id = movie_collections.id
-    )`)
-    this.db.run(`UPDATE movie_collections SET completeness_percentage = CASE WHEN total_movies > 0
-      THEN ROUND(CAST(owned_movies AS REAL) * 100.0 / total_movies) ELSE 0 END`)
-    this.db.run('DELETE FROM movie_collections WHERE owned_movies = 0')
-    await this.save()
-    return 0
-  }
-
   async invalidateStaleSeriesCompleteness(sourceId?: string): Promise<number> {
     if (!this.db) throw new Error('Database not initialized')
     const sql = sourceId

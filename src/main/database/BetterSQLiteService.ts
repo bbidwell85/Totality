@@ -1107,62 +1107,6 @@ export class BetterSQLiteService {
   }
 
   /**
-   * Recalculate movie collection stats after items have been deleted.
-   * Updates owned_movies and completeness_percentage from actual media_item_collections links.
-   * Removes collections with 0 owned movies.
-   */
-  recalculateCollectionStats(sourceId?: string): number {
-    if (!this.db) throw new Error('Database not initialized')
-
-    // Update owned_movies count from actual links
-    const updateSql = sourceId
-      ? `UPDATE movie_collections SET
-           owned_movies = (SELECT COUNT(DISTINCT mic.media_item_id) FROM media_item_collections mic
-                          JOIN media_items mi ON mic.media_item_id = mi.id
-                          WHERE mic.collection_id = movie_collections.id)
-         WHERE source_id = ?`
-      : `UPDATE movie_collections SET
-           owned_movies = (SELECT COUNT(DISTINCT mic.media_item_id) FROM media_item_collections mic
-                          JOIN media_items mi ON mic.media_item_id = mi.id
-                          WHERE mic.collection_id = movie_collections.id)`
-
-    if (sourceId) {
-      this.db.prepare(updateSql).run(sourceId)
-    } else {
-      this.db.prepare(updateSql).run()
-    }
-
-    // Recalculate completeness_percentage (scoped to source if provided)
-    if (sourceId) {
-      this.db.prepare(`
-        UPDATE movie_collections SET
-          completeness_percentage = CASE WHEN total_movies > 0
-            THEN ROUND(CAST(owned_movies AS REAL) * 100.0 / total_movies)
-            ELSE 0 END
-        WHERE source_id = ?
-      `).run(sourceId)
-    } else {
-      this.db.prepare(`
-        UPDATE movie_collections SET
-          completeness_percentage = CASE WHEN total_movies > 0
-            THEN ROUND(CAST(owned_movies AS REAL) * 100.0 / total_movies)
-            ELSE 0 END
-      `).run()
-    }
-
-    // Remove collections with 0 owned movies (scoped to source if provided)
-    const removed = sourceId
-      ? this.db.prepare('DELETE FROM movie_collections WHERE owned_movies = 0 AND source_id = ?').run(sourceId).changes
-      : this.db.prepare('DELETE FROM movie_collections WHERE owned_movies = 0').run().changes
-
-    if (removed > 0) {
-      console.log(`[BetterSQLite] Removed ${removed} empty collections after recalculation`)
-    }
-
-    return removed
-  }
-
-  /**
    * Invalidate stale series_completeness records where the owned episode count
    * in the database doesn't match what series_completeness claims.
    * Stale records are deleted so the user gets accurate data on next completeness analysis.
