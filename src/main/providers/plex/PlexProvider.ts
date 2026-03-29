@@ -683,10 +683,11 @@ export class PlexProvider implements MediaProvider {
       // Update scan time
       await db.updateSourceScanTime(this.sourceId)
 
-      // Clean up orphaned data and recalculate dependent tables
+      // Clean up orphaned data and invalidate stale completeness records
       try { db.cleanupOrphanedMediaData() } catch { /* non-critical */ }
-      try { db.recalculateCollectionStats(this.sourceId) } catch { /* non-critical */ }
       try { db.invalidateStaleSeriesCompleteness(this.sourceId) } catch { /* non-critical */ }
+      // Note: movie_collections are recalculated by "Analyze Collections" action,
+      // not here — the media_item_collections table is not used for tracking.
 
       result.success = true
       result.durationMs = Date.now() - startTime

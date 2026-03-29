@@ -1132,18 +1132,28 @@ export class BetterSQLiteService {
       this.db.prepare(updateSql).run()
     }
 
-    // Recalculate completeness_percentage
-    this.db.prepare(`
-      UPDATE movie_collections SET
-        completeness_percentage = CASE WHEN total_movies > 0
-          THEN ROUND(CAST(owned_movies AS REAL) * 100.0 / total_movies)
-          ELSE 0 END
-    `).run()
+    // Recalculate completeness_percentage (scoped to source if provided)
+    if (sourceId) {
+      this.db.prepare(`
+        UPDATE movie_collections SET
+          completeness_percentage = CASE WHEN total_movies > 0
+            THEN ROUND(CAST(owned_movies AS REAL) * 100.0 / total_movies)
+            ELSE 0 END
+        WHERE source_id = ?
+      `).run(sourceId)
+    } else {
+      this.db.prepare(`
+        UPDATE movie_collections SET
+          completeness_percentage = CASE WHEN total_movies > 0
+            THEN ROUND(CAST(owned_movies AS REAL) * 100.0 / total_movies)
+            ELSE 0 END
+      `).run()
+    }
 
-    // Remove collections with 0 owned movies
-    const removed = this.db.prepare(
-      'DELETE FROM movie_collections WHERE owned_movies = 0'
-    ).run().changes
+    // Remove collections with 0 owned movies (scoped to source if provided)
+    const removed = sourceId
+      ? this.db.prepare('DELETE FROM movie_collections WHERE owned_movies = 0 AND source_id = ?').run(sourceId).changes
+      : this.db.prepare('DELETE FROM movie_collections WHERE owned_movies = 0').run().changes
 
     if (removed > 0) {
       console.log(`[BetterSQLite] Removed ${removed} empty collections after recalculation`)
