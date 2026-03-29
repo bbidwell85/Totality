@@ -1841,13 +1841,16 @@ export class DatabaseService {
   async deleteMediaItem(id: number): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
 
-    // Before deleting, update any affected collections
+    // Before deleting, update affected collections and series completeness
     try {
-      const result = this.db.exec('SELECT tmdb_id, source_id, type FROM media_items WHERE id = ?', [id])
+      const result = this.db.exec('SELECT tmdb_id, source_id, type, series_title FROM media_items WHERE id = ?', [id])
       if (result[0]?.values[0]) {
-        const [tmdbId, sourceId, type] = result[0].values[0] as [number | null, string, string]
+        const [tmdbId, sourceId, type, seriesTitle] = result[0].values[0] as [string | null, string, string, string | null]
         if (tmdbId && type === 'movie') {
           await this.updateCollectionsAfterDeletion([String(tmdbId)], sourceId)
+        }
+        if (type === 'episode' && seriesTitle) {
+          this.db.run('DELETE FROM series_completeness WHERE series_title = ? AND source_id = ?', [seriesTitle, sourceId])
         }
       }
     } catch { /* non-critical */ }

@@ -851,7 +851,41 @@ export class MusicRepository {
    * Delete a music track by ID
    */
   async deleteTrack(id: number): Promise<void> {
+    // Read album/artist IDs before deletion for orphan cleanup
+    let albumId: number | null = null
+    let artistId: number | null = null
+    try {
+      const result = this.db.exec('SELECT album_id, artist_id FROM music_tracks WHERE id = ?', [id])
+      if (result[0]?.values[0]) {
+        albumId = result[0].values[0][0] as number | null
+        artistId = result[0].values[0][1] as number | null
+      }
+    } catch { /* proceed with deletion */ }
+
     this.db.run('DELETE FROM music_tracks WHERE id = ?', [id])
+
+    // Clean up orphaned album
+    if (albumId) {
+      const countResult = this.db.exec('SELECT COUNT(*) FROM music_tracks WHERE album_id = ?', [albumId])
+      if (countResult[0]?.values[0]?.[0] === 0) {
+        this.db.run('DELETE FROM music_quality_scores WHERE album_id = ?', [albumId])
+        this.db.run('DELETE FROM album_completeness WHERE album_id = ?', [albumId])
+        this.db.run('DELETE FROM music_albums WHERE id = ?', [albumId])
+      }
+    }
+
+    // Clean up orphaned artist
+    if (artistId) {
+      const countResult = this.db.exec('SELECT COUNT(*) FROM music_tracks WHERE artist_id = ?', [artistId])
+      if (countResult[0]?.values[0]?.[0] === 0) {
+        const nameResult = this.db.exec('SELECT name FROM music_artists WHERE id = ?', [artistId])
+        if (nameResult[0]?.values[0]) {
+          this.db.run('DELETE FROM artist_completeness WHERE artist_name = ?', [nameResult[0].values[0][0]])
+        }
+        this.db.run('DELETE FROM music_artists WHERE id = ?', [artistId])
+      }
+    }
+
     await this.save()
   }
 

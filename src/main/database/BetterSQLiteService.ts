@@ -1074,14 +1074,23 @@ export class BetterSQLiteService {
   deleteMediaItem(id: number): void {
     if (!this.db) throw new Error('Database not initialized')
 
-    // Before deleting, update any affected collections
+    // Before deleting, update affected collections and series completeness
     try {
       const item = this.db.prepare(
-        'SELECT tmdb_id, source_id, type FROM media_items WHERE id = ?'
-      ).get(id) as { tmdb_id?: number; source_id: string; type: string } | undefined
+        'SELECT tmdb_id, source_id, type, series_title FROM media_items WHERE id = ?'
+      ).get(id) as { tmdb_id?: string; source_id: string; type: string; series_title?: string } | undefined
 
-      if (item?.tmdb_id && item.type === 'movie') {
-        this.updateCollectionsAfterDeletion([String(item.tmdb_id)], item.source_id)
+      if (item) {
+        // Movie: update collection ownership
+        if (item.tmdb_id && item.type === 'movie') {
+          this.updateCollectionsAfterDeletion([String(item.tmdb_id)], item.source_id)
+        }
+        // Episode: invalidate series completeness so it gets recalculated
+        if (item.type === 'episode' && item.series_title) {
+          this.db.prepare(
+            'DELETE FROM series_completeness WHERE series_title = ? AND source_id = ?'
+          ).run(item.series_title, item.source_id)
+        }
       }
     } catch { /* non-critical — proceed with deletion */ }
 
@@ -1137,6 +1146,40 @@ export class BetterSQLiteService {
           cleaned++
         }
       }
+    } catch { /* non-critical */ }
+
+    // Validate series completeness — delete records where episode count doesn't match
+    try {
+      cleaned += this.db.prepare(`
+        DELETE FROM series_completeness WHERE id IN (
+          SELECT sc.id FROM series_completeness sc
+          WHERE sc.owned_episodes != (
+            SELECT COUNT(*) FROM media_items mi
+            WHERE mi.series_title = sc.series_title
+              AND mi.source_id = sc.source_id
+              AND mi.type = 'episode'
+          )
+        )
+      `).run().changes
+    } catch { /* non-critical */ }
+
+    // Clean up orphaned music data
+    try {
+      cleaned += this.db.prepare(
+        'DELETE FROM music_albums WHERE id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE album_id IS NOT NULL)'
+      ).run().changes
+      cleaned += this.db.prepare(
+        'DELETE FROM music_artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM music_tracks WHERE artist_id IS NOT NULL)'
+      ).run().changes
+      cleaned += this.db.prepare(
+        'DELETE FROM music_quality_scores WHERE album_id NOT IN (SELECT id FROM music_albums)'
+      ).run().changes
+      cleaned += this.db.prepare(
+        'DELETE FROM album_completeness WHERE album_id NOT IN (SELECT id FROM music_albums)'
+      ).run().changes
+      cleaned += this.db.prepare(
+        'DELETE FROM artist_completeness WHERE artist_name NOT IN (SELECT name FROM music_artists)'
+      ).run().changes
     } catch { /* non-critical */ }
 
     if (cleaned > 0) {
@@ -2608,7 +2651,39 @@ export class BetterSQLiteService {
    */
   deleteMusicTrack(id: number): void {
     if (!this.db) throw new Error('Database not initialized')
+
+    // Read album_id and artist_id before deletion for orphan cleanup
+    const track = this.db.prepare(
+      'SELECT album_id, artist_id FROM music_tracks WHERE id = ?'
+    ).get(id) as { album_id?: number; artist_id?: number } | undefined
+
     this.db.prepare('DELETE FROM music_tracks WHERE id = ?').run(id)
+
+    // Clean up orphaned album (0 remaining tracks)
+    if (track?.album_id) {
+      const albumTrackCount = this.db.prepare(
+        'SELECT COUNT(*) as cnt FROM music_tracks WHERE album_id = ?'
+      ).get(track.album_id) as { cnt: number }
+      if (albumTrackCount.cnt === 0) {
+        this.db.prepare('DELETE FROM music_quality_scores WHERE album_id = ?').run(track.album_id)
+        this.db.prepare('DELETE FROM album_completeness WHERE album_id = ?').run(track.album_id)
+        this.db.prepare('DELETE FROM music_albums WHERE id = ?').run(track.album_id)
+      }
+    }
+
+    // Clean up orphaned artist (0 remaining tracks)
+    if (track?.artist_id) {
+      const artistTrackCount = this.db.prepare(
+        'SELECT COUNT(*) as cnt FROM music_tracks WHERE artist_id = ?'
+      ).get(track.artist_id) as { cnt: number }
+      if (artistTrackCount.cnt === 0) {
+        const artist = this.db.prepare('SELECT name FROM music_artists WHERE id = ?').get(track.artist_id) as { name: string } | undefined
+        if (artist) {
+          this.db.prepare('DELETE FROM artist_completeness WHERE artist_name = ?').run(artist.name)
+        }
+        this.db.prepare('DELETE FROM music_artists WHERE id = ?').run(track.artist_id)
+      }
+    }
   }
 
   /**

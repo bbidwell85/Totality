@@ -683,11 +683,8 @@ export class PlexProvider implements MediaProvider {
       // Update scan time
       await db.updateSourceScanTime(this.sourceId)
 
-      // Clean up orphaned data and invalidate stale completeness records
+      // Clean up any orphaned data (collections, series, music validated inside)
       try { db.cleanupOrphanedMediaData() } catch { /* non-critical */ }
-      try { db.invalidateStaleSeriesCompleteness(this.sourceId) } catch { /* non-critical */ }
-      // Note: movie_collections are recalculated by "Analyze Collections" action,
-      // not here — the media_item_collections table is not used for tracking.
 
       result.success = true
       result.durationMs = Date.now() - startTime
@@ -2029,7 +2026,7 @@ export class PlexProvider implements MediaProvider {
       }
 
       // Clean up orphaned albums/artists
-      try { db.cleanupOrphanedMusicData(this.sourceId) } catch { /* non-critical */ }
+      // Orphaned albums/artists cleaned up by deleteMusicTrack() and cleanupOrphanedMediaData()
 
       console.log(`[PlexProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks (including ${totalCompilations} compilation albums)`)
 
