@@ -10,6 +10,9 @@
 import { getDatabase } from '../database/getDatabase'
 import type { ProviderType, MusicTrack, SyncField } from '../types/database'
 
+/** Provider types that support tag sync (read as source of truth + write as target) */
+const TAG_SYNC_PROVIDERS: Set<string> = new Set(['plex', 'mediamonkey', 'kodi-local', 'kodi'])
+
 export interface MoodComparisonTarget {
   sourceId: string
   sourceName: string
@@ -58,6 +61,9 @@ export class MoodSyncService {
     const result: MoodSourceInfo[] = []
 
     for (const source of sources) {
+      // Only include providers that support tag sync
+      if (!TAG_SYNC_PROVIDERS.has(source.source_type)) continue
+
       const totalTracks = db.countMusicTracks({ sourceId: source.source_id })
       if (totalTracks === 0) continue
 
@@ -88,7 +94,7 @@ export class MoodSyncService {
 
     // Get all other sources
     const sources = db.getMediaSources() as Array<{ source_id: string; display_name: string; source_type: string }>
-    const otherSources = sources.filter(s => s.source_id !== sourceOfTruthId)
+    const otherSources = sources.filter(s => s.source_id !== sourceOfTruthId && TAG_SYNC_PROVIDERS.has(s.source_type))
     if (otherSources.length === 0) return []
 
     // Build lookup maps for other sources
