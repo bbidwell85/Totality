@@ -709,14 +709,24 @@ export class PlexProvider implements MediaProvider {
     console.log(`[PlexProvider ${this.sourceId}] Reconciling ${type}s: ${items.length} in DB, ${validIds.size} in Plex`)
 
     let removedCount = 0
+    const deletedTmdbIds: string[] = []
+
     for (const item of items) {
       if (!validIds.has(item.plex_id)) {
         if (item.id) {
           console.log(`[PlexProvider ${this.sourceId}] Removing deleted ${type}: "${item.title}" (ID: ${item.plex_id})`)
+          if (item.tmdb_id) deletedTmdbIds.push(String(item.tmdb_id))
           await db.deleteMediaItem(item.id)
           removedCount++
         }
       }
+    }
+
+    // Update affected collections inline (no TMDB API calls needed)
+    if (type === 'movie' && deletedTmdbIds.length > 0) {
+      try {
+        db.updateCollectionsAfterDeletion(deletedTmdbIds, this.sourceId)
+      } catch { /* non-critical */ }
     }
 
     return removedCount

@@ -1107,6 +1107,55 @@ export class BetterSQLiteService {
   }
 
   /**
+   * Update movie collections after movies have been deleted.
+   * Removes deleted TMDB IDs from owned_movie_ids, decrements owned_movies,
+   * recalculates completeness_percentage, and removes empty collections.
+   * No TMDB API calls needed — works entirely from local data.
+   */
+  updateCollectionsAfterDeletion(deletedTmdbIds: string[], sourceId: string): void {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const deletedSet = new Set(deletedTmdbIds)
+    const collections = this.db.prepare(
+      'SELECT id, owned_movie_ids, owned_movies, total_movies FROM movie_collections WHERE source_id = ?'
+    ).all(sourceId) as Array<{ id: number; owned_movie_ids: string; owned_movies: number; total_movies: number }>
+
+    let updated = 0
+    for (const coll of collections) {
+      try {
+        const ownedIds: string[] = JSON.parse(coll.owned_movie_ids || '[]')
+        const filteredIds = ownedIds.filter(id => !deletedSet.has(id))
+
+        if (filteredIds.length !== ownedIds.length) {
+          const newOwned = filteredIds.length
+          const newPct = coll.total_movies > 0
+            ? Math.round((newOwned / coll.total_movies) * 100)
+            : 0
+
+          if (newOwned === 0) {
+            // Remove collection entirely if no owned movies remain
+            this.db!.prepare('DELETE FROM movie_collections WHERE id = ?').run(coll.id)
+          } else {
+            this.db!.prepare(`
+              UPDATE movie_collections SET
+                owned_movies = ?,
+                owned_movie_ids = ?,
+                completeness_percentage = ?,
+                updated_at = datetime('now')
+              WHERE id = ?
+            `).run(newOwned, JSON.stringify(filteredIds), newPct, coll.id)
+          }
+          updated++
+        }
+      } catch { /* skip malformed collection */ }
+    }
+
+    if (updated > 0) {
+      console.log(`[BetterSQLite] Updated ${updated} collections after movie deletion`)
+    }
+  }
+
+  /**
    * Invalidate stale series_completeness records where the owned episode count
    * in the database doesn't match what series_completeness claims.
    * Stale records are deleted so the user gets accurate data on next completeness analysis.

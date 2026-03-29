@@ -1863,6 +1863,39 @@ export class DatabaseService {
     return cleaned
   }
 
+  async updateCollectionsAfterDeletion(deletedTmdbIds: string[], sourceId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized')
+    const deletedSet = new Set(deletedTmdbIds)
+    const result = this.db.exec(
+      `SELECT id, owned_movie_ids, owned_movies, total_movies FROM movie_collections WHERE source_id = '${sourceId.replace(/'/g, "''")}'`
+    )
+    if (!result[0]) return
+
+    let updated = 0
+    for (const row of result[0].values) {
+      const [id, ownedIdsStr, _ownedMovies, totalMovies] = row as [number, string, number, number]
+      try {
+        const ownedIds: string[] = JSON.parse(ownedIdsStr || '[]')
+        const filteredIds = ownedIds.filter(oid => !deletedSet.has(oid))
+        if (filteredIds.length !== ownedIds.length) {
+          const newOwned = filteredIds.length
+          const newPct = totalMovies > 0 ? Math.round((newOwned / totalMovies) * 100) : 0
+          if (newOwned === 0) {
+            this.db.run('DELETE FROM movie_collections WHERE id = ?', [id])
+          } else {
+            this.db.run('UPDATE movie_collections SET owned_movies = ?, owned_movie_ids = ?, completeness_percentage = ? WHERE id = ?',
+              [newOwned, JSON.stringify(filteredIds), newPct, id])
+          }
+          updated++
+        }
+      } catch { /* skip */ }
+    }
+    if (updated > 0) {
+      console.log(`[Database] Updated ${updated} collections after movie deletion`)
+      await this.save()
+    }
+  }
+
   async invalidateStaleSeriesCompleteness(sourceId?: string): Promise<number> {
     if (!this.db) throw new Error('Database not initialized')
     const sql = sourceId
