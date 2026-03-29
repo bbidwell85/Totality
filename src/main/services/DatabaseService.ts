@@ -1863,6 +1863,56 @@ export class DatabaseService {
     return cleaned
   }
 
+  async recalculateCollectionStats(_sourceId?: string): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.run(`UPDATE movie_collections SET owned_movies = (
+      SELECT COUNT(DISTINCT mic.media_item_id) FROM media_item_collections mic
+      JOIN media_items mi ON mic.media_item_id = mi.id
+      WHERE mic.collection_id = movie_collections.id
+    )`)
+    this.db.run(`UPDATE movie_collections SET completeness_percentage = CASE WHEN total_movies > 0
+      THEN ROUND(CAST(owned_movies AS REAL) * 100.0 / total_movies) ELSE 0 END`)
+    this.db.run('DELETE FROM movie_collections WHERE owned_movies = 0')
+    await this.save()
+    return 0
+  }
+
+  async invalidateStaleSeriesCompleteness(sourceId?: string): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized')
+    const sql = sourceId
+      ? `DELETE FROM series_completeness WHERE source_id = '${sourceId.replace(/'/g, "''")}' AND owned_episodes != (
+          SELECT COUNT(*) FROM media_items mi WHERE mi.series_title = series_completeness.series_title
+          AND mi.source_id = series_completeness.source_id AND mi.type = 'episode')`
+      : `DELETE FROM series_completeness WHERE owned_episodes != (
+          SELECT COUNT(*) FROM media_items mi WHERE mi.series_title = series_completeness.series_title
+          AND mi.source_id = series_completeness.source_id AND mi.type = 'episode')`
+    this.db.run(sql)
+    const changes = this.db.getRowsModified()
+    if (changes > 0) await this.save()
+    return changes
+  }
+
+  async cleanupOrphanedMusicData(_sourceId?: string): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized')
+    let cleaned = 0
+    const tables = [
+      'DELETE FROM music_quality_scores WHERE album_id NOT IN (SELECT id FROM music_albums)',
+      'DELETE FROM album_completeness WHERE album_id NOT IN (SELECT id FROM music_albums)',
+      'DELETE FROM artist_completeness WHERE artist_name NOT IN (SELECT name FROM music_artists)',
+      'DELETE FROM music_albums WHERE id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE album_id IS NOT NULL)',
+      'DELETE FROM music_artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM music_tracks WHERE artist_id IS NOT NULL)',
+    ]
+    for (const sql of tables) {
+      this.db.run(sql)
+      cleaned += this.db.getRowsModified()
+    }
+    if (cleaned > 0) {
+      console.log(`[Database] Cleaned up ${cleaned} orphaned music rows`)
+      await this.save()
+    }
+    return cleaned
+  }
+
   // ============================================================================
   // MEDIA ITEM VERSIONS
   // ============================================================================

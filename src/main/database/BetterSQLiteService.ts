@@ -1107,6 +1107,125 @@ export class BetterSQLiteService {
   }
 
   /**
+   * Recalculate movie collection stats after items have been deleted.
+   * Updates owned_movies and completeness_percentage from actual media_item_collections links.
+   * Removes collections with 0 owned movies.
+   */
+  recalculateCollectionStats(sourceId?: string): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    // Update owned_movies count from actual links
+    const updateSql = sourceId
+      ? `UPDATE movie_collections SET
+           owned_movies = (SELECT COUNT(DISTINCT mic.media_item_id) FROM media_item_collections mic
+                          JOIN media_items mi ON mic.media_item_id = mi.id
+                          WHERE mic.collection_id = movie_collections.id)
+         WHERE source_id = ?`
+      : `UPDATE movie_collections SET
+           owned_movies = (SELECT COUNT(DISTINCT mic.media_item_id) FROM media_item_collections mic
+                          JOIN media_items mi ON mic.media_item_id = mi.id
+                          WHERE mic.collection_id = movie_collections.id)`
+
+    if (sourceId) {
+      this.db.prepare(updateSql).run(sourceId)
+    } else {
+      this.db.prepare(updateSql).run()
+    }
+
+    // Recalculate completeness_percentage
+    this.db.prepare(`
+      UPDATE movie_collections SET
+        completeness_percentage = CASE WHEN total_movies > 0
+          THEN ROUND(CAST(owned_movies AS REAL) * 100.0 / total_movies)
+          ELSE 0 END
+    `).run()
+
+    // Remove collections with 0 owned movies
+    const removed = this.db.prepare(
+      'DELETE FROM movie_collections WHERE owned_movies = 0'
+    ).run().changes
+
+    if (removed > 0) {
+      console.log(`[BetterSQLite] Removed ${removed} empty collections after recalculation`)
+    }
+
+    return removed
+  }
+
+  /**
+   * Invalidate stale series_completeness records where the owned episode count
+   * in the database doesn't match what series_completeness claims.
+   * Stale records are deleted so the user gets accurate data on next completeness analysis.
+   */
+  invalidateStaleSeriesCompleteness(sourceId?: string): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const sql = `
+      DELETE FROM series_completeness WHERE id IN (
+        SELECT sc.id FROM series_completeness sc
+        WHERE ${sourceId ? 'sc.source_id = ? AND' : ''}
+        sc.owned_episodes != (
+          SELECT COUNT(*) FROM media_items mi
+          WHERE mi.series_title = sc.series_title
+            AND mi.source_id = sc.source_id
+            AND mi.type = 'episode'
+        )
+      )
+    `
+    const result = sourceId
+      ? this.db.prepare(sql).run(sourceId)
+      : this.db.prepare(sql).run()
+
+    if (result.changes > 0) {
+      console.log(`[BetterSQLite] Invalidated ${result.changes} stale series_completeness records`)
+    }
+
+    return result.changes
+  }
+
+  /**
+   * Remove orphaned music data — artists/albums with no tracks,
+   * and related completeness/quality records.
+   */
+  cleanupOrphanedMusicData(sourceId?: string): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    let cleaned = 0
+    const sourceFilter = sourceId ? ` AND source_id = '${sourceId.replace(/'/g, "''")}'` : ''
+
+    // Delete music quality scores for albums that no longer exist
+    cleaned += this.db.prepare(
+      'DELETE FROM music_quality_scores WHERE album_id NOT IN (SELECT id FROM music_albums)'
+    ).run().changes
+
+    // Delete album completeness for albums that no longer exist
+    cleaned += this.db.prepare(
+      'DELETE FROM album_completeness WHERE album_id NOT IN (SELECT id FROM music_albums)'
+    ).run().changes
+
+    // Delete artist completeness for artists that no longer exist
+    cleaned += this.db.prepare(
+      'DELETE FROM artist_completeness WHERE artist_name NOT IN (SELECT name FROM music_artists)'
+    ).run().changes
+
+    // Delete albums with 0 tracks
+    cleaned += this.db.prepare(
+      `DELETE FROM music_albums WHERE id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE album_id IS NOT NULL)${sourceFilter}`
+    ).run().changes
+
+    // Delete artists with 0 tracks
+    cleaned += this.db.prepare(
+      `DELETE FROM music_artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM music_tracks WHERE artist_id IS NOT NULL)${sourceFilter}`
+    ).run().changes
+
+    if (cleaned > 0) {
+      console.log(`[BetterSQLite] Cleaned up ${cleaned} orphaned music rows`)
+    }
+
+    return cleaned
+  }
+
+  /**
    * Delete all media items for a source
    */
   deleteMediaItemsForSource(sourceId: string): void {

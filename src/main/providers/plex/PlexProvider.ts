@@ -683,8 +683,10 @@ export class PlexProvider implements MediaProvider {
       // Update scan time
       await db.updateSourceScanTime(this.sourceId)
 
-      // Clean up any orphaned quality_scores/versions from deleted items
+      // Clean up orphaned data and recalculate dependent tables
       try { db.cleanupOrphanedMediaData() } catch { /* non-critical */ }
+      try { db.recalculateCollectionStats(this.sourceId) } catch { /* non-critical */ }
+      try { db.invalidateStaleSeriesCompleteness(this.sourceId) } catch { /* non-critical */ }
 
       result.success = true
       result.durationMs = Date.now() - startTime
@@ -2009,6 +2011,24 @@ export class PlexProvider implements MediaProvider {
 
       result.success = true
       result.durationMs = Date.now() - startTime
+
+      // Reconcile music: remove tracks not in scanned set
+      const existingTracks = db.getMusicTracks({ sourceId: this.sourceId }) as MusicTrack[]
+      let musicRemoved = 0
+      for (const track of existingTracks) {
+        if (track.provider_id && !scannedTrackIds.has(track.provider_id) && track.id) {
+          try {
+            db.deleteMusicTrack(track.id)
+            musicRemoved++
+          } catch { /* best effort */ }
+        }
+      }
+      if (musicRemoved > 0) {
+        console.log(`[PlexProvider ${this.sourceId}] Removed ${musicRemoved} stale music tracks`)
+      }
+
+      // Clean up orphaned albums/artists
+      try { db.cleanupOrphanedMusicData(this.sourceId) } catch { /* non-critical */ }
 
       console.log(`[PlexProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks (including ${totalCompilations} compilation albums)`)
 
