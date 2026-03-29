@@ -27,6 +27,7 @@ interface MoodTarget {
   moods: string[]
   trackId: number
   trackProviderId: string
+  libraryId?: string
   hasMismatch: boolean
 }
 
@@ -49,7 +50,8 @@ type SyncFieldSet = { mood: boolean; genre: boolean }
 export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const [sources, setSources] = useState<MoodSource[]>([])
   const [sourceOfTruthId, setSourceOfTruthId] = useState<string>('')
-  const [comparisons, setComparisons] = useState<MoodComparison[]>([])
+  const [moodComparisons, setMoodComparisons] = useState<MoodComparison[]>([])
+  const [genreComparisons, setGenreComparisons] = useState<MoodComparison[]>([])
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncingTarget, setSyncingTarget] = useState<string | null>(null)
@@ -129,14 +131,22 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     setSyncedTrackIds(new Set())
     setSelectedTrackIds(new Set())
     try {
-      const result = await window.electronAPI.moodGetComparison({ sourceOfTruthId, field: activeField })
-      setComparisons(result)
+      const [moods, genres] = await Promise.all([
+        syncFields.mood
+          ? window.electronAPI.moodGetComparison({ sourceOfTruthId, field: 'mood' })
+          : Promise.resolve([]),
+        syncFields.genre
+          ? window.electronAPI.moodGetComparison({ sourceOfTruthId, field: 'genre' })
+          : Promise.resolve([]),
+      ])
+      setMoodComparisons(moods)
+      setGenreComparisons(genres)
     } catch (err) {
       console.error('Failed to load comparison:', err)
     } finally {
       setLoading(false)
     }
-  }, [sourceOfTruthId, activeField])
+  }, [sourceOfTruthId, syncFields.mood, syncFields.genre])
 
   useEffect(() => {
     if (sourceOfTruthId && isOpen) {
@@ -207,6 +217,100 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
 
   const fieldLabel = syncFields.mood && syncFields.genre ? 'tags' : syncFields.genre ? 'genres' : 'moods'
 
+  // Merge mood + genre comparisons into a unified view
+  // Each merged track has separate mood and genre data for source and each target
+  interface MergedComparison {
+    trackTitle: string
+    artist: string
+    album: string
+    sourceOfTruthTrackId: number
+    sourceMoods: string[]
+    sourceGenres: string[]
+    targets: Array<{
+      sourceId: string
+      sourceName: string
+      sourceType: string
+      trackId: number
+      trackProviderId: string
+      libraryId?: string
+      targetMoods: string[]
+      targetGenres: string[]
+      moodMismatch: boolean
+      genreMismatch: boolean
+      hasMismatch: boolean
+    }>
+  }
+
+  const comparisons = useMemo((): MergedComparison[] => {
+    // Build lookup by track ID for genre data
+    const genreByTrackId = new Map<number, { source: string[]; targets: Map<string, { moods: string[]; hasMismatch: boolean; trackId: number; trackProviderId: string; libraryId?: string; sourceName: string; sourceId: string; sourceType: string }> }>()
+    for (const gc of genreComparisons) {
+      const targetMap = new Map<string, typeof gc.targets[0]>()
+      for (const t of gc.targets) targetMap.set(t.sourceId, t)
+      genreByTrackId.set(gc.sourceOfTruthTrackId, { source: gc.sourceOfTruthMoods, targets: targetMap })
+    }
+
+    // Build merged from mood comparisons as base
+    const merged = new Map<number, MergedComparison>()
+
+    for (const mc of moodComparisons) {
+      const genreData = genreByTrackId.get(mc.sourceOfTruthTrackId)
+      const m: MergedComparison = {
+        trackTitle: mc.trackTitle,
+        artist: mc.artist,
+        album: mc.album,
+        sourceOfTruthTrackId: mc.sourceOfTruthTrackId,
+        sourceMoods: mc.sourceOfTruthMoods,
+        sourceGenres: genreData?.source || [],
+        targets: mc.targets.map(t => {
+          const gt = genreData?.targets.get(t.sourceId)
+          return {
+            sourceId: t.sourceId,
+            sourceName: t.sourceName,
+            sourceType: t.sourceType,
+            trackId: t.trackId,
+            trackProviderId: t.trackProviderId,
+            libraryId: t.libraryId,
+            targetMoods: t.moods,
+            targetGenres: gt?.moods || [],
+            moodMismatch: t.hasMismatch,
+            genreMismatch: gt?.hasMismatch || false,
+            hasMismatch: t.hasMismatch || (gt?.hasMismatch || false),
+          }
+        }),
+      }
+      merged.set(mc.sourceOfTruthTrackId, m)
+    }
+
+    // Add genre-only tracks (not in mood comparisons)
+    for (const gc of genreComparisons) {
+      if (merged.has(gc.sourceOfTruthTrackId)) continue
+      merged.set(gc.sourceOfTruthTrackId, {
+        trackTitle: gc.trackTitle,
+        artist: gc.artist,
+        album: gc.album,
+        sourceOfTruthTrackId: gc.sourceOfTruthTrackId,
+        sourceMoods: [],
+        sourceGenres: gc.sourceOfTruthMoods,
+        targets: gc.targets.map(t => ({
+          sourceId: t.sourceId,
+          sourceName: t.sourceName,
+          sourceType: t.sourceType,
+          trackId: t.trackId,
+          trackProviderId: t.trackProviderId,
+          libraryId: t.libraryId,
+          targetMoods: [],
+          targetGenres: t.moods,
+          moodMismatch: false,
+          genreMismatch: t.hasMismatch,
+          hasMismatch: t.hasMismatch,
+        })),
+      })
+    }
+
+    return Array.from(merged.values())
+  }, [moodComparisons, genreComparisons])
+
   // Filter and search
   const filteredComparisons = useMemo(() => {
     let result = comparisons
@@ -268,7 +372,8 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
     // Ensure at least one is selected
     if (!next.mood && !next.genre) return
     setSyncFields(next)
-    setComparisons([])
+    setMoodComparisons([])
+    setGenreComparisons([])
   }
 
   return (
@@ -573,22 +678,96 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                     </div>
                   </div>
 
-                  <div className="mt-1.5 ml-5.5">
-                    <p className="text-[10px] text-muted-foreground/60 mb-0.5">Source</p>
-                    <p className="text-[10px] text-foreground">{comp.sourceOfTruthMoods.join(' / ')}</p>
+                  {/* Source tags */}
+                  <div className="mt-1.5 ml-5.5 space-y-0.5">
+                    {syncFields.mood && comp.sourceMoods.length > 0 && (
+                      <p className="text-[10px]">
+                        <span className="text-muted-foreground/50 uppercase tracking-wider text-[8px] mr-1">mood</span>
+                        <span className="text-foreground">{comp.sourceMoods.join(' / ')}</span>
+                      </p>
+                    )}
+                    {syncFields.genre && comp.sourceGenres.length > 0 && (
+                      <p className="text-[10px]">
+                        <span className="text-muted-foreground/50 uppercase tracking-wider text-[8px] mr-1">genre</span>
+                        <span className="text-foreground">{comp.sourceGenres.join(' / ')}</span>
+                      </p>
+                    )}
+                    {comp.sourceMoods.length === 0 && comp.sourceGenres.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground/50 italic">No {fieldLabel}</p>
+                    )}
                   </div>
 
-                  {comp.targets.map((target, j) => (
-                    <div key={j} className="mt-1 ml-5.5">
-                      <p className="text-[10px] text-muted-foreground/60 mb-0.5">
-                        {target.sourceName}
-                        {target.trackId === syncingTrackId && <Loader2 className="w-2 h-2 text-primary animate-spin inline ml-1" />}
-                      </p>
-                      <p className={`text-[10px] ${target.hasMismatch && !wasSynced ? 'text-muted-foreground/50 italic' : 'text-foreground'}`}>
-                        {target.moods.length > 0 ? target.moods.join(' / ') : `No ${fieldLabel}`}
-                      </p>
-                    </div>
-                  ))}
+                  {/* Target comparisons */}
+                  {comp.targets.map((target, j) => {
+                    const showMood = syncFields.mood && (target.targetMoods.length > 0 || target.moodMismatch)
+                    const showGenre = syncFields.genre && (target.targetGenres.length > 0 || target.genreMismatch)
+                    const isMissing = (m: string, sourceList: string[]) => !sourceList.includes(m)
+                    const isExtra = (m: string, targetList: string[]) => !targetList.includes(m)
+
+                    return (
+                      <div key={j} className="mt-1.5 ml-5.5 pt-1.5 border-t border-border/20">
+                        <p className="text-[10px] text-muted-foreground/50 mb-0.5">
+                          {target.sourceName}
+                          {target.trackId === syncingTrackId && <Loader2 className="w-2 h-2 text-primary animate-spin inline ml-1" />}
+                        </p>
+
+                        {showMood && (
+                          <p className="text-[10px]">
+                            <span className="text-muted-foreground/50 uppercase tracking-wider text-[8px] mr-1">mood</span>
+                            {target.targetMoods.length > 0 ? target.targetMoods.map((m, k) => (
+                              <span key={k}>
+                                {k > 0 && <span className="text-muted-foreground/30"> / </span>}
+                                <span className={isExtra(m, comp.sourceMoods) ? 'text-muted-foreground/40 line-through' : 'text-foreground'}>{m}</span>
+                              </span>
+                            )) : (
+                              <span className="text-muted-foreground/40 italic">missing</span>
+                            )}
+                            {/* Show source moods missing from target */}
+                            {target.moodMismatch && comp.sourceMoods.filter(m => isMissing(m, target.targetMoods)).length > 0 && (
+                              <span className="text-primary/70">
+                                {target.targetMoods.length > 0 && <span className="text-muted-foreground/30"> / </span>}
+                                {comp.sourceMoods.filter(m => isMissing(m, target.targetMoods)).map((m, k) => (
+                                  <span key={k}>
+                                    {k > 0 && <span className="text-muted-foreground/30"> / </span>}
+                                    <span>+{m}</span>
+                                  </span>
+                                ))}
+                              </span>
+                            )}
+                          </p>
+                        )}
+
+                        {showGenre && (
+                          <p className="text-[10px]">
+                            <span className="text-muted-foreground/50 uppercase tracking-wider text-[8px] mr-1">genre</span>
+                            {target.targetGenres.length > 0 ? target.targetGenres.map((m, k) => (
+                              <span key={k}>
+                                {k > 0 && <span className="text-muted-foreground/30"> / </span>}
+                                <span className={isExtra(m, comp.sourceGenres) ? 'text-muted-foreground/40 line-through' : 'text-foreground'}>{m}</span>
+                              </span>
+                            )) : (
+                              <span className="text-muted-foreground/40 italic">missing</span>
+                            )}
+                            {target.genreMismatch && comp.sourceGenres.filter(m => isMissing(m, target.targetGenres)).length > 0 && (
+                              <span className="text-primary/70">
+                                {target.targetGenres.length > 0 && <span className="text-muted-foreground/30"> / </span>}
+                                {comp.sourceGenres.filter(m => isMissing(m, target.targetGenres)).map((m, k) => (
+                                  <span key={k}>
+                                    {k > 0 && <span className="text-muted-foreground/30"> / </span>}
+                                    <span>+{m}</span>
+                                  </span>
+                                ))}
+                              </span>
+                            )}
+                          </p>
+                        )}
+
+                        {!showMood && !showGenre && !wasSynced && (
+                          <p className="text-[10px] text-muted-foreground/40 italic">No {fieldLabel}</p>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )
             })}
