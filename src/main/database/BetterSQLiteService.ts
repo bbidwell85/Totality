@@ -1074,7 +1074,18 @@ export class BetterSQLiteService {
   deleteMediaItem(id: number): void {
     if (!this.db) throw new Error('Database not initialized')
 
-    // Delete associated data first
+    // Before deleting, update any affected collections
+    try {
+      const item = this.db.prepare(
+        'SELECT tmdb_id, source_id, type FROM media_items WHERE id = ?'
+      ).get(id) as { tmdb_id?: number; source_id: string; type: string } | undefined
+
+      if (item?.tmdb_id && item.type === 'movie') {
+        this.updateCollectionsAfterDeletion([String(item.tmdb_id)], item.source_id)
+      }
+    } catch { /* non-critical — proceed with deletion */ }
+
+    // Delete associated data
     this.db.prepare('DELETE FROM media_item_versions WHERE media_item_id = ?').run(id)
     this.db.prepare('DELETE FROM quality_scores WHERE media_item_id = ?').run(id)
     this.db.prepare('DELETE FROM media_item_collections WHERE media_item_id = ?').run(id)

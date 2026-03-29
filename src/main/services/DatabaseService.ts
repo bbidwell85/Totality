@@ -1841,6 +1841,17 @@ export class DatabaseService {
   async deleteMediaItem(id: number): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
 
+    // Before deleting, update any affected collections
+    try {
+      const result = this.db.exec('SELECT tmdb_id, source_id, type FROM media_items WHERE id = ?', [id])
+      if (result[0]?.values[0]) {
+        const [tmdbId, sourceId, type] = result[0].values[0] as [number | null, string, string]
+        if (tmdbId && type === 'movie') {
+          await this.updateCollectionsAfterDeletion([String(tmdbId)], sourceId)
+        }
+      }
+    } catch { /* non-critical */ }
+
     this.db.run('DELETE FROM media_item_versions WHERE media_item_id = ?', [id])
     this.db.run('DELETE FROM quality_scores WHERE media_item_id = ?', [id])
     this.db.run('DELETE FROM media_item_collections WHERE media_item_id = ?', [id])
