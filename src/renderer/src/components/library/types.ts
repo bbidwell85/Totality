@@ -78,6 +78,8 @@ export interface MusicTrack {
   channels?: number
   is_lossless?: boolean
   is_hi_res?: boolean
+  genres?: string // JSON array
+  mood?: string   // JSON array
 }
 
 export interface MusicStats {

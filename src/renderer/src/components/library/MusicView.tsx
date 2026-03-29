@@ -204,6 +204,8 @@ export function MusicView({
     qualityTier: string | null
     artist_name?: string
     album_title?: string
+    mood?: string
+    genres?: string
   } | null>(null)
 
   // Track list column state
@@ -659,7 +661,9 @@ export function MusicView({
                           is_lossless: track.is_lossless,
                           qualityTier: qualityTier,
                           artist_name: selectedAlbum.artist_name,
-                          album_title: selectedAlbum.title
+                          album_title: selectedAlbum.title,
+                          mood: track.originalTrack?.mood,
+                          genres: track.originalTrack?.genres,
                         })
                       }
                     }}
@@ -826,6 +830,27 @@ export function MusicView({
                             {[selectedTrackForQuality.artist_name, selectedTrackForQuality.album_title].filter(Boolean).join(' · ')}
                           </p>
                         )}
+                        {(() => {
+                          const genres = selectedTrackForQuality.genres ? JSON.parse(selectedTrackForQuality.genres) as string[] : []
+                          const moods = selectedTrackForQuality.mood ? JSON.parse(selectedTrackForQuality.mood) as string[] : []
+                          if (genres.length === 0 && moods.length === 0) return null
+                          return (
+                            <div className="mt-1.5 space-y-0.5">
+                              {genres.length > 0 && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  <span className="text-muted-foreground/60">Genre: </span>
+                                  {genres.join(', ')}
+                                </p>
+                              )}
+                              {moods.length > 0 && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  <span className="text-muted-foreground/60">Mood: </span>
+                                  {moods.join(', ')}
+                                </p>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         {(tier === 'low' || tier === 'medium') && (
