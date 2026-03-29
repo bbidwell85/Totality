@@ -1848,6 +1848,21 @@ export class DatabaseService {
     await this.save()
   }
 
+  async cleanupOrphanedMediaData(): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized')
+    let cleaned = 0
+    const tables = ['quality_scores', 'media_item_versions', 'media_item_collections']
+    for (const table of tables) {
+      this.db.run(`DELETE FROM ${table} WHERE media_item_id NOT IN (SELECT id FROM media_items)`)
+      cleaned += this.db.getRowsModified()
+    }
+    if (cleaned > 0) {
+      console.log(`[Database] Cleaned up ${cleaned} orphaned rows`)
+      await this.save()
+    }
+    return cleaned
+  }
+
   // ============================================================================
   // MEDIA ITEM VERSIONS
   // ============================================================================

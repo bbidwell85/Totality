@@ -323,9 +323,11 @@ export function Dashboard({
   }, [loadDashboardData])
 
   // Reload dashboard when a scan completes (items may have been added/removed)
+  // Double refresh: immediate + delayed to catch any race with stale item cleanup
   useEffect(() => {
     const cleanup = window.electronAPI.onScanCompleted?.(() => {
       loadDashboardData()
+      setTimeout(() => loadDashboardData(), 2000)
     })
     return () => cleanup?.()
   }, [loadDashboardData])

@@ -630,6 +630,15 @@ export class PlexProvider implements MediaProvider {
       }
 
       // Remove stale items
+      // If libraryType is null (Plex returned 0 items), detect from existing DB items
+      if (!isIncremental && !libraryType) {
+        const existingItems = db.getMediaItems({ sourceId: this.sourceId, libraryId })
+        if (existingItems.length > 0) {
+          libraryType = (existingItems[0] as { type: string }).type === 'episode' ? 'show' : 'movie'
+          console.log(`[PlexProvider ${this.sourceId}] Detected library type from DB: ${libraryType} (Plex returned 0 items)`)
+        }
+      }
+
       if (!isIncremental && libraryType) {
         // Full scan: fetch complete set of current Plex IDs to reconcile deletions
         const currentPlexIds = await this.getPlexLibraryItemIds(libraryId, libraryType)
@@ -673,6 +682,9 @@ export class PlexProvider implements MediaProvider {
 
       // Update scan time
       await db.updateSourceScanTime(this.sourceId)
+
+      // Clean up any orphaned quality_scores/versions from deleted items
+      try { db.cleanupOrphanedMediaData() } catch { /* non-critical */ }
 
       result.success = true
       result.durationMs = Date.now() - startTime

@@ -1082,6 +1082,31 @@ export class BetterSQLiteService {
   }
 
   /**
+   * Clean up orphaned rows in related tables where the parent media_item was deleted.
+   * Handles quality_scores, media_item_versions, and media_item_collections that
+   * may have been left behind due to transaction timing or CASCADE failures.
+   */
+  cleanupOrphanedMediaData(): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    let cleaned = 0
+    cleaned += this.db.prepare(
+      'DELETE FROM quality_scores WHERE media_item_id NOT IN (SELECT id FROM media_items)'
+    ).run().changes
+    cleaned += this.db.prepare(
+      'DELETE FROM media_item_versions WHERE media_item_id NOT IN (SELECT id FROM media_items)'
+    ).run().changes
+    cleaned += this.db.prepare(
+      'DELETE FROM media_item_collections WHERE media_item_id NOT IN (SELECT id FROM media_items)'
+    ).run().changes
+
+    if (cleaned > 0) {
+      console.log(`[BetterSQLite] Cleaned up ${cleaned} orphaned rows`)
+    }
+    return cleaned
+  }
+
+  /**
    * Delete all media items for a source
    */
   deleteMediaItemsForSource(sourceId: string): void {
