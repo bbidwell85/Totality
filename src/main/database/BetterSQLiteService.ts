@@ -1111,6 +1111,34 @@ export class BetterSQLiteService {
       'DELETE FROM media_item_collections WHERE media_item_id NOT IN (SELECT id FROM media_items)'
     ).run().changes
 
+    // Validate collection ownership — remove TMDB IDs that no longer exist in media_items
+    try {
+      const collections = this.db.prepare(
+        'SELECT id, owned_movie_ids, owned_movies, total_movies, source_id FROM movie_collections'
+      ).all() as Array<{ id: number; owned_movie_ids: string; owned_movies: number; total_movies: number; source_id: string }>
+
+      for (const coll of collections) {
+        const ownedIds: string[] = JSON.parse(coll.owned_movie_ids || '[]')
+        const validIds = ownedIds.filter(tmdbId => {
+          const exists = this.db!.prepare('SELECT 1 FROM media_items WHERE tmdb_id = ?').get(tmdbId)
+          return !!exists
+        })
+
+        if (validIds.length !== ownedIds.length) {
+          if (validIds.length === 0) {
+            this.db.prepare('DELETE FROM movie_collections WHERE id = ?').run(coll.id)
+            cleaned++
+          } else {
+            const newPct = coll.total_movies > 0 ? Math.round((validIds.length / coll.total_movies) * 100) : 0
+            this.db.prepare(
+              'UPDATE movie_collections SET owned_movies = ?, owned_movie_ids = ?, completeness_percentage = ?, updated_at = datetime(\'now\') WHERE id = ?'
+            ).run(validIds.length, JSON.stringify(validIds), newPct, coll.id)
+          }
+          cleaned++
+        }
+      }
+    } catch { /* non-critical */ }
+
     if (cleaned > 0) {
       console.log(`[BetterSQLite] Cleaned up ${cleaned} orphaned rows`)
     }
