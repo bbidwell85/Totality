@@ -1085,10 +1085,21 @@ export class BetterSQLiteService {
         if (item.tmdb_id && item.type === 'movie') {
           this.updateCollectionsAfterDeletion([String(item.tmdb_id)], item.source_id)
         }
-        // Episode: invalidate series completeness so it gets recalculated
+        // Episode: update series completeness inline (decrement owned, recalculate %)
         if (item.type === 'episode' && item.series_title) {
+          this.db.prepare(`
+            UPDATE series_completeness SET
+              owned_episodes = MAX(0, owned_episodes - 1),
+              completeness_percentage = CASE WHEN total_episodes > 0
+                THEN ROUND(CAST(MAX(0, owned_episodes - 1) AS REAL) * 100.0 / total_episodes)
+                ELSE 0 END,
+              updated_at = datetime('now')
+            WHERE series_title = ? AND source_id = ?
+          `).run(item.series_title, item.source_id)
+
+          // Remove series with 0 owned episodes
           this.db.prepare(
-            'DELETE FROM series_completeness WHERE series_title = ? AND source_id = ?'
+            'DELETE FROM series_completeness WHERE series_title = ? AND source_id = ? AND owned_episodes <= 0'
           ).run(item.series_title, item.source_id)
         }
       }
@@ -1148,19 +1159,29 @@ export class BetterSQLiteService {
       }
     } catch { /* non-critical */ }
 
-    // Validate series completeness — delete records where episode count doesn't match
+    // Validate series completeness — update owned_episodes from actual media_items count
     try {
-      cleaned += this.db.prepare(`
-        DELETE FROM series_completeness WHERE id IN (
-          SELECT sc.id FROM series_completeness sc
-          WHERE sc.owned_episodes != (
+      this.db.prepare(`
+        UPDATE series_completeness SET
+          owned_episodes = (
             SELECT COUNT(*) FROM media_items mi
-            WHERE mi.series_title = sc.series_title
-              AND mi.source_id = sc.source_id
+            WHERE mi.series_title = series_completeness.series_title
+              AND mi.source_id = series_completeness.source_id
               AND mi.type = 'episode'
-          )
-        )
-      `).run().changes
+          ),
+          completeness_percentage = CASE WHEN total_episodes > 0
+            THEN ROUND(CAST((
+              SELECT COUNT(*) FROM media_items mi
+              WHERE mi.series_title = series_completeness.series_title
+                AND mi.source_id = series_completeness.source_id
+                AND mi.type = 'episode'
+            ) AS REAL) * 100.0 / total_episodes)
+            ELSE 0 END
+      `).run()
+      // Remove series with 0 owned episodes
+      cleaned += this.db.prepare(
+        'DELETE FROM series_completeness WHERE owned_episodes <= 0'
+      ).run().changes
     } catch { /* non-critical */ }
 
     // Clean up orphaned music data

@@ -1850,7 +1850,18 @@ export class DatabaseService {
           await this.updateCollectionsAfterDeletion([String(tmdbId)], sourceId)
         }
         if (type === 'episode' && seriesTitle) {
-          this.db.run('DELETE FROM series_completeness WHERE series_title = ? AND source_id = ?', [seriesTitle, sourceId])
+          this.db.run(`
+            UPDATE series_completeness SET
+              owned_episodes = MAX(0, owned_episodes - 1),
+              completeness_percentage = CASE WHEN total_episodes > 0
+                THEN ROUND(CAST(MAX(0, owned_episodes - 1) AS REAL) * 100.0 / total_episodes)
+                ELSE 0 END
+            WHERE series_title = ? AND source_id = ?
+          `, [seriesTitle, sourceId])
+          this.db.run(
+            'DELETE FROM series_completeness WHERE series_title = ? AND source_id = ? AND owned_episodes <= 0',
+            [seriesTitle, sourceId]
+          )
         }
       }
     } catch { /* non-critical */ }
