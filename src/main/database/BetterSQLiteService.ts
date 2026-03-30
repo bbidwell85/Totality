@@ -2919,6 +2919,7 @@ export class BetterSQLiteService {
     const stmt = this.db.prepare(`
       SELECT sc.*
       FROM series_completeness sc
+      LEFT JOIN library_scans ls ON sc.source_id = ls.source_id AND sc.library_id = ls.library_id
       INNER JOIN (
         SELECT series_title, MAX(completeness_percentage) as max_pct
         FROM series_completeness
@@ -2927,6 +2928,7 @@ export class BetterSQLiteService {
         HAVING max_pct < 100
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
       WHERE sc.tmdb_id IS NOT NULL${sourceFilter}
+        AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
       GROUP BY sc.series_title
       ORDER BY sc.completeness_percentage ASC
     `)
@@ -3345,15 +3347,23 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     if (!this.db) throw new Error('Database not initialized')
 
     if (sourceId) {
-      const stmt = this.db.prepare(
-        'SELECT * FROM movie_collections WHERE completeness_percentage < 100 AND source_id = ? ORDER BY completeness_percentage ASC'
-      )
+      const stmt = this.db.prepare(`
+        SELECT mc.* FROM movie_collections mc
+        LEFT JOIN library_scans ls ON mc.source_id = ls.source_id AND mc.library_id = ls.library_id
+        WHERE mc.completeness_percentage < 100 AND mc.source_id = ?
+          AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        ORDER BY mc.completeness_percentage ASC
+      `)
       return stmt.all(sourceId) as MovieCollection[]
     }
 
-    const stmt = this.db.prepare(
-      'SELECT * FROM movie_collections WHERE completeness_percentage < 100 ORDER BY completeness_percentage ASC'
-    )
+    const stmt = this.db.prepare(`
+      SELECT mc.* FROM movie_collections mc
+      LEFT JOIN library_scans ls ON mc.source_id = ls.source_id AND mc.library_id = ls.library_id
+      WHERE mc.completeness_percentage < 100
+        AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+      ORDER BY mc.completeness_percentage ASC
+    `)
     return stmt.all() as MovieCollection[]
   }
 
@@ -3483,9 +3493,11 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     if (!this.db) throw new Error('Database not initialized')
 
     let sql = `
-      SELECT a.* FROM music_albums a
+      SELECT a.*, q.quality_tier, q.tier_quality, q.tier_score FROM music_albums a
       INNER JOIN music_quality_scores q ON a.id = q.album_id
+      LEFT JOIN library_scans ls ON a.source_id = ls.source_id AND a.library_id = ls.library_id
       WHERE q.needs_upgrade = 1
+        AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
     `
 
     if (sourceId) {
@@ -3565,20 +3577,23 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     if (!this.db) throw new Error('Database not initialized')
 
     if (sourceId) {
-      // When filtering by source, only return completeness for artists that exist in that source
       const stmt = this.db.prepare(`
         SELECT DISTINCT ac.*, ma.thumb_url
         FROM artist_completeness ac
         INNER JOIN music_artists ma ON ac.artist_name = ma.name AND ma.source_id = ?
+        LEFT JOIN library_scans ls ON ma.source_id = ls.source_id AND ma.library_id = ls.library_id
+        WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
         ORDER BY ac.artist_name ASC
       `)
       return stmt.all(sourceId) as ArtistCompleteness[]
     }
 
     const stmt = this.db.prepare(`
-      SELECT ac.*, ma.thumb_url
+      SELECT DISTINCT ac.*, ma.thumb_url
       FROM artist_completeness ac
       LEFT JOIN music_artists ma ON ac.artist_name = ma.name
+      LEFT JOIN library_scans ls ON ma.source_id = ls.source_id AND ma.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
       ORDER BY ac.artist_name ASC
     `)
     return stmt.all() as ArtistCompleteness[]

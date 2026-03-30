@@ -260,6 +260,7 @@ export function Dashboard({
           } catch { /* keep original */ }
           return s
         })
+        .filter(s => s.completeness_percentage < 100)
         .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
       setSeries(sortedSeries)
 
@@ -330,12 +331,10 @@ export function Dashboard({
     return () => cleanup?.()
   }, [loadDashboardData])
 
-  // Reload dashboard when completeness analysis completes (collections, series, music)
+  // Reload dashboard when any library data changes (scans, completeness, library toggle)
   useEffect(() => {
-    const cleanup = window.electronAPI.onLibraryUpdated?.((data: { type: string }) => {
-      if (data?.type === 'media') {
-        loadDashboardData()
-      }
+    const cleanup = window.electronAPI.onLibraryUpdated?.(() => {
+      loadDashboardData()
     })
     return () => cleanup?.()
   }, [loadDashboardData])
