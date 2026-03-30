@@ -2680,7 +2680,7 @@ export class BetterSQLiteService {
 
     this.db.prepare('DELETE FROM music_tracks WHERE id = ?').run(id)
 
-    // Clean up orphaned album (0 remaining tracks)
+    // Update album track_count and clean up if empty
     if (track?.album_id) {
       const albumTrackCount = this.db.prepare(
         'SELECT COUNT(*) as cnt FROM music_tracks WHERE album_id = ?'
@@ -2689,10 +2689,15 @@ export class BetterSQLiteService {
         this.db.prepare('DELETE FROM music_quality_scores WHERE album_id = ?').run(track.album_id)
         this.db.prepare('DELETE FROM album_completeness WHERE album_id = ?').run(track.album_id)
         this.db.prepare('DELETE FROM music_albums WHERE id = ?').run(track.album_id)
+      } else {
+        // Update the album's track_count to reflect the deletion
+        this.db.prepare(
+          'UPDATE music_albums SET track_count = ?, updated_at = datetime(\'now\') WHERE id = ?'
+        ).run(albumTrackCount.cnt, track.album_id)
       }
     }
 
-    // Clean up orphaned artist (0 remaining tracks)
+    // Update or clean up orphaned artist
     if (track?.artist_id) {
       const artistTrackCount = this.db.prepare(
         'SELECT COUNT(*) as cnt FROM music_tracks WHERE artist_id = ?'
@@ -2703,6 +2708,14 @@ export class BetterSQLiteService {
           this.db.prepare('DELETE FROM artist_completeness WHERE artist_name = ?').run(artist.name)
         }
         this.db.prepare('DELETE FROM music_artists WHERE id = ?').run(track.artist_id)
+      } else {
+        // Update artist's track and album counts
+        const albumCount = this.db.prepare(
+          'SELECT COUNT(DISTINCT album_id) as cnt FROM music_tracks WHERE artist_id = ? AND album_id IS NOT NULL'
+        ).get(track.artist_id) as { cnt: number }
+        this.db.prepare(
+          'UPDATE music_artists SET track_count = ?, album_count = ?, updated_at = datetime(\'now\') WHERE id = ?'
+        ).run(artistTrackCount.cnt, albumCount.cnt, track.artist_id)
       }
     }
   }
