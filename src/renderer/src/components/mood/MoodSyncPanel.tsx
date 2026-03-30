@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { X, Music, RefreshCw, ArrowRight, CheckCircle2, AlertCircle, Loader2, Circle, Search } from 'lucide-react'
+import { X, Tags, RefreshCw, ArrowRight, CheckCircle2, AlertCircle, Loader2, Circle, Search } from 'lucide-react'
 
 interface MoodSource {
   sourceId: string
@@ -390,7 +390,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
         <div className="flex items-center gap-2">
-          <Music className="w-4 h-4 text-muted-foreground" />
+          <Tags className="w-4 h-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">Tag Sync</h2>
           {totalMismatches > 0 && (
             <span className="text-xs text-muted-foreground">{totalMismatches}</span>
@@ -613,7 +613,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
         ) : filteredComparisons.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
             <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
-              <Music className="w-6 h-6 text-muted-foreground" />
+              <Tags className="w-6 h-6 text-muted-foreground" />
             </div>
             <p className="text-sm font-medium mb-1">
               {sourceOfTruthId

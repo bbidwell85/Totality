@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, X, Home, Film, Tv, Music, Library, Star, Settings, RefreshCw, Disc3, User, Bot, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Search, X, Home, Film, Tv, Music, Tags, Library, Star, Settings, RefreshCw, Disc3, User, Bot, ArrowLeft, ArrowRight } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { useNavigation } from '../../contexts/NavigationContext'
@@ -678,7 +678,7 @@ export function TopBar({
             )}
           </button>
 
-          {/* Mood Sync Panel Toggle */}
+          {/* Tag Sync Panel Toggle */}
           <button
             onClick={onToggleMoodSync}
             className={`relative p-2 rounded-md transition-colors ${
@@ -686,11 +686,11 @@ export function TopBar({
                 ? 'bg-white text-black'
                 : 'text-white hover:bg-white/10'
             }`}
-            title="Mood Sync"
-            aria-label="Toggle mood sync panel"
+            title="Tag Sync"
+            aria-label="Toggle tag sync panel"
             aria-pressed={showMoodSyncPanel}
           >
-            <Music className="w-5 h-5" />
+            <Tags className="w-5 h-5" />
           </button>
 
           {/* AI Chat Toggle */}
