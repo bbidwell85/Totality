@@ -382,7 +382,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       id="tag-sync-panel"
       role="complementary"
       aria-label="Tag Sync"
-      className={`fixed top-[88px] bottom-4 right-4 w-96 bg-sidebar-gradient/75 backdrop-blur-xl rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
+      className={`fixed top-[88px] bottom-4 right-4 w-96 bg-sidebar-gradient/90 backdrop-blur-xl rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
         isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
       }`}
       onKeyDown={handleKeyDown}
