@@ -155,6 +155,8 @@ export function Dashboard({
     return () => resizeObserver.disconnect()
   }, [hasMovies, hasTV, hasMusic, isLoading]) // Re-run when columns appear/disappear
 
+  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -180,26 +182,24 @@ export function Dashboard({
       if (serSort) setSeriesSortBy(serSort as 'completeness' | 'name' | 'recent')
       if (artSort) setArtistSortBy(artSort as 'completeness' | 'name')
 
-      const [movieUpgradeData, tvUpgradeData, musicUpgradeData, collectionsData, seriesData, artistsData] = await Promise.all([
-        window.electronAPI.getMediaItems({
-          needsUpgrade: true,
-          type: 'movie',
-          sortBy: 'tier_score',
-          sortOrder: 'asc',
-          sourceId
-        }) as Promise<MediaItem[]>,
-        window.electronAPI.getMediaItems({
-          needsUpgrade: true,
-          type: 'episode',
-          sortBy: 'tier_score',
-          sortOrder: 'asc',
-          sourceId
-        }) as Promise<MediaItem[]>,
-        window.electronAPI.musicGetAlbumsNeedingUpgrade(undefined, sourceId) as Promise<MusicAlbumUpgrade[]>,
-        window.electronAPI.collectionsGetIncomplete(sourceId) as Promise<MovieCollectionData[]>,
-        window.electronAPI.seriesGetIncomplete(sourceId) as Promise<SeriesCompletenessData[]>,
-        window.electronAPI.musicGetAllArtistCompleteness(sourceId) as Promise<ArtistCompletenessData[]>
+      const results = await Promise.allSettled([
+        window.electronAPI.getMediaItems({ needsUpgrade: true, type: 'movie', sortBy: 'tier_score', sortOrder: 'asc', sourceId }),
+        window.electronAPI.getMediaItems({ needsUpgrade: true, type: 'episode', sortBy: 'tier_score', sortOrder: 'asc', sourceId }),
+        window.electronAPI.musicGetAlbumsNeedingUpgrade(undefined, sourceId),
+        window.electronAPI.collectionsGetIncomplete(sourceId),
+        window.electronAPI.seriesGetIncomplete(sourceId),
+        window.electronAPI.musicGetAllArtistCompleteness(sourceId),
       ])
+
+      const val = <T,>(r: PromiseSettledResult<T>, fallback: T): T =>
+        r.status === 'fulfilled' ? r.value : fallback
+
+      const movieUpgradeData = val(results[0], []) as MediaItem[]
+      const tvUpgradeData = val(results[1], []) as MediaItem[]
+      const musicUpgradeData = val(results[2], []) as MusicAlbumUpgrade[]
+      const collectionsData = val(results[3], []) as MovieCollectionData[]
+      const seriesData = val(results[4], []) as SeriesCompletenessData[]
+      const artistsData = val(results[5], []) as ArtistCompletenessData[]
 
       // Load exclusions for completeness and upgrade filtering
       const [collectionExclusions, seriesExclusions, artistExclusions, upgradeExclusions] = await Promise.all([
@@ -309,42 +309,41 @@ export function Dashboard({
     }
   }, [activeSourceId])
 
+  // Debounced reload coalesces rapid event-driven refreshes (300ms)
+  const debouncedReload = useCallback(() => {
+    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current)
+    reloadTimerRef.current = setTimeout(() => loadDashboardData(), 300)
+  }, [loadDashboardData])
+
   useEffect(() => {
     loadDashboardData()
   }, [loadDashboardData])
 
-  // Reload dashboard when EP/Singles settings change
+  // Event-driven reloads use debounced version to coalesce rapid events
   useEffect(() => {
     const cleanup = window.electronAPI.onSettingsChanged?.((data) => {
       if (data.key === 'completeness_include_eps' || data.key === 'completeness_include_singles') {
-        loadDashboardData()
+        debouncedReload()
       }
     })
     return () => cleanup?.()
-  }, [loadDashboardData])
+  }, [debouncedReload])
 
-  // Reload dashboard when a scan completes (items may have been added/removed)
   useEffect(() => {
-    const cleanup = window.electronAPI.onScanCompleted?.(() => {
-      loadDashboardData()
-    })
+    const cleanup = window.electronAPI.onScanCompleted?.(() => debouncedReload())
     return () => cleanup?.()
-  }, [loadDashboardData])
+  }, [debouncedReload])
 
-  // Reload dashboard when any library data changes (scans, completeness, library toggle)
   useEffect(() => {
-    const cleanup = window.electronAPI.onLibraryUpdated?.(() => {
-      loadDashboardData()
-    })
+    const cleanup = window.electronAPI.onLibraryUpdated?.(() => debouncedReload())
     return () => cleanup?.()
-  }, [loadDashboardData])
+  }, [debouncedReload])
 
-  // Reload dashboard when exclusions change (items dismissed/restored in settings)
   useEffect(() => {
-    const handler = () => loadDashboardData()
+    const handler = () => debouncedReload()
     window.addEventListener('exclusions-changed', handler)
     return () => window.removeEventListener('exclusions-changed', handler)
-  }, [loadDashboardData])
+  }, [debouncedReload])
 
   // Parse functions for missing items with basic validation
   const parseMissingMovies = useCallback((collection: MovieCollectionData): MissingMovie[] => {
