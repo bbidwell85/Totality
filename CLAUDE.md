@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Totality is an Electron desktop application that analyzes media library quality from multiple sources (Plex, Jellyfin, Emby, Kodi) and recommends higher-quality versions. Built with Electron 41, React 18, TypeScript, Vite 6, and Tailwind CSS 4.
+Totality is an Electron desktop application that analyzes media library quality from multiple sources (Plex, Jellyfin, Emby, Kodi, MediaMonkey) and recommends higher-quality versions. Includes tag sync (mood/genre) across sources with bidirectional write support. Built with Electron 41, React 18, TypeScript, Vite 6, and Tailwind CSS 4.
 
 ## Development Commands
 
@@ -112,11 +112,12 @@ All other services follow the same singleton getter pattern and are discoverable
 
 The application supports multiple media server providers through a common interface:
 
-- **MediaProvider.ts**: Common interface for all providers (`ProviderType`: plex, jellyfin, emby, kodi, kodi-local, local)
+- **MediaProvider.ts**: Common interface for all providers (`ProviderType`: plex, jellyfin, emby, kodi, kodi-local, kodi-mysql, local, mediamonkey)
 - **ProviderFactory.ts**: Creates provider instances by type
-- **PlexProvider.ts**, **JellyfinProvider.ts**, **EmbyProvider.ts**, **KodiProvider.ts**, **KodiLocalProvider.ts**, **KodiMySQLProvider.ts**, **LocalFolderProvider.ts**: Provider implementations
+- **PlexProvider.ts**, **JellyfinProvider.ts**, **EmbyProvider.ts**, **KodiProvider.ts**, **KodiLocalProvider.ts**, **KodiMySQLProvider.ts**, **LocalFolderProvider.ts**, **MediaMonkeyProvider.ts**: Provider implementations
 - **JellyfinEmbyBase.ts**: Shared base class for Jellyfin/Emby (similar APIs)
 - **KodiDatabaseSchema.ts**: Schema mapping for local Kodi SQLite access
+- **MediaMonkeyDatabaseSchema.ts**: Schema mapping for MediaMonkey MM4/MM5 SQLite access
 - **LocalFolderProvider.ts**: Scans local folder paths with FFprobe + TMDB metadata lookup
 - **VersionNaming.ts**: Smart edition/version naming for multi-version movies (deduplication by TMDB/IMDB ID)
 
@@ -175,6 +176,7 @@ registerLoggingHandlers()
 registerAutoUpdateHandlers()
 registerGeminiHandlers()
 registerNotificationHandlers()
+registerMoodHandlers()
 ```
 
 **Handler Pattern** (`src/main/ipc/*.ts`):
@@ -196,9 +198,11 @@ const result = await window.electronAPI.namespaceMethod(args)
 // Renderer: window.electronAPI.onEventName(callback)
 ```
 
-Events: `sources:scanProgress`, `quality:analysisProgress`, `series:progress`, `collections:progress`, `music:scanProgress`, `music:qualityProgress`, `music:completenessProgress`, `monitoring:statusChanged`, `taskQueue:updated`, `library:updated`, `logging:entry`, `settings:changed`, `scan:completed`, `ai:toolUse`, `ai:chatStreamDelta`, `ai:chatStreamComplete`, `ai:analysisStreamDelta`, `ai:analysisStreamComplete`
+Events: `sources:scanProgress`, `quality:analysisProgress`, `series:progress`, `collections:progress`, `music:scanProgress`, `music:qualityProgress`, `music:completenessProgress`, `monitoring:statusChanged`, `taskQueue:updated`, `library:updated`, `logging:entry`, `settings:changed`, `scan:completed`, `ai:toolUse`, `ai:chatStreamDelta`, `ai:chatStreamComplete`, `ai:analysisStreamDelta`, `ai:analysisStreamComplete`, `mood:syncProgress`
 
 **Settings Change Events**: When a setting is updated via `setSetting()`, the main process emits `settings:changed` with `{ key, hasValue }`. Renderer components that depend on settings (e.g., Dashboard, MediaBrowser) listen via `window.electronAPI.onSettingsChanged()` to live-update without requiring a page reload. When reading settings in these handlers, always fetch fresh values from the API rather than relying on React state (which may be stale due to batched updates).
+
+**Exclusion Events**: When exclusions are added/removed (via library dismiss or settings tab), a `CustomEvent('exclusions-changed')` is dispatched on `window`. Dashboard and MediaBrowser listen for this to live-reload completeness data. Dashboard recalculates `completeness_percentage` for artists after filtering out excluded items (same pattern as collections and series).
 
 ### Database Schema
 
@@ -222,7 +226,7 @@ Events: `sources:scanProgress`, `quality:analysisProgress`, `series:progress`, `
 
 **Important**: Database uses triggers for `updated_at` timestamps. Schema migrations in `DatabaseService.runMigrations()`.
 
-**Exclusions and Completeness Stats**: The `exclusions` table stores items dismissed by the user from completeness results. Completeness panel stats (Missing, Complete, Incomplete counts) are computed **client-side** from filtered data in `MediaBrowser.tsx:loadCompletenessData()` — the raw server stats don't account for exclusions, so stats are recalculated after filtering out excluded items.
+**Exclusions and Completeness Stats**: The `exclusions` table stores items dismissed by the user from completeness results. Completeness panel stats (Missing, Complete, Incomplete counts) are computed **client-side** from filtered data in `MediaBrowser.tsx:loadCompletenessData()` — the raw server stats don't account for exclusions, so stats are recalculated after filtering out excluded items. Dashboard also recalculates `completeness_percentage` for collections, series, and artists after exclusion filtering — artists with all missing items excluded reach 100% and are hidden from the panel.
 
 ### Quality Analysis System
 
@@ -259,7 +263,7 @@ Events: `sources:scanProgress`, `quality:analysisProgress`, `series:progress`, `
 - **ToastContext**: Toast notification display
 - **NavigationContext**: Page/view navigation state
 - **KeyboardNavigationContext**: Keyboard shortcut handling
-- **ThemeContext**: Theme selection and persistence (`effectiveIsDark` for light/dark detection)
+- **ThemeContext**: Theme selection and persistence (`effectiveIsDark` for light/dark detection). 14 base themes (dark, slate, ember, midnight, oled, velvet, emerald, cobalt, carbon, matrix, fury, gotham, neon, whimsy) with dark/light/system modes. Film-inspired themes (matrix, fury, gotham, neon, whimsy) added in v0.3.1. Theme CSS vars in `src/renderer/src/styles/index.css`, selector UI in `AppearanceTab.tsx`.
 
 **Key Renderer Libraries**:
 - **react-window** + **react-virtualized-auto-sizer**: Virtualized lists/grids for large media libraries
@@ -268,10 +272,49 @@ Events: `sources:scanProgress`, `quality:analysisProgress`, `series:progress`, `
 
 ### Background Systems
 
-- **TaskQueueService** (`src/main/services/TaskQueueService.ts`): Task types: `library-scan`, `source-scan`, `series-completeness`, `collection-completeness`, `music-completeness`, `music-scan`. Supports pause/resume/cancel/reorder. Emits notifications on completion/failure.
+- **TaskQueueService** (`src/main/services/TaskQueueService.ts`): Task types: `library-scan`, `source-scan`, `series-completeness`, `collection-completeness`, `music-completeness`, `music-scan`. Supports pause/resume/cancel/reorder. Emits notifications on completion/failure. `TaskDefinition` supports optional `artistId` for single-artist music completeness analysis (routes through task queue instead of direct IPC call).
 - **LiveMonitoringService** (`src/main/services/LiveMonitoringService.ts`): Polls sources on intervals, pauses during manual scans, creates `source_change` notifications.
 - **Notifications** (`notifications` table): Types: `source_change`, `scan_complete`, `error`, `info`. Emitted from TaskQueueService, LiveMonitoringService, SourceManager, AutoUpdateService. UI in `ActivityPanel.tsx`.
 - **Wishlist**: Auto-fetches TMDB poster on add when `tmdb_id` present but `poster_url` missing (both direct and bulk add paths).
+
+### Tag Sync (Mood/Genre)
+
+**Location:** `src/main/services/MoodSyncService.ts`, `src/main/ipc/mood.ts`, `src/renderer/src/components/mood/MoodSyncPanel.tsx`
+
+Bidirectional sync of mood and genre tags across Plex, MediaMonkey, and Kodi. User selects a source of truth, compares tags across sources, and pushes corrections.
+
+- **MoodSyncService**: Compares tag fields across sources. Track matching by MusicBrainz ID (primary) or title+artist (fallback). Supports `SyncField` type (`'mood' | 'genre'`).
+- **Write targets**: Plex (HTTP PUT API with `mood[i].tag.tag` params), MediaMonkey (SQLite write with FTS/IUNICODE handling), Kodi (SQLite write to `song.mood` or `song_genre` junction table). All database writes include backup, running-app detection, and confirmation dialog.
+- **Tag Sync Panel**: Slide-out panel from TopBar (Tags icon). 4-step flow: Source of Truth → Fields (checkboxes) → Mode (Overwrite/Append) → Sync Targets. Dual-field comparison with inline diff highlighting. Per-track selective sync.
+- **Plex mood/genre READ**: Uses per-tag-category approach (`/library/sections/{id}/mood?type=10` then `/all?type=10&mood={id}`) since bulk JSON endpoint strips tag data.
+- **MediaMonkey IUNICODE collation**: sql.js can't register custom collations. Fix: replace IUNICODE→NOCASE in sqlite_master, export buffer, reimport. For writes, also handle FTS `mm` tokenizer by removing SongsText entries before export, restoring original schemas before saving.
+- **Supported providers for tag sync**: Plex, MediaMonkey, Kodi, Kodi-Local (controlled by `TAG_SYNC_PROVIDERS` set in MoodSyncService)
+
+### MediaMonkey Provider
+
+**Location:** `src/main/providers/mediamonkey/`
+
+- **MediaMonkeyProvider.ts**: Read-only scan of MM4 (MM.DB) / MM5 (MM5.DB) SQLite databases. Music-only provider.
+- **MediaMonkeyDatabaseSchema.ts**: Types and SQL queries for Songs, Albums, Artists, Lists/ListsSongs (moods), Genres/GenresSongs, Covers tables.
+- **MediaMonkeyDiscoveryService.ts**: Auto-detects MM4/MM5 at `%APPDATA%\MediaMonkey\` and `%APPDATA%\MediaMonkey5\`.
+- **MM5 column names**: `SamplingFrequency` (not SampleRate), `BPS` (not BitsPerSample), `Stereo` (not Channels), `TrackNumber`/`DiscNumber` are TEXT ("3/12" format).
+- **Mood storage**: `Songs.Mood` column (semicolon-separated) AND `Lists` table (`IDListType=2`, `TextData` column) + `ListsSongs` junction. Comma-separated values must be split for Plex compatibility.
+
+### Deletion Cleanup
+
+When items are deleted from a source and a rescan runs, cleanup is centralized in the database methods (not in individual providers):
+
+- **`deleteMediaItem()`**: Wrapped in SQLite transaction. Updates `movie_collections` (removes TMDB ID, decrements count). Decrements `series_completeness` owned_episodes. Deletes associated versions, quality_scores, collections.
+- **`deleteMusicTrack()`**: Wrapped in transaction. Removes orphaned albums (0 tracks) and artists (0 tracks). Updates album `track_count` and artist `track_count`/`album_count`.
+- **`cleanupOrphanedMediaData()`**: Belt-and-suspenders sweep after every scan. Validates collection ownership against actual media_items, updates series_completeness counts, removes orphaned music data.
+- **Safety guard**: `removeStaleItems()` refuses bulk deletion when Plex returns 0 IDs but DB has items (prevents API failure from wiping library).
+
+### Dashboard Refresh
+
+- Dashboard reloads via `loadDashboardData()` which makes 6 parallel `Promise.allSettled` IPC calls (movie upgrades, TV upgrades, music upgrades, collections, series, artist completeness).
+- Event-driven reloads are debounced (300ms) to prevent event storms from simultaneous scan + completeness task completions.
+- Refresh triggers: `scan:completed`, `library:updated` (all types), `exclusions-changed`, `settings:changed`, `activeSourceId` change.
+- Disabled libraries filtered at DB level via `library_scans.is_enabled` JOIN on all completeness/upgrade queries.
 
 ### Preference Persistence
 
@@ -423,8 +466,12 @@ better-sqlite3 writes directly to disk (no explicit save needed).
 
 1. Implement `MediaProvider` interface in `src/main/providers/NewProvider.ts`
 2. Register in `ProviderFactory.ts`
-3. Add provider type to `ProviderType` union and `source_type` CHECK constraint in `src/main/database/schema.ts`
-4. Add UI authentication flow in `src/renderer/src/components/sources/`
+3. Add provider type to `ProviderType` union in `src/main/providers/base/MediaProvider.ts`, `src/main/types/database.ts`, `src/renderer/src/contexts/SourceContext.tsx`
+4. Add to `source_type` CHECK constraint in `src/main/database/schema.ts` (requires table recreation migration for existing databases — see MediaMonkey CHECK migration pattern)
+5. Add to `ProviderTypeSchema` in `src/main/validation/schemas.ts`
+6. Add UI connection flow in `src/renderer/src/components/sources/` and register in `AddSourceModal.tsx`
+7. Add provider color to `providerColors` maps in `Sidebar.tsx`, `SourceCard.tsx`, `mediaUtils.ts`
+8. If supporting tag sync, add to `TAG_SYNC_PROVIDERS` set in `MoodSyncService.ts`
 
 ### Adding a React Component
 
@@ -436,6 +483,10 @@ Components in `src/renderer/src/components/` organized by domain: `dashboard/`, 
 - `TVShowsView.tsx`: TV show/season/episode views (extracted view component)
 - `MusicView.tsx`: Artist/album/track views (extracted view component). Album list `itemSize={104}`, track list `itemSize={40}`
 - `hooks/`: Custom hooks for library state (`useLibraryState`, `useLibraryDataLoading`, `useLibraryEventListeners`, etc.)
+
+**Alphabet Navigation**: The A-Z sidebar in library views uses `alphabetFilter` passed to backend queries (server-side filtering via `WHERE UPPER(SUBSTR(title, 1, 1)) = ?`). For collections-only view (all items in DOM), it uses DOM-based `scrollIntoView()` jump-to instead. The `getLetterOffset` IPC is no longer used by `scrollToLetter`.
+
+**Collections Display**: `MoviesView.tsx` uses append-aware `displayItems` logic to prevent scroll mixing during infinite scroll pagination. When `collectionsOnly` is true, all collections render at once (no pagination). When false, new pages are appended without re-sorting existing items.
 
 ## External APIs & Rate Limits
 
@@ -490,7 +541,7 @@ The application follows Electron security best practices:
 - **NOT NULL constraint failed**: Check if upsert code uses `|| null` for columns defined as `NOT NULL DEFAULT ''` — use `|| ''` instead
 
 ### Source Deletion
-When a source is deleted via `SourceManager.removeSource()` → `db.deleteMediaSource()`, both backends now clean up all associated data: `media_items`, `quality_scores`, `media_item_versions`, `media_item_collections`, `series_completeness`, `movie_collections`, `library_scans`, `media_sources`, `music_artists`, `music_albums`, `music_tracks`, `music_quality_scores`, `artist_completeness`, `album_completeness`, `wishlist_items`, `notifications`.
+When a source is deleted via `SourceManager.removeSource()` → `db.deleteMediaSource()`, both backends clean up all associated data. **Important**: Wishlist cleanup runs BEFORE `deleteMediaItemsForSource()` since the subquery needs `media_items` to still exist. Tables cleaned: `wishlist_items`, `media_items`, `quality_scores`, `media_item_versions`, `media_item_collections`, `series_completeness`, `movie_collections`, `library_scans`, `media_sources`, `music_artists`, `music_albums`, `music_tracks`, `music_quality_scores`, `artist_completeness`, `album_completeness`, `notifications`.
 
 ### IPC Errors
 - "Method not found": Check handler registered in `registerXxxHandlers()`
