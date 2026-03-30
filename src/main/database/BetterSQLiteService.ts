@@ -2913,7 +2913,8 @@ export class BetterSQLiteService {
   getIncompleteSeries(sourceId?: string): SeriesCompleteness[] {
     if (!this.db) throw new Error('Database not initialized')
 
-    const sourceFilter = sourceId ? ' AND source_id = ?' : ''
+    const subqueryFilter = sourceId ? ' AND sc2.source_id = ?' : ''
+    const outerFilter = sourceId ? ' AND sc.source_id = ?' : ''
     const params: unknown[] = sourceId ? [sourceId] : []
 
     const stmt = this.db.prepare(`
@@ -2921,18 +2922,17 @@ export class BetterSQLiteService {
       FROM series_completeness sc
       LEFT JOIN library_scans ls ON sc.source_id = ls.source_id AND sc.library_id = ls.library_id
       INNER JOIN (
-        SELECT series_title, MAX(completeness_percentage) as max_pct
-        FROM series_completeness
-        WHERE tmdb_id IS NOT NULL${sourceFilter}
-        GROUP BY series_title
+        SELECT sc2.series_title, MAX(sc2.completeness_percentage) as max_pct
+        FROM series_completeness sc2
+        WHERE sc2.tmdb_id IS NOT NULL${subqueryFilter}
+        GROUP BY sc2.series_title
         HAVING max_pct < 100
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
-      WHERE sc.tmdb_id IS NOT NULL${sourceFilter}
+      WHERE sc.tmdb_id IS NOT NULL${outerFilter}
         AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
       GROUP BY sc.series_title
       ORDER BY sc.completeness_percentage ASC
     `)
-    // If sourceId is provided, we need to pass it twice (once for subquery, once for outer WHERE)
     const allParams = sourceId ? [...params, ...params] : []
     return stmt.all(...allParams) as SeriesCompleteness[]
   }
