@@ -1299,7 +1299,6 @@ export class BetterSQLiteService {
     if (!this.db) throw new Error('Database not initialized')
 
     let cleaned = 0
-    const sourceFilter = sourceId ? ` AND source_id = '${sourceId.replace(/'/g, "''")}'` : ''
 
     // Delete music quality scores for albums that no longer exist
     cleaned += this.db.prepare(
@@ -1316,15 +1315,27 @@ export class BetterSQLiteService {
       'DELETE FROM artist_completeness WHERE artist_name NOT IN (SELECT name FROM music_artists)'
     ).run().changes
 
-    // Delete albums with 0 tracks
-    cleaned += this.db.prepare(
-      `DELETE FROM music_albums WHERE id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE album_id IS NOT NULL)${sourceFilter}`
-    ).run().changes
+    // Delete albums with 0 tracks (parameterized, no string interpolation)
+    if (sourceId) {
+      cleaned += this.db.prepare(
+        'DELETE FROM music_albums WHERE source_id = ? AND id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE album_id IS NOT NULL)'
+      ).run(sourceId).changes
+    } else {
+      cleaned += this.db.prepare(
+        'DELETE FROM music_albums WHERE id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE album_id IS NOT NULL)'
+      ).run().changes
+    }
 
-    // Delete artists with 0 tracks
-    cleaned += this.db.prepare(
-      `DELETE FROM music_artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM music_tracks WHERE artist_id IS NOT NULL)${sourceFilter}`
-    ).run().changes
+    // Delete artists with 0 tracks (parameterized)
+    if (sourceId) {
+      cleaned += this.db.prepare(
+        'DELETE FROM music_artists WHERE source_id = ? AND id NOT IN (SELECT DISTINCT artist_id FROM music_tracks WHERE artist_id IS NOT NULL)'
+      ).run(sourceId).changes
+    } else {
+      cleaned += this.db.prepare(
+        'DELETE FROM music_artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM music_tracks WHERE artist_id IS NOT NULL)'
+      ).run().changes
+    }
 
     if (cleaned > 0) {
       console.log(`[BetterSQLite] Cleaned up ${cleaned} orphaned music rows`)
@@ -1411,7 +1422,7 @@ export class BetterSQLiteService {
         updated_at = datetime('now')
     `)
 
-    const result = stmt.run(
+    stmt.run(
       version.media_item_id,
       version.version_source || 'primary',
       version.edition || null,
@@ -1446,7 +1457,11 @@ export class BetterSQLiteService {
       version.is_best ? 1 : 0
     )
 
-    return Number(result.lastInsertRowid)
+    // Always look up by unique key — lastInsertRowid is unreliable after ON CONFLICT DO UPDATE
+    const existing = this.db.prepare(
+      'SELECT id FROM media_item_versions WHERE media_item_id = ? AND file_path = ?'
+    ).get(version.media_item_id, version.file_path) as { id: number } | undefined
+    return existing?.id || 0
   }
 
   /**
@@ -2817,7 +2832,7 @@ export class BetterSQLiteService {
       return existingId
     }
 
-    const result = this.db.prepare(`
+    this.db.prepare(`
       INSERT INTO series_completeness (
         series_title, source_id, library_id, total_seasons, total_episodes,
         owned_seasons, owned_episodes, missing_seasons, missing_episodes,
@@ -2831,7 +2846,11 @@ export class BetterSQLiteService {
       data.backdrop_url || null, data.status || null
     )
 
-    return Number(result.lastInsertRowid)
+    // Look up by unique key — lastInsertRowid is unreliable after ON CONFLICT DO UPDATE
+    const inserted = this.db.prepare(
+      'SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ?'
+    ).get(data.series_title, sourceId) as { id: number } | undefined
+    return inserted?.id || 0
   }
 
   /**
@@ -3303,7 +3322,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       return existingId
     }
 
-    const result = this.db.prepare(`
+    this.db.prepare(`
       INSERT INTO movie_collections (
         tmdb_collection_id, collection_name, source_id, library_id,
         total_movies, owned_movies, missing_movies, owned_movie_ids,
@@ -3316,7 +3335,11 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       data.completeness_percentage, data.poster_url || null, data.backdrop_url || null
     )
 
-    return Number(result.lastInsertRowid)
+    // Look up by unique key — lastInsertRowid is unreliable after ON CONFLICT DO UPDATE
+    const inserted = this.db.prepare(
+      'SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id = ? AND library_id = ?'
+    ).get(data.tmdb_collection_id, sourceId, libraryId) as { id: number } | undefined
+    return inserted?.id || 0
   }
 
   /**

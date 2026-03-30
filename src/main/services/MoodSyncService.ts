@@ -109,7 +109,8 @@ export class MoodSyncService {
       const trackCount = db.countMusicTracks({ sourceId: source.source_id })
       if (trackCount === 0) continue
 
-      const tracks = db.getMusicTracks({ sourceId: source.source_id }) as MusicTrack[]
+      // Load target tracks — limit to 50k to prevent OOM on very large libraries
+      const tracks = db.getMusicTracks({ sourceId: source.source_id, limit: 50000 }) as MusicTrack[]
 
       for (const track of tracks) {
         const keys = this.getMatchKeys(track.title, track.artist_name, track.musicbrainz_id)

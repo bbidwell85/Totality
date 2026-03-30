@@ -100,6 +100,7 @@ export class PlexProvider implements MediaProvider {
     this.sourceId = config.sourceId || this.generateSourceId()
 
     this.api = axios.create({
+      timeout: 30000, // 30s default — prevents hanging on network issues
       headers: {
         'X-Plex-Client-Identifier': CLIENT_IDENTIFIER,
         'X-Plex-Product': PRODUCT_NAME,
