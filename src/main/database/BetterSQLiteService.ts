@@ -464,21 +464,23 @@ export class BetterSQLiteService {
   }
 
   /**
-   * Batch mode is a no-op for better-sqlite3 — each write is auto-persisted
-   * via WAL mode. For multi-step operations needing atomicity, use
-   * db.transaction() explicitly instead.
-   *
-   * SQL.js backend uses batch mode to defer disk writes until endBatch().
+   * Batch mode depth counter — for API consistency with SQL.js backend.
+   * better-sqlite3 auto-persists via WAL mode, so no deferred writes needed.
    */
+  private batchDepth = 0
+
   startBatch(): void {
-    // No-op: better-sqlite3 auto-persists via WAL mode
+    this.batchDepth++
   }
 
   /**
-   * End batch mode (no-op for better-sqlite3)
+   * End batch mode — depth-counted for safe nesting.
+   * Writes auto-persist via WAL mode, so no flush needed.
    */
   async endBatch(): Promise<void> {
-    // No-op: better-sqlite3 auto-persists via WAL mode
+    if (this.batchDepth > 0) {
+      this.batchDepth--
+    }
   }
 
   /**
@@ -616,7 +618,7 @@ export class BetterSQLiteService {
   } {
     if (!this.db) throw new Error('Database not initialized')
 
-    const whereClause = sourceId ? ' WHERE m.source_id = ?' : ''
+    const sourceFilter = sourceId ? ' AND m.source_id = ?' : ''
     const params = sourceId ? [sourceId] : []
 
     const sql = `
@@ -634,7 +636,8 @@ export class BetterSQLiteService {
         COALESCE(AVG(CASE WHEN m.type = 'episode' THEN q.overall_score END), 0) as tvAverageQualityScore
       FROM media_items m
       LEFT JOIN quality_scores q ON m.id = q.media_item_id
-      ${whereClause}
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)${sourceFilter}
     `
 
     const stmt = this.db.prepare(sql)
@@ -1006,9 +1009,9 @@ export class BetterSQLiteService {
         container = excluded.container,
         file_mtime = excluded.file_mtime,
         imdb_id = COALESCE(excluded.imdb_id, media_items.imdb_id),
-        tmdb_id = COALESCE(excluded.tmdb_id, media_items.tmdb_id),
-        series_tmdb_id = COALESCE(excluded.series_tmdb_id, media_items.series_tmdb_id),
-        poster_url = COALESCE(excluded.poster_url, media_items.poster_url),
+        tmdb_id = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.tmdb_id ELSE COALESCE(excluded.tmdb_id, media_items.tmdb_id) END,
+        series_tmdb_id = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.series_tmdb_id ELSE COALESCE(excluded.series_tmdb_id, media_items.series_tmdb_id) END,
+        poster_url = CASE WHEN media_items.user_fixed_match = 1 THEN media_items.poster_url ELSE COALESCE(excluded.poster_url, media_items.poster_url) END,
         episode_thumb_url = COALESCE(excluded.episode_thumb_url, media_items.episode_thumb_url),
         season_poster_url = COALESCE(excluded.season_poster_url, media_items.season_poster_url),
         summary = COALESCE(excluded.summary, media_items.summary),
@@ -1079,27 +1082,43 @@ export class BetterSQLiteService {
     // Before deleting, update affected collections and series completeness
     try {
       const item = db.prepare(
-        'SELECT tmdb_id, source_id, type, series_title FROM media_items WHERE id = ?'
-      ).get(id) as { tmdb_id?: string; source_id: string; type: string; series_title?: string } | undefined
+        'SELECT tmdb_id, source_id, library_id, type, series_title FROM media_items WHERE id = ?'
+      ).get(id) as { tmdb_id?: string; source_id: string; library_id?: string; type: string; series_title?: string } | undefined
 
       if (item) {
         if (item.tmdb_id && item.type === 'movie') {
           this.updateCollectionsAfterDeletion([String(item.tmdb_id)], item.source_id)
         }
         if (item.type === 'episode' && item.series_title) {
+          const libraryId = item.library_id || ''
+
+          // Delete the episode first so the recount is accurate
+          db.prepare('DELETE FROM media_item_versions WHERE media_item_id = ?').run(id)
+          db.prepare('DELETE FROM quality_scores WHERE media_item_id = ?').run(id)
+          db.prepare('DELETE FROM media_item_collections WHERE media_item_id = ?').run(id)
+          db.prepare('DELETE FROM media_items WHERE id = ?').run(id)
+
+          // Recount owned episodes
           db.prepare(`
             UPDATE series_completeness SET
-              owned_episodes = MAX(0, owned_episodes - 1),
+              owned_episodes = (SELECT COUNT(*) FROM media_items WHERE series_title = ? AND source_id = ? AND library_id = ? AND type = 'episode'),
               completeness_percentage = CASE WHEN total_episodes > 0
-                THEN ROUND(CAST(MAX(0, owned_episodes - 1) AS REAL) * 100.0 / total_episodes)
+                THEN ROUND(CAST((SELECT COUNT(*) FROM media_items WHERE series_title = ? AND source_id = ? AND library_id = ? AND type = 'episode') AS REAL) * 100.0 / total_episodes)
                 ELSE 0 END,
               updated_at = datetime('now')
-            WHERE series_title = ? AND source_id = ?
-          `).run(item.series_title, item.source_id)
+            WHERE series_title = ? AND source_id = ? AND library_id = ?
+          `).run(
+            item.series_title, item.source_id, libraryId,
+            item.series_title, item.source_id, libraryId,
+            item.series_title, item.source_id, libraryId
+          )
 
           db.prepare(
-            'DELETE FROM series_completeness WHERE series_title = ? AND source_id = ? AND owned_episodes <= 0'
-          ).run(item.series_title, item.source_id)
+            'DELETE FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ? AND owned_episodes <= 0'
+          ).run(item.series_title, item.source_id, libraryId)
+
+          // Already deleted above, skip the deletion below
+          return
         }
       }
     } catch { /* non-critical — proceed with deletion */ }
@@ -1694,11 +1713,21 @@ export class BetterSQLiteService {
   /**
    * Get all media sources
    */
-  getMediaSources(): MediaSource[] {
+  getMediaSources(type?: string): MediaSource[] {
     if (!this.db) throw new Error('Database not initialized')
 
-    const stmt = this.db.prepare('SELECT * FROM media_sources ORDER BY display_name')
-    const sources = stmt.all() as MediaSource[]
+    let sql = 'SELECT * FROM media_sources'
+    const params: string[] = []
+
+    if (type) {
+      sql += ' WHERE source_type = ?'
+      params.push(type)
+    }
+
+    sql += ' ORDER BY display_name'
+
+    const stmt = this.db.prepare(sql)
+    const sources = (params.length ? stmt.all(...params) : stmt.all()) as MediaSource[]
     const encryption = getCredentialEncryptionService()
 
     return sources.map(source => {
@@ -1819,52 +1848,62 @@ export class BetterSQLiteService {
 
     console.log(`[BetterSQLite] Deleting source ${sourceId} and all associated data...`)
 
-    // Delete wishlist items BEFORE media items (subquery needs media_items to exist)
-    this.db.prepare(`
-      DELETE FROM wishlist_items WHERE media_item_id IN (
-        SELECT id FROM media_items WHERE source_id = ?
-      )
-    `).run(sourceId)
+    const db = this.db
+    db.transaction(() => {
+      // Delete exclusions BEFORE media items (subquery needs media_items to exist)
+      db.prepare(`
+        DELETE FROM exclusions WHERE reference_id IN (
+          SELECT CAST(id AS TEXT) FROM media_items WHERE source_id = ?
+        )
+      `).run(sourceId)
 
-    // Delete media item related data (versions, quality scores, collections)
-    this.deleteMediaItemsForSource(sourceId)
+      // Delete wishlist items BEFORE media items (subquery needs media_items to exist)
+      db.prepare(`
+        DELETE FROM wishlist_items WHERE media_item_id IN (
+          SELECT id FROM media_items WHERE source_id = ?
+        )
+      `).run(sourceId)
 
-    // Delete music quality scores for albums from this source
-    this.db.prepare(`
-      DELETE FROM music_quality_scores WHERE album_id IN (
-        SELECT id FROM music_albums WHERE source_id = ?
-      )
-    `).run(sourceId)
+      // Delete media item related data (versions, quality scores, collections)
+      this.deleteMediaItemsForSource(sourceId)
 
-    // Delete album completeness data for albums from this source
-    this.db.prepare(`
-      DELETE FROM album_completeness WHERE album_id IN (
-        SELECT id FROM music_albums WHERE source_id = ?
-      )
-    `).run(sourceId)
+      // Delete music quality scores for albums from this source
+      db.prepare(`
+        DELETE FROM music_quality_scores WHERE album_id IN (
+          SELECT id FROM music_albums WHERE source_id = ?
+        )
+      `).run(sourceId)
 
-    // Delete artist completeness data for artists from this source
-    this.db.prepare(`
-      DELETE FROM artist_completeness WHERE artist_name IN (
-        SELECT name FROM music_artists WHERE source_id = ?
-      )
-    `).run(sourceId)
+      // Delete album completeness data for albums from this source
+      db.prepare(`
+        DELETE FROM album_completeness WHERE album_id IN (
+          SELECT id FROM music_albums WHERE source_id = ?
+        )
+      `).run(sourceId)
 
-    // Delete music tracks, albums, artists
-    this.db.prepare('DELETE FROM music_tracks WHERE source_id = ?').run(sourceId)
-    this.db.prepare('DELETE FROM music_albums WHERE source_id = ?').run(sourceId)
-    this.db.prepare('DELETE FROM music_artists WHERE source_id = ?').run(sourceId)
+      // Delete artist completeness data for artists from this source
+      db.prepare(`
+        DELETE FROM artist_completeness WHERE artist_name IN (
+          SELECT name FROM music_artists WHERE source_id = ?
+        )
+      `).run(sourceId)
 
-    // Delete completeness and scan data
-    this.db.prepare('DELETE FROM series_completeness WHERE source_id = ?').run(sourceId)
-    this.db.prepare('DELETE FROM movie_collections WHERE source_id = ?').run(sourceId)
-    this.db.prepare('DELETE FROM library_scans WHERE source_id = ?').run(sourceId)
+      // Delete music tracks, albums, artists
+      db.prepare('DELETE FROM music_tracks WHERE source_id = ?').run(sourceId)
+      db.prepare('DELETE FROM music_albums WHERE source_id = ?').run(sourceId)
+      db.prepare('DELETE FROM music_artists WHERE source_id = ?').run(sourceId)
 
-    // Delete notifications for this source
-    this.db.prepare('DELETE FROM notifications WHERE source_id = ?').run(sourceId)
+      // Delete completeness and scan data
+      db.prepare('DELETE FROM series_completeness WHERE source_id = ?').run(sourceId)
+      db.prepare('DELETE FROM movie_collections WHERE source_id = ?').run(sourceId)
+      db.prepare('DELETE FROM library_scans WHERE source_id = ?').run(sourceId)
 
-    // Delete the source itself
-    this.db.prepare('DELETE FROM media_sources WHERE source_id = ?').run(sourceId)
+      // Delete notifications for this source
+      db.prepare('DELETE FROM notifications WHERE source_id = ?').run(sourceId)
+
+      // Delete the source itself
+      db.prepare('DELETE FROM media_sources WHERE source_id = ?').run(sourceId)
+    })()
 
     console.log(`[BetterSQLite] Deleted source and all data: ${sourceId}`)
   }
@@ -2773,13 +2812,44 @@ export class BetterSQLiteService {
   }
 
   /**
+   * Update music artist artwork
+   */
+  updateMusicArtistArtwork(
+    sourceId: string,
+    providerId: string,
+    artwork: { thumbUrl?: string; artUrl?: string }
+  ): void {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const updates: string[] = []
+    const params: unknown[] = []
+
+    if (artwork.thumbUrl !== undefined) {
+      updates.push('thumb_url = ?')
+      params.push(artwork.thumbUrl)
+    }
+    if (artwork.artUrl !== undefined) {
+      updates.push('art_url = ?')
+      params.push(artwork.artUrl)
+    }
+
+    if (updates.length === 0) return
+
+    updates.push("updated_at = datetime('now')")
+    params.push(sourceId, providerId)
+
+    const sql = `UPDATE music_artists SET ${updates.join(', ')} WHERE source_id = ? AND provider_id = ?`
+    this.db.prepare(sql).run(...params)
+  }
+
+  /**
    * Update music artist MusicBrainz ID
    */
   updateMusicArtistMbid(artistId: number, musicbrainzId: string): void {
     if (!this.db) throw new Error('Database not initialized')
     this.db.prepare(`
       UPDATE music_artists SET musicbrainz_id = ?, updated_at = datetime('now')
-      WHERE id = ?
+      WHERE id = ? AND (user_fixed_match IS NULL OR user_fixed_match = 0)
     `).run(musicbrainzId, artistId)
   }
 
@@ -2790,7 +2860,7 @@ export class BetterSQLiteService {
     if (!this.db) throw new Error('Database not initialized')
     this.db.prepare(`
       UPDATE music_albums SET musicbrainz_id = ?, updated_at = datetime('now')
-      WHERE id = ?
+      WHERE id = ? AND (user_fixed_match IS NULL OR user_fixed_match = 0)
     `).run(musicbrainzId, albumId)
   }
 
@@ -2859,19 +2929,22 @@ export class BetterSQLiteService {
   getSeriesCompleteness(sourceId?: string): SeriesCompleteness[] {
     if (!this.db) throw new Error('Database not initialized')
 
-    const sourceFilter = sourceId ? ' AND source_id = ?' : ''
+    const sourceFilter = sourceId ? ' AND sc2.source_id = ?' : ''
+    const outerSourceFilter = sourceId ? ' AND sc.source_id = ?' : ''
     const params: unknown[] = sourceId ? [sourceId] : []
 
     const stmt = this.db.prepare(`
       SELECT sc.*
       FROM series_completeness sc
+      LEFT JOIN library_scans ls ON sc.source_id = ls.source_id AND sc.library_id = ls.library_id
       INNER JOIN (
-        SELECT series_title, MAX(completeness_percentage) as max_pct
-        FROM series_completeness
-        WHERE 1=1${sourceFilter}
-        GROUP BY series_title
+        SELECT sc2.series_title, MAX(sc2.completeness_percentage) as max_pct
+        FROM series_completeness sc2
+        LEFT JOIN library_scans ls2 ON sc2.source_id = ls2.source_id AND sc2.library_id = ls2.library_id
+        WHERE (ls2.is_enabled = 1 OR ls2.is_enabled IS NULL)${sourceFilter}
+        GROUP BY sc2.series_title
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
-      WHERE 1=1${sourceFilter}
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)${outerSourceFilter}
       GROUP BY sc.series_title
       ORDER BY sc.series_title ASC
     `)
@@ -3230,9 +3303,11 @@ WHERE m.type = 'episode' AND m.series_title = ?`
 
     // Get unique series with their best completeness
     const stmt = this.db.prepare(`
-      SELECT series_title, MAX(completeness_percentage) as best_completeness, tmdb_id
-      FROM series_completeness
-      GROUP BY series_title
+      SELECT sc.series_title, MAX(sc.completeness_percentage) as best_completeness, sc.tmdb_id
+      FROM series_completeness sc
+      LEFT JOIN library_scans ls ON sc.source_id = ls.source_id AND sc.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+      GROUP BY sc.series_title
     `)
     const rows = stmt.all() as Array<{
       series_title: string
@@ -3255,13 +3330,15 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     const missingStmt = this.db.prepare(`
       SELECT sc.missing_episodes
       FROM series_completeness sc
+      LEFT JOIN library_scans ls ON sc.source_id = ls.source_id AND sc.library_id = ls.library_id
       INNER JOIN (
-        SELECT series_title, MAX(completeness_percentage) as max_pct
-        FROM series_completeness
-        WHERE tmdb_id IS NOT NULL
-        GROUP BY series_title
+        SELECT sc2.series_title, MAX(sc2.completeness_percentage) as max_pct
+        FROM series_completeness sc2
+        LEFT JOIN library_scans ls2 ON sc2.source_id = ls2.source_id AND sc2.library_id = ls2.library_id
+        WHERE sc2.tmdb_id IS NOT NULL AND (ls2.is_enabled = 1 OR ls2.is_enabled IS NULL)
+        GROUP BY sc2.series_title
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
-      WHERE sc.tmdb_id IS NOT NULL
+      WHERE sc.tmdb_id IS NOT NULL AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
       GROUP BY sc.series_title
     `)
     const missingRows = missingStmt.all() as Array<{ missing_episodes: string }>
@@ -3348,10 +3425,20 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   getMovieCollections(sourceId?: string): MovieCollection[] {
     if (!this.db) throw new Error('Database not initialized')
     if (sourceId) {
-      const stmt = this.db.prepare('SELECT * FROM movie_collections WHERE source_id = ? ORDER BY collection_name ASC')
+      const stmt = this.db.prepare(`
+        SELECT mc.* FROM movie_collections mc
+        LEFT JOIN library_scans ls ON mc.source_id = ls.source_id AND mc.library_id = ls.library_id
+        WHERE mc.source_id = ? AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        ORDER BY mc.collection_name ASC
+      `)
       return stmt.all(sourceId) as MovieCollection[]
     }
-    const stmt = this.db.prepare('SELECT * FROM movie_collections ORDER BY collection_name ASC')
+    const stmt = this.db.prepare(`
+      SELECT mc.* FROM movie_collections mc
+      LEFT JOIN library_scans ls ON mc.source_id = ls.source_id AND mc.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+      ORDER BY mc.collection_name ASC
+    `)
     return stmt.all() as MovieCollection[]
   }
 
@@ -3444,25 +3531,31 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   } {
     if (!this.db) throw new Error('Database not initialized')
 
-    const totalStmt = this.db.prepare('SELECT COUNT(*) as count FROM movie_collections')
+    const enabledFilter = `
+      FROM movie_collections mc
+      LEFT JOIN library_scans ls ON mc.source_id = ls.source_id AND mc.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+    `
+
+    const totalStmt = this.db.prepare(`SELECT COUNT(*) as count ${enabledFilter}`)
     const total = (totalStmt.get() as { count: number }).count
 
     const completeStmt = this.db.prepare(
-      'SELECT COUNT(*) as count FROM movie_collections WHERE completeness_percentage = 100'
+      `SELECT COUNT(*) as count ${enabledFilter} AND mc.completeness_percentage = 100`
     )
     const complete = (completeStmt.get() as { count: number }).count
 
     const incompleteStmt = this.db.prepare(
-      'SELECT COUNT(*) as count FROM movie_collections WHERE completeness_percentage < 100'
+      `SELECT COUNT(*) as count ${enabledFilter} AND mc.completeness_percentage < 100`
     )
     const incomplete = (incompleteStmt.get() as { count: number }).count
 
     const missingStmt = this.db.prepare(
-      'SELECT SUM(json_array_length(missing_movies)) as count FROM movie_collections WHERE missing_movies IS NOT NULL'
+      `SELECT SUM(json_array_length(mc.missing_movies)) as count ${enabledFilter} AND mc.missing_movies IS NOT NULL`
     )
     const totalMissing = (missingStmt.get() as { count: number | null }).count || 0
 
-    const avgStmt = this.db.prepare('SELECT AVG(completeness_percentage) as avg FROM movie_collections')
+    const avgStmt = this.db.prepare(`SELECT AVG(mc.completeness_percentage) as avg ${enabledFilter}`)
     const avgCompleteness = Math.round((avgStmt.get() as { avg: number | null }).avg || 0)
 
     return { total, complete, incomplete, totalMissing, avgCompleteness }
@@ -3558,7 +3651,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
         thumb_url, last_sync_at, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       ON CONFLICT(artist_name) DO UPDATE SET
-        musicbrainz_id = excluded.musicbrainz_id,
+        musicbrainz_id = COALESCE(excluded.musicbrainz_id, artist_completeness.musicbrainz_id),
         total_albums = excluded.total_albums,
         owned_albums = excluded.owned_albums,
         total_singles = excluded.total_singles,
@@ -4127,12 +4220,18 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     const items = stmt.all(type) as Array<{ id: number; plex_id: string }>
 
     let removedCount = 0
-    const deleteStmt = this.db.prepare('DELETE FROM media_items WHERE id = ?')
+    const deleteVersionsStmt = this.db.prepare('DELETE FROM media_item_versions WHERE media_item_id = ?')
+    const deleteCollectionsStmt = this.db.prepare('DELETE FROM media_item_collections WHERE media_item_id = ?')
+    const deleteWishlistStmt = this.db.prepare('DELETE FROM wishlist_items WHERE media_item_id = ?')
     const deleteScoreStmt = this.db.prepare('DELETE FROM quality_scores WHERE media_item_id = ?')
+    const deleteStmt = this.db.prepare('DELETE FROM media_items WHERE id = ?')
 
     const transaction = this.db.transaction(() => {
       for (const item of items) {
         if (!validPlexIds.has(item.plex_id)) {
+          deleteVersionsStmt.run(item.id)
+          deleteCollectionsStmt.run(item.id)
+          deleteWishlistStmt.run(item.id)
           deleteScoreStmt.run(item.id)
           deleteStmt.run(item.id)
           removedCount++

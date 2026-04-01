@@ -65,12 +65,13 @@ export class MusicRepository {
   async upsertArtist(artist: MusicArtist): Promise<number> {
     const sql = `
       INSERT INTO music_artists (
-        source_id, source_type, provider_id, name, sort_name,
-        musicbrainz_id, genres, country, biography,
+        source_id, source_type, provider_id, library_id, name, sort_name,
+        musicbrainz_id, user_fixed_match, genres, country, biography,
         thumb_url, art_url, album_count, track_count
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, provider_id) DO UPDATE SET
         source_type = excluded.source_type,
+        library_id = excluded.library_id,
         name = excluded.name,
         sort_name = excluded.sort_name,
         musicbrainz_id = CASE WHEN music_artists.user_fixed_match = 1 THEN music_artists.musicbrainz_id ELSE COALESCE(excluded.musicbrainz_id, music_artists.musicbrainz_id) END,
@@ -87,9 +88,11 @@ export class MusicRepository {
       artist.source_id,
       artist.source_type,
       artist.provider_id,
+      artist.library_id || null,
       artist.name,
       artist.sort_name || artist.name,
       artist.musicbrainz_id || null,
+      artist.user_fixed_match ? 1 : 0,
       artist.genres || null,
       artist.country || null,
       artist.biography || null,
@@ -291,14 +294,15 @@ export class MusicRepository {
   async upsertAlbum(album: MusicAlbum): Promise<number> {
     const sql = `
       INSERT INTO music_albums (
-        source_id, source_type, provider_id, artist_id, artist_name,
+        source_id, source_type, provider_id, library_id, artist_id, artist_name,
         title, sort_title, year, musicbrainz_id, musicbrainz_release_group_id,
-        genres, studio, album_type, track_count, total_duration, total_size,
+        user_fixed_match, genres, studio, album_type, track_count, total_duration, total_size,
         best_audio_codec, best_audio_bitrate, best_sample_rate, best_bit_depth,
         avg_audio_bitrate, thumb_url, art_url, release_date, added_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, provider_id) DO UPDATE SET
         source_type = excluded.source_type,
+        library_id = excluded.library_id,
         artist_id = excluded.artist_id,
         artist_name = excluded.artist_name,
         title = excluded.title,
@@ -327,6 +331,7 @@ export class MusicRepository {
       album.source_id,
       album.source_type,
       album.provider_id,
+      album.library_id || null,
       album.artist_id || null,
       album.artist_name,
       album.title,
@@ -334,6 +339,7 @@ export class MusicRepository {
       album.year || null,
       album.musicbrainz_id || null,
       album.musicbrainz_release_group_id || null,
+      album.user_fixed_match ? 1 : 0,
       album.genres || null,
       album.studio || null,
       album.album_type || 'album',
@@ -595,7 +601,9 @@ export class MusicRepository {
       SELECT ma.*, mqs.quality_tier, mqs.tier_quality, mqs.tier_score
       FROM music_albums ma
       INNER JOIN music_quality_scores mqs ON ma.id = mqs.album_id
+      LEFT JOIN library_scans ls ON ma.source_id = ls.source_id AND ma.library_id = ls.library_id
       WHERE mqs.needs_upgrade = 1
+        AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
     `
     const params: (string | number)[] = []
 
@@ -627,14 +635,15 @@ export class MusicRepository {
   async upsertTrack(track: MusicTrack): Promise<number> {
     const sql = `
       INSERT INTO music_tracks (
-        source_id, source_type, provider_id, album_id, artist_id,
+        source_id, source_type, provider_id, library_id, album_id, artist_id,
         album_name, artist_name, title, track_number, disc_number, duration,
         file_path, file_size, container, file_mtime, audio_codec, audio_bitrate,
         sample_rate, bit_depth, channels, is_lossless, is_hi_res,
         musicbrainz_id, genres, mood, added_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, provider_id) DO UPDATE SET
         source_type = excluded.source_type,
+        library_id = excluded.library_id,
         album_id = excluded.album_id,
         artist_id = excluded.artist_id,
         album_name = excluded.album_name,
@@ -664,6 +673,7 @@ export class MusicRepository {
       track.source_id,
       track.source_type,
       track.provider_id,
+      track.library_id || null,
       track.album_id || null,
       track.artist_id || null,
       track.album_name || null,
@@ -1065,10 +1075,13 @@ export class MusicRepository {
 
     if (sourceId) {
       // When filtering by source, only return completeness for artists that exist in that source
+      // Filter out disabled libraries via library_scans.is_enabled
       sql = `
         SELECT DISTINCT ac.*, ma.thumb_url
         FROM artist_completeness ac
         INNER JOIN music_artists ma ON ac.artist_name = ma.name AND ma.source_id = ?
+        LEFT JOIN library_scans ls ON ma.source_id = ls.source_id AND ma.library_id = ls.library_id
+        WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
         ORDER BY ac.artist_name ASC
       `
       params.push(sourceId)
@@ -1077,6 +1090,8 @@ export class MusicRepository {
         SELECT ac.*, ma.thumb_url
         FROM artist_completeness ac
         LEFT JOIN music_artists ma ON ac.artist_name = ma.name
+        LEFT JOIN library_scans ls ON ma.source_id = ls.source_id AND ma.library_id = ls.library_id
+        WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
         ORDER BY ac.artist_name ASC
       `
     }

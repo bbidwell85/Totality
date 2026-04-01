@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { SETTING_KEYS } from '../../shared/settingKeys'
 import { Sidebar } from './components/layout/Sidebar'
 import { TopBar } from './components/layout/TopBar'
 import { MediaBrowser } from './components/library/MediaBrowser'
@@ -73,7 +74,7 @@ function AppContent() {
   }
 
   useEffect(() => {
-    window.electronAPI.getSetting('onboarding_completed')
+    window.electronAPI.getSetting(SETTING_KEYS.onboarding_completed)
       .then(value => setOnboardingComplete(value === 'true'))
       .catch(err => {
         console.error('Failed to load onboarding state:', err)
@@ -111,8 +112,8 @@ function AppContent() {
     try {
       const [artistsData, epsVal, singlesVal] = await Promise.all([
         window.electronAPI.musicGetAllArtistCompleteness(),
-        window.electronAPI.getSetting('completeness_include_eps'),
-        window.electronAPI.getSetting('completeness_include_singles'),
+        window.electronAPI.getSetting(SETTING_KEYS.completeness_include_eps),
+        window.electronAPI.getSetting(SETTING_KEYS.completeness_include_singles),
       ])
       const artists = artistsData as Array<{
         completeness_percentage: number
@@ -279,7 +280,7 @@ function AppContent() {
 
   const handleOnboardingComplete = async () => {
     try {
-      await window.electronAPI.setSetting('onboarding_completed', 'true')
+      await window.electronAPI.setSetting(SETTING_KEYS.onboarding_completed, 'true')
       markSplashShown()
       setOnboardingComplete(true)
     } catch (error) {

@@ -6,6 +6,7 @@ import { getTMDBService } from '../services/TMDBService'
 import { getWindowFromEvent } from './utils/safeSend'
 import { createProgressUpdater } from './utils/progressUpdater'
 import { validateInput, NonEmptyStringSchema, OptionalSourceIdSchema, PositiveIntSchema } from '../validation/schemas'
+import { getTaskQueueService } from '../services/TaskQueueService'
 
 /**
  * Register all series completeness IPC handlers
@@ -23,6 +24,12 @@ export function registerSeriesHandlers() {
   ipcMain.handle('series:analyzeAll', async (event, sourceId?: unknown, libraryId?: unknown) => {
     const validSourceId = sourceId !== undefined ? validateInput(NonEmptyStringSchema, sourceId, 'series:analyzeAll.sourceId') : undefined
     const validLibraryId = libraryId !== undefined ? validateInput(NonEmptyStringSchema, libraryId, 'series:analyzeAll.libraryId') : undefined
+
+    // Guard: prevent concurrent analysis for the same source/library
+    if (getTaskQueueService().hasActiveTask('series-completeness', validSourceId, validLibraryId)) {
+      throw new Error('A series analysis is already in progress for this library')
+    }
+
     const win = getWindowFromEvent(event)
     const service = getSeriesCompletenessService()
     const { onProgress, flush } = createProgressUpdater(win, 'series:progress', 'media')

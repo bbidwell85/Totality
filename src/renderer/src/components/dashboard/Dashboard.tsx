@@ -11,6 +11,7 @@ import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { MediaDetails } from '../library/MediaDetails'
 import { useSources } from '../../contexts/SourceContext'
 import type { MediaItem, MovieCollectionData, SeriesCompletenessData, ArtistCompletenessData, MusicAlbum } from '../library/types'
+import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import {
   emitDismissUpgrade,
   emitDismissCollectionMovie,
@@ -75,7 +76,8 @@ const COLLAPSED_HEIGHT_ARTIST = 64  // Smaller for artists
 
 // Connected indent design constants
 const EXPANDED_MARGIN = 8           // mt-2 margin above expanded content
-const EXPANDED_ITEM_HEIGHT = 40     // py-2 item row with hover
+const EXPANDED_ITEM_HEIGHT = 44     // w-8 h-8 icon (32px) + py-1.5 (12px) = 44px
+const EXPANDED_BOTTOM_PAD = 8       // Bottom padding after expanded content
 const ITEM_GAP = 4                  // space-y-1 gap between items
 
 // Section-specific heights
@@ -166,21 +168,25 @@ export function Dashboard({
 
       // Read completeness settings and sort preferences
       const [epsSettingVal, singlesSettingVal, upgSort, collSort, serSort, artSort] = await Promise.all([
-        window.electronAPI.getSetting('completeness_include_eps'),
-        window.electronAPI.getSetting('completeness_include_singles'),
-        window.electronAPI.getSetting('dashboard_upgrade_sort'),
-        window.electronAPI.getSetting('dashboard_collection_sort'),
-        window.electronAPI.getSetting('dashboard_series_sort'),
-        window.electronAPI.getSetting('dashboard_artist_sort'),
+        window.electronAPI.getSetting(SETTING_KEYS.completeness_include_eps),
+        window.electronAPI.getSetting(SETTING_KEYS.completeness_include_singles),
+        window.electronAPI.getSetting(SETTING_KEYS.dashboard_upgrade_sort),
+        window.electronAPI.getSetting(SETTING_KEYS.dashboard_collection_sort),
+        window.electronAPI.getSetting(SETTING_KEYS.dashboard_series_sort),
+        window.electronAPI.getSetting(SETTING_KEYS.dashboard_artist_sort),
       ])
       const epsEnabled = epsSettingVal !== 'false'
       const singlesEnabled = singlesSettingVal !== 'false'
       setIncludeEps(epsEnabled)
       setIncludeSingles(singlesEnabled)
-      if (upgSort) setUpgradeSortBy(upgSort as 'quality' | 'recent' | 'title')
-      if (collSort) setCollectionSortBy(collSort as 'completeness' | 'name' | 'recent')
-      if (serSort) setSeriesSortBy(serSort as 'completeness' | 'name' | 'recent')
-      if (artSort) setArtistSortBy(artSort as 'completeness' | 'name')
+      const effectiveUpgSort = (upgSort as 'quality' | 'recent' | 'title') || 'quality'
+      const effectiveCollSort = (collSort as 'completeness' | 'name' | 'recent') || 'completeness'
+      const effectiveSerSort = (serSort as 'completeness' | 'name' | 'recent') || 'completeness'
+      const effectiveArtSort = (artSort as 'completeness' | 'name') || 'completeness'
+      setUpgradeSortBy(effectiveUpgSort)
+      setCollectionSortBy(effectiveCollSort)
+      setSeriesSortBy(effectiveSerSort)
+      setArtistSortBy(effectiveArtSort)
 
       const results = await Promise.allSettled([
         window.electronAPI.getMediaItems({ needsUpgrade: true, type: 'movie', sortBy: 'tier_score', sortOrder: 'asc', sourceId }),
@@ -216,14 +222,13 @@ export function Dashboard({
       const excludedUpgradeIds = new Set(upgradeExclusions.map(e => e.reference_id))
 
       // Filter and sort upgrades, excluding dismissed items
-      setMovieUpgrades(movieUpgradeData
-        .filter(m => !excludedUpgradeIds.has(m.id))
-        .sort((a, b) => (a.tier_score ?? 100) - (b.tier_score ?? 100))
-      )
-      setTvUpgrades(tvUpgradeData
-        .filter(e => !excludedUpgradeIds.has(e.id))
-        .sort((a, b) => (a.tier_score ?? 100) - (b.tier_score ?? 100))
-      )
+      const sortUpgrades = <T extends MediaItem>(items: T[]): T[] => items.sort((a, b) => {
+        if (effectiveUpgSort === 'quality') return (a.tier_score ?? 100) - (b.tier_score ?? 100)
+        if (effectiveUpgSort === 'recent') return (((b as unknown as Record<string, string>).created_at) || '').localeCompare(((a as unknown as Record<string, string>).created_at) || '')
+        return a.title.localeCompare(b.title)
+      })
+      setMovieUpgrades(sortUpgrades(movieUpgradeData.filter(m => !excludedUpgradeIds.has(m.id))))
+      setTvUpgrades(sortUpgrades(tvUpgradeData.filter(e => !excludedUpgradeIds.has(e.id))))
       setMusicUpgrades((musicUpgradeData || []).filter(m => !excludedUpgradeIds.has(m.id)))
 
       // Filter collections: remove excluded missing movies from JSON, adjust totals
@@ -242,7 +247,11 @@ export function Dashboard({
           return c
         })
         .filter(c => c.total_movies > 1 && c.completeness_percentage < 100)
-        .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
+        .sort((a, b) => {
+          if (effectiveCollSort === 'completeness') return b.completeness_percentage - a.completeness_percentage
+          if (effectiveCollSort === 'recent') return (((b as unknown as Record<string, string>).created_at) || '').localeCompare(((a as unknown as Record<string, string>).created_at) || '')
+          return a.collection_name.localeCompare(b.collection_name)
+        })
       setCollections(filteredCollections)
 
       // Filter series: remove excluded missing episodes from JSON
@@ -261,7 +270,11 @@ export function Dashboard({
           return s
         })
         .filter(s => s.completeness_percentage < 100)
-        .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
+        .sort((a, b) => {
+          if (effectiveSerSort === 'completeness') return b.completeness_percentage - a.completeness_percentage
+          if (effectiveSerSort === 'recent') return (((b as unknown as Record<string, string>).created_at) || '').localeCompare(((a as unknown as Record<string, string>).created_at) || '')
+          return a.series_title.localeCompare(b.series_title)
+        })
       setSeries(sortedSeries)
 
       // Filter artists: remove excluded missing albums from JSON, recalculate completeness
@@ -299,7 +312,10 @@ export function Dashboard({
           }
         })
         .filter(a => a.completeness_percentage < 100)
-        .sort((a, b) => b.completeness_percentage - a.completeness_percentage)
+        .sort((a, b) => {
+          if (effectiveArtSort === 'completeness') return b.completeness_percentage - a.completeness_percentage
+          return a.artist_name.localeCompare(b.artist_name)
+        })
       setArtists(incompleteArtists)
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
@@ -501,6 +517,8 @@ export function Dashboard({
     if (nonEmptyGroups.length > 1) {
       height += (nonEmptyGroups.length - 1) * TYPE_SECTION_GAP
     }
+
+    height += EXPANDED_BOTTOM_PAD
 
     return height
   }, [artists, expandedArtists, parseMissingAlbums])
@@ -1258,7 +1276,7 @@ export function Dashboard({
                 <div className="flex items-center gap-2">
                   <select
                     value={upgradeSortBy}
-                    onChange={e => { const v = e.target.value as 'quality' | 'recent' | 'title'; setUpgradeSortBy(v); window.electronAPI.setSetting('dashboard_upgrade_sort', v) }}
+                    onChange={e => { const v = e.target.value as 'quality' | 'recent' | 'title'; setUpgradeSortBy(v); window.electronAPI.setSetting(SETTING_KEYS.dashboard_upgrade_sort, v) }}
                     className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="quality">Quality</option>
@@ -1383,7 +1401,7 @@ export function Dashboard({
                 <div className="flex items-center gap-2">
                   <select
                     value={collectionSortBy}
-                    onChange={e => { const v = e.target.value as 'completeness' | 'name' | 'recent'; setCollectionSortBy(v); window.electronAPI.setSetting('dashboard_collection_sort', v) }}
+                    onChange={e => { const v = e.target.value as 'completeness' | 'name' | 'recent'; setCollectionSortBy(v); window.electronAPI.setSetting(SETTING_KEYS.dashboard_collection_sort, v) }}
                     className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="completeness">Completeness</option>
@@ -1426,7 +1444,7 @@ export function Dashboard({
                 <div className="flex items-center gap-2">
                   <select
                     value={seriesSortBy}
-                    onChange={e => { const v = e.target.value as 'completeness' | 'name' | 'recent'; setSeriesSortBy(v); window.electronAPI.setSetting('dashboard_series_sort', v) }}
+                    onChange={e => { const v = e.target.value as 'completeness' | 'name' | 'recent'; setSeriesSortBy(v); window.electronAPI.setSetting(SETTING_KEYS.dashboard_series_sort, v) }}
                     className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="completeness">Completeness</option>
@@ -1469,7 +1487,7 @@ export function Dashboard({
                 <div className="flex items-center gap-2">
                   <select
                     value={artistSortBy}
-                    onChange={e => { const v = e.target.value as 'completeness' | 'name'; setArtistSortBy(v); window.electronAPI.setSetting('dashboard_artist_sort', v) }}
+                    onChange={e => { const v = e.target.value as 'completeness' | 'name'; setArtistSortBy(v); window.electronAPI.setSetting(SETTING_KEYS.dashboard_artist_sort, v) }}
                     className="text-xs bg-background text-foreground border border-border/50 rounded px-2 py-0.5 cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary"
                   >
                     <option value="completeness">Completeness</option>

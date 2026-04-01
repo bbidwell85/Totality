@@ -562,6 +562,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notificationsMarkAllRead: () => ipcRenderer.invoke('notifications:markAllRead'),
   notificationsDelete: (ids: number[]) => ipcRenderer.invoke('notifications:delete', ids),
   notificationsClear: () => ipcRenderer.invoke('notifications:clear'),
+  onNotificationsNew: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('notifications:new', handler)
+    return () => ipcRenderer.removeListener('notifications:new', handler)
+  },
 
   // ============================================================================
   // TASK QUEUE
@@ -1712,6 +1717,7 @@ export interface ElectronAPI {
   notificationsMarkAllRead: () => Promise<void>
   notificationsDelete: (ids: number[]) => Promise<void>
   notificationsClear: () => Promise<void>
+  onNotificationsNew: (callback: () => void) => () => void
 
   // ============================================================================
   // TASK QUEUE

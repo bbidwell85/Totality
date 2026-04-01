@@ -170,7 +170,7 @@ export const MonitoringConfigSchema = z.object({
   enabled: z.boolean().optional(),
   startOnLaunch: z.boolean().optional(),
   pauseDuringManualScan: z.boolean().optional(),
-  pollingIntervals: z.record(ProviderTypeSchema, z.number().int().positive()).optional(),
+  pollingIntervals: z.record(ProviderTypeSchema, z.number().int().positive().optional()).optional(),
 }).refine(() => true) // Partial<MonitoringConfig>
 
 /**

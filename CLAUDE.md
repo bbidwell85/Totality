@@ -272,9 +272,9 @@ Events: `sources:scanProgress`, `quality:analysisProgress`, `series:progress`, `
 
 ### Background Systems
 
-- **TaskQueueService** (`src/main/services/TaskQueueService.ts`): Task types: `library-scan`, `source-scan`, `series-completeness`, `collection-completeness`, `music-completeness`, `music-scan`. Supports pause/resume/cancel/reorder. Emits notifications on completion/failure. `TaskDefinition` supports optional `artistId` for single-artist music completeness analysis (routes through task queue instead of direct IPC call).
-- **LiveMonitoringService** (`src/main/services/LiveMonitoringService.ts`): Polls sources on intervals, pauses during manual scans, creates `source_change` notifications.
-- **Notifications** (`notifications` table): Types: `source_change`, `scan_complete`, `error`, `info`. Emitted from TaskQueueService, LiveMonitoringService, SourceManager, AutoUpdateService. UI in `ActivityPanel.tsx`.
+- **TaskQueueService** (`src/main/services/TaskQueueService.ts`): Task types: `library-scan`, `source-scan`, `series-completeness`, `collection-completeness`, `music-completeness`, `music-scan`. Supports pause/resume/cancel/reorder. Emits notifications on completion/failure. `TaskDefinition` supports optional `artistId` for single-artist music completeness analysis (routes through task queue instead of direct IPC call). Deduplicates tasks by `type + sourceId + libraryId` — adding a duplicate returns the existing task ID. `hasActiveTask(type, sourceId?, libraryId?)` allows IPC handlers to check for running/queued tasks before starting direct scans.
+- **LiveMonitoringService** (`src/main/services/LiveMonitoringService.ts`): Polls sources on intervals, pauses during manual scans, creates `source_change` notifications. Emits `library:updated` to renderer after detecting changes. Default polling intervals defined in `DEFAULT_MONITORING_CONFIG` (`src/main/types/monitoring.ts`) — must include all `ProviderType` values. `pollingIntervals` type is `Partial<Record<ProviderType, number>>` since not all providers may have intervals configured.
+- **Notifications** (`notifications` table): Types: `source_change`, `scan_complete`, `error`, `info`. Emitted from TaskQueueService, LiveMonitoringService, SourceManager, AutoUpdateService. UI in `ActivityPanel.tsx`. Push-based delivery via `notifications:new` IPC event (`src/main/ipc/utils/notificationEmitter.ts`) — ActivityPanel subscribes for real-time updates instead of relying solely on polling.
 - **Wishlist**: Auto-fetches TMDB poster on add when `tmdb_id` present but `poster_url` missing (both direct and bulk add paths).
 
 ### Tag Sync (Mood/Genre)
@@ -314,7 +314,9 @@ When items are deleted from a source and a rescan runs, cleanup is centralized i
 - Dashboard reloads via `loadDashboardData()` which makes 6 parallel `Promise.allSettled` IPC calls (movie upgrades, TV upgrades, music upgrades, collections, series, artist completeness).
 - Event-driven reloads are debounced (300ms) to prevent event storms from simultaneous scan + completeness task completions.
 - Refresh triggers: `scan:completed`, `library:updated` (all types), `exclusions-changed`, `settings:changed`, `activeSourceId` change.
-- Disabled libraries filtered at DB level via `library_scans.is_enabled` JOIN on all completeness/upgrade queries.
+- Disabled libraries filtered at DB level via `library_scans.is_enabled` JOIN on all completeness/upgrade queries (including `getSeriesCompleteness`, `getMovieCollections`, `getLibraryStats`, `getSeriesCompletenessStats`, `getMovieCollectionStats`).
+- **Sort persistence**: `loadDashboardData` applies the persisted sort preference when setting data (not just via useEffect). This prevents stale sort order when the preference hasn't changed between reloads (React skips no-op `setState`, so the sort useEffect wouldn't re-fire).
+- **Expanded row heights**: `VariableSizeList` row heights for expandable artists/collections/series use constants (`EXPANDED_ITEM_HEIGHT = 44`, `EXPANDED_BOTTOM_PAD = 8`) that must match actual CSS rendering. Mismatch causes content cutoff.
 
 ### Preference Persistence
 
@@ -357,6 +359,7 @@ Preferences persisted via `setSetting`/`getSetting`:
 - `@typescript-eslint/no-explicit-any` is `warn` — avoid `any` but it won't block builds
 - ESLint 9 flat config (`eslint.config.js`), `typescript-eslint` v8 (unified package), `@typescript-eslint/no-require-imports` and `@typescript-eslint/no-unused-expressions` are off, `caughtErrors: 'none'` on no-unused-vars
 - IPC handlers validate inputs with **Zod v4** schemas (`src/main/validation/schemas.ts`) using `validateInput(schema, input, 'context')` — note Zod v4 has different APIs from v3 (e.g., `z.object()` methods differ)
+- **Zod v4 `z.record(enum, value)` gotcha**: Unlike v3, Zod v4 treats enum-keyed records as requiring ALL enum keys. For partial records (e.g., `pollingIntervals` where only some providers are configured), use `z.record(enum, value.optional())` so missing keys pass validation as `undefined`
 
 ## Important Patterns
 
@@ -396,6 +399,23 @@ db.startBatch()
 await db.endBatch()  // Single write to disk
 ```
 
+Batch mode is reentrant (depth-counted) — nested `startBatch()`/`endBatch()` calls are safe. Only the outermost `endBatch()` flushes to disk.
+
+### Shared Utilities
+
+- **`MusicQualityAnalyzer`** (`src/main/services/MusicQualityAnalyzer.ts`): `analyzeAlbumQuality(db, sourceId?, onProgress?)` — extracted from 3 duplicate locations. Handles batch mode internally.
+- **`getArtistAlbumsCombined`** (`src/main/services/utils/musicUtils.ts`): Combines albums by FK (`artistId`) and name (`artistName`) with deduplication. Extracted from 3 duplicate locations.
+- **Quality colors** (`src/renderer/src/utils/qualityColors.ts`): `getQualityLevelColors()`, `getResolutionColors()`, `getMusicTierLabel()` — shared across MediaDetails, WishlistItemCard.
+- **Settings constants** (`src/shared/settingKeys.ts`): `SETTING_KEYS` const object with all known setting keys. Used across renderer files to avoid bare string literals.
+
+### Scan Concurrency Guards
+
+Direct IPC scan handlers (`music:scanLibrary`, `series:analyzeAll`, `collections:analyzeAll`) check `TaskQueueService.hasActiveTask()` before executing. If a task of the same type is already running/queued, the handler throws an error. This prevents concurrent writes to shared tables.
+
+### Exclusion Event Dispatch
+
+When items are dismissed or un-dismissed in the Library view (`useDismissHandlers.ts`), the `exclusions-changed` CustomEvent is dispatched after each `addExclusion()`/`removeExclusion()` call. This triggers Dashboard and MediaBrowser to recalculate completeness data.
+
 ### Singleton Services
 
 ```typescript
@@ -421,7 +441,7 @@ The app supports two SQLite backends with automatic migration:
 
 `DatabaseFactory` handles backend selection and auto-migration from SQL.js → better-sqlite3 on first run. If migration fails, it falls back to SQL.js. Override with env vars: `USE_SQLJS=true` or `USE_BETTER_SQLITE3=true`.
 
-**Dual-Backend Gotcha**: `DatabaseServiceInterface` uses `[key: string]: any`, so TypeScript does NOT enforce method signature parity between `BetterSQLiteService` and `DatabaseService`. When adding or modifying database methods, manually verify both implementations have identical signatures. A mismatch will silently fail at runtime (e.g., wrong parameters passed positionally).
+**Dual-Backend Gotcha**: `DatabaseServiceInterface` uses `[key: string]: any`, so TypeScript does NOT enforce method signature parity between `BetterSQLiteService` and `DatabaseService`. When adding or modifying database methods, manually verify both implementations have identical signatures. A mismatch will silently fail at runtime (e.g., wrong parameters passed positionally). Both backends now enforce `PRAGMA foreign_keys = ON` and protect `user_fixed_match` records in upsert ON CONFLICT clauses.
 
 **NOT NULL DEFAULT '' Columns**: Several tables use `source_id TEXT NOT NULL DEFAULT ''` and `library_id TEXT NOT NULL DEFAULT ''`. When writing upsert methods, use `data.source_id || ''` (empty string), NOT `data.source_id || null`. Passing `null` to a NOT NULL column causes a `SqliteError: NOT NULL constraint failed` at runtime.
 

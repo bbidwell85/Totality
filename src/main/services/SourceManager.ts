@@ -10,6 +10,7 @@ import { getPlexService } from './PlexService'
 import { getLiveMonitoringService } from './LiveMonitoringService'
 import { getTaskQueueService } from './TaskQueueService'
 import { getLoggingService } from './LoggingService'
+import { emitNotificationCreated } from '../ipc/utils/notificationEmitter'
 import { app } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs/promises'
@@ -117,6 +118,7 @@ export class SourceManager {
             ? `"${unavailableSources[0].name}" could not be reached at startup. Please check the connection.`
             : `${unavailableSources.length} sources could not be reached at startup: ${names}. Please check their connections.`,
         })
+        emitNotificationCreated()
       } catch (err) {
         console.warn('[SourceManager] Could not create notification for unavailable sources:', err)
       }
@@ -260,6 +262,7 @@ export class SourceManager {
     console.log(`[SourceManager] Added source: ${config.displayName} (${sourceId})`)
     try {
       db.createNotification({ type: 'info', title: 'Source added', message: `${config.displayName} (${config.sourceType})`, sourceId, sourceName: config.displayName })
+      emitNotificationCreated()
     } catch { /* ignore */ }
     return source
   }
@@ -332,6 +335,7 @@ export class SourceManager {
 
     try {
       db.createNotification({ type: 'info', title: 'Source removed', message: sourceName })
+      emitNotificationCreated()
     } catch { /* ignore */ }
     console.log(`[SourceManager] Removed source: ${sourceId}`)
   }

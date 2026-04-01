@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import { X, RefreshCw, Tv, Film, Music, Square, Settings, Clock, Loader2 } from 'lucide-react'
 
 type CompletenessTaskType = 'series-completeness' | 'collection-completeness' | 'music-completeness'
@@ -178,7 +179,7 @@ export function CompletenessPanel({
 
   const loadApiKey = async () => {
     try {
-      const key = await window.electronAPI.getSetting('tmdb_api_key')
+      const key = await window.electronAPI.getSetting(SETTING_KEYS.tmdb_api_key)
       setIsKeyConfigured(!!key)
     } catch (err) {
       console.error('Error loading API key:', err)

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { SETTING_KEYS } from '../../../../../shared/settingKeys'
 import type { AnalysisProgress } from '../types'
 
 interface UseLibraryEventListenersOptions {
@@ -37,7 +38,7 @@ interface UseLibraryEventListenersOptions {
 export function useLibraryEventListeners({
   activeSourceId,
   scanProgressSize: _scanProgressSize,
-  loadMedia: _loadMedia,
+  loadMedia,
   loadStats: _loadStats,
   loadCompletenessData,
   loadMusicData,
@@ -72,7 +73,10 @@ export function useLibraryEventListeners({
         // Refresh enabled libraries when a library is toggled
         // Only refresh if it's the active source or no sourceId specified
         if (!data.sourceId || data.sourceId === activeSourceId) {
-          loadActiveSourceLibraries()
+          loadActiveSourceLibraries().then(() => {
+            loadMedia()
+            loadCompletenessData()
+          })
         }
         pendingUpdateRef.current = null
       }, 500) // 500ms debounce for live updates
@@ -80,6 +84,8 @@ export function useLibraryEventListeners({
     [
       activeSourceId,
       loadActiveSourceLibraries,
+      loadMedia,
+      loadCompletenessData,
     ]
   )
 
@@ -162,14 +168,14 @@ export function useLibraryEventListeners({
 
     // Listen for settings changes (e.g., API key added/removed in Settings)
     const cleanupSettingsChanged = window.electronAPI.onSettingsChanged?.(async (data) => {
-      if (data.key === 'tmdb_api_key') {
+      if (data.key === SETTING_KEYS.tmdb_api_key) {
         setTmdbApiKeySet(data.hasValue)
       }
-      if (data.key === 'completeness_include_eps' || data.key === 'completeness_include_singles') {
+      if (data.key === SETTING_KEYS.completeness_include_eps || data.key === SETTING_KEYS.completeness_include_singles) {
         // Read fresh settings to avoid stale state race condition
         const [epsVal, singlesVal] = await Promise.all([
-          window.electronAPI.getSetting('completeness_include_eps'),
-          window.electronAPI.getSetting('completeness_include_singles'),
+          window.electronAPI.getSetting(SETTING_KEYS.completeness_include_eps),
+          window.electronAPI.getSetting(SETTING_KEYS.completeness_include_singles),
         ])
         const freshEps = (epsVal as string) !== 'false'
         const freshSingles = (singlesVal as string) !== 'false'

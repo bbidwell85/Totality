@@ -76,6 +76,9 @@ const PROVIDERS: Array<{
   { key: 'jellyfin', name: 'Jellyfin', method: 'polling' },
   { key: 'emby', name: 'Emby', method: 'polling' },
   { key: 'kodi', name: 'Kodi', method: 'polling' },
+  { key: 'kodi-local', name: 'Kodi (Local DB)', method: 'file-watching' },
+  { key: 'kodi-mysql', name: 'Kodi (MySQL)', method: 'polling' },
+  { key: 'mediamonkey', name: 'MediaMonkey', method: 'polling' },
   { key: 'local', name: 'Local Folders', method: 'file-watching' },
 ]
 
@@ -138,6 +141,8 @@ export function GeneralTab() {
       jellyfin: 300000,
       emby: 300000,
       kodi: 300000,
+      'kodi-mysql': 300000,
+      mediamonkey: 60000,
     },
   })
   const [configuredProviders, setConfiguredProviders] = useState<Set<string>>(new Set())
@@ -159,8 +164,7 @@ export function GeneralTab() {
         const providerTypes = new Set<string>()
         ;(sources as MediaSource[]).forEach((source) => {
           if (source.is_enabled) {
-            const type = source.source_type.startsWith('kodi') ? 'kodi' : source.source_type
-            providerTypes.add(type)
+            providerTypes.add(source.source_type)
           }
         })
         setConfiguredProviders(providerTypes)

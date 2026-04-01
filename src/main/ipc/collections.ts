@@ -3,6 +3,7 @@ import { getMovieCollectionService } from '../services/MovieCollectionService'
 import { getWindowFromEvent } from './utils/safeSend'
 import { createProgressUpdater } from './utils/progressUpdater'
 import { validateInput, OptionalSourceIdSchema, PositiveIntSchema, NonEmptyStringSchema } from '../validation/schemas'
+import { getTaskQueueService } from '../services/TaskQueueService'
 
 export function registerCollectionHandlers() {
   const service = getMovieCollectionService()
@@ -13,6 +14,12 @@ export function registerCollectionHandlers() {
   ipcMain.handle('collections:analyzeAll', async (event, sourceId?: unknown, libraryId?: unknown) => {
     const validSourceId = sourceId !== undefined ? validateInput(NonEmptyStringSchema, sourceId, 'collections:analyzeAll.sourceId') : undefined
     const validLibraryId = libraryId !== undefined ? validateInput(NonEmptyStringSchema, libraryId, 'collections:analyzeAll.libraryId') : undefined
+
+    // Guard: prevent concurrent analysis for the same source/library
+    if (getTaskQueueService().hasActiveTask('collection-completeness', validSourceId, validLibraryId)) {
+      throw new Error('A collection analysis is already in progress for this library')
+    }
+
     const win = getWindowFromEvent(event)
     const { onProgress, flush } = createProgressUpdater(win, 'collections:progress', 'media')
 

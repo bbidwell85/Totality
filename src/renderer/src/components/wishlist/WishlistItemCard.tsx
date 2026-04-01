@@ -4,14 +4,7 @@ import { StarRating } from './StarRating'
 import { StoreLinksMenu } from './StoreLinksMenu'
 import type { WishlistItem, StoreLink, WishlistPriority } from '../../contexts/WishlistContext'
 import { useWishlist } from '../../contexts/WishlistContext'
-
-// Quality tier colors
-const qualityTierColors: Record<string, string> = {
-  'SD': 'bg-red-500/20 text-red-400',
-  '720p': 'bg-yellow-500/20 text-yellow-400',
-  '1080p': 'bg-blue-500/20 text-blue-400',
-  '4K': 'bg-green-500/20 text-green-400'
-}
+import { getResolutionColors } from '../../utils/qualityColors'
 
 interface WishlistItemCardProps {
   item: WishlistItem
@@ -117,7 +110,7 @@ export const WishlistItemCard = memo(function WishlistItemCard({
   const placeholderIcon = placeholderIcons[item.media_type]
   const qualityDisplay = getQualityDisplay()
   const isUpgrade = item.reason === 'upgrade'
-  const tierColorClass = item.current_quality_tier ? qualityTierColors[item.current_quality_tier] || 'bg-muted text-muted-foreground' : ''
+  const tierColorClass = item.current_quality_tier ? getResolutionColors(item.current_quality_tier) : ''
   const isMusic = item.media_type === 'album' || item.media_type === 'track'
   const isCompleted = item.status === 'completed'
 

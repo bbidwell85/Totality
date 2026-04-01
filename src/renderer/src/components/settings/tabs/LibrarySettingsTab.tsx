@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { SETTING_KEYS } from '../../../../../shared/settingKeys'
 import {
   Music,
   Film,
@@ -163,8 +164,8 @@ export function LibrarySettingsTab() {
           seriesEpisode,
           artistAlbum,
         ] = await Promise.all([
-          window.electronAPI.getSetting('completeness_include_eps'),
-          window.electronAPI.getSetting('completeness_include_singles'),
+          window.electronAPI.getSetting(SETTING_KEYS.completeness_include_eps),
+          window.electronAPI.getSetting(SETTING_KEYS.completeness_include_singles),
           window.electronAPI.getExclusions('media_upgrade'),
           window.electronAPI.getExclusions('collection_movie'),
           window.electronAPI.getExclusions('series_episode'),
@@ -300,7 +301,7 @@ export function LibrarySettingsTab() {
                   onChange={async (checked) => {
                     setIncludeEps(checked)
                     await window.electronAPI.setSetting(
-                      'completeness_include_eps',
+                      SETTING_KEYS.completeness_include_eps,
                       String(checked)
                     )
                   }}
@@ -313,7 +314,7 @@ export function LibrarySettingsTab() {
                   onChange={async (checked) => {
                     setIncludeSingles(checked)
                     await window.electronAPI.setSetting(
-                      'completeness_include_singles',
+                      SETTING_KEYS.completeness_include_singles,
                       String(checked)
                     )
                   }}

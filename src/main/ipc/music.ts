@@ -6,7 +6,6 @@
 
 import { ipcMain } from 'electron'
 import { getDatabase } from '../database/getDatabase'
-import { getQualityAnalyzer } from '../services/QualityAnalyzer'
 import { getMusicBrainzService } from '../services/MusicBrainzService'
 import { getSourceManager } from '../services/SourceManager'
 import { PlexProvider } from '../providers/plex/PlexProvider'
@@ -14,11 +13,14 @@ import { LocalFolderProvider } from '../providers/local/LocalFolderProvider'
 import { JellyfinEmbyBase } from '../providers/jellyfin-emby/JellyfinEmbyBase'
 import { KodiProvider } from '../providers/kodi/KodiProvider'
 import { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
-import type { MusicFilters, MusicTrack } from '../types/database'
+import type { MusicTrack } from '../types/database'
 import { safeSend, getWindowFromEvent } from './utils/safeSend'
 import { createProgressUpdater } from './utils/progressUpdater'
 import { validateInput, PositiveIntSchema, NonEmptyStringSchema, OptionalSourceIdSchema, SourceIdSchema, LibraryIdSchema, MusicFiltersSchema } from '../validation/schemas'
 import { z } from 'zod'
+import { getTaskQueueService } from '../services/TaskQueueService'
+import { analyzeAlbumQuality } from '../services/MusicQualityAnalyzer'
+import { getArtistAlbumsCombined } from '../services/utils/musicUtils'
 
 export function registerMusicHandlers(): void {
   // ============================================================================
@@ -31,6 +33,12 @@ export function registerMusicHandlers(): void {
   ipcMain.handle('music:scanLibrary', async (_event, sourceId: unknown, libraryId: unknown) => {
     const validSourceId = validateInput(SourceIdSchema, sourceId, 'music:scanLibrary')
     const validLibraryId = validateInput(LibraryIdSchema, libraryId, 'music:scanLibrary')
+
+    // Guard: prevent concurrent scans for the same library
+    if (getTaskQueueService().hasActiveTask('music-scan', validSourceId, validLibraryId)) {
+      throw new Error('A scan is already in progress for this library')
+    }
+
     console.log(`[music:scanLibrary] Starting scan for source=${validSourceId}, library=${validLibraryId}`)
 
     const manager = getSourceManager()
@@ -103,25 +111,7 @@ export function registerMusicHandlers(): void {
 
       // Analyze quality for all albums
       const db = getDatabase()
-      const analyzer = getQualityAnalyzer()
-      const albums = db.getMusicAlbums({ sourceId: validSourceId })
-      console.log(`[music:scanLibrary] Found ${albums.length} albums in database for sourceId=${validSourceId}`)
-
-      // Batch fetch all tracks to avoid N+1 queries
-      const albumIds = albums.map((a: { id?: number }) => a.id).filter((id: number | undefined): id is number => id != null)
-      const tracksByAlbum = 'getMusicTracksByAlbumIds' in db
-        ? (db as unknown as { getMusicTracksByAlbumIds: (ids: number[]) => Map<number, MusicTrack[]> }).getMusicTracksByAlbumIds(albumIds)
-        : null
-
-      db.startBatch()
-      for (const album of albums) {
-        const tracks = tracksByAlbum
-          ? (tracksByAlbum.get(album.id!) || [])
-          : db.getMusicTracks({ albumId: album.id })
-        const qualityScore = analyzer.analyzeMusicAlbum(album, tracks)
-        await db.upsertMusicQualityScore(qualityScore)
-      }
-      await db.endBatch()
+      await analyzeAlbumQuality(db, validSourceId)
 
       // Update library scan timestamp if successful
       if (result.success && library) {
@@ -335,41 +325,22 @@ export function registerMusicHandlers(): void {
   ipcMain.handle('music:analyzeAllQuality', async (event, sourceId?: unknown) => {
     const validSourceId = sourceId !== undefined ? validateInput(OptionalSourceIdSchema, sourceId, 'music:analyzeAllQuality') : undefined
     const db = getDatabase()
-    const analyzer = getQualityAnalyzer()
     const win = getWindowFromEvent(event)
     const { onProgress, flush } = createProgressUpdater(win, 'music:qualityProgress', 'music')
 
     try {
-      const filters: MusicFilters = validSourceId ? { sourceId: validSourceId } : {}
-      const albums = db.getMusicAlbums(filters)
-
-      // Batch fetch all tracks to avoid N+1 queries
-      const albumIds = albums.map((a: { id?: number }) => a.id).filter((id: number | undefined): id is number => id != null)
-      const tracksByAlbum = 'getMusicTracksByAlbumIds' in db
-        ? (db as unknown as { getMusicTracksByAlbumIds: (ids: number[]) => Map<number, MusicTrack[]> }).getMusicTracksByAlbumIds(albumIds)
-        : null
-
-      let processed = 0
-
-      db.startBatch()
-      for (const album of albums) {
-        const tracks = tracksByAlbum
-          ? (tracksByAlbum.get(album.id!) || [])
-          : db.getMusicTracks({ albumId: album.id })
-        const qualityScore = analyzer.analyzeMusicAlbum(album, tracks)
-        await db.upsertMusicQualityScore(qualityScore)
-
-        processed++
+      let totalAnalyzed = 0
+      await analyzeAlbumQuality(db, validSourceId, (current, total) => {
+        totalAnalyzed = total
         onProgress({
-          current: processed,
-          total: albums.length,
-          currentItem: `${album.artist_name} - ${album.title}`,
-          percentage: (processed / albums.length) * 100,
+          current,
+          total,
+          currentItem: `Analyzing album ${current}/${total}`,
+          percentage: (current / total) * 100,
         })
-      }
-      await db.endBatch()
+      })
 
-      return { success: true, analyzed: albums.length }
+      return { success: true, analyzed: totalAnalyzed }
     } catch (error: unknown) {
       console.error('[music:analyzeAllQuality] Error:', error)
       throw error
@@ -452,17 +423,7 @@ export function registerMusicHandlers(): void {
       }
 
       // Get albums by artist_id AND by artist_name to catch all albums
-      const albumsById = db.getMusicAlbums({ artistId: validArtistId })
-      const albumsByName = db.getMusicAlbumsByArtistName(artist.name)
-
-      // Combine and deduplicate by album id
-      const albumMap = new Map<number, typeof albumsById[0]>()
-      for (const album of [...albumsById, ...albumsByName]) {
-        if (album.id !== undefined) {
-          albumMap.set(album.id, album)
-        }
-      }
-      const albums = Array.from(albumMap.values())
+      const albums = getArtistAlbumsCombined(db, validArtistId, artist.name)
 
       const ownedTitles = albums.map(a => a.title)
       const ownedMbIds = albums.filter(a => a.musicbrainz_id).map(a => a.musicbrainz_id!)
@@ -688,17 +649,7 @@ export function registerMusicHandlers(): void {
       await db.updateArtistMatch(validArtistId, validMusicbrainzId)
 
       // Get albums for re-analysis
-      const albumsById = db.getMusicAlbums({ artistId: validArtistId })
-      const albumsByName = db.getMusicAlbumsByArtistName(artist.name)
-
-      // Combine and deduplicate
-      const albumMap = new Map<number, typeof albumsById[0]>()
-      for (const album of [...albumsById, ...albumsByName]) {
-        if (album.id !== undefined) {
-          albumMap.set(album.id, album)
-        }
-      }
-      const albums = Array.from(albumMap.values())
+      const albums = getArtistAlbumsCombined(db, validArtistId, artist.name)
 
       const ownedTitles = albums.map(a => a.title)
       const ownedMbIds = albums.filter(a => a.musicbrainz_id).map(a => a.musicbrainz_id!)

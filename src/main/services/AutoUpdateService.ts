@@ -8,6 +8,7 @@
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater, type UpdateInfo, type ProgressInfo } from 'electron-updater'
 import { safeSend } from '../ipc/utils/safeSend'
+import { emitNotificationCreated } from '../ipc/utils/notificationEmitter'
 import { getDatabaseServiceSync } from '../database/DatabaseFactory'
 
 export type UpdateStatus =
@@ -71,6 +72,7 @@ export class AutoUpdateService {
       })
       try {
         getDatabaseServiceSync().createNotification({ type: 'info', title: 'Update available', message: `Version ${info.version} is ready to download` })
+        emitNotificationCreated()
       } catch { /* ignore */ }
     })
 
@@ -101,6 +103,7 @@ export class AutoUpdateService {
       })
       try {
         getDatabaseServiceSync().createNotification({ type: 'info', title: 'Update ready', message: `Version ${info.version} will install on restart` })
+        emitNotificationCreated()
       } catch { /* ignore */ }
     })
 

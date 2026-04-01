@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { MoreVertical, RefreshCw, Pencil, EyeOff, X, Copy, Check } from 'lucide-react'
+import { SETTING_KEYS } from '../../../../shared/settingKeys'
+import { getQualityLevelColors } from '../../utils/qualityColors'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import type { WishlistMediaType } from '../../contexts/WishlistContext'
 import { useMenuClose } from '../../hooks/useMenuClose'
@@ -183,7 +185,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   useEffect(() => {
     const cleanup = window.electronAPI.onSettingsChanged(async (data: { key: string }) => {
       if (data.key === 'quality_video_weight') {
-        const val = await window.electronAPI.getSetting('quality_video_weight')
+        const val = await window.electronAPI.getSetting(SETTING_KEYS.quality_video_weight)
         if (val) setVideoWeight(Math.max(0, Math.min(100, parseInt(val) || 70)))
       }
     })
@@ -222,7 +224,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
       }
       setThresholds(loadedThresholds)
 
-      const weightVal = await window.electronAPI.getSetting('quality_video_weight')
+      const weightVal = await window.electronAPI.getSetting(SETTING_KEYS.quality_video_weight)
       if (weightVal) setVideoWeight(Math.max(0, Math.min(100, parseInt(weightVal) || 70)))
 
       const item = await window.electronAPI.getMediaItemById(mediaId) as MediaWithQuality | null
@@ -656,8 +658,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
               <div className="flex gap-1.5 mt-2 overflow-x-auto">
                 {versions.map((v) => {
                   const isSelected = selectedVersionId === v.id
-                  const qualityColor = v.tier_quality === 'HIGH' ? 'bg-green-500/15 hover:bg-green-500/25' :
-                    v.tier_quality === 'LOW' ? 'bg-red-500/15 hover:bg-red-500/25' : ''
+                  const qualityColor = getQualityLevelColors(v.tier_quality || '')
                   return (
                     <button
                       key={v.id}

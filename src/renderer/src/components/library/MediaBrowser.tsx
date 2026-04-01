@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import { MediaDetails } from './MediaDetails'
 import { CompletenessPanel } from './CompletenessPanel'
 import { MissingItemPopup } from './MissingItemPopup'
@@ -186,14 +187,16 @@ export function MediaBrowser({
 
   const setViewType = useCallback((vt: 'grid' | 'list') => {
     setViewTypeState(vt)
+    if (!viewPrefsLoadedRef.current) return
     viewPrefsRef.current[view] = { ...viewPrefsRef.current[view] || { viewType: 'grid', gridScale: 4 }, viewType: vt }
-    window.electronAPI.setSetting('library_view_prefs', JSON.stringify(viewPrefsRef.current))
+    window.electronAPI.setSetting(SETTING_KEYS.library_view_prefs, JSON.stringify(viewPrefsRef.current))
   }, [view])
 
   const setGridScale = useCallback((gs: number) => {
     setGridScaleState(gs)
+    if (!viewPrefsLoadedRef.current) return
     viewPrefsRef.current[view] = { ...viewPrefsRef.current[view] || { viewType: 'grid', gridScale: 4 }, gridScale: gs }
-    window.electronAPI.setSetting('library_view_prefs', JSON.stringify(viewPrefsRef.current))
+    window.electronAPI.setSetting(SETTING_KEYS.library_view_prefs, JSON.stringify(viewPrefsRef.current))
   }, [view])
 
   const [collectionsOnly, setCollectionsOnly] = useState(false)
@@ -994,8 +997,8 @@ export function MediaBrowser({
   // Load EP/Singles inclusion settings
   const loadEpSingleSettings = useCallback(async () => {
     const [epsVal, singlesVal] = await Promise.all([
-      window.electronAPI.getSetting('completeness_include_eps'),
-      window.electronAPI.getSetting('completeness_include_singles'),
+      window.electronAPI.getSetting(SETTING_KEYS.completeness_include_eps),
+      window.electronAPI.getSetting(SETTING_KEYS.completeness_include_singles),
     ])
     setIncludeEps((epsVal as string) !== 'false')
     setIncludeSingles((singlesVal as string) !== 'false')
@@ -1030,7 +1033,7 @@ export function MediaBrowser({
     checkTmdbApiKey()
     // Load per-tab view preferences
     if (!viewPrefsLoadedRef.current) {
-      window.electronAPI.getSetting('library_view_prefs').then(val => {
+      window.electronAPI.getSetting(SETTING_KEYS.library_view_prefs).then(val => {
         if (val) {
           try {
             const prefs = JSON.parse(val)

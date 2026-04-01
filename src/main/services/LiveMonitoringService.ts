@@ -21,6 +21,7 @@ import { getDatabase } from '../database/getDatabase'
 import { getSourceManager } from './SourceManager'
 import { getLoggingService } from './LoggingService'
 import { safeSend } from '../ipc/utils/safeSend'
+import { emitNotificationCreated } from '../ipc/utils/notificationEmitter'
 import {
   MonitoringConfig,
   DEFAULT_MONITORING_CONFIG,
@@ -139,7 +140,7 @@ export class LiveMonitoringService {
     this.config.pauseDuringManualScan = pauseDuringManualScan !== 'false' // Default true
 
     // Load per-provider intervals
-    const providerTypes: ProviderType[] = ['plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'local']
+    const providerTypes: ProviderType[] = ['plex', 'jellyfin', 'emby', 'kodi', 'kodi-local', 'kodi-mysql', 'local', 'mediamonkey']
     for (const provider of providerTypes) {
       const interval = db.getSetting(`monitoring_interval_${provider}`)
       if (interval) {
@@ -725,11 +726,30 @@ export class LiveMonitoringService {
                 sourceName: source.display_name,
                 itemCount: totalChanges,
               })
+              emitNotificationCreated()
             } catch { /* ignore */ }
           }
         }
       } catch (error) {
         console.error(`[LiveMonitoring] Error in targeted scan for library ${library.libraryId}:`, error)
+      }
+    }
+
+    // Emit library:updated for each event type so Dashboard/MediaBrowser refresh
+    if (events.length > 0) {
+      const hasMusicChanges = events.some(e => {
+        const libType = e.libraryId?.split(':')[0]
+        return libType === 'music'
+      })
+      const hasMediaChanges = events.some(e => {
+        const libType = e.libraryId?.split(':')[0]
+        return libType !== 'music'
+      })
+      if (hasMediaChanges) {
+        this.sendToRenderer('library:updated', { type: 'media' })
+      }
+      if (hasMusicChanges) {
+        this.sendToRenderer('library:updated', { type: 'music' })
       }
     }
 
@@ -755,7 +775,7 @@ export class LiveMonitoringService {
    * Start polling for a remote source
    */
   private startPolling(sourceId: string, sourceType: ProviderType): void {
-    const interval = this.config.pollingIntervals[sourceType] || DEFAULT_MONITORING_CONFIG.pollingIntervals[sourceType]
+    const interval = this.config.pollingIntervals[sourceType] || DEFAULT_MONITORING_CONFIG.pollingIntervals[sourceType] || 300000
 
     console.log(`[LiveMonitoring] Starting polling for ${sourceId} (${sourceType}) every ${interval / 1000}s`)
 
@@ -819,7 +839,7 @@ export class LiveMonitoringService {
       clearTimeout(existingTimer)
     }
 
-    const interval = this.config.pollingIntervals[sourceType] || DEFAULT_MONITORING_CONFIG.pollingIntervals[sourceType]
+    const interval = this.config.pollingIntervals[sourceType] || DEFAULT_MONITORING_CONFIG.pollingIntervals[sourceType] || 300000
     const timer = setTimeout(() => this.pollSource(sourceId, sourceType), interval)
     this.pollingTimers.set(sourceId, timer)
   }
@@ -956,7 +976,15 @@ export class LiveMonitoringService {
           sourceName: source.display_name,
           itemCount: totalAdded + totalUpdated + totalRemoved,
         })
+        emitNotificationCreated()
       } catch { /* ignore */ }
+    }
+
+    // Emit library:updated for each event type so Dashboard/MediaBrowser refresh
+    if (events.length > 0) {
+      // Polling only handles remote sources which are typically video/media
+      // but emit based on library type to be correct
+      this.sendToRenderer('library:updated', { type: 'media' })
     }
 
     // Notify renderer of source check completion

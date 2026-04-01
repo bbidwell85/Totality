@@ -255,6 +255,14 @@ export function ActivityPanel() {
     }
   }, [isOpen, loadNotifications])
 
+  // Subscribe to push notifications for immediate reload
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onNotificationsNew?.(() => {
+      loadNotifications()
+    })
+    return () => unsubscribe?.()
+  }, [loadNotifications])
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

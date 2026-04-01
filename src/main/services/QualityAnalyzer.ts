@@ -621,37 +621,42 @@ export class QualityAnalyzer {
 
     getLoggingService().verbose('[QualityAnalyzer]', `Starting analysis of ${mediaItems.length} items`)
 
-    for (const item of mediaItems) {
-      try {
-        const qualityScore = await this.analyzeMediaItem(item)
-        await db.upsertQualityScore(qualityScore)
+    db.startBatch()
+    try {
+      for (const item of mediaItems) {
+        try {
+          const qualityScore = await this.analyzeMediaItem(item)
+          await db.upsertQualityScore(qualityScore)
 
-        // Track distribution for verbose summary
-        const tier = qualityScore.quality_tier || 'SD'
-        const quality = qualityScore.tier_quality || 'MEDIUM'
-        tierCounts[tier] = (tierCounts[tier] || 0) + 1
-        qualityCounts[quality] = (qualityCounts[quality] || 0) + 1
+          // Track distribution for verbose summary
+          const tier = qualityScore.quality_tier || 'SD'
+          const quality = qualityScore.tier_quality || 'MEDIUM'
+          tierCounts[tier] = (tierCounts[tier] || 0) + 1
+          qualityCounts[quality] = (qualityCounts[quality] || 0) + 1
 
-        // Score individual versions and update best version selection
-        if (item.id && item.version_count && item.version_count > 1) {
-          const versions = db.getMediaItemVersions(item.id)
-          for (const version of versions) {
-            if (version.id) {
-              const vScore = this.analyzeVersion(version)
-              db.updateMediaItemVersionQuality(version.id, vScore)
+          // Score individual versions and update best version selection
+          if (item.id && item.version_count && item.version_count > 1) {
+            const versions = db.getMediaItemVersions(item.id)
+            for (const version of versions) {
+              if (version.id) {
+                const vScore = this.analyzeVersion(version)
+                db.updateMediaItemVersionQuality(version.id, vScore)
+              }
             }
+            db.updateBestVersion(item.id)
           }
-          db.updateBestVersion(item.id)
-        }
 
-        analyzed++
+          analyzed++
 
-        if (onProgress) {
-          onProgress(analyzed, mediaItems.length)
+          if (onProgress) {
+            onProgress(analyzed, mediaItems.length)
+          }
+        } catch (error) {
+          console.error(`Failed to analyze item ${item.id}:`, error)
         }
-      } catch (error) {
-        console.error(`Failed to analyze item ${item.id}:`, error)
       }
+    } finally {
+      await db.endBatch()
     }
 
     const tierSummary = Object.entries(tierCounts).map(([t, c]) => `${t}:${c}`).join(', ')

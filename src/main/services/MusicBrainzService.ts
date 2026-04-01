@@ -924,6 +924,9 @@ export class MusicBrainzService extends CancellableOperation {
     // Phase 1: Analyze artist completeness
     console.log(`[MusicBrainzService] Phase 1: Analyzing ${artists.length} artists (skipRecent=${skipRecentlyAnalyzed}, vinylFilter=${filterVinylOnly})`)
 
+    db.startBatch()
+    try {
+
     for (const artist of artists) {
       if (this.isCancelled()) {
         console.log(`[MusicBrainzService] Analysis cancelled at artist ${currentItem + 1}/${totalItems}`)
@@ -982,6 +985,11 @@ export class MusicBrainzService extends CancellableOperation {
         }
 
         artistsAnalyzed++
+
+        // Periodic checkpoint every 25 items to avoid losing too much work on crash
+        if (artistsAnalyzed % 25 === 0) {
+          db.forceSave?.()
+        }
       } catch (error) {
         console.error(`[MusicBrainzService] Failed to analyze artist "${artist.name}":`, error)
       }
@@ -1053,11 +1061,20 @@ export class MusicBrainzService extends CancellableOperation {
           }
         }
         albumsAnalyzed++
+
+        // Periodic checkpoint every 25 items to avoid losing too much work on crash
+        if (albumsAnalyzed % 25 === 0) {
+          db.forceSave?.()
+        }
       } catch (error) {
         console.error(`[MusicBrainzService] Failed to analyze album "${album.title}":`, error)
       }
 
       currentItem++
+    }
+
+    } finally {
+      await db.endBatch()
     }
 
     onProgress?.({

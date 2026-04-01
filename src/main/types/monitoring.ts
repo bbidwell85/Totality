@@ -2,7 +2,7 @@
  * Types for Live Monitoring and Notification System
  */
 
-export type ProviderType = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'kodi-local' | 'local'
+export type ProviderType = 'plex' | 'jellyfin' | 'emby' | 'kodi' | 'kodi-local' | 'kodi-mysql' | 'local' | 'mediamonkey'
 
 // =============================================================================
 // Monitoring Configuration
@@ -12,7 +12,7 @@ export interface MonitoringConfig {
   enabled: boolean
   startOnLaunch: boolean
   pauseDuringManualScan: boolean
-  pollingIntervals: Record<ProviderType, number>
+  pollingIntervals: Partial<Record<ProviderType, number>>
 }
 
 export const DEFAULT_MONITORING_CONFIG: MonitoringConfig = {
@@ -25,7 +25,9 @@ export const DEFAULT_MONITORING_CONFIG: MonitoringConfig = {
     emby: 300000,      // 5 minutes - remote server
     kodi: 300000,      // 5 minutes - remote server
     'kodi-local': 60000, // 1 minute - local database
+    'kodi-mysql': 300000, // 5 minutes - remote database
     local: 60000,      // 1 minute - local folder
+    mediamonkey: 60000, // 1 minute - local database
   },
 }
 

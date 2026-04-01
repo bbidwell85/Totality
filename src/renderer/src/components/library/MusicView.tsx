@@ -2000,7 +2000,7 @@ const AlbumCard = memo(({ album, onClick, showArtist = true, showSourceBadge, on
         {hasCompleteness && (
           <div className="absolute bottom-2 right-2 z-10">
             <div className="bg-foreground text-background text-xs font-bold px-1.5 py-0.5 rounded shadow-md">
-              {completeness!.owned_tracks}/{completeness!.total_tracks}
+              {album.track_count || completeness!.owned_tracks}/{completeness!.total_tracks}
             </div>
           </div>
         )}
@@ -2231,7 +2231,7 @@ const AlbumListItem = memo(({ album, onClick, showArtist = true, showSourceBadge
       <div className="w-20 shrink-0 text-center">
         {completeness && (
           <span className="px-2 py-0.5 text-xs font-medium bg-foreground text-background rounded">
-            {completeness.owned_tracks}/{completeness.total_tracks}
+            {album.track_count || completeness.owned_tracks}/{completeness.total_tracks}
           </span>
         )}
       </div>

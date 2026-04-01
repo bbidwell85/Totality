@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { SETTING_KEYS } from '../../../../../shared/settingKeys'
 import type { AnalysisProgress, MediaSource } from '../types'
 
 type AnalysisType = 'series' | 'collections' | 'music'
@@ -60,7 +61,7 @@ export function useAnalysisManager({
   // Check if TMDB API key is configured
   const checkTmdbApiKey = useCallback(async () => {
     try {
-      const key = await window.electronAPI.getSetting('tmdb_api_key')
+      const key = await window.electronAPI.getSetting(SETTING_KEYS.tmdb_api_key)
       setTmdbApiKeySet(!!key && key.length > 0)
     } catch (err) {
       console.warn('Failed to check TMDB API key:', err)

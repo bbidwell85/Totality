@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import { Search, X, Home, Film, Tv, Music, Tags, Library, Star, Settings, RefreshCw, Disc3, User, Bot, ArrowLeft, ArrowRight } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useWishlist } from '../../contexts/WishlistContext'
@@ -90,11 +91,11 @@ export function TopBar({
   // Check TMDB API key status
   const [tmdbApiKeySet, setTmdbApiKeySet] = useState(false)
   useEffect(() => {
-    window.electronAPI.getSetting('tmdb_api_key').then(value => {
+    window.electronAPI.getSetting(SETTING_KEYS.tmdb_api_key).then(value => {
       setTmdbApiKeySet(!!value)
     })
     const unsubscribe = window.electronAPI.onSettingsChanged(({ key, hasValue }) => {
-      if (key === 'tmdb_api_key') setTmdbApiKeySet(hasValue)
+      if (key === SETTING_KEYS.tmdb_api_key) setTmdbApiKeySet(hasValue)
     })
     return unsubscribe
   }, [])

@@ -87,6 +87,7 @@ export function useDismissHandlers({
         e.id === item.id ? { ...e, needs_upgrade: false, tier_quality: e.tier_quality === 'LOW' ? 'MEDIUM' : e.tier_quality } : e
       ))
       emitDismissUpgrade({ mediaId: item.id })
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
       addToast({
         type: 'success',
         title: 'Upgrade dismissed',
@@ -103,6 +104,7 @@ export function useDismissHandlers({
               setSelectedShowEpisodes(prev => prev.map(e =>
                 e.id === item.id ? { ...e, needs_upgrade: true } : e
               ))
+              window.dispatchEvent(new CustomEvent('exclusions-changed'))
             } catch { /* ignore */ }
           },
         },
@@ -137,6 +139,7 @@ export function useDismissHandlers({
         }
         return next
       })
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
       addToast({ type: 'success', title: 'Item dismissed', message: `"${title}" removed from recommendations` })
     } catch (err) {
       console.error('Failed to dismiss missing episode:', err)
@@ -173,6 +176,7 @@ export function useDismissHandlers({
         }
         return next
       })
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
       addToast({ type: 'success', title: 'Season dismissed', message: `${seasonEpisodes.length} missing episodes from Season ${seasonNumber} removed` })
     } catch (err) {
       console.error('Failed to dismiss missing season:', err)
@@ -205,6 +209,7 @@ export function useDismissHandlers({
             .filter(c => c.total_movies > 1)
       )
       emitDismissCollectionMovie({ collectionId, tmdbId })
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
       addToast({ type: 'success', title: 'Movie dismissed', message: `"${movieTitle}" removed from collection recommendations` })
     } catch (err) {
       console.error('Failed to dismiss collection movie:', err)
@@ -231,6 +236,7 @@ export function useDismissHandlers({
         next.set(artistName, updated)
         return next
       })
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
       addToast({ type: 'success', title: 'Album dismissed', message: `"${album.title}" removed from recommendations` })
     } catch (err) {
       console.error('Failed to dismiss missing album:', err)

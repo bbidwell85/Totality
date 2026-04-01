@@ -40,7 +40,7 @@ export class DatabaseService {
   private db: Database | null = null
   private dbPath: string
   private _isInitialized = false
-  private batchMode = false
+  private batchDepth = 0
   private pendingSave = false
 
   // Write mutex to prevent concurrent saves
@@ -107,6 +107,9 @@ export class DatabaseService {
         this.db = new SQL.Database()
         console.log('New database created')
       }
+
+      // Enable foreign key enforcement
+      this.db.run('PRAGMA foreign_keys = ON')
 
       // Run schema migrations
       await this.runMigrations()
@@ -777,7 +780,7 @@ export class DatabaseService {
     }
 
     // In batch mode, mark as pending but don't actually save yet
-    if (this.batchMode) {
+    if (this.batchDepth > 0) {
       this.pendingSave = true
       return
     }
@@ -792,22 +795,32 @@ export class DatabaseService {
    * Call endBatch() when done to persist all changes
    */
   startBatch(): void {
-    this.batchMode = true
-    this.pendingSave = false
-    console.log('Database batch mode started')
+    this.batchDepth++
+    if (this.batchDepth === 1) {
+      this.pendingSave = false
+      console.log('Database batch mode started')
+    }
   }
 
   /**
    * End batch mode and save all pending changes
+   * Uses depth counter for safe nesting — only flushes when outermost batch ends
    */
   async endBatch(): Promise<void> {
-    this.batchMode = false
+    if (this.batchDepth <= 0) {
+      console.warn('endBatch() called without matching startBatch()')
+      return
+    }
 
-    if (this.pendingSave) {
-      console.log('Database batch mode ended, saving pending changes...')
-      await this.forceSave()
-    } else {
-      console.log('Database batch mode ended, no pending changes')
+    this.batchDepth--
+
+    if (this.batchDepth === 0) {
+      if (this.pendingSave) {
+        console.log('Database batch mode ended, saving pending changes...')
+        await this.forceSave()
+      } else {
+        console.log('Database batch mode ended, no pending changes')
+      }
     }
   }
 
@@ -936,7 +949,7 @@ export class DatabaseService {
    * Check if in batch mode
    */
   isInBatchMode(): boolean {
-    return this.batchMode
+    return this.batchDepth > 0
   }
 
   /**
@@ -1841,46 +1854,137 @@ export class DatabaseService {
   async deleteMediaItem(id: number): Promise<void> {
     if (!this.db) throw new Error('Database not initialized')
 
-    // Before deleting, update affected collections and series completeness
+    this.startBatch()
     try {
-      const result = this.db.exec('SELECT tmdb_id, source_id, type, series_title FROM media_items WHERE id = ?', [id])
-      if (result[0]?.values[0]) {
-        const [tmdbId, sourceId, type, seriesTitle] = result[0].values[0] as [string | null, string, string, string | null]
-        if (tmdbId && type === 'movie') {
-          await this.updateCollectionsAfterDeletion([String(tmdbId)], sourceId)
+      // Before deleting, update affected collections and series completeness
+      try {
+        const result = this.db.exec('SELECT tmdb_id, source_id, library_id, type, series_title FROM media_items WHERE id = ?', [id])
+        if (result[0]?.values[0]) {
+          const [tmdbId, sourceId, libraryId, type, seriesTitle] = result[0].values[0] as [string | null, string, string | null, string, string | null]
+          if (tmdbId && type === 'movie') {
+            await this.updateCollectionsAfterDeletion([String(tmdbId)], sourceId)
+          }
+          if (type === 'episode' && seriesTitle) {
+            // Recount owned episodes from actual media_items (excluding the item being deleted)
+            this.db.run(`
+              UPDATE series_completeness SET
+                owned_episodes = (
+                  SELECT COUNT(*) FROM media_items mi
+                  WHERE mi.series_title = series_completeness.series_title
+                    AND mi.source_id = series_completeness.source_id
+                    AND mi.type = 'episode'
+                    AND mi.id != ?
+                ),
+                completeness_percentage = CASE WHEN total_episodes > 0
+                  THEN ROUND(CAST((
+                    SELECT COUNT(*) FROM media_items mi
+                    WHERE mi.series_title = series_completeness.series_title
+                      AND mi.source_id = series_completeness.source_id
+                      AND mi.type = 'episode'
+                      AND mi.id != ?
+                  ) AS REAL) * 100.0 / total_episodes)
+                  ELSE 0 END
+              WHERE series_title = ? AND source_id = ? AND library_id = ?
+            `, [id, id, seriesTitle, sourceId, libraryId || ''])
+            this.db.run(
+              'DELETE FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ? AND owned_episodes <= 0',
+              [seriesTitle, sourceId, libraryId || '']
+            )
+          }
         }
-        if (type === 'episode' && seriesTitle) {
-          this.db.run(`
-            UPDATE series_completeness SET
-              owned_episodes = MAX(0, owned_episodes - 1),
-              completeness_percentage = CASE WHEN total_episodes > 0
-                THEN ROUND(CAST(MAX(0, owned_episodes - 1) AS REAL) * 100.0 / total_episodes)
-                ELSE 0 END
-            WHERE series_title = ? AND source_id = ?
-          `, [seriesTitle, sourceId])
-          this.db.run(
-            'DELETE FROM series_completeness WHERE series_title = ? AND source_id = ? AND owned_episodes <= 0',
-            [seriesTitle, sourceId]
-          )
-        }
-      }
-    } catch { /* non-critical */ }
+      } catch { /* non-critical */ }
 
-    this.db.run('DELETE FROM media_item_versions WHERE media_item_id = ?', [id])
-    this.db.run('DELETE FROM quality_scores WHERE media_item_id = ?', [id])
-    this.db.run('DELETE FROM media_item_collections WHERE media_item_id = ?', [id])
-    this.db.run('DELETE FROM media_items WHERE id = ?', [id])
-    await this.save()
+      this.db.run('DELETE FROM media_item_versions WHERE media_item_id = ?', [id])
+      this.db.run('DELETE FROM quality_scores WHERE media_item_id = ?', [id])
+      this.db.run('DELETE FROM media_item_collections WHERE media_item_id = ?', [id])
+      this.db.run('DELETE FROM media_items WHERE id = ?', [id])
+    } finally {
+      await this.endBatch()
+    }
   }
 
   async cleanupOrphanedMediaData(): Promise<number> {
     if (!this.db) throw new Error('Database not initialized')
     let cleaned = 0
+
+    // Clean up orphaned child rows
     const tables = ['quality_scores', 'media_item_versions', 'media_item_collections']
     for (const table of tables) {
       this.db.run(`DELETE FROM ${table} WHERE media_item_id NOT IN (SELECT id FROM media_items)`)
       cleaned += this.db.getRowsModified()
     }
+
+    // Validate collection ownership — remove TMDB IDs that no longer exist in media_items
+    try {
+      const collectionsResult = this.db.exec(
+        'SELECT id, owned_movie_ids, owned_movies, total_movies, source_id FROM movie_collections'
+      )
+      if (collectionsResult.length > 0 && collectionsResult[0].values.length > 0) {
+        for (const row of collectionsResult[0].values) {
+          const [id, ownedIdsStr, _ownedMovies, totalMovies] = row as [number, string, number, number]
+          try {
+            const ownedIds: string[] = JSON.parse(ownedIdsStr || '[]')
+            const validIds = ownedIds.filter(tmdbId => {
+              const exists = this.db!.exec('SELECT 1 FROM media_items WHERE tmdb_id = ?', [tmdbId])
+              return exists.length > 0 && exists[0].values.length > 0
+            })
+
+            if (validIds.length !== ownedIds.length) {
+              if (validIds.length === 0) {
+                this.db.run('DELETE FROM movie_collections WHERE id = ?', [id])
+                cleaned++
+              } else {
+                const newPct = (totalMovies as number) > 0 ? Math.round((validIds.length / (totalMovies as number)) * 100) : 0
+                this.db.run(
+                  'UPDATE movie_collections SET owned_movies = ?, owned_movie_ids = ?, completeness_percentage = ? WHERE id = ?',
+                  [validIds.length, JSON.stringify(validIds), newPct, id]
+                )
+              }
+              cleaned++
+            }
+          } catch { /* skip malformed JSON */ }
+        }
+      }
+    } catch (e) { console.warn('[Database] Collection cleanup warning:', e) }
+
+    // Validate series completeness — update owned_episodes from actual media_items count
+    try {
+      this.db.run(`
+        UPDATE series_completeness SET
+          owned_episodes = (
+            SELECT COUNT(*) FROM media_items mi
+            WHERE mi.series_title = series_completeness.series_title
+              AND mi.source_id = series_completeness.source_id
+              AND mi.type = 'episode'
+          ),
+          completeness_percentage = CASE WHEN total_episodes > 0
+            THEN ROUND(CAST((
+              SELECT COUNT(*) FROM media_items mi
+              WHERE mi.series_title = series_completeness.series_title
+                AND mi.source_id = series_completeness.source_id
+                AND mi.type = 'episode'
+            ) AS REAL) * 100.0 / total_episodes)
+            ELSE 0 END
+      `)
+      // Remove series with 0 owned episodes
+      this.db.run('DELETE FROM series_completeness WHERE owned_episodes <= 0')
+      cleaned += this.db.getRowsModified()
+    } catch (e) { console.warn('[Database] Series cleanup warning:', e) }
+
+    // Clean up orphaned music data
+    try {
+      this.db.run('DELETE FROM music_albums WHERE id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE album_id IS NOT NULL)')
+      cleaned += this.db.getRowsModified()
+      this.db.run('DELETE FROM music_artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM music_tracks WHERE artist_id IS NOT NULL)')
+      cleaned += this.db.getRowsModified()
+      this.db.run('DELETE FROM music_quality_scores WHERE album_id NOT IN (SELECT id FROM music_albums)')
+      cleaned += this.db.getRowsModified()
+      this.db.run('DELETE FROM album_completeness WHERE album_id NOT IN (SELECT id FROM music_albums)')
+      cleaned += this.db.getRowsModified()
+      this.db.run('DELETE FROM artist_completeness WHERE artist_name NOT IN (SELECT name FROM music_artists)')
+      cleaned += this.db.getRowsModified()
+    } catch (e) { console.warn('[Database] Music cleanup warning:', e) }
+
     if (cleaned > 0) {
       console.log(`[Database] Cleaned up ${cleaned} orphaned rows`)
       await this.save()
@@ -2029,8 +2133,11 @@ export class DatabaseService {
       version.is_best ? 1 : 0
     ])
 
-    // Get last inserted ID
-    const result = this.db.exec('SELECT last_insert_rowid()')
+    // Look up the actual ID by unique key (lastInsertRowid is stale after ON CONFLICT DO UPDATE)
+    const result = this.db.exec(
+      'SELECT id FROM media_item_versions WHERE media_item_id = ? AND file_path = ?',
+      [version.media_item_id, version.file_path]
+    )
     return (result[0]?.values[0]?.[0] as number) || 0
   }
 
@@ -2396,9 +2503,12 @@ export class DatabaseService {
 
     console.log(`Removing ${itemsToDelete.length} stale ${type}(s) from database...`)
 
-    // Delete stale items and their associated quality scores
+    // Delete stale items and their associated data
     for (const item of itemsToDelete) {
       console.log(`  Removing: ${item.title} (plex_id: ${item.plex_id})`)
+      this.db.run('DELETE FROM wishlist_items WHERE media_item_id = ?', [item.id])
+      this.db.run('DELETE FROM media_item_versions WHERE media_item_id = ?', [item.id])
+      this.db.run('DELETE FROM media_item_collections WHERE media_item_id = ?', [item.id])
       this.db.run('DELETE FROM quality_scores WHERE media_item_id = ?', [item.id])
       this.db.run('DELETE FROM media_items WHERE id = ?', [item.id])
     }
@@ -2455,11 +2565,11 @@ export class DatabaseService {
       score.issues,
     ])
 
-    const result = this.db.exec('SELECT last_insert_rowid() as id')
-    const id = result[0].values[0][0] as number
-
     await this.save()
-    return id
+
+    // Look up the actual ID by unique key (lastInsertRowid is stale after ON CONFLICT DO UPDATE)
+    const result = this.db.exec('SELECT id FROM quality_scores WHERE media_item_id = ?', [score.media_item_id])
+    return (result[0]?.values[0]?.[0] as number) || 0
   }
 
   /**
@@ -3082,75 +3192,100 @@ export class DatabaseService {
 
     console.log(`[Database] Deleting source ${sourceId} and all associated data...`)
 
-    // Delete quality scores for media items from this source
-    this.db.run(
-      `DELETE FROM quality_scores WHERE media_item_id IN (
-        SELECT id FROM media_items WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+    this.startBatch()
+    try {
+      // Delete wishlist items BEFORE media items (subquery needs media_items to exist)
+      this.db.run(
+        `DELETE FROM wishlist_items WHERE media_item_id IN (
+          SELECT id FROM media_items WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete wishlist items that reference media items being deleted (upgrade items)
-    // Must be before media_items deletion since it references media_items
-    this.db.run(
-      `DELETE FROM wishlist_items WHERE media_item_id IN (
-        SELECT id FROM media_items WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+      // Delete media item related data (versions, quality scores, collections)
+      this.db.run(
+        `DELETE FROM media_item_versions WHERE media_item_id IN (
+          SELECT id FROM media_items WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete media items
-    this.db.run('DELETE FROM media_items WHERE source_id = ?', [sourceId])
+      this.db.run(
+        `DELETE FROM quality_scores WHERE media_item_id IN (
+          SELECT id FROM media_items WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete music quality scores for albums from this source
-    this.db.run(
-      `DELETE FROM music_quality_scores WHERE album_id IN (
-        SELECT id FROM music_albums WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+      this.db.run(
+        `DELETE FROM media_item_collections WHERE media_item_id IN (
+          SELECT id FROM media_items WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete album completeness data for albums from this source
-    this.db.run(
-      `DELETE FROM album_completeness WHERE album_id IN (
-        SELECT id FROM music_albums WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+      // Delete exclusions referencing media items from this source
+      this.db.run(
+        `DELETE FROM exclusions WHERE reference_id IN (
+          SELECT id FROM media_items WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete artist completeness data for artists from this source
-    this.db.run(
-      `DELETE FROM artist_completeness WHERE artist_name IN (
-        SELECT name FROM music_artists WHERE source_id = ?
-      )`,
-      [sourceId]
-    )
+      // Delete media items
+      this.db.run('DELETE FROM media_items WHERE source_id = ?', [sourceId])
 
-    // Delete music tracks
-    this.db.run('DELETE FROM music_tracks WHERE source_id = ?', [sourceId])
+      // Delete music quality scores for albums from this source
+      this.db.run(
+        `DELETE FROM music_quality_scores WHERE album_id IN (
+          SELECT id FROM music_albums WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete music albums
-    this.db.run('DELETE FROM music_albums WHERE source_id = ?', [sourceId])
+      // Delete album completeness data for albums from this source
+      this.db.run(
+        `DELETE FROM album_completeness WHERE album_id IN (
+          SELECT id FROM music_albums WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete music artists
-    this.db.run('DELETE FROM music_artists WHERE source_id = ?', [sourceId])
+      // Delete artist completeness data for artists from this source
+      this.db.run(
+        `DELETE FROM artist_completeness WHERE artist_name IN (
+          SELECT name FROM music_artists WHERE source_id = ?
+        )`,
+        [sourceId]
+      )
 
-    // Delete series completeness data for this source
-    this.db.run('DELETE FROM series_completeness WHERE source_id = ?', [sourceId])
+      // Delete music tracks
+      this.db.run('DELETE FROM music_tracks WHERE source_id = ?', [sourceId])
 
-    // Delete movie collections data for this source
-    this.db.run('DELETE FROM movie_collections WHERE source_id = ?', [sourceId])
+      // Delete music albums
+      this.db.run('DELETE FROM music_albums WHERE source_id = ?', [sourceId])
 
-    // Delete library scan timestamps
-    this.db.run('DELETE FROM library_scans WHERE source_id = ?', [sourceId])
+      // Delete music artists
+      this.db.run('DELETE FROM music_artists WHERE source_id = ?', [sourceId])
 
-    // Delete notifications for this source
-    this.db.run('DELETE FROM notifications WHERE source_id = ?', [sourceId])
+      // Delete series completeness data for this source
+      this.db.run('DELETE FROM series_completeness WHERE source_id = ?', [sourceId])
 
-    // Delete the source itself
-    this.db.run('DELETE FROM media_sources WHERE source_id = ?', [sourceId])
+      // Delete movie collections data for this source
+      this.db.run('DELETE FROM movie_collections WHERE source_id = ?', [sourceId])
 
-    await this.save()
+      // Delete library scan timestamps
+      this.db.run('DELETE FROM library_scans WHERE source_id = ?', [sourceId])
+
+      // Delete notifications for this source
+      this.db.run('DELETE FROM notifications WHERE source_id = ?', [sourceId])
+
+      // Delete the source itself
+      this.db.run('DELETE FROM media_sources WHERE source_id = ?', [sourceId])
+    } finally {
+      await this.endBatch()
+    }
+
     console.log(`[Database] Deleted media source and all data: ${sourceId}`)
   }
 
@@ -3320,11 +3455,14 @@ export class DatabaseService {
         data.status || null,
       ])
 
-      const result = this.db.exec('SELECT last_insert_rowid() as id')
-      const id = result[0].values[0][0] as number
-
       await this.save()
-      return id
+
+      // Look up the actual ID by unique key (lastInsertRowid is stale after ON CONFLICT DO UPDATE)
+      const result = this.db.exec(
+        'SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ?',
+        [data.series_title, sourceId, libraryId]
+      )
+      return (result[0]?.values[0]?.[0] as number) || 0
     }
   }
 
@@ -3335,19 +3473,23 @@ export class DatabaseService {
   getSeriesCompleteness(sourceId?: string): SeriesCompleteness[] {
     if (!this.db) throw new Error('Database not initialized')
 
-    const sourceFilter = sourceId ? ' AND source_id = ?' : ''
+    const sourceFilter = sourceId ? ' AND sc2.source_id = ?' : ''
+    const outerSourceFilter = sourceId ? ' AND sc.source_id = ?' : ''
 
     // Get deduplicated series - for each series_title, return the entry with highest completeness
+    // Filter out disabled libraries via library_scans.is_enabled
     const result = this.db.exec(`
       SELECT sc.*
       FROM series_completeness sc
+      LEFT JOIN library_scans ls ON sc.source_id = ls.source_id AND sc.library_id = ls.library_id
       INNER JOIN (
-        SELECT series_title, MAX(completeness_percentage) as max_pct
-        FROM series_completeness
-        WHERE 1=1${sourceFilter}
-        GROUP BY series_title
+        SELECT sc2.series_title, MAX(sc2.completeness_percentage) as max_pct
+        FROM series_completeness sc2
+        LEFT JOIN library_scans ls2 ON sc2.source_id = ls2.source_id AND sc2.library_id = ls2.library_id
+        WHERE (ls2.is_enabled = 1 OR ls2.is_enabled IS NULL)${sourceFilter}
+        GROUP BY sc2.series_title
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
-      WHERE 1=1${sourceFilter}
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)${outerSourceFilter}
       GROUP BY sc.series_title
       ORDER BY sc.series_title ASC
     `, sourceId ? [sourceId, sourceId] : [])
@@ -3725,13 +3867,16 @@ export class DatabaseService {
 
     // Get unique series with their best completeness (highest percentage)
     // This handles duplicates across multiple sources
+    // Filter out disabled libraries via library_scans.is_enabled
     let result = this.db.exec(`
       SELECT
-        series_title,
-        MAX(completeness_percentage) as best_completeness,
-        tmdb_id
-      FROM series_completeness
-      GROUP BY series_title
+        sc.series_title,
+        MAX(sc.completeness_percentage) as best_completeness,
+        sc.tmdb_id
+      FROM series_completeness sc
+      LEFT JOIN library_scans ls ON sc.source_id = ls.source_id AND sc.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+      GROUP BY sc.series_title
     `)
 
     if (!result.length || !result[0].values) return stats
@@ -3760,13 +3905,15 @@ export class DatabaseService {
     result = this.db.exec(`
       SELECT sc.missing_episodes
       FROM series_completeness sc
+      LEFT JOIN library_scans ls ON sc.source_id = ls.source_id AND sc.library_id = ls.library_id
       INNER JOIN (
-        SELECT series_title, MAX(completeness_percentage) as max_pct
-        FROM series_completeness
-        WHERE tmdb_id IS NOT NULL
-        GROUP BY series_title
+        SELECT sc2.series_title, MAX(sc2.completeness_percentage) as max_pct
+        FROM series_completeness sc2
+        LEFT JOIN library_scans ls2 ON sc2.source_id = ls2.source_id AND sc2.library_id = ls2.library_id
+        WHERE sc2.tmdb_id IS NOT NULL AND (ls2.is_enabled = 1 OR ls2.is_enabled IS NULL)
+        GROUP BY sc2.series_title
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
-      WHERE sc.tmdb_id IS NOT NULL
+      WHERE sc.tmdb_id IS NOT NULL AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
       GROUP BY sc.series_title
     `)
 
@@ -3858,11 +4005,14 @@ export class DatabaseService {
         data.backdrop_url || null,
       ])
 
-      const result = this.db.exec('SELECT last_insert_rowid() as id')
-      const id = result[0].values[0][0] as number
-
       await this.save()
-      return id
+
+      // Look up the actual ID by unique key (lastInsertRowid is stale after ON CONFLICT DO UPDATE)
+      const result = this.db.exec(
+        'SELECT id FROM movie_collections WHERE tmdb_collection_id = ? AND source_id = ? AND library_id = ?',
+        [data.tmdb_collection_id, sourceId, libraryId]
+      )
+      return (result[0]?.values[0]?.[0] as number) || 0
     }
   }
 
@@ -3872,9 +4022,22 @@ export class DatabaseService {
   getMovieCollections(sourceId?: string): MovieCollection[] {
     if (!this.db) throw new Error('Database not initialized')
 
-    const result = sourceId
-      ? this.db.exec('SELECT * FROM movie_collections WHERE source_id = ? ORDER BY collection_name ASC', [sourceId])
-      : this.db.exec('SELECT * FROM movie_collections ORDER BY collection_name ASC')
+    let sql = `
+      SELECT mc.*
+      FROM movie_collections mc
+      LEFT JOIN library_scans ls ON mc.source_id = ls.source_id AND mc.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+    `
+    const params: string[] = []
+
+    if (sourceId) {
+      sql += ' AND mc.source_id = ?'
+      params.push(sourceId)
+    }
+
+    sql += ' ORDER BY mc.collection_name ASC'
+
+    const result = this.db.exec(sql, params)
     if (!result.length) return []
 
     return this.rowsToObjects<MovieCollection>(result[0])
@@ -3988,31 +4151,37 @@ export class DatabaseService {
       avgCompleteness: 0,
     }
 
+    const enabledFilter = `
+      FROM movie_collections mc
+      LEFT JOIN library_scans ls ON mc.source_id = ls.source_id AND mc.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+    `
+
     // Total collections
-    let result = this.db.exec('SELECT COUNT(*) FROM movie_collections')
+    let result = this.db.exec(`SELECT COUNT(*) ${enabledFilter}`)
     stats.total = (result[0]?.values[0]?.[0] as number) || 0
 
     // Complete collections
     result = this.db.exec(
-      'SELECT COUNT(*) FROM movie_collections WHERE completeness_percentage = 100'
+      `SELECT COUNT(*) ${enabledFilter} AND mc.completeness_percentage = 100`
     )
     stats.complete = (result[0]?.values[0]?.[0] as number) || 0
 
     // Incomplete collections
     result = this.db.exec(
-      'SELECT COUNT(*) FROM movie_collections WHERE completeness_percentage < 100'
+      `SELECT COUNT(*) ${enabledFilter} AND mc.completeness_percentage < 100`
     )
     stats.incomplete = (result[0]?.values[0]?.[0] as number) || 0
 
     // Total missing movies across all collections
     result = this.db.exec(
-      'SELECT SUM(json_array_length(missing_movies)) FROM movie_collections WHERE missing_movies IS NOT NULL'
+      `SELECT SUM(json_array_length(mc.missing_movies)) ${enabledFilter} AND mc.missing_movies IS NOT NULL`
     )
     stats.totalMissing = (result[0]?.values[0]?.[0] as number) || 0
 
     // Average completeness
     result = this.db.exec(
-      'SELECT AVG(completeness_percentage) FROM movie_collections'
+      `SELECT AVG(mc.completeness_percentage) ${enabledFilter}`
     )
     stats.avgCompleteness = Math.round(
       (result[0]?.values[0]?.[0] as number) || 0

@@ -13,6 +13,7 @@ import { getErrorMessage } from './utils/errorUtils'
 
 import { BrowserWindow } from 'electron'
 import { safeSend } from '../ipc/utils/safeSend'
+import { emitNotificationCreated } from '../ipc/utils/notificationEmitter'
 import { getSourceManager } from './SourceManager'
 import { getSeriesCompletenessService } from './SeriesCompletenessService'
 import { getMovieCollectionService } from './MovieCollectionService'
@@ -24,7 +25,6 @@ import { JellyfinEmbyBase } from '../providers/jellyfin-emby/JellyfinEmbyBase'
 import { KodiProvider } from '../providers/kodi/KodiProvider'
 import { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
 import type { ScanResult } from '../providers/base/MediaProvider'
-import type { MusicTrack } from '../types/database'
 import { getWishlistCompletionService } from './WishlistCompletionService'
 
 // ============================================================================
@@ -128,6 +128,25 @@ export class TaskQueueService {
    * Add a task to the queue
    */
   addTask(definition: TaskDefinition): string {
+    // Check for duplicate: same type + sourceId + libraryId already queued or running
+    const isDuplicate = (t: QueuedTask) =>
+      t.type === definition.type &&
+      t.sourceId === definition.sourceId &&
+      t.libraryId === definition.libraryId
+
+    // Check running task
+    if (this.currentTask && isDuplicate(this.currentTask)) {
+      console.log(`[TaskQueue] Duplicate task already running: ${definition.label} (${this.currentTask.id})`)
+      return this.currentTask.id
+    }
+
+    // Check queued tasks
+    const existing = this.queue.find(isDuplicate)
+    if (existing) {
+      console.log(`[TaskQueue] Duplicate task already queued: ${definition.label} (${existing.id})`)
+      return existing.id
+    }
+
     const task: QueuedTask = {
       id: this.generateId(),
       type: definition.type,
@@ -236,6 +255,20 @@ export class TaskQueueService {
         getMovieCollectionService().cancel()
         break
     }
+  }
+
+  /**
+   * Check if a task of the given type is currently running or queued
+   * for the specified source/library combination
+   */
+  hasActiveTask(type: TaskType, sourceId?: string, libraryId?: string): boolean {
+    const matches = (t: QueuedTask) =>
+      t.type === type &&
+      t.sourceId === sourceId &&
+      t.libraryId === libraryId
+
+    if (this.currentTask && matches(this.currentTask)) return true
+    return this.queue.some(matches)
   }
 
   /**
@@ -495,6 +528,7 @@ export class TaskQueueService {
             sourceId: task.sourceId,
             sourceName: task.label,
           })
+          emitNotificationCreated()
         } catch { /* ignore */ }
       }
     }
@@ -573,19 +607,19 @@ export class TaskQueueService {
       case 'series-completeness':
         await this.executeSeriesCompleteness(task, progressCallback)
         this.sendLibraryUpdated()
-        try { getDatabase().createNotification({ type: 'info', title: 'Series completeness analyzed', message: task.label || 'TV series completeness analysis complete' }) } catch { /* ignore */ }
+        try { getDatabase().createNotification({ type: 'info', title: 'Series completeness analyzed', message: task.label || 'TV series completeness analysis complete' }); emitNotificationCreated() } catch { /* ignore */ }
         break
 
       case 'collection-completeness':
         await this.executeCollectionCompleteness(task, progressCallback)
         this.sendLibraryUpdated()
-        try { getDatabase().createNotification({ type: 'info', title: 'Collection completeness analyzed', message: task.label || 'Movie collection completeness analysis complete' }) } catch { /* ignore */ }
+        try { getDatabase().createNotification({ type: 'info', title: 'Collection completeness analyzed', message: task.label || 'Movie collection completeness analysis complete' }); emitNotificationCreated() } catch { /* ignore */ }
         break
 
       case 'music-completeness':
         await this.executeMusicCompleteness(task, progressCallback)
         this.sendLibraryUpdated()
-        try { getDatabase().createNotification({ type: 'info', title: 'Music completeness analyzed', message: task.label || 'Artist completeness analysis complete' }) } catch { /* ignore */ }
+        try { getDatabase().createNotification({ type: 'info', title: 'Music completeness analyzed', message: task.label || 'Artist completeness analysis complete' }); emitNotificationCreated() } catch { /* ignore */ }
         break
 
       case 'music-scan':
@@ -714,13 +748,8 @@ export class TaskQueueService {
       if (!artist) throw new Error(`Artist not found: ${task.artistId}`)
 
       // Get albums by FK and name (same logic as music:analyzeArtistCompleteness IPC handler)
-      const albumsById = db.getMusicAlbums({ artistId: task.artistId })
-      const albumsByName = db.getMusicAlbumsByArtistName(artist.name)
-      const albumMap = new Map<number, typeof albumsById[0]>()
-      for (const album of [...albumsById, ...albumsByName]) {
-        if (album.id !== undefined) albumMap.set(album.id, album)
-      }
-      const albums = Array.from(albumMap.values())
+      const { getArtistAlbumsCombined } = await import('./utils/musicUtils')
+      const albums = getArtistAlbumsCombined(db, task.artistId, artist.name)
 
       onProgress({ phase: 'Analyzing artist', currentItem: artist.name, percentage: 5 })
 
@@ -813,32 +842,12 @@ export class TaskQueueService {
       throw new Error(result.errors.join(', '))
     }
 
-    // Analyze quality for all albums after scan (same as music:scanLibrary IPC handler)
+    // Analyze quality for all albums after scan
     const db = getDatabase()
-    const { getQualityAnalyzer } = await import('./QualityAnalyzer')
-    const analyzer = getQualityAnalyzer()
-    const albums = db.getMusicAlbums({ sourceId: task.sourceId })
-    if (albums.length > 0) {
-      console.log(`[TaskQueue] Analyzing music quality for ${albums.length} albums...`)
-      const albumIds = albums.map((a: { id?: number }) => a.id).filter((id: number | undefined): id is number => id != null)
-      const tracksByAlbum = 'getMusicTracksByAlbumIds' in db
-        ? (db as unknown as { getMusicTracksByAlbumIds: (ids: number[]) => Map<number, unknown[]> }).getMusicTracksByAlbumIds(albumIds)
-        : null
-
-      db.startBatch()
-      try {
-        for (const album of albums) {
-          const tracks = tracksByAlbum
-            ? (tracksByAlbum.get(album.id!) || [])
-            : db.getMusicTracks({ albumId: album.id })
-          const qualityScore = analyzer.analyzeMusicAlbum(album, tracks as MusicTrack[])
-          await db.upsertMusicQualityScore(qualityScore)
-        }
-      } finally {
-        await db.endBatch()
-      }
-      console.log(`[TaskQueue] Music quality analysis complete for ${albums.length} albums`)
-    }
+    const { analyzeAlbumQuality } = await import('./MusicQualityAnalyzer')
+    console.log(`[TaskQueue] Analyzing music quality for source ${task.sourceId}...`)
+    await analyzeAlbumQuality(db, task.sourceId)
+    console.log(`[TaskQueue] Music quality analysis complete`)
   }
 
   // ============================================================================
@@ -964,6 +973,7 @@ export class TaskQueueService {
           sourceName: task.label,
           itemCount: scanned,
         })
+        emitNotificationCreated()
       } catch { /* ignore notification errors */ }
 
       // Check wishlist for auto-completion after items were added or updated

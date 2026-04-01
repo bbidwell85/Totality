@@ -113,10 +113,17 @@ describe('TaskQueueService', () => {
     })
 
     it('should generate unique task IDs', () => {
-      const id1 = service.addTask({ type: 'library-scan', label: 'Task 1' })
-      const id2 = service.addTask({ type: 'library-scan', label: 'Task 2' })
+      const id1 = service.addTask({ type: 'library-scan', label: 'Task 1', sourceId: 'src1' })
+      const id2 = service.addTask({ type: 'library-scan', label: 'Task 2', sourceId: 'src2' })
 
       expect(id1).not.toBe(id2)
+    })
+
+    it('should deduplicate tasks with same type+source+library', () => {
+      const id1 = service.addTask({ type: 'library-scan', label: 'Task 1', sourceId: 'src1' })
+      const id2 = service.addTask({ type: 'library-scan', label: 'Task 1 dup', sourceId: 'src1' })
+
+      expect(id1).toBe(id2)
     })
   })
 
