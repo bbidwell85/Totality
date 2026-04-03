@@ -1,16 +1,18 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 
-export type BaseTheme = 'dark' | 'slate' | 'ember' | 'midnight' | 'oled' | 'velvet' | 'emerald' | 'cobalt' | 'carbon'
+export type BaseTheme = 'dark' | 'slate' | 'ember' | 'midnight' | 'oled' | 'velvet' | 'emerald' | 'cobalt' | 'carbon' | 'matrix' | 'fury' | 'gotham' | 'neon' | 'whimsy'
 export type ThemeMode = 'dark' | 'light' | 'system'
 
-const BASE_THEMES: BaseTheme[] = ['dark', 'slate', 'ember', 'midnight', 'oled', 'velvet', 'emerald', 'cobalt', 'carbon']
+const BASE_THEMES: BaseTheme[] = ['dark', 'slate', 'ember', 'midnight', 'oled', 'velvet', 'emerald', 'cobalt', 'carbon', 'matrix', 'fury', 'gotham', 'neon', 'whimsy']
 export const DARK_ONLY_THEMES: BaseTheme[] = ['dark', 'oled']
 
 const ALL_THEME_CLASSES = [
   'dark', 'slate', 'ember', 'midnight', 'oled', 'velvet', 'emerald', 'cobalt', 'carbon', 'frost',
+  'matrix', 'fury', 'gotham', 'neon', 'whimsy',
   'slate-light', 'ember-light', 'midnight-light',
   'velvet-light', 'emerald-light', 'cobalt-light', 'carbon-light',
+  'matrix-light', 'fury-light', 'gotham-light', 'neon-light', 'whimsy-light',
 ]
 
 interface ThemeContextValue {

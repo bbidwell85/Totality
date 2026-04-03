@@ -283,11 +283,12 @@ Events: `sources:scanProgress`, `quality:analysisProgress`, `series:progress`, `
 
 Bidirectional sync of mood and genre tags across Plex, MediaMonkey, and Kodi. User selects a source of truth, compares tags across sources, and pushes corrections.
 
-- **MoodSyncService**: Compares tag fields across sources. Track matching by MusicBrainz ID (primary) or title+artist (fallback). Supports `SyncField` type (`'mood' | 'genre'`).
+- **MoodSyncService**: Compares tag fields across sources. Track matching by MusicBrainz ID (primary) or title+artist (fallback). Supports `SyncField` type (`'mood' | 'genre'`). Tag comparison is case-insensitive (`tagsMatch` normalizes to lowercase).
 - **Write targets**: Plex (HTTP PUT API with `mood[i].tag.tag` params), MediaMonkey (SQLite write with FTS/IUNICODE handling), Kodi (SQLite write to `song.mood` or `song_genre` junction table). All database writes include backup, running-app detection, and confirmation dialog.
 - **Tag Sync Panel**: Slide-out panel from TopBar (Tags icon). 4-step flow: Source of Truth → Fields (checkboxes) → Mode (Overwrite/Append) → Sync Targets. Dual-field comparison with inline diff highlighting. Per-track selective sync.
 - **Plex mood/genre READ**: Uses per-tag-category approach (`/library/sections/{id}/mood?type=10` then `/all?type=10&mood={id}`) since bulk JSON endpoint strips tag data.
 - **MediaMonkey IUNICODE collation**: sql.js can't register custom collations. Fix: replace IUNICODE→NOCASE in sqlite_master, export buffer, reimport. For writes, also handle FTS `mm` tokenizer by removing SongsText entries before export, restoring original schemas before saving.
+- **MediaMonkey mood dedup**: `convertToMusicTrack()` merges moods from junction table (Lists/ListsSongs) and Songs.Mood column with case-insensitive deduplication, preferring column values (which carry the synced casing).
 - **Supported providers for tag sync**: Plex, MediaMonkey, Kodi, Kodi-Local (controlled by `TAG_SYNC_PROVIDERS` set in MoodSyncService)
 
 ### MediaMonkey Provider
@@ -304,16 +305,27 @@ Bidirectional sync of mood and genre tags across Plex, MediaMonkey, and Kodi. Us
 
 When items are deleted from a source and a rescan runs, cleanup is centralized in the database methods (not in individual providers):
 
-- **`deleteMediaItem()`**: Wrapped in SQLite transaction. Updates `movie_collections` (removes TMDB ID, decrements count). Decrements `series_completeness` owned_episodes. Deletes associated versions, quality_scores, collections.
-- **`deleteMusicTrack()`**: Wrapped in transaction. Removes orphaned albums (0 tracks) and artists (0 tracks). Updates album `track_count` and artist `track_count`/`album_count`.
+- **`deleteMediaItem()`**: Wrapped in SQLite transaction. For episodes: recounts `owned_episodes`/`owned_seasons`, updates `missing_episodes`/`missing_seasons` JSON (adds deleted episode to missing list), backdates `updated_at` to force re-analysis. For movies: updates `movie_collections` (removes TMDB ID from `owned_movie_ids`, adds to `missing_movies` JSON). Deletes associated versions, quality_scores, collections.
+- **`deleteMusicTrack()`**: Wrapped in transaction. Removes orphaned albums (0 tracks) and artists (0 tracks). Updates album `track_count` and artist `track_count`/`album_count`. When tracks are deleted: updates `album_completeness.missing_tracks` JSON. When albums become empty: adds album to `artist_completeness.missing_albums` JSON, updates owned counts.
 - **`cleanupOrphanedMediaData()`**: Belt-and-suspenders sweep after every scan. Validates collection ownership against actual media_items, updates series_completeness counts, removes orphaned music data.
 - **Safety guard**: `removeStaleItems()` refuses bulk deletion when Plex returns 0 IDs but DB has items (prevents API failure from wiping library).
 
-### Dashboard Refresh
+### Auto-Completeness After Scans
 
-- Dashboard reloads via `loadDashboardData()` which makes 6 parallel `Promise.allSettled` IPC calls (movie upgrades, TV upgrades, music upgrades, collections, series, artist completeness).
-- Event-driven reloads are debounced (300ms) to prevent event storms from simultaneous scan + completeness task completions.
-- Refresh triggers: `scan:completed`, `library:updated` (all types), `exclusions-changed`, `settings:changed`, `activeSourceId` change.
+After any scan (manual rescan or live monitoring) that adds, updates, or removes items, completeness analysis is automatically triggered:
+
+- **TV Shows**: `autoAnalyzeAffectedSeries()` — finds series with changed episode counts, runs `analyzeSeries()` for each via TMDB. Removes completeness records for fully deleted series. Runs directly (not queued) for fast targeted updates.
+- **Movies**: Queues a scoped `collection-completeness` task for the affected library.
+- **Music**: `autoRunMusicQualityAnalysis()` runs quality analysis, then `syncArtistCompletenessAfterScan()` and `syncAlbumCompletenessAfterScan()` update completeness cache by comparing actual owned items against `missing_*` JSON lists (no MusicBrainz API calls needed).
+- **Live monitoring music**: Lightweight count check via `getMusicTrackCount()` (single Plex API call with `Container-Size=0`) before triggering expensive full music scan. Only scans if track count differs from DB.
+- **Plex full scan counting**: `scanLibrary()` tracks `itemsAdded`/`itemsUpdated` by comparing against pre-scan `existingPlexIds` Set. `scanMusicLibrary()` similarly tracks via `existingTrackIds`. Previously both reported 0 for these fields.
+
+### Dashboard & Library Live Refresh
+
+- **Dashboard** reloads via `loadDashboardData()` which makes 6 parallel `Promise.allSettled` IPC calls (movie upgrades, TV upgrades, music upgrades, collections, series, artist completeness). Debounced (300ms). Triggers: `scan:completed`, `library:updated` (all types), `exclusions-changed`, `settings:changed`, `activeSourceId` change.
+- **Library view** (`useLibraryEventListeners`) reloads on `library:updated` events: `type: 'media'` → `loadMedia()` + `loadCompletenessData()`; `type: 'music'` → `loadMusicData()` + `loadMusicCompletenessData()`. Also reloads on `scan:completed` when items changed. Debounced (500ms).
+- **`loadMusicData()`** reloads stats, paginated artists, paginated albums, and refreshes `selectedArtist` to update track/album counts in subtitle.
+- **`sendLibraryUpdated(type)`** in TaskQueueService accepts `'media'` or `'music'` type to route refresh correctly. Music completeness tasks emit `'music'` type.
 - Disabled libraries filtered at DB level via `library_scans.is_enabled` JOIN on all completeness/upgrade queries (including `getSeriesCompleteness`, `getMovieCollections`, `getLibraryStats`, `getSeriesCompletenessStats`, `getMovieCollectionStats`).
 - **Sort persistence**: `loadDashboardData` applies the persisted sort preference when setting data (not just via useEffect). This prevents stale sort order when the preference hasn't changed between reloads (React skips no-op `setState`, so the sort useEffect wouldn't re-fire).
 - **Expanded row heights**: `VariableSizeList` row heights for expandable artists/collections/series use constants (`EXPANDED_ITEM_HEIGHT = 44`, `EXPANDED_BOTTOM_PAD = 8`) that must match actual CSS rendering. Mismatch causes content cutoff.

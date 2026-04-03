@@ -526,6 +526,13 @@ export class PlexProvider implements MediaProvider {
       totalItems = itemsToProcess.length
       console.log(`[PlexProvider ${this.sourceId}] Processing ${totalItems} items...`)
 
+      // Collect existing plex IDs to track new vs updated items
+      const existingPlexIds = new Set(
+        (db.getMediaItems({ sourceId: this.sourceId, libraryId }) as Array<{ plex_id?: string }>)
+          .map((item: { plex_id?: string }) => item.plex_id)
+          .filter(Boolean)
+      )
+
       // Start batch mode
       db.startBatch()
 
@@ -605,6 +612,11 @@ export class PlexProvider implements MediaProvider {
 
                 scanned++
                 result.itemsScanned++
+                if (existingPlexIds.has(mediaItem.plex_id)) {
+                  result.itemsUpdated++
+                } else {
+                  result.itemsAdded++
+                }
               }
 
               if (onProgress) {
@@ -1372,6 +1384,28 @@ export class PlexProvider implements MediaProvider {
   /**
    * Get all tracks for an album
    */
+  /**
+   * Get total music track count from Plex without fetching item data.
+   * Uses X-Plex-Container-Size=0 to only get the totalSize from the container.
+   */
+  async getMusicTrackCount(libraryId: string): Promise<number> {
+    if (!this.selectedServer) return 0
+
+    const url = `${this.selectedServer.uri}/library/sections/${libraryId}/all`
+    const response = await this.api.get(url, {
+      params: { type: 10 }, // type 10 = tracks
+      headers: {
+        'X-Plex-Token': this.selectedServer.accessToken,
+        'X-Plex-Container-Start': '0',
+        'X-Plex-Container-Size': '0',
+        Accept: 'application/json',
+      },
+    })
+
+    const container = (response.data as { MediaContainer?: { totalSize?: number } })?.MediaContainer
+    return container?.totalSize || 0
+  }
+
   async getMusicTracks(albumKey: string): Promise<PlexMusicTrack[]> {
     if (!this.selectedServer) {
       throw new Error('No server selected')
@@ -1802,6 +1836,13 @@ export class PlexProvider implements MediaProvider {
       const scannedAlbumIds = new Set<string>()
       const scannedTrackIds = new Set<string>()
 
+      // Collect existing track provider IDs to track new vs updated
+      const existingTrackIds = new Set(
+        (db.getMusicTracks({ sourceId: this.sourceId }) as Array<{ provider_id?: string }>)
+          .map((t: { provider_id?: string }) => t.provider_id)
+          .filter(Boolean)
+      )
+
       // Helper to process an album
       const processAlbum = async (
         plexAlbum: PlexMusicAlbum,
@@ -1876,6 +1917,11 @@ export class PlexProvider implements MediaProvider {
           await db.upsertMusicTrack(trackData)
           scannedTrackIds.add(trackData.provider_id)
           result.itemsScanned++
+          if (existingTrackIds.has(trackData.provider_id)) {
+            result.itemsUpdated++
+          } else {
+            result.itemsAdded++
+          }
         }
 
         return { trackCount: trackDataList.length }
@@ -2030,6 +2076,7 @@ export class PlexProvider implements MediaProvider {
         }
       }
       if (musicRemoved > 0) {
+        result.itemsRemoved = musicRemoved
         console.log(`[PlexProvider ${this.sourceId}] Removed ${musicRemoved} stale music tracks`)
       }
 

@@ -59,24 +59,28 @@ export function useLibraryEventListeners({
 
   const handleLibraryUpdate = useCallback(
     (data: { type: 'media' | 'music' | 'libraryToggle'; sourceId?: string }) => {
-      // Only handle library toggle events (enable/disable libraries)
-      // Media and music reloads are handled manually by the user navigating
-      if (data.type !== 'libraryToggle') {
-        return
-      }
-
       // Debounce updates to avoid excessive refreshes
       if (pendingUpdateRef.current) {
         clearTimeout(pendingUpdateRef.current)
       }
       pendingUpdateRef.current = setTimeout(() => {
-        // Refresh enabled libraries when a library is toggled
         // Only refresh if it's the active source or no sourceId specified
-        if (!data.sourceId || data.sourceId === activeSourceId) {
+        if (data.sourceId && data.sourceId !== activeSourceId) return
+
+        if (data.type === 'libraryToggle') {
+          // Refresh enabled libraries when a library is toggled
           loadActiveSourceLibraries().then(() => {
             loadMedia()
             loadCompletenessData()
           })
+        } else if (data.type === 'media') {
+          // Refresh media data when items are added/removed/updated
+          loadMedia()
+          loadCompletenessData()
+        } else if (data.type === 'music') {
+          // Refresh music data when tracks are added/removed/updated
+          loadMusicData()
+          loadMusicCompletenessData()
         }
         pendingUpdateRef.current = null
       }, 500) // 500ms debounce for live updates
@@ -86,6 +90,8 @@ export function useLibraryEventListeners({
       loadActiveSourceLibraries,
       loadMedia,
       loadCompletenessData,
+      loadMusicData,
+      loadMusicCompletenessData,
     ]
   )
 
@@ -242,6 +248,14 @@ export function useLibraryEventListeners({
       // Auto-navigate on first scan to help new users
       if (data.isFirstScan && data.sourceId) {
         setActiveSource(data.sourceId)
+      }
+
+      // Reload library data after scan completes with changes
+      if (data.itemsAdded > 0 || data.itemsUpdated > 0 || (data as Record<string, unknown>).itemsRemoved) {
+        loadMedia()
+        loadCompletenessData()
+        loadMusicData()
+        loadMusicCompletenessData()
       }
     })
 

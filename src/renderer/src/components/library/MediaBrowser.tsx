@@ -511,8 +511,18 @@ export function MediaBrowser({
     } catch (err) {
       console.warn('Failed to load music stats:', err)
     }
-    // Also reload paginated artists when music data refreshes
+    // Reload paginated artists and albums when music data refreshes
     loadPaginatedArtists(true)
+    loadPaginatedAlbums(true)
+
+    // Refresh selected artist to update track/album counts in subtitle
+    if (selectedArtist?.id) {
+      try {
+        const artists = await window.electronAPI.musicGetArtists({ sourceId: activeSourceId || undefined })
+        const fresh = (artists as MusicArtist[]).find(a => a.id === selectedArtist.id)
+        if (fresh) setSelectedArtist(fresh)
+      } catch { /* ignore */ }
+    }
   }
 
   // Load paginated artists from server with current filters/sorting
@@ -1477,7 +1487,7 @@ export function MediaBrowser({
       {!hideHeader && (
       <header
         id="top-bar"
-        className="dark fixed top-4 left-4 right-4 z-100 bg-black rounded-2xl shadow-xl px-4 py-3"
+        className="dark fixed top-4 left-4 right-4 z-100 bg-black rounded-2xl shadow-xl px-4 py-2"
         role="banner"
         aria-label="Main navigation"
       >
@@ -1485,7 +1495,7 @@ export function MediaBrowser({
           {/* Left Section: Logo + Search */}
           <div className="flex items-center gap-4 flex-1 min-w-0">
             {/* Logo - Left */}
-            <img src={logoImage} alt="Totality" className="h-10 shrink-0" />
+            <img src={logoImage} alt="Totality" className="h-8 shrink-0" />
 
           {/* Search - Flexible width with min/max constraints */}
           <div ref={searchContainerRef} className="relative shrink min-w-24 max-w-80 w-64" role="combobox" aria-expanded={showSearchResults && hasSearchResults} aria-haspopup="listbox" aria-owns="search-results-listbox">
@@ -1967,7 +1977,7 @@ export function MediaBrowser({
       {/* Library Content Container - self-contained element */}
       <main
         id="library-content"
-        className={`fixed top-[88px] bottom-4 transition-[left,right,opacity] duration-300 ease-out flex flex-col ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}
+        className={`fixed top-[76px] bottom-4 transition-[left,right,opacity] duration-300 ease-out flex flex-col ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}
         style={{
           left: sidebarCollapsed ? '96px' : '288px',
           right: showCompletenessPanel || showWishlistPanel || showChatPanel ? '352px' : '16px'

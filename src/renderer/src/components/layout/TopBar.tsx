@@ -248,7 +248,7 @@ export function TopBar({
   return (
     <header
       id="top-bar"
-      className="fixed top-4 left-4 right-4 z-100 bg-black text-white rounded-2xl shadow-xl px-4 py-3"
+      className="fixed top-4 left-4 right-4 z-100 bg-black text-white rounded-2xl shadow-xl px-4 py-2"
       role="banner"
       aria-label="Main navigation"
     >
@@ -256,7 +256,7 @@ export function TopBar({
         {/* Left Section: Logo + Search */}
         <div className="flex items-center gap-4 flex-1 min-w-0">
           {/* Logo */}
-          <img src={logoImage} alt="Totality" className="h-10 shrink-0" />
+          <img src={logoImage} alt="Totality" className="h-8 shrink-0" />
 
           {/* Search */}
           <div ref={searchContainerRef} className="relative shrink min-w-24 max-w-80 w-56 focus-within:w-80 transition-all duration-300 ease-out">
@@ -638,6 +638,21 @@ export function TopBar({
 
         {/* Right Section: Panel Toggles & Settings */}
         <div className="flex items-center justify-end flex-1 gap-2">
+          {/* AI Chat Toggle */}
+          <button
+            onClick={onToggleChat}
+            className={`p-2 rounded-md transition-colors ${
+              showChatPanel
+                ? 'bg-white text-black'
+                : 'text-white hover:bg-white/10'
+            }`}
+            title="AI Assistant"
+            aria-label="Toggle AI chat"
+            aria-pressed={showChatPanel}
+          >
+            <Bot className="w-5 h-5" />
+          </button>
+
           {/* Completeness Panel Toggle */}
           <button
             onClick={onToggleCompleteness}
@@ -659,6 +674,21 @@ export function TopBar({
             )}
           </button>
 
+          {/* Tag Sync Panel Toggle */}
+          <button
+            onClick={onToggleMoodSync}
+            className={`relative p-2 rounded-md transition-colors ${
+              showMoodSyncPanel
+                ? 'bg-white text-black'
+                : 'text-white hover:bg-white/10'
+            }`}
+            title="Tag Sync"
+            aria-label="Toggle tag sync panel"
+            aria-pressed={showMoodSyncPanel}
+          >
+            <Tags className="w-5 h-5" />
+          </button>
+
           {/* Wishlist Panel Toggle */}
           <button
             onClick={onToggleWishlist}
@@ -677,36 +707,6 @@ export function TopBar({
                 {wishlistCount > 99 ? '99+' : wishlistCount}
               </span>
             )}
-          </button>
-
-          {/* Tag Sync Panel Toggle */}
-          <button
-            onClick={onToggleMoodSync}
-            className={`relative p-2 rounded-md transition-colors ${
-              showMoodSyncPanel
-                ? 'bg-white text-black'
-                : 'text-white hover:bg-white/10'
-            }`}
-            title="Tag Sync"
-            aria-label="Toggle tag sync panel"
-            aria-pressed={showMoodSyncPanel}
-          >
-            <Tags className="w-5 h-5" />
-          </button>
-
-          {/* AI Chat Toggle */}
-          <button
-            onClick={onToggleChat}
-            className={`p-2 rounded-md transition-colors ${
-              showChatPanel
-                ? 'bg-white text-black'
-                : 'text-white hover:bg-white/10'
-            }`}
-            title="AI Assistant"
-            aria-label="Toggle AI chat"
-            aria-pressed={showChatPanel}
-          >
-            <Bot className="w-5 h-5" />
           </button>
 
           {/* Activity Panel */}

@@ -1082,8 +1082,8 @@ export class BetterSQLiteService {
     // Before deleting, update affected collections and series completeness
     try {
       const item = db.prepare(
-        'SELECT tmdb_id, source_id, library_id, type, series_title FROM media_items WHERE id = ?'
-      ).get(id) as { tmdb_id?: string; source_id: string; library_id?: string; type: string; series_title?: string } | undefined
+        'SELECT tmdb_id, source_id, library_id, type, series_title, season_number, episode_number, title FROM media_items WHERE id = ?'
+      ).get(id) as { tmdb_id?: string; source_id: string; library_id?: string; type: string; series_title?: string; season_number?: number; episode_number?: number; title?: string } | undefined
 
       if (item) {
         if (item.tmdb_id && item.type === 'movie') {
@@ -1098,16 +1098,19 @@ export class BetterSQLiteService {
           db.prepare('DELETE FROM media_item_collections WHERE media_item_id = ?').run(id)
           db.prepare('DELETE FROM media_items WHERE id = ?').run(id)
 
-          // Recount owned episodes
+          // Recount owned episodes/seasons and mark as needing re-analysis
+          // Use old updated_at so auto-completeness won't skip this series
           db.prepare(`
             UPDATE series_completeness SET
               owned_episodes = (SELECT COUNT(*) FROM media_items WHERE series_title = ? AND source_id = ? AND library_id = ? AND type = 'episode'),
+              owned_seasons = (SELECT COUNT(DISTINCT season_number) FROM media_items WHERE series_title = ? AND source_id = ? AND library_id = ? AND type = 'episode'),
               completeness_percentage = CASE WHEN total_episodes > 0
                 THEN ROUND(CAST((SELECT COUNT(*) FROM media_items WHERE series_title = ? AND source_id = ? AND library_id = ? AND type = 'episode') AS REAL) * 100.0 / total_episodes)
                 ELSE 0 END,
-              updated_at = datetime('now')
+              updated_at = datetime('now', '-30 days')
             WHERE series_title = ? AND source_id = ? AND library_id = ?
           `).run(
+            item.series_title, item.source_id, libraryId,
             item.series_title, item.source_id, libraryId,
             item.series_title, item.source_id, libraryId,
             item.series_title, item.source_id, libraryId
@@ -1116,6 +1119,45 @@ export class BetterSQLiteService {
           db.prepare(
             'DELETE FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ? AND owned_episodes <= 0'
           ).run(item.series_title, item.source_id, libraryId)
+
+          // Update missing_episodes/missing_seasons JSON to include the deleted episode
+          if (item.season_number != null && item.episode_number != null) {
+            const scRow = db.prepare(
+              'SELECT id, missing_episodes, missing_seasons FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ?'
+            ).get(item.series_title, item.source_id, libraryId) as { id: number; missing_episodes: string; missing_seasons: string } | undefined
+
+            if (scRow) {
+              // Add deleted episode to missing list
+              const missingEps: Array<{ season_number: number; episode_number: number; title?: string; air_date?: string }> =
+                JSON.parse(scRow.missing_episodes || '[]')
+              const alreadyMissing = missingEps.some(
+                e => e.season_number === item.season_number && e.episode_number === item.episode_number
+              )
+              if (!alreadyMissing) {
+                missingEps.push({
+                  season_number: item.season_number!,
+                  episode_number: item.episode_number!,
+                  title: item.title || undefined,
+                  air_date: undefined,
+                })
+                missingEps.sort((a, b) => (a.season_number - b.season_number) || (a.episode_number - b.episode_number))
+              }
+
+              // Check if the deleted episode's season is now fully missing
+              const missingSeasonsArr: number[] = JSON.parse(scRow.missing_seasons || '[]')
+              const remainingInSeason = db.prepare(
+                "SELECT COUNT(*) as cnt FROM media_items WHERE series_title = ? AND source_id = ? AND library_id = ? AND season_number = ? AND type = 'episode'"
+              ).get(item.series_title, item.source_id, libraryId, item.season_number) as { cnt: number }
+              if (remainingInSeason.cnt === 0 && !missingSeasonsArr.includes(item.season_number!)) {
+                missingSeasonsArr.push(item.season_number!)
+                missingSeasonsArr.sort((a, b) => a - b)
+              }
+
+              db.prepare(
+                'UPDATE series_completeness SET missing_episodes = ?, missing_seasons = ? WHERE id = ?'
+              ).run(JSON.stringify(missingEps), JSON.stringify(missingSeasonsArr), scRow.id)
+            }
+          }
 
           // Already deleted above, skip the deletion below
           return
@@ -1241,8 +1283,8 @@ export class BetterSQLiteService {
 
     const deletedSet = new Set(deletedTmdbIds)
     const collections = this.db.prepare(
-      'SELECT id, owned_movie_ids, owned_movies, total_movies FROM movie_collections WHERE source_id = ?'
-    ).all(sourceId) as Array<{ id: number; owned_movie_ids: string; owned_movies: number; total_movies: number }>
+      'SELECT id, owned_movie_ids, owned_movies, total_movies, missing_movies FROM movie_collections WHERE source_id = ?'
+    ).all(sourceId) as Array<{ id: number; owned_movie_ids: string; owned_movies: number; total_movies: number; missing_movies: string }>
 
     let updated = 0
     for (const coll of collections) {
@@ -1260,14 +1302,36 @@ export class BetterSQLiteService {
             // Remove collection entirely if no owned movies remain
             this.db!.prepare('DELETE FROM movie_collections WHERE id = ?').run(coll.id)
           } else {
+            // Add deleted movies to missing_movies JSON
+            const missingMovies: Array<{ tmdb_id: string; title: string; year?: number; poster_path?: string }> =
+              JSON.parse(coll.missing_movies || '[]')
+            const removedIds = ownedIds.filter(tmdbId => deletedSet.has(tmdbId))
+            for (const tmdbId of removedIds) {
+              if (!missingMovies.some(m => String(m.tmdb_id) === tmdbId)) {
+                // Look up movie details (still in media_items at this point)
+                const movie = this.db!.prepare(
+                  'SELECT title, year, poster_url FROM media_items WHERE tmdb_id = ? AND source_id = ? LIMIT 1'
+                ).get(tmdbId, sourceId) as { title: string; year?: number; poster_url?: string } | undefined
+                if (movie) {
+                  missingMovies.push({
+                    tmdb_id: tmdbId,
+                    title: movie.title,
+                    year: movie.year,
+                    poster_path: movie.poster_url,
+                  })
+                }
+              }
+            }
+
             this.db!.prepare(`
               UPDATE movie_collections SET
                 owned_movies = ?,
                 owned_movie_ids = ?,
+                missing_movies = ?,
                 completeness_percentage = ?,
                 updated_at = datetime('now')
               WHERE id = ?
-            `).run(newOwned, JSON.stringify(filteredIds), newPct, coll.id)
+            `).run(newOwned, JSON.stringify(filteredIds), JSON.stringify(missingMovies), newPct, coll.id)
           }
           updated++
         }
@@ -2731,8 +2795,8 @@ export class BetterSQLiteService {
 
     const db = this.db
     const track = db.prepare(
-      'SELECT album_id, artist_id FROM music_tracks WHERE id = ?'
-    ).get(id) as { album_id?: number; artist_id?: number } | undefined
+      'SELECT id, title, album_id, artist_id, track_number, musicbrainz_id FROM music_tracks WHERE id = ?'
+    ).get(id) as { id: number; title: string; album_id?: number; artist_id?: number; track_number?: number; musicbrainz_id?: string } | undefined
 
     const txn = db.transaction(() => {
     db.prepare('DELETE FROM music_tracks WHERE id = ?').run(id)
@@ -2742,6 +2806,35 @@ export class BetterSQLiteService {
         'SELECT COUNT(*) as cnt FROM music_tracks WHERE album_id = ?'
       ).get(track.album_id) as { cnt: number }
       if (albumTrackCount.cnt === 0) {
+        // Album is now empty — add it to artist's missing_albums before deleting
+        const album = db.prepare(
+          'SELECT title, artist_name, musicbrainz_id FROM music_albums WHERE id = ?'
+        ).get(track.album_id) as { title: string; artist_name: string; musicbrainz_id?: string } | undefined
+        if (album) {
+          const acRow = db.prepare(
+            'SELECT id, missing_albums, owned_albums, total_albums, completeness_percentage FROM artist_completeness WHERE artist_name = ?'
+          ).get(album.artist_name) as { id: number; missing_albums: string; owned_albums: number; total_albums: number; completeness_percentage: number } | undefined
+          if (acRow) {
+            const missingAlbums: Array<{ musicbrainz_id: string; title: string; year?: number; album_type?: string }> =
+              JSON.parse(acRow.missing_albums || '[]')
+            const alreadyMissing = missingAlbums.some(
+              a => (album.musicbrainz_id && a.musicbrainz_id === album.musicbrainz_id) ||
+                   a.title.toLowerCase() === album.title.toLowerCase()
+            )
+            if (!alreadyMissing) {
+              missingAlbums.push({
+                musicbrainz_id: album.musicbrainz_id || '',
+                title: album.title,
+              })
+            }
+            const newOwned = Math.max(0, acRow.owned_albums - 1)
+            const newPct = acRow.total_albums > 0 ? Math.round((newOwned / acRow.total_albums) * 100) : 0
+            db.prepare(
+              'UPDATE artist_completeness SET missing_albums = ?, owned_albums = ?, completeness_percentage = ?, updated_at = datetime(\'now\') WHERE id = ?'
+            ).run(JSON.stringify(missingAlbums), newOwned, newPct, acRow.id)
+          }
+        }
+
         db.prepare('DELETE FROM music_quality_scores WHERE album_id = ?').run(track.album_id)
         db.prepare('DELETE FROM album_completeness WHERE album_id = ?').run(track.album_id)
         db.prepare('DELETE FROM music_albums WHERE id = ?').run(track.album_id)
@@ -2749,6 +2842,31 @@ export class BetterSQLiteService {
         db.prepare(
           'UPDATE music_albums SET track_count = ?, updated_at = datetime(\'now\') WHERE id = ?'
         ).run(albumTrackCount.cnt, track.album_id)
+
+        // Update album_completeness: add deleted track to missing_tracks
+        const acAlbum = db.prepare(
+          'SELECT id, missing_tracks, owned_tracks, total_tracks FROM album_completeness WHERE album_id = ?'
+        ).get(track.album_id) as { id: number; missing_tracks: string; owned_tracks: number; total_tracks: number } | undefined
+        if (acAlbum) {
+          const missingTracks: Array<{ musicbrainz_id?: string; title: string; track_number?: number }> =
+            JSON.parse(acAlbum.missing_tracks || '[]')
+          const alreadyMissing = missingTracks.some(
+            t => t.title.toLowerCase() === track.title.toLowerCase()
+          )
+          if (!alreadyMissing) {
+            missingTracks.push({
+              musicbrainz_id: track.musicbrainz_id || undefined,
+              title: track.title,
+              track_number: track.track_number || undefined,
+            })
+            missingTracks.sort((a, b) => (a.track_number || 0) - (b.track_number || 0))
+          }
+          const newOwned = Math.max(0, acAlbum.owned_tracks - 1)
+          const newPct = acAlbum.total_tracks > 0 ? Math.round((newOwned / acAlbum.total_tracks) * 100) : 0
+          db.prepare(
+            'UPDATE album_completeness SET missing_tracks = ?, owned_tracks = ?, completeness_percentage = ?, updated_at = datetime(\'now\') WHERE id = ?'
+          ).run(JSON.stringify(missingTracks), newOwned, newPct, acAlbum.id)
+        }
       }
     }
 
@@ -3715,6 +3833,159 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       ORDER BY ac.artist_name ASC
     `)
     return stmt.all() as ArtistCompleteness[]
+  }
+
+  /**
+   * Sync artist completeness after a scan by removing newly-owned albums
+   * from missing_albums/missing_eps/missing_singles JSON lists.
+   * No MusicBrainz API calls needed — works entirely from local data.
+   * @returns Number of artists updated
+   */
+  syncArtistCompletenessAfterScan(sourceId: string): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    // Get all artists with completeness records that have items in this source
+    const artists = this.db.prepare(`
+      SELECT DISTINCT ac.id, ac.artist_name, ac.missing_albums, ac.missing_singles, ac.missing_eps,
+        ac.owned_albums, ac.owned_singles, ac.owned_eps,
+        ac.total_albums, ac.total_singles, ac.total_eps
+      FROM artist_completeness ac
+      INNER JOIN music_artists ma ON ac.artist_name = ma.name AND ma.source_id = ?
+    `).all(sourceId) as Array<{
+      id: number; artist_name: string
+      missing_albums: string; missing_singles: string; missing_eps: string
+      owned_albums: number; owned_singles: number; owned_eps: number
+      total_albums: number; total_singles: number; total_eps: number
+    }>
+
+    let updated = 0
+
+    for (const ac of artists) {
+      // Get current owned album titles and MusicBrainz IDs for this artist
+      const ownedAlbums = this.db.prepare(`
+        SELECT title, musicbrainz_id FROM music_albums
+        WHERE artist_name = ? AND source_id = ?
+      `).all(ac.artist_name, sourceId) as Array<{ title: string; musicbrainz_id?: string }>
+
+      const ownedTitlesLower = new Set(ownedAlbums.map(a => a.title.toLowerCase()))
+      const ownedMbIds = new Set(ownedAlbums.filter(a => a.musicbrainz_id).map(a => a.musicbrainz_id!))
+
+      let changed = false
+
+      // Filter missing_albums — remove entries that are now owned
+      const missingAlbums: Array<{ musicbrainz_id: string; title: string }> = JSON.parse(ac.missing_albums || '[]')
+      const filteredAlbums = missingAlbums.filter(m => {
+        if (m.musicbrainz_id && ownedMbIds.has(m.musicbrainz_id)) return false
+        if (ownedTitlesLower.has(m.title.toLowerCase())) return false
+        return true
+      })
+      if (filteredAlbums.length !== missingAlbums.length) changed = true
+
+      // Filter missing_singles
+      const missingSingles: Array<{ musicbrainz_id: string; title: string }> = JSON.parse(ac.missing_singles || '[]')
+      const filteredSingles = missingSingles.filter(m => {
+        if (m.musicbrainz_id && ownedMbIds.has(m.musicbrainz_id)) return false
+        if (ownedTitlesLower.has(m.title.toLowerCase())) return false
+        return true
+      })
+      if (filteredSingles.length !== missingSingles.length) changed = true
+
+      // Filter missing_eps
+      const missingEps: Array<{ musicbrainz_id: string; title: string }> = JSON.parse(ac.missing_eps || '[]')
+      const filteredEps = missingEps.filter(m => {
+        if (m.musicbrainz_id && ownedMbIds.has(m.musicbrainz_id)) return false
+        if (ownedTitlesLower.has(m.title.toLowerCase())) return false
+        return true
+      })
+      if (filteredEps.length !== missingEps.length) changed = true
+
+      // Also check if actual owned album count changed
+      const actualOwnedAlbums = ownedAlbums.length
+      const countChanged = actualOwnedAlbums !== ac.owned_albums
+
+      if (changed || countChanged) {
+        // Use actual owned count from DB; derive singles/eps from missing list since we can't distinguish types from music_albums
+        const newOwnedAlbums = ac.total_albums - filteredAlbums.length
+        const newOwnedSingles = ac.total_singles - filteredSingles.length
+        const newOwnedEps = ac.total_eps - filteredEps.length
+        // Weighted: albums 3x, EPs 2x, singles 1x
+        const totalWeighted = ac.total_albums * 3 + ac.total_eps * 2 + ac.total_singles
+        const ownedWeighted = newOwnedAlbums * 3 + newOwnedEps * 2 + newOwnedSingles
+        const newPct = totalWeighted > 0 ? Math.round((ownedWeighted / totalWeighted) * 100) : 0
+
+        this.db.prepare(`
+          UPDATE artist_completeness SET
+            missing_albums = ?, missing_singles = ?, missing_eps = ?,
+            owned_albums = ?, owned_singles = ?, owned_eps = ?,
+            completeness_percentage = ?, updated_at = datetime('now')
+          WHERE id = ?
+        `).run(
+          JSON.stringify(filteredAlbums), JSON.stringify(filteredSingles), JSON.stringify(filteredEps),
+          newOwnedAlbums, newOwnedSingles, newOwnedEps,
+          newPct, ac.id
+        )
+        updated++
+      }
+    }
+
+    return updated
+  }
+
+  /**
+   * Sync album completeness after a scan by removing newly-owned tracks
+   * from missing_tracks JSON lists.
+   * No MusicBrainz API calls needed — works entirely from local data.
+   * @returns Number of albums updated
+   */
+  syncAlbumCompletenessAfterScan(sourceId: string): number {
+    if (!this.db) throw new Error('Database not initialized')
+
+    // Get all album_completeness records for albums in this source
+    const records = this.db.prepare(`
+      SELECT ac.id, ac.album_id, ac.missing_tracks, ac.owned_tracks, ac.total_tracks
+      FROM album_completeness ac
+      INNER JOIN music_albums ma ON ac.album_id = ma.id AND ma.source_id = ?
+    `).all(sourceId) as Array<{
+      id: number; album_id: number; missing_tracks: string; owned_tracks: number; total_tracks: number
+    }>
+
+    let updated = 0
+
+    for (const ac of records) {
+      // Get actual track count and titles for this album
+      const ownedTracks = this.db.prepare(
+        'SELECT title, musicbrainz_id FROM music_tracks WHERE album_id = ?'
+      ).all(ac.album_id) as Array<{ title: string; musicbrainz_id?: string }>
+
+      const actualOwnedCount = ownedTracks.length
+      const ownedTitlesLower = new Set(ownedTracks.map(t => t.title.toLowerCase()))
+      const ownedMbIds = new Set(ownedTracks.filter(t => t.musicbrainz_id).map(t => t.musicbrainz_id!))
+
+      // Remove tracks from missing list that are now owned
+      const missingTracks: Array<{ musicbrainz_id?: string; title: string; track_number?: number }> =
+        JSON.parse(ac.missing_tracks || '[]')
+
+      const filteredTracks = missingTracks.filter(m => {
+        if (m.musicbrainz_id && ownedMbIds.has(m.musicbrainz_id)) return false
+        if (ownedTitlesLower.has(m.title.toLowerCase())) return false
+        return true
+      })
+
+      // Update if owned count changed OR missing list changed
+      const missingChanged = filteredTracks.length !== missingTracks.length
+      const countChanged = actualOwnedCount !== ac.owned_tracks
+
+      if (missingChanged || countChanged) {
+        const newPct = ac.total_tracks > 0 ? Math.round((actualOwnedCount / ac.total_tracks) * 100) : 0
+
+        this.db.prepare(
+          'UPDATE album_completeness SET missing_tracks = ?, owned_tracks = ?, completeness_percentage = ?, updated_at = datetime(\'now\') WHERE id = ?'
+        ).run(JSON.stringify(filteredTracks), actualOwnedCount, newPct, ac.id)
+        updated++
+      }
+    }
+
+    return updated
   }
 
   /**

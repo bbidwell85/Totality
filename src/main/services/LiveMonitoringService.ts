@@ -20,6 +20,10 @@ import { promisify } from 'util'
 import { getDatabase } from '../database/getDatabase'
 import { getSourceManager } from './SourceManager'
 import { getLoggingService } from './LoggingService'
+import { getSeriesCompletenessService } from './SeriesCompletenessService'
+import { getTMDBService } from './TMDBService'
+import { getTaskQueueService } from './TaskQueueService'
+import type { ScanResult } from '../providers/base/MediaProvider'
 import { safeSend } from '../ipc/utils/safeSend'
 import { emitNotificationCreated } from '../ipc/utils/notificationEmitter'
 import {
@@ -768,6 +772,11 @@ export class LiveMonitoringService {
       })
     }
 
+    // Auto-analyze affected series/collections after changes detected
+    if (events.length > 0) {
+      this.autoAnalyzeCompleteness(sourceId, events)
+    }
+
     return events
   }
 
@@ -867,12 +876,21 @@ export class LiveMonitoringService {
 
     for (const library of enabledLibraries) {
       try {
-        // Run incremental scan
-        const result = await sourceManager.scanLibraryIncremental(
-          sourceId,
-          library.libraryId,
-          () => {} // Silent progress
-        )
+        let result: ScanResult
+
+        if (library.libraryType === 'music') {
+          // Music libraries: check if track count changed before doing expensive full scan
+          const needsScan = await this.musicLibraryHasChanges(sourceId, library.libraryId, source.source_type as ProviderType)
+          if (!needsScan) continue
+          result = await this.scanMusicLibrary(sourceId, library.libraryId, source.source_type as ProviderType)
+        } else {
+          // Run incremental scan for video libraries
+          result = await sourceManager.scanLibraryIncremental(
+            sourceId,
+            library.libraryId,
+            () => {} // Silent progress
+          )
+        }
 
         // Check for both added AND updated items
         if (result.success && (result.itemsAdded > 0 || result.itemsUpdated > 0)) {
@@ -982,9 +1000,21 @@ export class LiveMonitoringService {
 
     // Emit library:updated for each event type so Dashboard/MediaBrowser refresh
     if (events.length > 0) {
-      // Polling only handles remote sources which are typically video/media
-      // but emit based on library type to be correct
-      this.sendToRenderer('library:updated', { type: 'media' })
+      const libraryTypes = new Set(
+        enabledLibraries
+          .filter(l => events.some(e => e.libraryId === l.libraryId))
+          .map(l => l.libraryType)
+      )
+      if (libraryTypes.has('movie') || libraryTypes.has('show')) {
+        this.sendToRenderer('library:updated', { type: 'media' })
+      }
+      if (libraryTypes.has('music')) {
+        this.sendToRenderer('library:updated', { type: 'music' })
+      }
+      // Fallback: if we can't determine type, emit media
+      if (!libraryTypes.has('movie') && !libraryTypes.has('show') && !libraryTypes.has('music')) {
+        this.sendToRenderer('library:updated', { type: 'media' })
+      }
     }
 
     // Notify renderer of source check completion
@@ -1000,6 +1030,11 @@ export class LiveMonitoringService {
           console.error('[LiveMonitoring] Wishlist completion check failed:', getErrorMessage(err))
         })
       })
+    }
+
+    // Auto-analyze affected series/collections after changes detected
+    if (events.length > 0) {
+      this.autoAnalyzeCompleteness(sourceId, events)
     }
 
     return events
@@ -1034,6 +1069,207 @@ export class LiveMonitoringService {
   /**
    * Send event to renderer process
    */
+  /**
+   * Lightweight check: compare Plex music library item count against DB track count.
+   * Returns true if counts differ (scan needed), false if unchanged.
+   */
+  private async musicLibraryHasChanges(sourceId: string, libraryId: string, sourceType: ProviderType): Promise<boolean> {
+    try {
+      const db = getDatabase()
+      const dbTrackCount = db.countMusicTracks({ sourceId })
+
+      // For Plex, query the library section to get total track count
+      if (sourceType === 'plex') {
+        const sourceManager = getSourceManager()
+        const provider = sourceManager.getProvider(sourceId)
+        if (!provider) return false
+
+        const { PlexProvider } = await import('../providers/plex/PlexProvider')
+        if (provider instanceof PlexProvider) {
+          const plexTrackCount = await provider.getMusicTrackCount(libraryId)
+          if (plexTrackCount !== dbTrackCount) {
+            console.log(`[LiveMonitoring] Music library track count changed: Plex=${plexTrackCount}, DB=${dbTrackCount}`)
+            return true
+          }
+          return false
+        }
+      }
+
+      // For other providers, always scan (no lightweight check available)
+      return true
+    } catch {
+      // On error, skip scan rather than doing expensive full scan
+      return false
+    }
+  }
+
+  /**
+   * Scan a music library using the provider-specific music scanning method.
+   * Routes to the correct scan method based on provider type.
+   */
+  private async scanMusicLibrary(sourceId: string, libraryId: string, sourceType: ProviderType): Promise<ScanResult> {
+    const sourceManager = getSourceManager()
+    const provider = sourceManager.getProvider(sourceId)
+    if (!provider) {
+      return { success: false, itemsScanned: 0, itemsAdded: 0, itemsUpdated: 0, itemsRemoved: 0, errors: ['Provider not found'], durationMs: 0 }
+    }
+
+    if (sourceType === 'plex') {
+      const { PlexProvider } = await import('../providers/plex/PlexProvider')
+      if (provider instanceof PlexProvider) {
+        return provider.scanMusicLibrary(libraryId)
+      }
+    } else if (sourceType === 'jellyfin' || sourceType === 'emby') {
+      const { JellyfinEmbyBase } = await import('../providers/jellyfin-emby/JellyfinEmbyBase')
+      if (provider instanceof JellyfinEmbyBase) {
+        return provider.scanMusicLibrary(libraryId)
+      }
+    } else if (sourceType === 'kodi') {
+      const { KodiProvider } = await import('../providers/kodi/KodiProvider')
+      if (provider instanceof KodiProvider) {
+        return provider.scanMusicLibrary()
+      }
+    } else if (sourceType === 'kodi-local') {
+      const { KodiLocalProvider } = await import('../providers/kodi/KodiLocalProvider')
+      if (provider instanceof KodiLocalProvider) {
+        return provider.scanMusicLibrary()
+      }
+    } else if (sourceType === 'local' || sourceType === 'mediamonkey') {
+      return provider.scanLibrary(libraryId)
+    }
+
+    return { success: false, itemsScanned: 0, itemsAdded: 0, itemsUpdated: 0, itemsRemoved: 0, errors: [`Music scanning not supported for ${sourceType}`], durationMs: 0 }
+  }
+
+  /**
+   * Auto-analyze completeness for series/collections/music affected by live monitoring changes.
+   * For 'show' libraries: analyzes only the specific series that changed (requires TMDB).
+   * For 'movie' libraries: queues a scoped collection-completeness task (requires TMDB).
+   * For 'music' libraries: runs music quality analysis.
+   */
+  private autoAnalyzeCompleteness(sourceId: string, events: SourceChangeEvent[]): void {
+    const db = getDatabase()
+    const tmdbApiKey = db.getSetting('tmdb_api_key')
+
+    const libraries = db.getSourceLibraries(sourceId) as Array<{
+      libraryId: string; libraryName: string; libraryType: string; isEnabled: boolean
+    }>
+    const libraryMap = new Map(libraries.map(l => [l.libraryId, l]))
+
+    for (const event of events) {
+      if (!event.libraryId) continue
+      const lib = libraryMap.get(event.libraryId)
+      if (!lib) continue
+
+      if (lib.libraryType === 'show' && tmdbApiKey) {
+        this.analyzeAffectedSeries(sourceId, lib.libraryId, lib.libraryName)
+      } else if (lib.libraryType === 'movie' && tmdbApiKey) {
+        getTaskQueueService().addTask({
+          type: 'collection-completeness',
+          label: `Collection completeness: ${lib.libraryName}`,
+          sourceId,
+          libraryId: lib.libraryId,
+        })
+      } else if (lib.libraryType === 'music') {
+        this.autoRunMusicQualityAnalysis(sourceId, lib.libraryName)
+      }
+    }
+  }
+
+  /**
+   * Run music quality analysis after live monitoring detects music library changes.
+   */
+  private autoRunMusicQualityAnalysis(sourceId: string, libraryName: string): void {
+    const doAnalysis = async () => {
+      const { analyzeAlbumQuality } = await import('./MusicQualityAnalyzer')
+      const db = getDatabase()
+      console.log(`[LiveMonitoring] Auto-analyzing music quality for ${libraryName}...`)
+      await analyzeAlbumQuality(db, sourceId)
+
+      // Sync completeness — remove newly-owned items from missing lists (no API calls)
+      const artistsSynced = db.syncArtistCompletenessAfterScan(sourceId)
+      const albumsSynced = db.syncAlbumCompletenessAfterScan(sourceId)
+      if (artistsSynced > 0 || albumsSynced > 0) {
+        console.log(`[LiveMonitoring] Updated completeness for ${artistsSynced} artists, ${albumsSynced} albums in ${libraryName}`)
+      }
+
+      console.log(`[LiveMonitoring] Music quality analysis complete for ${libraryName}`)
+      this.sendToRenderer('library:updated', { type: 'music' })
+    }
+
+    doAnalysis().catch(err => {
+      console.error('[LiveMonitoring] Auto music quality analysis failed:', getErrorMessage(err))
+    })
+  }
+
+  /**
+   * Analyze only series whose episode counts changed.
+   * Removes completeness records for series with no remaining episodes.
+   */
+  private analyzeAffectedSeries(sourceId: string, libraryId: string, libraryName: string): void {
+    const doAnalysis = async () => {
+      const db = getDatabase()
+      const service = getSeriesCompletenessService()
+
+      // Get distinct series in this library from media_items
+      const episodes = db.getMediaItems({ type: 'episode' as const, sourceId, libraryId }) as Array<{ series_title?: string }>
+      const currentSeries = new Map<string, number>()
+      for (const ep of episodes) {
+        if (!ep.series_title) continue
+        currentSeries.set(ep.series_title, (currentSeries.get(ep.series_title) || 0) + 1)
+      }
+
+      // Get existing completeness records for this library
+      const existing = db.getAllSeriesCompleteness(sourceId, libraryId)
+      const existingMap = new Map<string, { owned_episodes: number }>(
+        existing.map((sc: { series_title: string; owned_episodes: number }) => [sc.series_title, { owned_episodes: sc.owned_episodes }])
+      )
+
+      // Find affected series
+      const affectedSeries: string[] = []
+      for (const [title, count] of currentSeries) {
+        const record = existingMap.get(title)
+        if (!record || record.owned_episodes !== count) {
+          affectedSeries.push(title)
+        }
+      }
+
+      // Removed series — delete completeness records
+      for (const sc of existing) {
+        if (!currentSeries.has(sc.series_title) && sc.id) {
+          db.deleteSeriesCompleteness(sc.id)
+          console.log(`[LiveMonitoring] Removed completeness for deleted series: ${sc.series_title}`)
+        }
+      }
+
+      if (affectedSeries.length === 0) {
+        console.log(`[LiveMonitoring] No series changes detected in ${libraryName}`)
+        return
+      }
+
+      console.log(`[LiveMonitoring] Analyzing ${affectedSeries.length} affected series in ${libraryName}: ${affectedSeries.join(', ')}`)
+
+      const tmdb = getTMDBService()
+      await tmdb.initialize()
+
+      for (const title of affectedSeries) {
+        try {
+          await service.analyzeSeries(title, sourceId, libraryId)
+          console.log(`[LiveMonitoring] Completed series analysis: ${title}`)
+        } catch (err) {
+          console.error(`[LiveMonitoring] Failed to analyze series "${title}":`, getErrorMessage(err))
+        }
+      }
+
+      // Emit library updated so dashboard refreshes
+      this.sendToRenderer('library:updated', { type: 'media' })
+    }
+
+    doAnalysis().catch(err => {
+      console.error('[LiveMonitoring] Auto-analyze affected series failed:', getErrorMessage(err))
+    })
+  }
+
   private sendToRenderer(channel: string, data: unknown): void {
     if (this.mainWindow) {
       safeSend(this.mainWindow, channel, data)

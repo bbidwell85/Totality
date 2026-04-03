@@ -1190,7 +1190,7 @@ export function Dashboard({
     return (
       <div
         ref={containerRef}
-        className="fixed top-[88px] bottom-4 flex items-center justify-center transition-[left,right] duration-300 ease-out"
+        className="fixed top-[76px] bottom-4 flex items-center justify-center transition-[left,right] duration-300 ease-out"
         style={{
           left: sidebarCollapsed ? '96px' : '288px',
           right: '16px'
@@ -1205,7 +1205,7 @@ export function Dashboard({
     return (
       <div
         ref={containerRef}
-        className="fixed top-[88px] bottom-4 flex flex-col items-center justify-center transition-[left,right] duration-300 ease-out"
+        className="fixed top-[76px] bottom-4 flex flex-col items-center justify-center transition-[left,right] duration-300 ease-out"
         style={{
           left: sidebarCollapsed ? '96px' : '288px',
           right: '16px'
@@ -1225,7 +1225,7 @@ export function Dashboard({
   return (
     <div
       ref={containerRef}
-      className="fixed top-[88px] bottom-4 flex flex-col overflow-hidden transition-[left,right] duration-300 ease-out"
+      className="fixed top-[76px] bottom-4 flex flex-col overflow-hidden transition-[left,right] duration-300 ease-out"
       style={{
         left: sidebarCollapsed ? '96px' : '288px',
         right: '16px'
@@ -1281,7 +1281,7 @@ export function Dashboard({
                   >
                     <option value="quality">Quality</option>
                     <option value="recent">Recent</option>
-                    <option value="title">Title</option>
+                    <option value="title">Name</option>
                   </select>
                   <span className="text-xs text-muted-foreground">
                     {upgradeTab === 'movies' ? movieUpgrades.length : upgradeTab === 'tv' ? tvUpgrades.length : musicUpgrades.length}

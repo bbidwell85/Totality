@@ -49,6 +49,7 @@ type SyncFieldSet = { mood: boolean; genre: boolean }
 
 export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   const [sources, setSources] = useState<MoodSource[]>([])
+  const [genreSources, setGenreSources] = useState<MoodSource[]>([])
   const [sourceOfTruthId, setSourceOfTruthId] = useState<string>('')
   const [moodComparisons, setMoodComparisons] = useState<MoodComparison[]>([])
   const [genreComparisons, setGenreComparisons] = useState<MoodComparison[]>([])
@@ -113,10 +114,14 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
 
   const loadSources = async () => {
     try {
-      const result = await window.electronAPI.moodGetSources(activeField)
-      setSources(result)
+      const [moodResult, genreResult] = await Promise.all([
+        window.electronAPI.moodGetSources('mood'),
+        window.electronAPI.moodGetSources('genre'),
+      ])
+      setSources(moodResult)
+      setGenreSources(genreResult)
       if (!sourceOfTruthId) {
-        const withData = result.find(s => s.tracksWithMoods > 0)
+        const withData = moodResult.find(s => s.tracksWithMoods > 0) || genreResult.find(s => s.tracksWithMoods > 0)
         if (withData) setSourceOfTruthId(withData.sourceId)
       }
     } catch (error) {
@@ -382,7 +387,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       id="tag-sync-panel"
       role="complementary"
       aria-label="Tag Sync"
-      className={`fixed top-[88px] bottom-4 right-4 w-96 bg-card/90 backdrop-blur-xl rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
+      className={`fixed top-[76px] bottom-4 right-4 w-96 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
         isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
       }`}
       onKeyDown={handleKeyDown}
@@ -426,11 +431,17 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/30 text-foreground text-xs focus:outline-hidden focus:ring-2 focus:ring-primary"
         >
           <option value="">Select a source...</option>
-          {sources.map(s => (
-            <option key={s.sourceId} value={s.sourceId}>
-              {s.sourceName} — {s.tracksWithMoods} {fieldLabel}
-            </option>
-          ))}
+          {sources.map(s => {
+            const genreSource = genreSources.find(g => g.sourceId === s.sourceId)
+            const parts: string[] = []
+            if (syncFields.mood) parts.push(`${s.tracksWithMoods} moods`)
+            if (syncFields.genre) parts.push(`${genreSource?.tracksWithMoods ?? 0} genres`)
+            return (
+              <option key={s.sourceId} value={s.sourceId}>
+                {s.sourceName} — {parts.join(' · ')}
+              </option>
+            )
+          })}
         </select>
       </div>
 

@@ -26,6 +26,7 @@ import { KodiProvider } from '../providers/kodi/KodiProvider'
 import { KodiLocalProvider } from '../providers/kodi/KodiLocalProvider'
 import type { ScanResult } from '../providers/base/MediaProvider'
 import { getWishlistCompletionService } from './WishlistCompletionService'
+import { getTMDBService } from './TMDBService'
 
 // ============================================================================
 // Types
@@ -618,7 +619,7 @@ export class TaskQueueService {
 
       case 'music-completeness':
         await this.executeMusicCompleteness(task, progressCallback)
-        this.sendLibraryUpdated()
+        this.sendLibraryUpdated('music')
         try { getDatabase().createNotification({ type: 'info', title: 'Music completeness analyzed', message: task.label || 'Artist completeness analysis complete' }); emitNotificationCreated() } catch { /* ignore */ }
         break
 
@@ -858,10 +859,10 @@ export class TaskQueueService {
    * Send library:updated event to trigger UI refresh
    * Called after completeness tasks complete to refresh MediaBrowser
    */
-  private sendLibraryUpdated(): void {
+  private sendLibraryUpdated(type: 'media' | 'music' = 'media'): void {
     const win = BrowserWindow.getAllWindows()[0]
     if (win) {
-      safeSend(win, 'library:updated', { type: 'media' })
+      safeSend(win, 'library:updated', { type })
     }
   }
 
@@ -982,7 +983,164 @@ export class TaskQueueService {
           console.error('[TaskQueue] Wishlist completion check failed:', getErrorMessage(err))
         })
       }
+
+      // Auto-queue completeness analysis for scanned libraries
+      if ((task.type === 'library-scan' || task.type === 'source-scan' || task.type === 'music-scan') &&
+          ((task.result?.itemsAdded || 0) > 0 || (task.result?.itemsUpdated || 0) > 0 || (task.result?.itemsRemoved || 0) > 0)) {
+        this.autoQueueCompleteness(task)
+      }
     }
+  }
+
+  /**
+   * Auto-trigger completeness analysis for libraries that were just scanned.
+   * For 'show' libraries → targeted series completeness (only affected series, requires TMDB)
+   * For 'movie' libraries → collection completeness task (requires TMDB)
+   * For 'music' libraries → music quality analysis (no external API required)
+   */
+  private autoQueueCompleteness(task: QueuedTask): void {
+    try {
+      const db = getDatabase()
+
+      if (!task.sourceId) return
+
+      // For library scans, check the specific library type
+      // For source scans, check all libraries for the source
+      const libraries = task.libraryId
+        ? db.getSourceLibraries(task.sourceId).filter(
+            (l: { libraryId: string }) => l.libraryId === task.libraryId
+          )
+        : db.getSourceLibraries(task.sourceId).filter(
+            (l: { isEnabled: boolean }) => l.isEnabled
+          )
+
+      const tmdbApiKey = db.getSetting('tmdb_api_key')
+
+      for (const lib of libraries) {
+        if (lib.libraryType === 'show' && tmdbApiKey) {
+          // Targeted: analyze only series whose episode counts changed
+          this.autoAnalyzeAffectedSeries(task.sourceId, lib.libraryId, lib.libraryName)
+        } else if (lib.libraryType === 'movie' && tmdbApiKey) {
+          const taskId = this.addTask({
+            type: 'collection-completeness',
+            label: `Collection completeness: ${lib.libraryName}`,
+            sourceId: task.sourceId,
+            libraryId: lib.libraryId,
+          })
+          console.log(`[TaskQueue] Auto-queued collection completeness for ${lib.libraryName} (${taskId})`)
+        } else if (lib.libraryType === 'music') {
+          // Music quality analysis (already runs after music-scan tasks,
+          // but also needed for library-scan/source-scan of music libraries)
+          if (task.type !== 'music-scan') {
+            this.autoRunMusicQualityAnalysis(task.sourceId, lib.libraryName)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[TaskQueue] Auto-queue completeness failed:', getErrorMessage(err))
+    }
+  }
+
+  /**
+   * Run music quality analysis after a non-music-scan updates a music library.
+   * (music-scan tasks already run quality analysis inline.)
+   */
+  private autoRunMusicQualityAnalysis(sourceId: string, libraryName: string): void {
+    const doAnalysis = async () => {
+      const db = getDatabase()
+      const { analyzeAlbumQuality } = await import('./MusicQualityAnalyzer')
+      console.log(`[TaskQueue] Auto-analyzing music quality for ${libraryName}...`)
+      await analyzeAlbumQuality(db, sourceId)
+
+      // Sync completeness — remove newly-owned items from missing lists (no API calls)
+      const artistsSynced = db.syncArtistCompletenessAfterScan(sourceId)
+      const albumsSynced = db.syncAlbumCompletenessAfterScan(sourceId)
+      if (artistsSynced > 0 || albumsSynced > 0) {
+        console.log(`[TaskQueue] Updated completeness for ${artistsSynced} artists, ${albumsSynced} albums in ${libraryName}`)
+      }
+
+      console.log(`[TaskQueue] Music quality analysis complete for ${libraryName}`)
+      this.sendLibraryUpdated('music')
+    }
+
+    doAnalysis().catch(err => {
+      console.error('[TaskQueue] Auto music quality analysis failed:', getErrorMessage(err))
+    })
+  }
+
+  /**
+   * Analyze only series whose episode counts changed after a scan.
+   * Finds series that are new (no completeness record) or stale (owned count mismatch).
+   * Removes completeness records for series with no remaining episodes.
+   * Runs asynchronously to not block the scan completion flow.
+   */
+  private autoAnalyzeAffectedSeries(sourceId: string, libraryId: string, libraryName: string): void {
+    const doAnalysis = async () => {
+      const db = getDatabase()
+      const service = getSeriesCompletenessService()
+
+      // Get distinct series in this library from media_items
+      const episodes = db.getMediaItems({ type: 'episode' as const, sourceId, libraryId }) as Array<{ series_title?: string }>
+      const currentSeries = new Map<string, number>()
+      for (const ep of episodes) {
+        if (!ep.series_title) continue
+        currentSeries.set(ep.series_title, (currentSeries.get(ep.series_title) || 0) + 1)
+      }
+
+      // Get existing completeness records for this library
+      const existing = db.getAllSeriesCompleteness(sourceId, libraryId)
+      const existingMap = new Map<string, { owned_episodes: number }>(
+        existing.map((sc: { series_title: string; owned_episodes: number }) => [sc.series_title, { owned_episodes: sc.owned_episodes }])
+      )
+
+      // Find affected series:
+      // 1. New series (in media_items but no completeness record)
+      // 2. Changed series (owned_episodes mismatch)
+      const affectedSeries: string[] = []
+      for (const [title, count] of currentSeries) {
+        const record = existingMap.get(title)
+        if (!record || record.owned_episodes !== count) {
+          affectedSeries.push(title)
+        }
+      }
+
+      // 3. Removed series (in completeness but no longer in media_items)
+      for (const sc of existing) {
+        if (!currentSeries.has(sc.series_title) && sc.id) {
+          // Series completely removed — delete the completeness record
+          db.deleteSeriesCompleteness(sc.id)
+          console.log(`[TaskQueue] Removed completeness for deleted series: ${sc.series_title}`)
+        }
+      }
+
+      if (affectedSeries.length === 0) {
+        console.log(`[TaskQueue] No series changes detected in ${libraryName}`)
+        return
+      }
+
+      console.log(`[TaskQueue] Analyzing ${affectedSeries.length} affected series in ${libraryName}: ${affectedSeries.join(', ')}`)
+
+      // Initialize TMDB service
+      const tmdb = getTMDBService()
+      await tmdb.initialize()
+
+      // Analyze each affected series
+      for (const title of affectedSeries) {
+        try {
+          await service.analyzeSeries(title, sourceId, libraryId)
+          console.log(`[TaskQueue] Completed series analysis: ${title}`)
+        } catch (err) {
+          console.error(`[TaskQueue] Failed to analyze series "${title}":`, getErrorMessage(err))
+        }
+      }
+
+      // Emit library updated so dashboard refreshes
+      this.sendLibraryUpdated()
+    }
+
+    doAnalysis().catch(err => {
+      console.error('[TaskQueue] Auto-analyze affected series failed:', getErrorMessage(err))
+    })
   }
 
   private emitHistoryUpdate(): void {

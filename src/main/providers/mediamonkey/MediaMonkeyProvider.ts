@@ -438,9 +438,15 @@ export class MediaMonkeyProvider implements MediaProvider {
     // Merge mood from junction table and Songs.Mood column
     // MediaMonkey stores comma-separated moods as single entries (e.g., "Dreamy, Ethereal, Cinematic")
     // Split on commas to get individual mood tags for Plex compatibility
+    // Case-insensitive dedup: prefer column values (which have the synced casing after tag sync)
     const junctionMoods = (moodMap.get(song.ID) || []).flatMap(m => m.split(',').map(v => v.trim()).filter(Boolean))
     const columnMood = song.Mood ? song.Mood.split(/[;,]/).map(m => m.trim()).filter(Boolean) : []
-    const allMoods = [...new Set([...junctionMoods, ...columnMood])]
+    const seenMoods = new Map<string, string>()
+    for (const m of columnMood) seenMoods.set(m.toLowerCase(), m)
+    for (const m of junctionMoods) {
+      if (!seenMoods.has(m.toLowerCase())) seenMoods.set(m.toLowerCase(), m)
+    }
+    const allMoods = [...seenMoods.values()]
 
     return {
       source_id: this.sourceId,

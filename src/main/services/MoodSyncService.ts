@@ -201,8 +201,8 @@ export class MoodSyncService {
    */
   private tagsMatch(a: string[], b: string[]): boolean {
     if (a.length !== b.length) return false
-    const sortedA = [...a].sort()
-    const sortedB = [...b].sort()
+    const sortedA = [...a].map(v => v.toLowerCase()).sort()
+    const sortedB = [...b].map(v => v.toLowerCase()).sort()
     return sortedA.every((val, i) => val === sortedB[i])
   }
 

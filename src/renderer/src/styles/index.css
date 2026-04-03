@@ -586,6 +586,260 @@
     --sidebar-gradient: linear-gradient(135deg, #f2f2f2 0%, #eaeaee 100%);
   }
 
+  /* ═══════════════════════════════════════════════
+     Film Color Grade Themes
+     ═══════════════════════════════════════════════ */
+
+  .matrix {
+    /* Matrix Theme - The Matrix (1999) terminal green */
+    --background: 140 30% 7%;                /* #0d1610 - Deep black-green */
+    --foreground: 130 20% 88%;              /* #d4e6d8 - Green-tinted white */
+    --card: 140 30% 11%;                    /* #152218 - Dark green card */
+    --card-foreground: 130 20% 88%;
+    --popover: 140 30% 11%;
+    --popover-foreground: 130 20% 88%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 140 30% 7%;
+    --secondary: 140 25% 16%;              /* #1e3024 - Green secondary */
+    --secondary-foreground: 130 20% 88%;
+    --muted: 140 25% 13%;                  /* #182a1e - Muted green */
+    --muted-foreground: 135 15% 48%;       /* #607a68 - Muted text */
+    --accent: 120 100% 50%;                /* #00ff00 - Terminal green */
+    --accent-foreground: 140 30% 7%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 130 20% 88%;
+    --border: 140 25% 20%;                 /* #263d2c - Green border */
+    --input: 140 25% 20%;
+    --ring: 0 0% 100%;
+    --bg-gradient: linear-gradient(135deg, #0a130d 0%, #051a0e 42%, #0d160f 100%);
+    --sidebar-gradient: linear-gradient(135deg, #152218 0%, #0e2814 100%);
+  }
+
+  .matrix-light {
+    /* Matrix Light (Construct) - Pale digital green */
+    --background: 135 20% 88%;             /* #d6e8db - Pale mint */
+    --foreground: 140 30% 12%;             /* #162418 - Dark green text */
+    --card: 135 18% 94%;                   /* #ecf4ee - Light green card */
+    --card-foreground: 140 30% 12%;
+    --popover: 135 18% 94%;
+    --popover-foreground: 140 30% 12%;
+    --primary: 140 30% 14%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 135 15% 82%;             /* #c8dace - Green secondary */
+    --secondary-foreground: 140 30% 12%;
+    --muted: 135 15% 85%;                 /* #d0e0d4 - Muted mint */
+    --muted-foreground: 140 15% 38%;      /* #536e58 - Muted text */
+    --accent: 140 70% 35%;                /* #1b9650 - Rich green accent */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 135 15% 75%;                /* #b4ccba - Green border */
+    --input: 135 15% 75%;
+    --ring: 140 30% 14%;
+    --bg-gradient: linear-gradient(135deg, #d4e8d8 0%, #c8e4d0 42%, #d8ead6 100%);
+    --sidebar-gradient: linear-gradient(135deg, #ecf4ee 0%, #dceee2 100%);
+  }
+
+  .fury {
+    /* Fury Theme - Mad Max: Fury Road desert orange */
+    --background: 25 35% 10%;              /* #1e1610 - Deep warm brown */
+    --foreground: 30 25% 92%;              /* #f2ece5 - Warm sand white */
+    --card: 25 35% 14%;                    /* #2c2018 - Warm brown card */
+    --card-foreground: 30 25% 92%;
+    --popover: 25 35% 14%;
+    --popover-foreground: 30 25% 92%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 25 35% 10%;
+    --secondary: 25 28% 20%;              /* #3a2c20 - Brown secondary */
+    --secondary-foreground: 30 25% 92%;
+    --muted: 25 28% 17%;                  /* #32261c - Muted brown */
+    --muted-foreground: 28 18% 50%;       /* #8a7660 - Muted sand */
+    --accent: 25 80% 50%;                 /* #e07020 - Vivid orange */
+    --accent-foreground: 25 35% 8%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 30 25% 92%;
+    --border: 25 28% 24%;                 /* #463828 - Warm border */
+    --input: 25 28% 24%;
+    --ring: 0 0% 100%;
+    --bg-gradient: linear-gradient(135deg, #1c1410 0%, #261608 42%, #201812 100%);
+    --sidebar-gradient: linear-gradient(135deg, #2c2018 0%, #2a1c10 100%);
+  }
+
+  .fury-light {
+    /* Fury Light (Mirage) - Sandy desert warmth */
+    --background: 30 30% 87%;             /* #e4d8cc - Warm sand */
+    --foreground: 25 35% 14%;             /* #2c2018 - Dark brown text */
+    --card: 30 25% 93%;                   /* #f2ece4 - Cream card */
+    --card-foreground: 25 35% 14%;
+    --popover: 30 25% 93%;
+    --popover-foreground: 25 35% 14%;
+    --primary: 25 35% 16%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 22% 80%;             /* #d4c8ba - Warm secondary */
+    --secondary-foreground: 25 35% 14%;
+    --muted: 30 22% 83%;                 /* #dacebe - Muted sand */
+    --muted-foreground: 25 18% 42%;      /* #7a6652 - Muted text */
+    --accent: 25 80% 45%;                /* #cc6418 - Burnt orange */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 20% 72%;                /* #c2b4a2 - Warm border */
+    --input: 30 20% 72%;
+    --ring: 25 35% 16%;
+    --bg-gradient: linear-gradient(135deg, #e2d6c8 0%, #e0ccb8 42%, #e4d8ca 100%);
+    --sidebar-gradient: linear-gradient(135deg, #f2ece4 0%, #e8ddd0 100%);
+  }
+
+  .gotham {
+    /* Gotham Theme - The Godfather amber noir */
+    --background: 35 25% 9%;              /* #181410 - Very dark sepia */
+    --foreground: 38 20% 90%;             /* #f0e8dd - Warm cream text */
+    --card: 35 25% 13%;                   /* #241e16 - Sepia card */
+    --card-foreground: 38 20% 90%;
+    --popover: 35 25% 13%;
+    --popover-foreground: 38 20% 90%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 35 25% 9%;
+    --secondary: 35 20% 18%;              /* #302820 - Dark sepia secondary */
+    --secondary-foreground: 38 20% 90%;
+    --muted: 35 20% 15%;                  /* #2a221a - Muted sepia */
+    --muted-foreground: 38 12% 48%;       /* #8a7e6e - Muted text */
+    --accent: 42 55% 55%;                 /* #c9a34e - Amber gold */
+    --accent-foreground: 35 25% 8%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 38 20% 90%;
+    --border: 35 20% 22%;                 /* #3a3028 - Sepia border */
+    --input: 35 20% 22%;
+    --ring: 0 0% 100%;
+    --bg-gradient: linear-gradient(135deg, #161210 0%, #1c1408 42%, #181410 100%);
+    --sidebar-gradient: linear-gradient(135deg, #241e16 0%, #201810 100%);
+  }
+
+  .gotham-light {
+    /* Gotham Light (Noir) - Aged parchment gold */
+    --background: 38 25% 86%;             /* #e0d6c6 - Parchment */
+    --foreground: 35 25% 13%;             /* #241e16 - Dark sepia text */
+    --card: 38 22% 93%;                   /* #f0eae0 - Cream card */
+    --card-foreground: 35 25% 13%;
+    --popover: 38 22% 93%;
+    --popover-foreground: 35 25% 13%;
+    --primary: 35 25% 15%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 38 18% 78%;             /* #d0c4b2 - Warm secondary */
+    --secondary-foreground: 35 25% 13%;
+    --muted: 38 18% 82%;                 /* #d8ccba - Muted parchment */
+    --muted-foreground: 38 15% 40%;      /* #746850 - Muted text */
+    --accent: 42 60% 45%;                /* #b88c20 - Deep gold */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 38 18% 70%;                /* #beb09e - Warm border */
+    --input: 38 18% 70%;
+    --ring: 35 25% 15%;
+    --bg-gradient: linear-gradient(135deg, #ded4c4 0%, #dcceb6 42%, #e0d6c6 100%);
+    --sidebar-gradient: linear-gradient(135deg, #f0eae0 0%, #e6dccb 100%);
+  }
+
+  .neon {
+    /* Neon Theme - Blade Runner 2049 cyberpunk */
+    --background: 240 20% 10%;            /* #161620 - Deep navy */
+    --foreground: 250 15% 92%;            /* #e8e4f2 - Cool lavender white */
+    --card: 240 20% 14%;                  /* #1e1e2e - Dark navy card */
+    --card-foreground: 250 15% 92%;
+    --popover: 240 20% 14%;
+    --popover-foreground: 250 15% 92%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 240 20% 10%;
+    --secondary: 245 18% 20%;            /* #28263a - Purple secondary */
+    --secondary-foreground: 250 15% 92%;
+    --muted: 245 18% 17%;                /* #222036 - Muted navy */
+    --muted-foreground: 250 10% 52%;     /* #7e7a90 - Muted text */
+    --accent: 320 75% 56%;               /* #e040a0 - Hot pink */
+    --accent-foreground: 240 20% 8%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 250 15% 92%;
+    --border: 245 18% 24%;               /* #34304a - Purple border */
+    --input: 245 18% 24%;
+    --ring: 0 0% 100%;
+    --bg-gradient: linear-gradient(135deg, #14141e 0%, #1a0e2a 42%, #161620 100%);
+    --sidebar-gradient: linear-gradient(135deg, #1e1e2e 0%, #1c1434 100%);
+  }
+
+  .neon-light {
+    /* Neon Light (Pastel) - Soft lavender-pink */
+    --background: 270 20% 89%;            /* #e2daea - Soft lavender */
+    --foreground: 240 20% 14%;            /* #1e1e2e - Dark navy text */
+    --card: 270 18% 95%;                  /* #f0ecf4 - Light lavender card */
+    --card-foreground: 240 20% 14%;
+    --popover: 270 18% 95%;
+    --popover-foreground: 240 20% 14%;
+    --primary: 240 20% 16%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 15% 82%;            /* #d2c8de - Lavender secondary */
+    --secondary-foreground: 240 20% 14%;
+    --muted: 270 15% 85%;                /* #d8d0e2 - Muted lavender */
+    --muted-foreground: 260 12% 42%;     /* #645a78 - Muted text */
+    --accent: 320 65% 48%;               /* #c82890 - Magenta accent */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 270 15% 76%;               /* #c4bad0 - Lavender border */
+    --input: 270 15% 76%;
+    --ring: 240 20% 16%;
+    --bg-gradient: linear-gradient(135deg, #e0d8e8 0%, #dcd0e8 42%, #e2daea 100%);
+    --sidebar-gradient: linear-gradient(135deg, #f0ecf4 0%, #e4daf0 100%);
+  }
+
+  .whimsy {
+    /* Whimsy Theme - Grand Budapest Hotel / Amélie */
+    --background: 340 20% 12%;            /* #241618 - Deep plum */
+    --foreground: 20 20% 92%;             /* #f4ece6 - Warm cream text */
+    --card: 340 20% 16%;                  /* #302024 - Plum card */
+    --card-foreground: 20 20% 92%;
+    --popover: 340 20% 16%;
+    --popover-foreground: 20 20% 92%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 340 20% 12%;
+    --secondary: 340 16% 22%;            /* #3c2a30 - Plum secondary */
+    --secondary-foreground: 20 20% 92%;
+    --muted: 340 16% 19%;                /* #352428 - Muted plum */
+    --muted-foreground: 350 12% 52%;     /* #907880 - Muted text */
+    --accent: 350 60% 60%;               /* #e06080 - Warm coral pink */
+    --accent-foreground: 340 20% 10%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 20 20% 92%;
+    --border: 340 16% 26%;               /* #48343c - Plum border */
+    --input: 340 16% 26%;
+    --ring: 0 0% 100%;
+    --bg-gradient: linear-gradient(135deg, #221416 0%, #2a1018 42%, #241618 100%);
+    --sidebar-gradient: linear-gradient(135deg, #302024 0%, #2c1820 100%);
+  }
+
+  .whimsy-light {
+    /* Whimsy Light (Storybook) - Soft blush pink */
+    --background: 15 25% 89%;             /* #ecdee0 - Soft blush */
+    --foreground: 340 20% 16%;            /* #302024 - Dark plum text */
+    --card: 15 22% 95%;                   /* #f5eeee - Pink cream card */
+    --card-foreground: 340 20% 16%;
+    --popover: 15 22% 95%;
+    --popover-foreground: 340 20% 16%;
+    --primary: 340 20% 18%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 15 18% 82%;             /* #dccece - Pink secondary */
+    --secondary-foreground: 340 20% 16%;
+    --muted: 15 18% 85%;                 /* #e0d4d6 - Muted blush */
+    --muted-foreground: 350 12% 42%;     /* #78606a - Muted text */
+    --accent: 350 55% 52%;               /* #cc4870 - Rose coral */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 15 15% 76%;                /* #c8babb - Pink border */
+    --input: 15 15% 76%;
+    --ring: 340 20% 18%;
+    --bg-gradient: linear-gradient(135deg, #eadcde 0%, #e8d4d8 42%, #ecdee0 100%);
+    --sidebar-gradient: linear-gradient(135deg, #f5eeee 0%, #eedee2 100%);
+  }
+
 }
 
 @layer base {

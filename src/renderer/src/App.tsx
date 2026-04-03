@@ -358,7 +358,7 @@ function AppContent() {
   const handleToggleCompleteness = () => {
     setShowCompletenessPanel(prev => {
       const newState = !prev
-      if (newState) { setShowWishlistPanel(false); setShowChatPanel(false) }
+      if (newState) { setShowWishlistPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false) }
       return newState
     })
   }
@@ -366,7 +366,7 @@ function AppContent() {
   const handleToggleWishlist = () => {
     setShowWishlistPanel(prev => {
       const newState = !prev
-      if (newState) { setShowCompletenessPanel(false); setShowChatPanel(false) }
+      if (newState) { setShowCompletenessPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false) }
       return newState
     })
   }
@@ -471,7 +471,7 @@ function AppContent() {
           </SectionErrorBoundary>
         ) : (
           <main
-            className="fixed top-[88px] bottom-0 transition-[left,right] duration-300 ease-out"
+            className="fixed top-[76px] bottom-0 transition-[left,right] duration-300 ease-out"
             style={{
               left: sidebarCollapsed ? '96px' : '288px',
               right: '16px'
