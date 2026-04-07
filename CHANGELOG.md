@@ -2,6 +2,71 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.2](https://github.com/bbidwell85/totality/compare/v0.3.1...v0.3.2) (2026-04-07)
+
+
+### Features
+
+* add 75% opacity and backdrop blur to Tag Sync panel ([fc2cb93](https://github.com/bbidwell85/totality/commit/fc2cb938d83c68043e1c0eda0168736e5eb82cc1))
+* add genre extraction from Plex and Kodi, generalize tag sync ([0061527](https://github.com/bbidwell85/totality/commit/00615274044c086ac4ca6dbbbf572d1353f8b7d8))
+* add genre write support for MediaMonkey and Kodi ([7499f56](https://github.com/bbidwell85/totality/commit/7499f56fed81f886971886452b4202fd02ffb5c8))
+* add Kodi mood write with safety guards ([ebce11a](https://github.com/bbidwell85/totality/commit/ebce11a26c98fdf36d94277250f927b6523e1d7d))
+* add MediaMonkey provider with mood extraction and FFmpeg co-install ([fc66e2b](https://github.com/bbidwell85/totality/commit/fc66e2b2b81a25589cca01328bd1d2278ab51221))
+* add mood sync comparison UI and Plex mood write ([f807447](https://github.com/bbidwell85/totality/commit/f807447009117256fa39f24494e72b7fa3e37808))
+* add Overwrite/Append mode toggle for mood sync ([95eebb6](https://github.com/bbidwell85/totality/commit/95eebb66e33446e3a69cac95e8362e085ec49f90))
+* add per-track sync animation and failure indicators ([57a0677](https://github.com/bbidwell85/totality/commit/57a0677e506575b8266c1e921cc701f2babc2cd3))
+* add search, selective sync, and source comparison to Mood Sync panel ([7684667](https://github.com/bbidwell85/totality/commit/7684667e749eb322b85e1ff46f017b97be21cb28))
+* auto-completeness after scans, live refresh, UI polish ([bcbb3ea](https://github.com/bbidwell85/totality/commit/bcbb3eaf4d72ea2a30bccde9fc8112cf773ed108))
+* dual-field comparison view with difference highlighting ([b108cad](https://github.com/bbidwell85/totality/commit/b108caddffe400b4a131522e93fee641f46c34de))
+* fetch Plex mood tags during music scan ([1bd10aa](https://github.com/bbidwell85/totality/commit/1bd10aa59e68a9d6772f38bce4a25258f2d30664))
+* generalize sync to support mood and genre fields ([d719d41](https://github.com/bbidwell85/totality/commit/d719d4177f29c33bd83026d8b2ff7e67133ea0fc))
+* move Mood Sync to dedicated panel with TopBar button ([d081681](https://github.com/bbidwell85/totality/commit/d0816817a79dcd9b316423a090c14a306aafe02c))
+* restructure Tag Sync panel into logical steps ([60bd9b4](https://github.com/bbidwell85/totality/commit/60bd9b401540f281e83991296db0dd2a50ae1517))
+* show genre and mood in music track details modal header ([b325ac5](https://github.com/bbidwell85/totality/commit/b325ac59694819bea785af0b8ace1e80584d5db5))
+* support mood sync to read-only targets (MediaMonkey, Kodi Local) ([b00966b](https://github.com/bbidwell85/totality/commit/b00966bcf0f75f503d8914a176375ccea6c3521f))
+* write mood tags to MediaMonkey database with safety guards ([637e3ab](https://github.com/bbidwell85/totality/commit/637e3ab7b8dc514dcf419beec9ee19135a1572d2))
+
+
+### Bug Fixes
+
+* 5 high-priority issues from pre-release audit ([828c9d6](https://github.com/bbidwell85/totality/commit/828c9d6fdde4cf0ed5555a5d2da3ebc7f9e72c68))
+* align MoodSyncPanel with settings tab design patterns ([f363dbc](https://github.com/bbidwell85/totality/commit/f363dbcadf582c4a261c1862208f07fa2ca7384e))
+* ambiguous source_id column in getIncompleteSeries query ([d1163ec](https://github.com/bbidwell85/totality/commit/d1163ec47b6efb39afb38b10d0ff2ec1b51a0e57))
+* audit cleanup — lint warnings, ProviderType parity, queue guard, tag sync fixes ([71a7dbc](https://github.com/bbidwell85/totality/commit/71a7dbc73edc9069e1c93e94d594706e0b9e989c))
+* centralize all deletion cleanup in database methods ([51573fc](https://github.com/bbidwell85/totality/commit/51573fc7b67d220c53751cdfe4e7126a3c698941))
+* change mood sync logging from warn to log level ([4432ec1](https://github.com/bbidwell85/totality/commit/4432ec1449d751c06367ace3121342fbd3e5cf1e))
+* code review cleanup — security, performance, accessibility ([e0c00b4](https://github.com/bbidwell85/totality/commit/e0c00b475c1b4203f7a8ed06422a78304e58aee1))
+* comprehensive data layer audit — 42 findings across 9 categories ([809f53d](https://github.com/bbidwell85/totality/commit/809f53d8208ca0b66cf76e7e292378bc60df0345))
+* comprehensive stale data cleanup after Plex deletions ([a20a246](https://github.com/bbidwell85/totality/commit/a20a2460059cd9ecb729a0c7641392f0932dfed2))
+* dashboard data accuracy — 5 issues from comprehensive audit ([6e31df6](https://github.com/bbidwell85/totality/commit/6e31df672657133eaf2bb58cede4c3099c3763d7))
+* deleted Plex items persisting on dashboard after rescan ([8c95587](https://github.com/bbidwell85/totality/commit/8c95587e32f5e8e8f7c8b30dd8050f37e247e49f))
+* don't recalculate collections from empty join table, refresh dashboard on analysis complete ([18d2733](https://github.com/bbidwell85/totality/commit/18d27332b0fd4a6fc9cf9cf579a66c162798c946))
+* fetch Plex mood tags via per-mood-tag endpoint ([17ea67b](https://github.com/bbidwell85/totality/commit/17ea67b6cb9334242371ecd76bd318c04ae7fa76))
+* filter tag sync panel to only show supported providers ([06bab74](https://github.com/bbidwell85/totality/commit/06bab74bab3d0e5ded89729d3c66d7139ed11e53))
+* increase Tag Sync panel opacity from 75% to 90% ([1bc480f](https://github.com/bbidwell85/totality/commit/1bc480f4a3c5bc221c7fda8cab06ff363688696e))
+* move MoodSyncPanel outside dashboard-only block ([1d03b67](https://github.com/bbidwell85/totality/commit/1d03b672503490c9b7208c3860c80af1df56deab))
+* optimize mood sync — count queries, shared utils, reduced memory ([3f43fb7](https://github.com/bbidwell85/totality/commit/3f43fb7e446d2c27245396a6a24b19cf0118de55))
+* preserve mood data during rescans with COALESCE ([351289d](https://github.com/bbidwell85/totality/commit/351289d5a8638698951b639fd50e570385d54e14))
+* QA architecture — transactions, debounce, safety guards ([e38d6a8](https://github.com/bbidwell85/totality/commit/e38d6a80519fc9b27311d53b203b35e454f8525e))
+* redesign MoodSyncPanel to match WishlistPanel patterns ([3ba3c4d](https://github.com/bbidwell85/totality/commit/3ba3c4dc2d023bc4793e4c967d58d4a501fcb80f))
+* remove broken recalculateCollectionStats, add library:updated listener ([8814974](https://github.com/bbidwell85/totality/commit/8814974c6d8b0760d73ba381b0aa2ca53025c149))
+* replace field tabs with radio buttons, fix genre label text ([d001d61](https://github.com/bbidwell85/totality/commit/d001d619c8c1c4e883020c375bb7960afd41e55c))
+* replace Music icon with Tags icon for Tag Sync panel ([42d4562](https://github.com/bbidwell85/totality/commit/42d45622149a889e3d700951c5fce3399309f39b))
+* resolve FTS tokenizer and orphan index errors in MM5 write ([42ab98e](https://github.com/bbidwell85/totality/commit/42ab98e00e2945be82bf4b823d08cd3db842173e))
+* revert COALESCE on mood upsert — rescans must reflect actual data ([66ee06c](https://github.com/bbidwell85/totality/commit/66ee06cff57a44cc0bd0f6a0790c411a63143c7a))
+* set Tag Sync panel opacity to 90% ([8539973](https://github.com/bbidwell85/totality/commit/8539973e92761600e9e1855fc819400e251c412f))
+* show sync success in panel after Kodi/MediaMonkey writes ([c5b19ab](https://github.com/bbidwell85/totality/commit/c5b19ab9b1ee1785e71d39fe5cbc7cec7a85a6be))
+* split comma-separated moods from MediaMonkey into individual tags ([a9736a1](https://github.com/bbidwell85/totality/commit/a9736a1f08cc30d33e60af55a84a2cec810fbaf1))
+* update album track_count and artist counts on track deletion ([9f80c50](https://github.com/bbidwell85/totality/commit/9f80c5055480cde49d05b717e4ff8f03c25f3258))
+* update collections inline after movie deletion (no TMDB API calls) ([254fa9c](https://github.com/bbidwell85/totality/commit/254fa9c1155ae11a27158eceda5ed5b465450e37))
+* update collections inside deleteMediaItem, not in caller ([7d9618b](https://github.com/bbidwell85/totality/commit/7d9618b12bec70eea726e972bf58be27448e969f))
+* update local DB after mood sync to reflect changes in comparison ([432949d](https://github.com/bbidwell85/totality/commit/432949d59465b07b4caae5266cc6ef28da9bdaa6))
+* update series completeness inline instead of deleting it ([90da795](https://github.com/bbidwell85/totality/commit/90da795898e826d17f629f014fb8be9cdecbc59e))
+* update write log messages from "mood updates" to "tag updates" ([a41cba4](https://github.com/bbidwell85/totality/commit/a41cba42886334da7f8c32265dac3533afdd8583))
+* use bg-card/95 for Tag Sync panel background tint ([8827c9f](https://github.com/bbidwell85/totality/commit/8827c9fb3e3dd6de18c43baddc5f93e650b29af8))
+* use theme card color at 90% opacity for Tag Sync panel ([3a3dc1a](https://github.com/bbidwell85/totality/commit/3a3dc1a1f828d6f5009c932182851c29cd036cc1))
+* validate collection ownership during orphan cleanup ([bea616b](https://github.com/bbidwell85/totality/commit/bea616b0eff5b41df657609357834f61bad65bde))
+
 ### [0.3.1](https://github.com/bbidwell85/totality/compare/v0.3.0...v0.3.1) (2026-03-26)
 
 
