@@ -323,6 +323,7 @@ export function Dashboard({
     } finally {
       setIsLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- includeEps/includeSingles are read from settings inside, adding them would cause reload loops
   }, [activeSourceId])
 
   // Debounced reload coalesces rapid event-driven refreshes (300ms)

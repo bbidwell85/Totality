@@ -628,40 +628,43 @@ export function convertKodiImageUrl(imageUrl: string | null | undefined): string
 export function convertKodiPathToLocal(kodiPath: string): string {
   if (!kodiPath) return kodiPath
 
+  // Strip Kodi section prefix (e.g., "music@smb://..." → "smb://...")
+  const path = kodiPath.replace(/^[a-z]+@(?=[a-z]+:\/\/)/i, '')
+
   // Handle SMB URLs: smb://server/share/path -> \\server\share\path (Windows UNC)
-  if (kodiPath.startsWith('smb://')) {
+  if (path.startsWith('smb://')) {
     // Remove smb:// prefix and convert forward slashes to backslashes
-    const uncPath = kodiPath.slice(6).replace(/\//g, '\\')
+    const uncPath = path.slice(6).replace(/\//g, '\\')
     return '\\\\' + uncPath
   }
 
   // Handle NFS URLs: nfs://server/export/path -> convert using configured mount mappings
   // Users configure mappings in Settings > Services (e.g., "nas.local/media" -> "Z:")
-  if (kodiPath.startsWith('nfs://')) {
-    const localPath = convertNfsPathToLocal(kodiPath)
-    if (localPath !== kodiPath) {
+  if (path.startsWith('nfs://')) {
+    const localPath = convertNfsPathToLocal(path)
+    if (localPath !== path) {
       return localPath
     }
     // No mapping found - log warning with guidance
-    console.warn(`[KodiDatabaseSchema] No NFS mount mapping configured for path with scheme: ${kodiPath.split('://')[0] || 'unknown'}`)
+    console.warn(`[KodiDatabaseSchema] No NFS mount mapping configured for path with scheme: ${path.split('://')[0] || 'unknown'}`)
     console.warn('[KodiDatabaseSchema] Configure NFS mappings in Settings > Services > Kodi NFS Mounts')
-    return kodiPath
+    return path
   }
 
   // Handle other URL schemes that Kodi might use
-  if (kodiPath.includes('://') && !kodiPath.startsWith('file://')) {
+  if (path.includes('://') && !path.startsWith('file://')) {
     // Unknown URL scheme, return as-is
-    console.warn(`[KodiDatabaseSchema] Unknown URL scheme for FFprobe: ${kodiPath.split('://')[0] || 'unknown'}`)
-    return kodiPath
+    console.warn(`[KodiDatabaseSchema] Unknown URL scheme for FFprobe: ${path.split('://')[0] || 'unknown'}`)
+    return path
   }
 
   // Handle file:// URLs
-  if (kodiPath.startsWith('file://')) {
-    return kodiPath.slice(7)
+  if (path.startsWith('file://')) {
+    return path.slice(7)
   }
 
   // Already a local path
-  return kodiPath
+  return path
 }
 
 /**

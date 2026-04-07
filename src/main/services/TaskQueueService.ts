@@ -116,6 +116,7 @@ export class TaskQueueService {
 
   private static readonly MAX_COMPLETED_TASKS = 50
   private static readonly MAX_HISTORY_ENTRIES = 100
+  private static readonly MAX_QUEUE_DEPTH = 50
   private static readonly PROGRESS_THROTTLE_MS = 250 // Max ~4 progress events/second
 
   /**
@@ -146,6 +147,12 @@ export class TaskQueueService {
     if (existing) {
       console.log(`[TaskQueue] Duplicate task already queued: ${definition.label} (${existing.id})`)
       return existing.id
+    }
+
+    // Guard against runaway queue accumulation
+    if (this.queue.length >= TaskQueueService.MAX_QUEUE_DEPTH) {
+      console.warn(`[TaskQueue] Queue depth limit reached (${TaskQueueService.MAX_QUEUE_DEPTH}), rejecting: ${definition.label}`)
+      return ''
     }
 
     const task: QueuedTask = {

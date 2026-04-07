@@ -1921,7 +1921,7 @@ export class DatabaseService {
       )
       if (collectionsResult.length > 0 && collectionsResult[0].values.length > 0) {
         for (const row of collectionsResult[0].values) {
-          const [id, ownedIdsStr, _ownedMovies, totalMovies] = row as [number, string, number, number]
+          const [id, ownedIdsStr, /* ownedMovies */, totalMovies] = row as [number, string, number, number]
           try {
             const ownedIds: string[] = JSON.parse(ownedIdsStr || '[]')
             const validIds = ownedIds.filter(tmdbId => {
@@ -2002,7 +2002,7 @@ export class DatabaseService {
 
     let updated = 0
     for (const row of result[0].values) {
-      const [id, ownedIdsStr, _ownedMovies, totalMovies] = row as [number, string, number, number]
+      const [id, ownedIdsStr, /* ownedMovies */, totalMovies] = row as [number, string, number, number]
       try {
         const ownedIds: string[] = JSON.parse(ownedIdsStr || '[]')
         const filteredIds = ownedIds.filter(oid => !deletedSet.has(oid))

@@ -85,6 +85,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       setTimeout(() => closeButtonRef.current?.focus(), 100)
       loadSources()
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadSources is stable, adding it causes re-fetch loops
   }, [isOpen, activeField])
 
   useEffect(() => {
@@ -526,7 +527,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                 </div>
                 <button
                   onClick={() => handleSyncClick(target.sourceId)}
-                  disabled={syncing || target.mismatchCount === 0 || !hasActiveField}
+                  disabled={syncing || target.mismatchCount === 0 || !hasActiveField || selectedTrackIds.size === 0}
                   aria-label={`Sync ${fieldLabel} to ${target.sourceName}`}
                   className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ml-2 focus:outline-hidden focus:ring-2 focus:ring-primary"
                 >

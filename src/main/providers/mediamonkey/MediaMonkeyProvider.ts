@@ -251,6 +251,7 @@ export class MediaMonkeyProvider implements MediaProvider {
 
       // Batch-load all mood data from junction table
       const moodMap = this.loadAllMoods()
+      console.log(`[MediaMonkeyProvider] Loaded ${moodMap.size} songs with junction table moods`)
 
       // Batch-load album cover art paths (external file covers)
       const coverMap = this.loadAlbumCovers()
@@ -436,11 +437,12 @@ export class MediaMonkeyProvider implements MediaProvider {
     const hiRes = isHiRes(song.SamplingFrequency, song.BPS, lossless)
 
     // Merge mood from junction table and Songs.Mood column
-    // MediaMonkey stores comma-separated moods as single entries (e.g., "Dreamy, Ethereal, Cinematic")
-    // Split on commas to get individual mood tags for Plex compatibility
+    // Junction table: MediaMonkey stores comma-separated moods as single entries — split on commas
+    // Songs.Mood column: semicolon-delimited (both natively and after tag sync writes) — split on semicolons only
+    // Splitting column on commas would destroy mood values containing commas (e.g., "R&B, Soul")
     // Case-insensitive dedup: prefer column values (which have the synced casing after tag sync)
     const junctionMoods = (moodMap.get(song.ID) || []).flatMap(m => m.split(',').map(v => v.trim()).filter(Boolean))
-    const columnMood = song.Mood ? song.Mood.split(/[;,]/).map(m => m.trim()).filter(Boolean) : []
+    const columnMood = song.Mood ? song.Mood.split(';').map(m => m.trim()).filter(Boolean) : []
     const seenMoods = new Map<string, string>()
     for (const m of columnMood) seenMoods.set(m.toLowerCase(), m)
     for (const m of junctionMoods) {
@@ -773,6 +775,36 @@ export class MediaMonkeyProvider implements MediaProvider {
         console.log('[MediaMonkeyProvider] Writing database to disk...')
         fs.writeFileSync(this.databasePath, Buffer.from(finalBuffer))
         console.log(`[MediaMonkeyProvider] Wrote ${result.written} tag updates to ${path.basename(this.databasePath)}`)
+
+        // Verify: re-read the DB and check that moods actually persisted
+        try {
+          const verifyBuffer = fs.readFileSync(this.databasePath)
+          const verifyDb = new SQL.Database(verifyBuffer)
+          verifyDb.run('PRAGMA writable_schema = ON')
+          verifyDb.run("UPDATE sqlite_master SET sql = replace(sql, 'IUNICODE', 'NOCASE') WHERE sql LIKE '%IUNICODE%'")
+          verifyDb.run('PRAGMA writable_schema = OFF')
+          const vBuf = verifyDb.export()
+          verifyDb.close()
+          const vDb = new SQL.Database(vBuf)
+
+          let verified = 0
+          let mismatches = 0
+          for (const { songId, moods } of trackUpdates) {
+            const row = vDb.exec(`SELECT Mood FROM Songs WHERE ID = ${songId}`)
+            const savedMood = row.length > 0 && row[0].values.length > 0 ? String(row[0].values[0][0]) : ''
+            const expected = moods.join('; ')
+            if (savedMood === expected) {
+              verified++
+            } else {
+              mismatches++
+              console.warn(`[MediaMonkeyProvider] VERIFY MISMATCH song ${songId}: expected="${expected}", got="${savedMood}"`)
+            }
+          }
+          vDb.close()
+          console.log(`[MediaMonkeyProvider] Verification: ${verified} OK, ${mismatches} mismatches`)
+        } catch (verifyErr) {
+          console.warn(`[MediaMonkeyProvider] Verification failed: ${getErrorMessage(verifyErr)}`)
+        }
 
       } catch (txError) {
         console.warn(`[MediaMonkeyProvider] Transaction error: ${getErrorMessage(txError)}`)

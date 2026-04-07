@@ -277,6 +277,7 @@ export function useLibraryEventListeners({
       cleanupScanCompleted?.()
       window.removeEventListener('exclusions-changed', handleExclusionsChanged)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadMedia is stable via parent; adding it causes re-subscription loops
   }, [
     handleLibraryUpdate,
     addToast,
