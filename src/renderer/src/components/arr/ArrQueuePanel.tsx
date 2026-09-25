@@ -214,37 +214,36 @@ export function ArrQueuePanel({ isOpen, onClose }: ArrQueuePanelProps) {
   ].filter(([, items]) => (items as ArrQueueItem[]).length > 0) as [ArrType, ArrQueueItem[]][]
 
   return (
-    <div className={`fixed inset-y-0 right-0 w-80 bg-background border-l border-border shadow-2xl z-50 flex flex-col transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
+    <div className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
       isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
     }`}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+      <div className="flex items-center justify-between p-4 border-b border-border/30">
         <div className="flex items-center gap-2">
-          <Download className="w-4 h-4 text-muted-foreground" />
-          <h2 className="font-semibold text-sm">Downloads</h2>
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Downloads</h2>
           {queue.length > 0 && (
-            <span className="text-xs text-muted-foreground">({queue.length})</span>
+            <span className="px-1.5 py-0.5 text-xs font-medium bg-primary/20 text-primary rounded-full">{queue.length}</span>
           )}
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={loadQueue}
             disabled={loading}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-hidden disabled:opacity-50"
             title="Refresh queue"
           >
             {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
             ) : (
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="w-4 h-4 text-muted-foreground" />
             )}
           </button>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors"
-            title="Close"
+            className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary"
+            aria-label="Close downloads panel"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
       </div>
