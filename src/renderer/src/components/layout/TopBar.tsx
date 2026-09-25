@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
-import { Search, X, Home, Film, Tv, Music, Tags, Library, Star, Settings, RefreshCw, Disc3, User, Bot, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Search, X, Home, Film, Tv, Music, Tags, BarChart2, Star, Settings, RefreshCw, Disc3, User, Bot, ArrowLeft, ArrowRight, Download } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { useNavigation } from '../../contexts/NavigationContext'
@@ -34,6 +34,8 @@ interface TopBarProps {
   onToggleWishlist: () => void
   onToggleChat: () => void
   onToggleMoodSync: () => void
+  onToggleArrQueue: () => void
+  showArrQueue: boolean
   showCompletenessPanel: boolean
   showWishlistPanel: boolean
   showChatPanel: boolean
@@ -58,6 +60,8 @@ export function TopBar({
   onToggleWishlist,
   onToggleChat,
   onToggleMoodSync,
+  onToggleArrQueue,
+  showArrQueue,
   showCompletenessPanel,
   showWishlistPanel,
   showChatPanel,
@@ -98,6 +102,26 @@ export function TopBar({
       if (key === SETTING_KEYS.tmdb_api_key) setTmdbApiKeySet(hasValue)
     })
     return unsubscribe
+  }, [])
+
+  // Check if any arr apps are configured
+  const [arrAppsConfigured, setArrAppsConfigured] = useState(false)
+  useEffect(() => {
+    const checkArr = () => {
+      window.electronAPI.arrGetConfiguredApps()
+        .then(apps => {
+          const a = apps as { radarr: boolean; sonarr: boolean; lidarr: boolean }
+          setArrAppsConfigured(a.radarr || a.sonarr || a.lidarr)
+        })
+        .catch(() => {})
+    }
+    checkArr()
+    const unsub = window.electronAPI.onSettingsChanged(({ key }) => {
+      if (key.startsWith('radarr') || key.startsWith('sonarr') || key.startsWith('lidarr')) {
+        checkArr()
+      }
+    })
+    return unsub
   }, [])
 
   const showEmptyState = sources.length === 0
@@ -661,11 +685,11 @@ export function TopBar({
                 ? 'bg-white text-black'
                 : 'text-white hover:bg-white/10'
             }`}
-            title={!tmdbApiKeySet ? "TMDB API key needed for completeness" : "Collection Completeness"}
+            title={!tmdbApiKeySet ? "TMDB API key needed for completeness" : "Completeness"}
             aria-label="Toggle completeness panel"
             aria-pressed={showCompletenessPanel}
           >
-            <Library className="w-5 h-5" />
+            <BarChart2 className="w-5 h-5" />
             {!tmdbApiKeySet && (
               <span
                 className="absolute top-1 right-1 w-2 h-2 rounded-full"
@@ -708,6 +732,23 @@ export function TopBar({
               </span>
             )}
           </button>
+
+          {/* Download Queue Toggle — only shown when arr apps are configured */}
+          {arrAppsConfigured && (
+            <button
+              onClick={onToggleArrQueue}
+              className={`p-2 rounded-md transition-colors ${
+                showArrQueue
+                  ? 'bg-white text-black'
+                  : 'text-white hover:bg-white/10'
+              }`}
+              title="Download queue"
+              aria-label="Toggle download queue"
+              aria-pressed={showArrQueue}
+            >
+              <Download className="w-5 h-5" />
+            </button>
+          )}
 
           {/* Activity Panel */}
           <ActivityPanel />

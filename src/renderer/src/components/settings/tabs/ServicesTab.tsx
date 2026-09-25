@@ -1,4 +1,4 @@
-import { useState, useEffect, useId, useCallback } from 'react'
+import { useState, useEffect, useId, useCallback, useRef } from 'react'
 import {
   Eye,
   EyeOff,
@@ -139,6 +139,8 @@ function ArrServiceCard({ type, expanded, onToggle }: { type: ArrType; expanded:
   const [rootFolders, setRootFolders] = useState<Array<{ id: number; path: string }>>([])
   const [profileId, setProfileId] = useState('')
   const [rootFolder, setRootFolder] = useState('')
+  const [savedField, setSavedField] = useState<'profile' | 'folder' | null>(null)
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { label } = ARR_META[type]
 
   // Load saved settings on mount
@@ -217,14 +219,22 @@ function ArrServiceCard({ type, expanded, onToggle }: { type: ArrType; expanded:
     ])
   }
 
+  const showSaved = (field: 'profile' | 'folder') => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    setSavedField(field)
+    savedTimerRef.current = setTimeout(() => setSavedField(null), 2000)
+  }
+
   const handleProfileChange = useCallback(async (id: string) => {
     setProfileId(id)
     await window.electronAPI.setSetting(`${type}_quality_profile_id`, id)
+    showSaved('profile')
   }, [type])
 
   const handleRootFolderChange = useCallback(async (path: string) => {
     setRootFolder(path)
     await window.electronAPI.setSetting(`${type}_root_folder`, path)
+    showSaved('folder')
   }, [type])
 
   const isConfigured = status === 'valid'
@@ -310,7 +320,10 @@ function ArrServiceCard({ type, expanded, onToggle }: { type: ArrType; expanded:
           <div className="grid grid-cols-2 gap-3 pt-1 border-t border-border/20">
             {profiles.length > 0 && (
               <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quality Profile</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quality Profile</label>
+                  {savedField === 'profile' && <span className="text-xs text-green-400">Saved ✓</span>}
+                </div>
                 <select
                   value={profileId}
                   onChange={(e) => handleProfileChange(e.target.value)}
@@ -325,7 +338,10 @@ function ArrServiceCard({ type, expanded, onToggle }: { type: ArrType; expanded:
             )}
             {rootFolders.length > 0 && (
               <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Root Folder</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Root Folder</label>
+                  {savedField === 'folder' && <span className="text-xs text-green-400">Saved ✓</span>}
+                </div>
                 <select
                   value={rootFolder}
                   onChange={(e) => handleRootFolderChange(e.target.value)}
@@ -369,6 +385,8 @@ export function ServicesTab() {
   const [ffmpegAvailable, setFfmpegAvailable] = useState(false)
   const [isInstalling, setIsInstalling] = useState(false)
   const [isUninstalling, setIsUninstalling] = useState(false)
+  const [confirmUninstall, setConfirmUninstall] = useState(false)
+  const confirmUninstallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [installProgress, setInstallProgress] = useState<{ stage: string; percent: number } | null>(
     null
   )
@@ -637,7 +655,13 @@ export function ServicesTab() {
   }
 
   const handleUninstallFFprobe = async () => {
-    if (!confirm('Are you sure you want to uninstall FFprobe?')) return
+    if (!confirmUninstall) {
+      setConfirmUninstall(true)
+      confirmUninstallTimerRef.current = setTimeout(() => setConfirmUninstall(false), 3000)
+      return
+    }
+    if (confirmUninstallTimerRef.current) clearTimeout(confirmUninstallTimerRef.current)
+    setConfirmUninstall(false)
     setIsUninstalling(true)
     setFfprobeError(null)
     try {
@@ -823,14 +847,18 @@ export function ServicesTab() {
                 <button
                   onClick={handleUninstallFFprobe}
                   disabled={isUninstalling || isInstalling}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors disabled:opacity-50"
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded transition-colors disabled:opacity-50 ${
+                    confirmUninstall
+                      ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                      : 'text-red-400 hover:text-red-300 hover:bg-red-500/10'
+                  }`}
                 >
                   {isUninstalling ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <Trash2 className="w-3.5 h-3.5" />
                   )}
-                  Uninstall
+                  {isUninstalling ? 'Uninstalling…' : confirmUninstall ? 'Click again to confirm' : 'Uninstall'}
                 </button>
               ) : ffprobeAvailable && !ffprobeBundled ? (
                 <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground">

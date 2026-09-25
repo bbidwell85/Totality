@@ -215,7 +215,7 @@ export const CollectionModal = memo(function CollectionModal({
                           <button
                             onClick={() => onDismissCollectionMovie(movie.tmdb_id!, movie.title)}
                             className="w-7 h-7 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                            title="Dismiss"
+                            title="Hide from view"
                           >
                             <EyeOff className="w-4 h-4" />
                           </button>

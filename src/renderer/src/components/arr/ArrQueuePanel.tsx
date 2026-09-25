@@ -213,10 +213,10 @@ export function ArrQueuePanel({ isOpen, onClose }: ArrQueuePanelProps) {
     ['lidarr', lidarrItems],
   ].filter(([, items]) => (items as ArrQueueItem[]).length > 0) as [ArrType, ArrQueueItem[]][]
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-y-0 right-0 w-80 bg-background border-l border-border shadow-2xl z-50 flex flex-col">
+    <div className={`fixed inset-y-0 right-0 w-80 bg-background border-l border-border shadow-2xl z-50 flex flex-col transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
+      isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
+    }`}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">

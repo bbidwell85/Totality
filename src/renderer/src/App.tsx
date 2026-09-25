@@ -8,6 +8,7 @@ import { WishlistPanel } from './components/wishlist/WishlistPanel'
 import { CompletenessPanel } from './components/library/CompletenessPanel'
 import { ChatPanel } from './components/chat/ChatPanel'
 import { MoodSyncPanel } from './components/mood/MoodSyncPanel'
+import { ArrQueuePanel } from './components/arr/ArrQueuePanel'
 import type { ViewContext } from './hooks/useChat'
 import { AIInsightsPanel } from './components/library/AIInsightsPanel'
 import { SourceProvider, useSources } from './contexts/SourceContext'
@@ -48,6 +49,7 @@ function AppContent() {
   const [showWishlistPanel, setShowWishlistPanel] = useState(false)
   const [showChatPanel, setShowChatPanel] = useState(false)
   const [showMoodSyncPanel, setShowMoodSyncPanel] = useState(false)
+  const [showArrQueue, setShowArrQueue] = useState(false)
   const [showAIInsights, setShowAIInsights] = useState(false)
   const [aiInsightsInitialReport, setAiInsightsInitialReport] = useState<string | undefined>(undefined)
 
@@ -358,7 +360,7 @@ function AppContent() {
   const handleToggleCompleteness = () => {
     setShowCompletenessPanel(prev => {
       const newState = !prev
-      if (newState) { setShowWishlistPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false) }
+      if (newState) { setShowWishlistPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false); setShowArrQueue(false) }
       return newState
     })
   }
@@ -366,7 +368,7 @@ function AppContent() {
   const handleToggleWishlist = () => {
     setShowWishlistPanel(prev => {
       const newState = !prev
-      if (newState) { setShowCompletenessPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false) }
+      if (newState) { setShowCompletenessPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false); setShowArrQueue(false) }
       return newState
     })
   }
@@ -374,7 +376,7 @@ function AppContent() {
   const handleToggleChat = () => {
     setShowChatPanel(prev => {
       const newState = !prev
-      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowMoodSyncPanel(false) }
+      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowMoodSyncPanel(false); setShowArrQueue(false) }
       return newState
     })
   }
@@ -382,7 +384,15 @@ function AppContent() {
   const handleToggleMoodSync = () => {
     setShowMoodSyncPanel(prev => {
       const newState = !prev
-      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowChatPanel(false) }
+      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowChatPanel(false); setShowArrQueue(false) }
+      return newState
+    })
+  }
+
+  const handleToggleArrQueue = () => {
+    setShowArrQueue(prev => {
+      const newState = !prev
+      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false) }
       return newState
     })
   }
@@ -444,10 +454,12 @@ function AppContent() {
           onToggleWishlist={handleToggleWishlist}
           onToggleChat={handleToggleChat}
           onToggleMoodSync={handleToggleMoodSync}
+          onToggleArrQueue={handleToggleArrQueue}
           showCompletenessPanel={showCompletenessPanel}
           showWishlistPanel={showWishlistPanel}
           showChatPanel={showChatPanel}
           showMoodSyncPanel={showMoodSyncPanel}
+          showArrQueue={showArrQueue}
           isAutoRefreshing={isAutoRefreshing}
           hasMovies={hasMovies}
           hasTV={hasTV}
@@ -552,6 +564,11 @@ function AppContent() {
         <MoodSyncPanel
           isOpen={showMoodSyncPanel}
           onClose={() => setShowMoodSyncPanel(false)}
+        />
+        {/* Arr Download Queue Panel - rendered at App level, available in all views */}
+        <ArrQueuePanel
+          isOpen={showArrQueue}
+          onClose={() => setShowArrQueue(false)}
         />
         {/* Chat Panel - rendered at App level, available in all views */}
         <ChatPanel

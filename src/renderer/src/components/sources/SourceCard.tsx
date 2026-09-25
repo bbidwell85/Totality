@@ -4,7 +4,7 @@
  * Displays a single media source with its status and actions.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Server, HardDrive, Film, Tv, Music, Folder } from 'lucide-react'
 import { useSources, type ProviderType } from '../../contexts/SourceContext'
 import type { MediaSourceResponse, MediaLibraryResponse } from '../../../../preload/index'
@@ -133,6 +133,8 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'error'>('unknown')
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // FFprobe state (for kodi-local sources)
   const [ffprobeAvailable, setFfprobeAvailable] = useState<boolean | null>(null)
@@ -206,12 +208,15 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
     }
   }
 
-  // Handle delete
+  // Handle delete with 2-click confirm
   const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to remove "${source.display_name}"? This will also delete all scanned media items from this source.`)) {
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      confirmDeleteTimerRef.current = setTimeout(() => setConfirmDelete(false), 3000)
       return
     }
-
+    if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current)
+    setConfirmDelete(false)
     setIsDeleting(true)
     try {
       await removeSource(source.source_id)
@@ -669,9 +674,13 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
             <button
               onClick={handleDelete}
               disabled={isDeleting}
-              className="text-xs px-3 py-1.5 rounded border border-destructive text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              className={`text-xs px-3 py-1.5 rounded border disabled:opacity-50 transition-colors ${
+                confirmDelete
+                  ? 'border-destructive bg-destructive text-destructive-foreground'
+                  : 'border-destructive text-destructive hover:bg-destructive/10'
+              }`}
             >
-              {isDeleting ? 'Removing...' : 'Remove'}
+              {isDeleting ? 'Removing...' : confirmDelete ? 'Click again to confirm' : 'Remove'}
             </button>
           </div>
         </div>

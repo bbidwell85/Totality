@@ -5,11 +5,11 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useToast } from '../../contexts/ToastContext'
 import { FixedSizeList as VirtualList, VariableSizeList } from 'react-window'
-import { Sparkles, Library, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus, EyeOff, Download } from 'lucide-react'
+import { Sparkles, Library, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus, EyeOff } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { ArrButtons } from '../arr/AddToArrButton'
-import { ArrQueuePanel } from '../arr/ArrQueuePanel'
 import { MediaDetails } from '../library/MediaDetails'
 import { useSources } from '../../contexts/SourceContext'
 import type { MediaItem, MovieCollectionData, SeriesCompletenessData, ArtistCompletenessData, MusicAlbum, MissingMovie, MissingEpisode } from '../library/types'
@@ -83,6 +83,7 @@ export function Dashboard({
   hasMusic = false
 }: DashboardProps) {
   const { sources, activeSourceId } = useSources()
+  const { addToast } = useToast()
   const [movieUpgrades, setMovieUpgrades] = useState<MediaItem[]>([])
   const [tvUpgrades, setTvUpgrades] = useState<MediaItem[]>([])
   const [musicUpgrades, setMusicUpgrades] = useState<MusicAlbumUpgrade[]>([])
@@ -90,7 +91,6 @@ export function Dashboard({
   const [series, setSeries] = useState<SeriesCompletenessData[]>([])
   const [artists, setArtists] = useState<ArtistCompletenessData[]>([])
   const [arrApps, setArrApps] = useState<{ radarr: boolean; sonarr: boolean; lidarr: boolean }>({ radarr: false, sonarr: false, lidarr: false })
-  const [showArrQueue, setShowArrQueue] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [includeEps, setIncludeEps] = useState(true)
@@ -470,30 +470,44 @@ export function Dashboard({
   const dismissMovieUpgrade = useCallback(async (index: number) => {
     const item = movieUpgrades[index]
     if (!item) return
-    await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, item.title)
+    const exclusionId = await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, item.title)
     setMovieUpgrades(prev => prev.filter((_, i) => i !== index))
     emitDismissUpgrade({ mediaId: item.id })
-  }, [movieUpgrades])
+    addToast({ type: 'info', message: `Hidden: ${item.title}`, action: { label: 'Undo', onClick: async () => {
+      await window.electronAPI.removeExclusion(exclusionId)
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
+    }}})
+  }, [movieUpgrades, addToast])
 
   const dismissTvUpgrade = useCallback(async (index: number) => {
     const item = tvUpgrades[index]
     if (!item) return
-    await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, `${item.series_title} S${item.season_number}E${item.episode_number}`)
+    const label = `${item.series_title} S${item.season_number}E${item.episode_number}`
+    const exclusionId = await window.electronAPI.addExclusion('media_upgrade', item.id, undefined, undefined, label)
     setTvUpgrades(prev => prev.filter((_, i) => i !== index))
     emitDismissUpgrade({ mediaId: item.id })
-  }, [tvUpgrades])
+    addToast({ type: 'info', message: `Hidden: ${label}`, action: { label: 'Undo', onClick: async () => {
+      await window.electronAPI.removeExclusion(exclusionId)
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
+    }}})
+  }, [tvUpgrades, addToast])
 
   const dismissMusicUpgrade = useCallback(async (index: number) => {
     const album = musicUpgrades[index]
     if (!album) return
-    await window.electronAPI.addExclusion('media_upgrade', album.id, undefined, undefined, `${album.artist_name} - ${album.title}`)
+    const label = `${album.artist_name} - ${album.title}`
+    const exclusionId = await window.electronAPI.addExclusion('media_upgrade', album.id, undefined, undefined, label)
     setMusicUpgrades(prev => prev.filter((_, i) => i !== index))
-  }, [musicUpgrades])
+    addToast({ type: 'info', message: `Hidden: ${label}`, action: { label: 'Undo', onClick: async () => {
+      await window.electronAPI.removeExclusion(exclusionId)
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
+    }}})
+  }, [musicUpgrades, addToast])
 
   const dismissCollectionMovie = useCallback(async (collectionIndex: number, movie: MissingMovie) => {
     const collection = collections[collectionIndex]
     if (!collection) return
-    await window.electronAPI.addExclusion('collection_movie', undefined, movie.tmdb_id, collection.tmdb_collection_id, movie.title)
+    const exclusionId = await window.electronAPI.addExclusion('collection_movie', undefined, movie.tmdb_id, collection.tmdb_collection_id, movie.title)
     // Update the collection's missing movies, totals, and remove trivial collections
     setCollections(prev => prev.map((c, i) => {
       if (i !== collectionIndex) return c
@@ -508,24 +522,33 @@ export function Dashboard({
     }).filter(c => c.total_movies > 1))
     collectionsListInstanceRef.current?.resetAfterIndex(0)
     emitDismissCollectionMovie({ collectionId: collection.tmdb_collection_id, tmdbId: movie.tmdb_id })
-  }, [collections])
+    addToast({ type: 'info', message: `Hidden: ${movie.title}`, action: { label: 'Undo', onClick: async () => {
+      await window.electronAPI.removeExclusion(exclusionId)
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
+    }}})
+  }, [collections, addToast])
 
   const dismissSeriesEpisode = useCallback(async (seriesIndex: number, episode: MissingEpisode) => {
     const s = series[seriesIndex]
     if (!s) return
     const refKey = `S${episode.season_number}E${episode.episode_number}`
-    await window.electronAPI.addExclusion('series_episode', undefined, refKey, s.tmdb_id || s.series_title, `${s.series_title} ${refKey}`)
+    const label = `${s.series_title} ${refKey}`
+    const exclusionId = await window.electronAPI.addExclusion('series_episode', undefined, refKey, s.tmdb_id || s.series_title, label)
     setSeries(prev => prev.map((ser, i) => {
       if (i !== seriesIndex) return ser
       const filtered = (ser.missing_episodes || []).filter(ep => !(ep.season_number === episode.season_number && ep.episode_number === episode.episode_number))
       return { ...ser, missing_episodes: filtered }
     }))
-  }, [series])
+    addToast({ type: 'info', message: `Hidden: ${label}`, action: { label: 'Undo', onClick: async () => {
+      await window.electronAPI.removeExclusion(exclusionId)
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
+    }}})
+  }, [series, addToast])
 
   const dismissArtistAlbum = useCallback(async (artistIndex: number, album: MissingAlbumItem) => {
     const artist = artists[artistIndex]
     if (!artist) return
-    await window.electronAPI.addExclusion('artist_album', undefined, album.musicbrainz_id, artist.musicbrainz_id || artist.artist_name, album.title)
+    const exclusionId = await window.electronAPI.addExclusion('artist_album', undefined, album.musicbrainz_id, artist.musicbrainz_id || artist.artist_name, album.title)
     // Remove from the appropriate missing list in state
     setArtists(prev => prev.map((a, i) => {
       if (i !== artistIndex) return a
@@ -540,7 +563,11 @@ export function Dashboard({
       if (album.album_type === 'single') return { ...a, missing_singles: removeFromJson(a.missing_singles) }
       return a
     }))
-  }, [artists])
+    addToast({ type: 'info', message: `Hidden: ${album.title}`, action: { label: 'Undo', onClick: async () => {
+      await window.electronAPI.removeExclusion(exclusionId)
+      window.dispatchEvent(new CustomEvent('exclusions-changed'))
+    }}})
+  }, [artists, addToast])
 
   // Re-sort data when sort option changes
   // Helper to access created_at from DB row data (present in DB but not typed)
@@ -638,7 +665,7 @@ export function Dashboard({
           <button
             onClick={() => dismissMovieUpgrade(index)}
             className="opacity-0 group-hover/row:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
-            title="Dismiss"
+            title="Hide from view"
           >
             <EyeOff className="w-3.5 h-3.5" />
           </button>
@@ -696,7 +723,7 @@ export function Dashboard({
           <button
             onClick={() => dismissTvUpgrade(index)}
             className="opacity-0 group-hover/row:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
-            title="Dismiss"
+            title="Hide from view"
           >
             <EyeOff className="w-3.5 h-3.5" />
           </button>
@@ -745,7 +772,7 @@ export function Dashboard({
             <button
               onClick={() => dismissMusicUpgrade(index)}
               className="opacity-0 group-hover/row:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
-              title="Dismiss"
+              title="Hide from view"
             >
               <EyeOff className="w-3.5 h-3.5" />
             </button>
@@ -838,7 +865,7 @@ export function Dashboard({
                 <button
                   onClick={(e) => { e.stopPropagation(); dismissCollectionMovie(index, movie) }}
                   className="opacity-0 group-hover/item:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
-                  title="Dismiss"
+                  title="Hide from view"
                 >
                   <EyeOff className="w-3 h-3" />
                 </button>
@@ -948,7 +975,7 @@ export function Dashboard({
                     group.missingEpisodes.forEach(ep => dismissSeriesEpisode(index, ep))
                   }}
                   className="opacity-0 group-hover/item:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
-                  title="Dismiss season"
+                  title="Hide season from view"
                 >
                   <EyeOff className="w-3 h-3" />
                 </button>
@@ -1078,7 +1105,7 @@ export function Dashboard({
                       <button
                         onClick={(e) => { e.stopPropagation(); dismissArtistAlbum(index, item) }}
                         className="opacity-0 group-hover/item:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-all"
-                        title="Dismiss"
+                        title="Hide from view"
                       >
                         <EyeOff className="w-3 h-3" />
                       </button>
@@ -1194,15 +1221,6 @@ export function Dashboard({
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Upgrades</h2>
                 </div>
                 <div className="flex items-center gap-2">
-                  {(arrApps.radarr || arrApps.sonarr || arrApps.lidarr) && (
-                    <button
-                      onClick={() => setShowArrQueue(true)}
-                      className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                      title="View download queue"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                    </button>
-                  )}
                   <select
                     value={upgradeSortBy}
                     onChange={e => { const v = e.target.value as 'quality' | 'recent' | 'title'; setUpgradeSortBy(v); window.electronAPI.setSetting(SETTING_KEYS.dashboard_upgrade_sort, v) }}
@@ -1449,8 +1467,6 @@ export function Dashboard({
         </div>
       )}
 
-      {/* Arr Download Queue Panel */}
-      <ArrQueuePanel isOpen={showArrQueue} onClose={() => setShowArrQueue(false)} />
 
       {/* Media Detail Modal */}
       {selectedMediaId !== null && (

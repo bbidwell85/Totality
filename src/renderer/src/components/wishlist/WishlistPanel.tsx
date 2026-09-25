@@ -225,15 +225,16 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
         </div>
       )}
 
-      {/* Category Tabs (All / Missing / Upgrade) */}
+      {/* Combined filter row: Category + Media type */}
       {counts.total > 0 && activeStatus !== 'completed' && (
-        <div className="px-3 pt-2 pb-2 border-b border-border/30">
+        <div className="px-3 pt-2 pb-2 border-b border-border/30 space-y-1.5">
+          {/* Category pills */}
           <div className="flex gap-1">
             {categoryOptions.map(({ type, icon: Icon, label, count }) => (
               <button
                 key={type}
                 onClick={() => setActiveCategory(type)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs rounded-lg transition-colors ${
+                className={`flex items-center gap-1 px-2 py-1 text-xs rounded-full transition-colors ${
                   activeCategory === type
                     ? 'bg-primary/20 text-primary'
                     : 'bg-muted/20 text-muted-foreground hover:bg-muted/30'
@@ -248,15 +249,8 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
                 )}
               </button>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Filters & Sort */}
-      {counts.total > 0 && (
-        <div className="p-3 border-b border-border/30 space-y-2">
-          {/* Media type filter pills */}
-          <div className="flex gap-1">
+            <span className="text-border/60 self-center mx-0.5">·</span>
+            {/* Media type pills inline */}
             {filterOptions.map(({ type, icon: Icon, label }) => (
               <button
                 key={type}
@@ -272,6 +266,12 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Filters & Sort */}
+      {counts.total > 0 && (
+        <div className="p-3 border-b border-border/30">
 
           {/* Sort options */}
           <div className="flex items-center gap-2 text-xs">
