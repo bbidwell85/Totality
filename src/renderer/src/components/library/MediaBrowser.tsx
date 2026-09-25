@@ -87,7 +87,6 @@ export function MediaBrowser({
   const {
     showCompletenessPanel,
     showWishlistPanel,
-    showChatPanel,
     setShowCompletenessPanel,
     setShowWishlistPanel,
   } = usePanelState({
@@ -1813,7 +1812,7 @@ export function MediaBrowser({
         className={`fixed top-[76px] bottom-4 transition-[left,right,opacity] duration-300 ease-out flex flex-col ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}
         style={{
           left: sidebarCollapsed ? '96px' : '288px',
-          right: showCompletenessPanel || showWishlistPanel || showChatPanel ? '352px' : '16px'
+          right: '16px'
         }}
         role="tabpanel"
         aria-label={`${view === 'movies' ? 'Movies' : view === 'tv' ? 'TV Shows' : 'Music'} library`}
