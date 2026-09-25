@@ -624,7 +624,8 @@ export function TVShowsView({
                 season={item.season as SeasonInfo}
                 showTitle={selectedShowData.title}
                 onClick={() => onSelectSeason(item.seasonNumber)}
-                             />
+                missingCount={(completenessData?.missing_episodes || []).filter(ep => ep.season_number === item.seasonNumber).length}
+              />
             ) : (
               <MissingSeasonCardWithArtwork
                 key={`missing-${item.seasonNumber}`}
@@ -1035,8 +1036,10 @@ const MissingEpisodeRowWithArtwork = memo(({
   )
 })
 
-const SeasonCard = memo(({ season, showTitle, onClick }: { season: SeasonInfo; showTitle: string; onClick: () => void }) => {
+const SeasonCard = memo(({ season, showTitle, onClick, missingCount = 0 }: { season: SeasonInfo; showTitle: string; onClick: () => void; missingCount?: number }) => {
   const cardRef = useRef<HTMLDivElement>(null)
+  const owned = season.episodes.length
+  const total = owned + missingCount
 
   return (
     <div
@@ -1071,7 +1074,10 @@ const SeasonCard = memo(({ season, showTitle, onClick }: { season: SeasonInfo; s
       <div className="pt-2">
         <h4 className="font-medium text-sm truncate">{formatSeasonLabel(season.seasonNumber)}</h4>
         <p className="text-xs text-muted-foreground">
-          {season.episodes.length} {season.episodes.length === 1 ? 'Episode' : 'Episodes'}
+          {total > 0 && owned < total
+            ? `${owned} of ${total} ${total === 1 ? 'Episode' : 'Episodes'}`
+            : `${owned} ${owned === 1 ? 'Episode' : 'Episodes'}`
+          }
         </p>
       </div>
     </div>
@@ -1081,5 +1087,6 @@ const SeasonCard = memo(({ season, showTitle, onClick }: { season: SeasonInfo; s
   return prevProps.season.seasonNumber === nextProps.season.seasonNumber &&
          prevProps.showTitle === nextProps.showTitle &&
          prevProps.season.posterUrl === nextProps.season.posterUrl &&
-         prevProps.season.episodes === nextProps.season.episodes
+         prevProps.season.episodes === nextProps.season.episodes &&
+         prevProps.missingCount === nextProps.missingCount
 })
