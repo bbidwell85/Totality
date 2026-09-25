@@ -4,12 +4,14 @@ import { X, CircleFadingArrowUp, EyeOff } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { MissingItemPopup } from './MissingItemPopup'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
+import { AddToArrButton } from '../arr/AddToArrButton'
 
 interface MissingMovie {
   tmdb_id: string
   title: string
   year?: number
   poster_path?: string
+  release_date?: string
 }
 
 interface MovieCollectionData {
@@ -18,8 +20,8 @@ interface MovieCollectionData {
   collection_name: string
   total_movies: number
   owned_movies: number
-  missing_movies: string // JSON array
-  owned_movie_ids: string // JSON array
+  missing_movies: MissingMovie[]
+  owned_movie_ids: string[]
   completeness_percentage: number
   poster_url?: string
 }
@@ -52,7 +54,14 @@ export const CollectionModal = memo(function CollectionModal({
   onDismissAllMissingInCollection,
 }: CollectionModalProps) {
   const [selectedMissing, setSelectedMissing] = useState<MissingMovie | null>(null)
+  const [radarrEnabled, setRadarrEnabled] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    window.electronAPI.arrGetConfiguredApps()
+      .then((apps: { radarr: boolean }) => setRadarrEnabled(apps.radarr))
+      .catch(() => {})
+  }, [])
 
   // Focus trap
   useFocusTrap(true, modalRef)
@@ -70,14 +79,7 @@ export const CollectionModal = memo(function CollectionModal({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  // Parse missing movies from JSON
-  const missingMovies = useMemo<MissingMovie[]>(() => {
-    try {
-      return JSON.parse(collection.missing_movies || '[]')
-    } catch {
-      return []
-    }
-  }, [collection.missing_movies])
+  const missingMovies = useMemo<MissingMovie[]>(() => collection.missing_movies || [], [collection.missing_movies])
 
   // Create a Set for O(1) lookup of missing movie tmdb_ids
   const missingMovieMap = useMemo(() => {
@@ -217,6 +219,15 @@ export const CollectionModal = memo(function CollectionModal({
                           >
                             <EyeOff className="w-4 h-4" />
                           </button>
+                        )}
+                        {radarrEnabled && movie.tmdb_id && (
+                          <AddToArrButton
+                            type="radarr"
+                            tmdbId={movie.tmdb_id}
+                            title={movie.title}
+                            year={movie.year}
+                            compact
+                          />
                         )}
                         <AddToWishlistButton
                           mediaType="movie"

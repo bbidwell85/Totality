@@ -3,6 +3,7 @@ import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from './QualityAnalyzer'
 import { getTMDBService } from './TMDBService'
 import { getMusicBrainzService } from './MusicBrainzService'
+import type { SeriesCompleteness, MovieCollection } from '../types/database'
 
 /** Actionable item from tool results — not-owned titles the user can add to wishlist */
 export interface ActionableItem {
@@ -528,17 +529,13 @@ export async function executeTool(
         series = db.getAllSeriesCompleteness()
       }
       const seriesLimit = toolNumber(input, 'limit', 1, 50) || 20
-      const limited = series.slice(0, seriesLimit)
-      const simplified = limited.map((s: Record<string, unknown>) => {
-        let missingCount = 0
-        let missingSample: string[] = []
-        try {
-          const parsed = JSON.parse((s.missing_episodes as string) || '[]')
-          missingCount = parsed.length
-          missingSample = parsed.slice(0, 5).map((e: Record<string, unknown>) =>
-            `S${e.season_number}E${e.episode_number}`,
-          )
-        } catch { /* empty */ }
+      const limited = (series as SeriesCompleteness[]).slice(0, seriesLimit)
+      const simplified = limited.map((s) => {
+        const missingEps = s.missing_episodes || []
+        const missingCount = missingEps.length
+        const missingSample = missingEps.slice(0, 5).map((e) =>
+          `S${e.season_number}E${e.episode_number}`,
+        )
         return compact({
           series_title: s.series_title,
           total_seasons: s.total_seasons,
@@ -561,17 +558,13 @@ export async function executeTool(
         collections = db.getMovieCollections()
       }
       const collLimit = toolNumber(input, 'limit', 1, 50) || 20
-      const limited = collections.slice(0, collLimit)
-      const simplified = limited.map((c: Record<string, unknown>) => {
-        let missingCount = 0
-        let missingSample: string[] = []
-        try {
-          const parsed = JSON.parse((c.missing_movies as string) || '[]')
-          missingCount = parsed.length
-          missingSample = parsed.slice(0, 5).map((m: Record<string, unknown>) =>
-            m.year ? `${m.title} (${m.year})` : `${m.title}`,
-          )
-        } catch { /* empty */ }
+      const limited = (collections as MovieCollection[]).slice(0, collLimit)
+      const simplified = limited.map((c) => {
+        const missingMovies = c.missing_movies || []
+        const missingCount = missingMovies.length
+        const missingSample = missingMovies.slice(0, 5).map((m) =>
+          m.year ? `${m.title} (${m.year})` : `${m.title}`,
+        )
         return compact({
           collection_name: c.collection_name,
           total_movies: c.total_movies,

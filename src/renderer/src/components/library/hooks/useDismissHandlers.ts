@@ -124,19 +124,12 @@ export function useDismissHandlers({
         const next = new Map(prev)
         const data = next.get(seriesTitle)
         if (data?.missing_episodes) {
-          try {
-            const missing: MissingEpisode[] = JSON.parse(data.missing_episodes)
-            const filtered = missing.filter(e => !(e.season_number === episode.season_number && e.episode_number === episode.episode_number))
-            // Also update missing_seasons if no episodes remain for dismissed season
-            const remainingSeasonsWithMissing = new Set(filtered.map(e => e.season_number))
-            const missSeasons: number[] = JSON.parse(data.missing_seasons || '[]')
-            const filteredSeasons = missSeasons.filter(s => remainingSeasonsWithMissing.has(s))
-            next.set(seriesTitle, {
-              ...data,
-              missing_episodes: JSON.stringify(filtered),
-              missing_seasons: JSON.stringify(filteredSeasons),
-            })
-          } catch { /* ignore */ }
+          const missing = data.missing_episodes
+          const filtered = missing.filter(e => !(e.season_number === episode.season_number && e.episode_number === episode.episode_number))
+          // Also update missing_seasons if no episodes remain for dismissed season
+          const remainingSeasonsWithMissing = new Set(filtered.map(e => e.season_number))
+          const filteredSeasons = (data.missing_seasons || []).filter(s => remainingSeasonsWithMissing.has(s))
+          next.set(seriesTitle, { ...data, missing_episodes: filtered, missing_seasons: filteredSeasons })
         }
         return next
       })
@@ -151,7 +144,7 @@ export function useDismissHandlers({
     try {
       const data = seriesCompleteness.get(seriesTitle)
       if (!data?.missing_episodes) return
-      const allMissing: MissingEpisode[] = JSON.parse(data.missing_episodes || '[]')
+      const allMissing = data.missing_episodes
       const seasonEpisodes = allMissing.filter(e => e.season_number === seasonNumber)
       await Promise.all(seasonEpisodes.map(ep => {
         const refKey = `S${ep.season_number}E${ep.episode_number}`
@@ -161,19 +154,10 @@ export function useDismissHandlers({
         const next = new Map(prev)
         const d = next.get(seriesTitle)
         if (d?.missing_episodes) {
-          try {
-            const missing: MissingEpisode[] = JSON.parse(d.missing_episodes)
-            const filtered = missing.filter(e => e.season_number !== seasonNumber)
-            // Also remove the season from missing_seasons if no episodes remain for it
-            const remainingSeasonsWithMissing = new Set(filtered.map(e => e.season_number))
-            const missSeasons: number[] = JSON.parse(d.missing_seasons || '[]')
-            const filteredSeasons = missSeasons.filter(s => remainingSeasonsWithMissing.has(s))
-            next.set(seriesTitle, {
-              ...d,
-              missing_episodes: JSON.stringify(filtered),
-              missing_seasons: JSON.stringify(filteredSeasons),
-            })
-          } catch { /* ignore */ }
+          const filtered = d.missing_episodes.filter(e => e.season_number !== seasonNumber)
+          const remainingSeasonsWithMissing = new Set(filtered.map(e => e.season_number))
+          const filteredSeasons = (d.missing_seasons || []).filter(s => remainingSeasonsWithMissing.has(s))
+          next.set(seriesTitle, { ...d, missing_episodes: filtered, missing_seasons: filteredSeasons })
         }
         return next
       })
@@ -191,17 +175,14 @@ export function useDismissHandlers({
       await window.electronAPI.addExclusion('collection_movie', undefined, tmdbId, collectionId, movieTitle)
 
       const updateCollection = (c: MovieCollectionData): MovieCollectionData => {
-        try {
-          const missing = JSON.parse(c.missing_movies || '[]')
-          const filtered = missing.filter((m: { tmdb_id: string }) => m.tmdb_id !== tmdbId)
-          const newTotal = c.total_movies - 1
-          return {
-            ...c,
-            missing_movies: JSON.stringify(filtered),
-            total_movies: newTotal,
-            completeness_percentage: newTotal > 0 ? c.owned_movies / newTotal * 100 : 100
-          }
-        } catch { return c }
+        const filtered = (c.missing_movies || []).filter(m => m.tmdb_id !== tmdbId)
+        const newTotal = c.total_movies - 1
+        return {
+          ...c,
+          missing_movies: filtered,
+          total_movies: newTotal,
+          completeness_percentage: newTotal > 0 ? c.owned_movies / newTotal * 100 : 100,
+        }
       }
 
       setSelectedCollection(prev => prev ? updateCollection(prev) : prev)
@@ -247,7 +228,7 @@ export function useDismissHandlers({
   const handleDismissAllMissingInCollection = useCallback(async () => {
     if (!selectedCollection) return
     try {
-      const missing = JSON.parse(selectedCollection.missing_movies || '[]') as Array<{ tmdb_id: string; title: string }>
+      const missing = selectedCollection.missing_movies || []
       if (missing.length === 0) return
       const collectionId = selectedCollection.tmdb_collection_id
       const collectionName = selectedCollection.collection_name
@@ -256,7 +237,7 @@ export function useDismissHandlers({
       ))
       const markComplete = (c: MovieCollectionData): MovieCollectionData => ({
         ...c,
-        missing_movies: '[]',
+        missing_movies: [],
         total_movies: c.owned_movies,
         completeness_percentage: 100,
       })

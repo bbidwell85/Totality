@@ -60,6 +60,52 @@ export class BetterSQLiteService {
   private dbPath: string
   private _isInitialized = false
 
+  // Retention limits for unbounded tables — unread notifications are never pruned
+  private static readonly MAX_READ_NOTIFICATIONS = 500
+  private static readonly MAX_TASK_HISTORY = 500
+  private static readonly MAX_ACTIVITY_LOG = 500
+
+  private pruneReadNotifications(): void {
+    if (!this.db) return
+    const { c } = this.db.prepare('SELECT COUNT(*) as c FROM notifications WHERE is_read = 1').get() as { c: number }
+    if (c <= BetterSQLiteService.MAX_READ_NOTIFICATIONS) return
+    this.db.prepare(`
+      DELETE FROM notifications
+      WHERE is_read = 1
+        AND id NOT IN (SELECT id FROM notifications WHERE is_read = 1 ORDER BY created_at DESC LIMIT ?)
+    `).run(BetterSQLiteService.MAX_READ_NOTIFICATIONS)
+  }
+
+  private pruneTaskHistory(): void {
+    if (!this.db) return
+    const { c } = this.db.prepare('SELECT COUNT(*) as c FROM task_history').get() as { c: number }
+    if (c <= BetterSQLiteService.MAX_TASK_HISTORY) return
+    this.db.prepare(`
+      DELETE FROM task_history
+      WHERE id NOT IN (SELECT id FROM task_history ORDER BY recorded_at DESC LIMIT ?)
+    `).run(BetterSQLiteService.MAX_TASK_HISTORY)
+  }
+
+  private pruneActivityLog(): void {
+    if (!this.db) return
+    const { c } = this.db.prepare('SELECT COUNT(*) as c FROM activity_log').get() as { c: number }
+    if (c <= BetterSQLiteService.MAX_ACTIVITY_LOG) return
+    this.db.prepare(`
+      DELETE FROM activity_log
+      WHERE id NOT IN (SELECT id FROM activity_log ORDER BY created_at DESC LIMIT ?)
+    `).run(BetterSQLiteService.MAX_ACTIVITY_LOG)
+  }
+
+  /**
+   * Build a safe FTS5 MATCH query from a user-supplied search string.
+   * Each whitespace-separated word becomes a quoted phrase to avoid special-char errors.
+   */
+  private static buildFtsQuery(query: string): string {
+    const words = query.trim().split(/\s+/).filter(w => w.length > 0)
+    if (words.length === 0) return '""'
+    return words.map(w => `"${w.replace(/"/g, '""')}"`).join(' ')
+  }
+
   /** Check if database is initialized */
   get isInitialized(): boolean {
     return this._isInitialized
@@ -193,6 +239,9 @@ export class BetterSQLiteService {
 
       // Library scans
       'ALTER TABLE library_scans ADD COLUMN is_enabled INTEGER NOT NULL DEFAULT 1',
+
+      // Per-library upgrade target tier (NULL = use global LOW quality rule)
+      'ALTER TABLE library_scans ADD COLUMN upgrade_min_tier TEXT',
 
       // Sort title support
       'ALTER TABLE media_items ADD COLUMN sort_title TEXT',
@@ -330,6 +379,89 @@ export class BetterSQLiteService {
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_music_albums_type ON music_albums(album_type) WHERE album_type IS NOT NULL')
     } catch {
       // Indexes may already exist
+    }
+
+    // Create FTS5 virtual tables + sync triggers (better-sqlite3 only; SQL.js lacks FTS5)
+    try {
+      this.db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
+          title, series_title,
+          content='media_items', content_rowid='id',
+          tokenize='unicode61'
+        );
+        CREATE TRIGGER IF NOT EXISTS media_fts_ai AFTER INSERT ON media_items BEGIN
+          INSERT INTO media_fts(rowid, title, series_title) VALUES (new.id, new.title, COALESCE(new.series_title, ''));
+        END;
+        CREATE TRIGGER IF NOT EXISTS media_fts_ad AFTER DELETE ON media_items BEGIN
+          INSERT INTO media_fts(media_fts, rowid, title, series_title) VALUES ('delete', old.id, old.title, COALESCE(old.series_title, ''));
+        END;
+        CREATE TRIGGER IF NOT EXISTS media_fts_au AFTER UPDATE OF title, series_title ON media_items BEGIN
+          INSERT INTO media_fts(media_fts, rowid, title, series_title) VALUES ('delete', old.id, old.title, COALESCE(old.series_title, ''));
+          INSERT INTO media_fts(rowid, title, series_title) VALUES (new.id, new.title, COALESCE(new.series_title, ''));
+        END;
+        CREATE VIRTUAL TABLE IF NOT EXISTS music_artist_fts USING fts5(
+          name,
+          content='music_artists', content_rowid='id',
+          tokenize='unicode61'
+        );
+        CREATE TRIGGER IF NOT EXISTS music_artist_fts_ai AFTER INSERT ON music_artists BEGIN
+          INSERT INTO music_artist_fts(rowid, name) VALUES (new.id, new.name);
+        END;
+        CREATE TRIGGER IF NOT EXISTS music_artist_fts_ad AFTER DELETE ON music_artists BEGIN
+          INSERT INTO music_artist_fts(music_artist_fts, rowid, name) VALUES ('delete', old.id, old.name);
+        END;
+        CREATE TRIGGER IF NOT EXISTS music_artist_fts_au AFTER UPDATE OF name ON music_artists BEGIN
+          INSERT INTO music_artist_fts(music_artist_fts, rowid, name) VALUES ('delete', old.id, old.name);
+          INSERT INTO music_artist_fts(rowid, name) VALUES (new.id, new.name);
+        END;
+        CREATE VIRTUAL TABLE IF NOT EXISTS music_album_fts USING fts5(
+          title, artist_name,
+          content='music_albums', content_rowid='id',
+          tokenize='unicode61'
+        );
+        CREATE TRIGGER IF NOT EXISTS music_album_fts_ai AFTER INSERT ON music_albums BEGIN
+          INSERT INTO music_album_fts(rowid, title, artist_name) VALUES (new.id, new.title, COALESCE(new.artist_name, ''));
+        END;
+        CREATE TRIGGER IF NOT EXISTS music_album_fts_ad AFTER DELETE ON music_albums BEGIN
+          INSERT INTO music_album_fts(music_album_fts, rowid, title, artist_name) VALUES ('delete', old.id, old.title, COALESCE(old.artist_name, ''));
+        END;
+        CREATE TRIGGER IF NOT EXISTS music_album_fts_au AFTER UPDATE OF title, artist_name ON music_albums BEGIN
+          INSERT INTO music_album_fts(music_album_fts, rowid, title, artist_name) VALUES ('delete', old.id, old.title, COALESCE(old.artist_name, ''));
+          INSERT INTO music_album_fts(rowid, title, artist_name) VALUES (new.id, new.title, COALESCE(new.artist_name, ''));
+        END;
+        CREATE VIRTUAL TABLE IF NOT EXISTS music_track_fts USING fts5(
+          title, artist_name, album_name,
+          content='music_tracks', content_rowid='id',
+          tokenize='unicode61'
+        );
+        CREATE TRIGGER IF NOT EXISTS music_track_fts_ai AFTER INSERT ON music_tracks BEGIN
+          INSERT INTO music_track_fts(rowid, title, artist_name, album_name) VALUES (new.id, new.title, COALESCE(new.artist_name, ''), COALESCE(new.album_name, ''));
+        END;
+        CREATE TRIGGER IF NOT EXISTS music_track_fts_ad AFTER DELETE ON music_tracks BEGIN
+          INSERT INTO music_track_fts(music_track_fts, rowid, title, artist_name, album_name) VALUES ('delete', old.id, old.title, COALESCE(old.artist_name, ''), COALESCE(old.album_name, ''));
+        END;
+        CREATE TRIGGER IF NOT EXISTS music_track_fts_au AFTER UPDATE OF title, artist_name, album_name ON music_tracks BEGIN
+          INSERT INTO music_track_fts(music_track_fts, rowid, title, artist_name, album_name) VALUES ('delete', old.id, old.title, COALESCE(old.artist_name, ''), COALESCE(old.album_name, ''));
+          INSERT INTO music_track_fts(rowid, title, artist_name, album_name) VALUES (new.id, new.title, COALESCE(new.artist_name, ''), COALESCE(new.album_name, ''));
+        END;
+      `)
+    } catch (error: unknown) {
+      console.warn('[BetterSQLite] FTS5 table creation skipped:', getErrorMessage(error))
+    }
+
+    // Populate FTS5 virtual tables from existing data (one-time; triggers handle future writes)
+    try {
+      const ftsReady = this.db.prepare("SELECT value FROM settings WHERE key = 'fts_populated'").get()
+      if (!ftsReady) {
+        this.db.exec(`INSERT INTO media_fts(rowid, title, series_title) SELECT id, title, COALESCE(series_title, '') FROM media_items`)
+        this.db.exec(`INSERT INTO music_artist_fts(rowid, name) SELECT id, name FROM music_artists`)
+        this.db.exec(`INSERT INTO music_album_fts(rowid, title, artist_name) SELECT id, title, COALESCE(artist_name, '') FROM music_albums`)
+        this.db.exec(`INSERT INTO music_track_fts(rowid, title, artist_name, album_name) SELECT id, title, COALESCE(artist_name, ''), COALESCE(album_name, '') FROM music_tracks`)
+        this.db.prepare("INSERT OR IGNORE INTO settings(key, value) VALUES ('fts_populated', '1')").run()
+        console.log('[BetterSQLite] FTS5 index populated from existing data')
+      }
+    } catch (error: unknown) {
+      console.warn('[BetterSQLite] FTS population skipped:', getErrorMessage(error))
     }
 
     // Fix music track album_id references — prior bug in upsertMusicAlbum returned
@@ -597,6 +729,41 @@ export class BetterSQLiteService {
   }
 
   // ============================================================================
+  // TMDB CACHE
+  // ============================================================================
+
+  /**
+   * Retrieve a persisted TMDB API response.
+   * Returns null when the key is not present (caller handles expiry by comparing
+   * cached_at against CACHE_DURATION).
+   */
+  getTmdbCache(key: string): { data: string; cached_at: number } | null {
+    if (!this.db) return null
+    const row = this.db.prepare('SELECT data, cached_at FROM tmdb_cache WHERE cache_key = ?').get(key) as { data: string; cached_at: number } | undefined
+    return row ?? null
+  }
+
+  /**
+   * Persist a TMDB API response. Uses UPSERT so repeated calls are safe.
+   * Prunes entries older than 48 hours after every 500 writes to prevent
+   * unbounded growth (TMDB data rarely changes within the 24h TTL window).
+   */
+  setTmdbCache(key: string, data: string): void {
+    if (!this.db) return
+    const now = Date.now()
+    this.db.prepare(
+      'INSERT INTO tmdb_cache (cache_key, data, cached_at) VALUES (?, ?, ?) ON CONFLICT(cache_key) DO UPDATE SET data = excluded.data, cached_at = excluded.cached_at'
+    ).run(key, data, now)
+
+    // Periodic pruning — avoid a full table scan on every write
+    const rowCount = (this.db.prepare('SELECT COUNT(*) as n FROM tmdb_cache').get() as { n: number }).n
+    if (rowCount > 2000) {
+      const cutoff = now - 48 * 60 * 60 * 1000 // 48 hours
+      this.db.prepare('DELETE FROM tmdb_cache WHERE cached_at < ?').run(cutoff)
+    }
+  }
+
+  // ============================================================================
   // STATISTICS
   // ============================================================================
 
@@ -789,9 +956,8 @@ export class BetterSQLiteService {
       params.push(filters.libraryId)
     }
     if (filters?.searchQuery) {
-      sql += ' AND (m.title LIKE ? OR m.series_title LIKE ?)'
-      const search = `%${filters.searchQuery}%`
-      params.push(search, search)
+      sql += ' AND m.id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH ?)'
+      params.push(BetterSQLiteService.buildFtsQuery(filters.searchQuery))
     }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') {
@@ -810,10 +976,15 @@ export class BetterSQLiteService {
       params.push(filters.tierQuality)
     }
     if (filters?.needsUpgrade !== undefined) {
-      sql += ' AND q.needs_upgrade = ?'
-      params.push(filters.needsUpgrade ? 1 : 0)
       if (filters.needsUpgrade) {
+        // Flag items that are LOW quality OR below the library's minimum tier target
+        sql += ` AND (q.needs_upgrade = 1 OR (ls.upgrade_min_tier IS NOT NULL AND
+          CASE q.quality_tier WHEN '4K' THEN 4 WHEN '1080p' THEN 3 WHEN '720p' THEN 2 ELSE 1 END
+          < CASE ls.upgrade_min_tier WHEN '4K' THEN 4 WHEN '1080p' THEN 3 WHEN '720p' THEN 2 ELSE 1 END))`
         sql += ` AND m.id NOT IN (SELECT reference_id FROM exclusions WHERE exclusion_type = 'media_upgrade' AND reference_id IS NOT NULL)`
+      } else {
+        sql += ' AND q.needs_upgrade = ?'
+        params.push(0)
       }
     }
 
@@ -920,9 +1091,8 @@ export class BetterSQLiteService {
       params.push(filters.libraryId)
     }
     if (filters?.searchQuery) {
-      sql += ' AND (m.title LIKE ? OR m.series_title LIKE ?)'
-      const search = `%${filters.searchQuery}%`
-      params.push(search, search)
+      sql += ' AND m.id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH ?)'
+      params.push(BetterSQLiteService.buildFtsQuery(filters.searchQuery))
     }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') {
@@ -941,10 +1111,15 @@ export class BetterSQLiteService {
       params.push(filters.tierQuality)
     }
     if (filters?.needsUpgrade !== undefined) {
-      sql += ' AND q.needs_upgrade = ?'
-      params.push(filters.needsUpgrade ? 1 : 0)
       if (filters.needsUpgrade) {
+        // Flag items that are LOW quality OR below the library's minimum tier target
+        sql += ` AND (q.needs_upgrade = 1 OR (ls.upgrade_min_tier IS NOT NULL AND
+          CASE q.quality_tier WHEN '4K' THEN 4 WHEN '1080p' THEN 3 WHEN '720p' THEN 2 ELSE 1 END
+          < CASE ls.upgrade_min_tier WHEN '4K' THEN 4 WHEN '1080p' THEN 3 WHEN '720p' THEN 2 ELSE 1 END))`
         sql += ` AND m.id NOT IN (SELECT reference_id FROM exclusions WHERE exclusion_type = 'media_upgrade' AND reference_id IS NOT NULL)`
+      } else {
+        sql += ' AND q.needs_upgrade = ?'
+        params.push(0)
       }
     }
 
@@ -2113,11 +2288,12 @@ export class BetterSQLiteService {
     isEnabled: boolean
     lastScanAt: string | null
     itemsScanned: number
+    upgradeMinTier: string | null
   }> {
     if (!this.db) throw new Error('Database not initialized')
 
     const stmt = this.db.prepare(`
-      SELECT library_id, library_name, library_type, is_enabled, last_scan_at, items_scanned
+      SELECT library_id, library_name, library_type, is_enabled, last_scan_at, items_scanned, upgrade_min_tier
       FROM library_scans WHERE source_id = ?
     `)
     const rows = stmt.all(sourceId) as Array<{
@@ -2127,6 +2303,7 @@ export class BetterSQLiteService {
       is_enabled: number
       last_scan_at: string | null
       items_scanned: number
+      upgrade_min_tier: string | null
     }>
 
     return rows.map(row => ({
@@ -2136,7 +2313,22 @@ export class BetterSQLiteService {
       isEnabled: row.is_enabled === 1,
       lastScanAt: row.last_scan_at,
       itemsScanned: row.items_scanned || 0,
+      upgradeMinTier: row.upgrade_min_tier ?? null,
     }))
+  }
+
+  /**
+   * Set or clear the per-library upgrade minimum tier.
+   * Items below this tier will be flagged for upgrade regardless of quality level.
+   * Pass null to revert to the default LOW-quality-only rule.
+   */
+  setLibraryUpgradeTier(sourceId: string, libraryId: string, minTier: string | null): void {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.prepare(
+      `INSERT INTO library_scans (source_id, library_id, library_name, library_type, last_scan_at, items_scanned, is_enabled, upgrade_min_tier)
+       VALUES (?, ?, '', 'unknown', datetime('now'), 0, 1, ?)
+       ON CONFLICT(source_id, library_id) DO UPDATE SET upgrade_min_tier = excluded.upgrade_min_tier`
+    ).run(sourceId, libraryId, minTier)
   }
 
   /**
@@ -2495,8 +2687,8 @@ export class BetterSQLiteService {
       params.push(filters.libraryId)
     }
     if (filters?.searchQuery) {
-      sql += ' AND name LIKE ?'
-      params.push(`%${filters.searchQuery}%`)
+      sql += ' AND id IN (SELECT rowid FROM music_artist_fts WHERE music_artist_fts MATCH ?)'
+      params.push(BetterSQLiteService.buildFtsQuery(filters.searchQuery))
     }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') {
@@ -2531,7 +2723,7 @@ export class BetterSQLiteService {
     const params: unknown[] = []
     if (filters?.sourceId) { sql += ' AND source_id = ?'; params.push(filters.sourceId) }
     if (filters?.libraryId) { sql += ' AND library_id = ?'; params.push(filters.libraryId) }
-    if (filters?.searchQuery) { sql += ' AND name LIKE ?'; params.push(`%${filters.searchQuery}%`) }
+    if (filters?.searchQuery) { sql += ' AND id IN (SELECT rowid FROM music_artist_fts WHERE music_artist_fts MATCH ?)'; params.push(BetterSQLiteService.buildFtsQuery(filters.searchQuery)) }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') { sql += " AND name NOT GLOB '[A-Za-z]*'" }
       else { sql += ' AND UPPER(SUBSTR(name, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
@@ -2587,8 +2779,8 @@ export class BetterSQLiteService {
       params.push(filters.libraryId)
     }
     if (filters?.searchQuery) {
-      sql += ' AND (title LIKE ? OR artist_name LIKE ?)'
-      params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`)
+      sql += ' AND id IN (SELECT rowid FROM music_album_fts WHERE music_album_fts MATCH ?)'
+      params.push(BetterSQLiteService.buildFtsQuery(filters.searchQuery))
     }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
@@ -2632,7 +2824,7 @@ export class BetterSQLiteService {
     else if (filters?.artistName) { sql += ' AND artist_name = ?'; params.push(filters.artistName) }
     if (filters?.sourceId) { sql += ' AND source_id = ?'; params.push(filters.sourceId) }
     if (filters?.libraryId) { sql += ' AND library_id = ?'; params.push(filters.libraryId) }
-    if (filters?.searchQuery) { sql += ' AND (title LIKE ? OR artist_name LIKE ?)'; params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`) }
+    if (filters?.searchQuery) { sql += ' AND id IN (SELECT rowid FROM music_album_fts WHERE music_album_fts MATCH ?)'; params.push(BetterSQLiteService.buildFtsQuery(filters.searchQuery)) }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
       else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
@@ -2696,8 +2888,8 @@ export class BetterSQLiteService {
       params.push(filters.sourceId)
     }
     if (filters?.searchQuery) {
-      sql += ' AND (title LIKE ? OR artist_name LIKE ? OR album_name LIKE ?)'
-      params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`, `%${filters.searchQuery}%`)
+      sql += ' AND id IN (SELECT rowid FROM music_track_fts WHERE music_track_fts MATCH ?)'
+      params.push(BetterSQLiteService.buildFtsQuery(filters.searchQuery))
     }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
@@ -2764,7 +2956,7 @@ export class BetterSQLiteService {
     if (filters?.albumId) { sql += ' AND album_id = ?'; params.push(filters.albumId) }
     if (filters?.artistId) { sql += ' AND artist_id = ?'; params.push(filters.artistId) }
     if (filters?.sourceId) { sql += ' AND source_id = ?'; params.push(filters.sourceId) }
-    if (filters?.searchQuery) { sql += ' AND (title LIKE ? OR artist_name LIKE ? OR album_name LIKE ?)'; params.push(`%${filters.searchQuery}%`, `%${filters.searchQuery}%`, `%${filters.searchQuery}%`) }
+    if (filters?.searchQuery) { sql += ' AND id IN (SELECT rowid FROM music_track_fts WHERE music_track_fts MATCH ?)'; params.push(BetterSQLiteService.buildFtsQuery(filters.searchQuery)) }
     if (filters?.alphabetFilter) {
       if (filters.alphabetFilter === '#') { sql += " AND title NOT GLOB '[A-Za-z]*'" }
       else { sql += ' AND UPPER(SUBSTR(title, 1, 1)) = ?'; params.push(filters.alphabetFilter.toUpperCase()) }
@@ -3013,7 +3205,8 @@ export class BetterSQLiteService {
         WHERE id = ?
       `).run(
         data.total_seasons, data.total_episodes, data.owned_seasons, data.owned_episodes,
-        data.missing_seasons, data.missing_episodes, data.completeness_percentage,
+        JSON.stringify(data.missing_seasons), JSON.stringify(data.missing_episodes),
+        data.completeness_percentage,
         data.tmdb_id || null, data.poster_url || null, data.backdrop_url || null,
         data.status || null, existingId
       )
@@ -3029,7 +3222,8 @@ export class BetterSQLiteService {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       data.series_title, sourceId, libraryId, data.total_seasons, data.total_episodes,
-      data.owned_seasons, data.owned_episodes, data.missing_seasons, data.missing_episodes,
+      data.owned_seasons, data.owned_episodes,
+      JSON.stringify(data.missing_seasons), JSON.stringify(data.missing_episodes),
       data.completeness_percentage, data.tmdb_id || null, data.poster_url || null,
       data.backdrop_url || null, data.status || null
     )
@@ -3039,6 +3233,31 @@ export class BetterSQLiteService {
       'SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ?'
     ).get(data.series_title, sourceId) as { id: number } | undefined
     return inserted?.id || 0
+  }
+
+  // Parse JSON blob columns from raw SQLite row into typed arrays
+  private static parseSeriesRow(row: SeriesCompleteness): SeriesCompleteness {
+    return {
+      ...row,
+      missing_seasons: Array.isArray(row.missing_seasons)
+        ? row.missing_seasons
+        : JSON.parse((row.missing_seasons as unknown as string) || '[]'),
+      missing_episodes: Array.isArray(row.missing_episodes)
+        ? row.missing_episodes
+        : JSON.parse((row.missing_episodes as unknown as string) || '[]'),
+    }
+  }
+
+  private static parseCollectionRow(row: MovieCollection): MovieCollection {
+    return {
+      ...row,
+      missing_movies: Array.isArray(row.missing_movies)
+        ? row.missing_movies
+        : JSON.parse((row.missing_movies as unknown as string) || '[]'),
+      owned_movie_ids: Array.isArray(row.owned_movie_ids)
+        ? row.owned_movie_ids
+        : JSON.parse((row.owned_movie_ids as unknown as string) || '[]'),
+    }
   }
 
   /**
@@ -3067,7 +3286,7 @@ export class BetterSQLiteService {
       ORDER BY sc.series_title ASC
     `)
     const allParams = sourceId ? [...params, ...params] : []
-    return stmt.all(...allParams) as SeriesCompleteness[]
+    return (stmt.all(...allParams) as SeriesCompleteness[]).map(BetterSQLiteService.parseSeriesRow)
   }
 
   /**
@@ -3089,7 +3308,7 @@ export class BetterSQLiteService {
     }
 
     const stmt = this.db.prepare(sql)
-    return stmt.all(...params) as SeriesCompleteness[]
+    return (stmt.all(...params) as SeriesCompleteness[]).map(BetterSQLiteService.parseSeriesRow)
   }
 
   /**
@@ -3115,7 +3334,8 @@ export class BetterSQLiteService {
     }
 
     const stmt = this.db.prepare(sql)
-    return (stmt.get(...params) as SeriesCompleteness) || null
+    const row = (stmt.get(...params) as SeriesCompleteness) || null
+    return row ? BetterSQLiteService.parseSeriesRow(row) : null
   }
 
   /**
@@ -3146,7 +3366,7 @@ export class BetterSQLiteService {
       ORDER BY sc.completeness_percentage ASC
     `)
     const allParams = sourceId ? [...params, ...params] : []
-    return stmt.all(...allParams) as SeriesCompleteness[]
+    return (stmt.all(...allParams) as SeriesCompleteness[]).map(BetterSQLiteService.parseSeriesRow)
   }
 
   /**
@@ -3198,8 +3418,8 @@ export class BetterSQLiteService {
     }
 
     if (filters?.searchQuery) {
-      sql += " AND COALESCE(m.series_title, 'Unknown Series') LIKE '%' || ? || '%'"
-      params.push(filters.searchQuery)
+      sql += ' AND m.id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH ?)'
+      params.push(`series_title : ${BetterSQLiteService.buildFtsQuery(filters.searchQuery)}`)
     }
 
     sql += " GROUP BY COALESCE(m.series_title, 'Unknown Series')"
@@ -3264,8 +3484,8 @@ export class BetterSQLiteService {
     }
 
     if (filters?.searchQuery) {
-      sql += " AND COALESCE(m.series_title, 'Unknown Series') LIKE '%' || ? || '%'"
-      params.push(filters.searchQuery)
+      sql += ' AND m.id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH ?)'
+      params.push(`series_title : ${BetterSQLiteService.buildFtsQuery(filters.searchQuery)}`)
     }
 
     const stmt = this.db.prepare(sql)
@@ -3306,8 +3526,8 @@ export class BetterSQLiteService {
     }
 
     if (filters?.searchQuery) {
-      sql += " AND COALESCE(m.series_title, 'Unknown Series') LIKE '%' || ? || '%'"
-      params.push(filters.searchQuery)
+      sql += ' AND m.id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH ?)'
+      params.push(`series_title : ${BetterSQLiteService.buildFtsQuery(filters.searchQuery)}`)
     }
 
     const stmt = this.db.prepare(sql)
@@ -3511,7 +3731,8 @@ WHERE m.type = 'episode' AND m.series_title = ?`
         WHERE id = ?
       `).run(
         data.collection_name, data.total_movies, data.owned_movies,
-        data.missing_movies, data.owned_movie_ids, data.completeness_percentage,
+        JSON.stringify(data.missing_movies), JSON.stringify(data.owned_movie_ids),
+        data.completeness_percentage,
         data.poster_url || null, data.backdrop_url || null, existingId
       )
       return existingId
@@ -3526,7 +3747,8 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `).run(
       data.tmdb_collection_id, data.collection_name, sourceId, libraryId,
-      data.total_movies, data.owned_movies, data.missing_movies, data.owned_movie_ids,
+      data.total_movies, data.owned_movies,
+      JSON.stringify(data.missing_movies), JSON.stringify(data.owned_movie_ids),
       data.completeness_percentage, data.poster_url || null, data.backdrop_url || null
     )
 
@@ -3549,7 +3771,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
         WHERE mc.source_id = ? AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
         ORDER BY mc.collection_name ASC
       `)
-      return stmt.all(sourceId) as MovieCollection[]
+      return (stmt.all(sourceId) as MovieCollection[]).map(BetterSQLiteService.parseCollectionRow)
     }
     const stmt = this.db.prepare(`
       SELECT mc.* FROM movie_collections mc
@@ -3557,7 +3779,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
       ORDER BY mc.collection_name ASC
     `)
-    return stmt.all() as MovieCollection[]
+    return (stmt.all() as MovieCollection[]).map(BetterSQLiteService.parseCollectionRow)
   }
 
   /**
@@ -3566,7 +3788,8 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   getMovieCollectionByTmdbId(tmdbCollectionId: string): MovieCollection | null {
     if (!this.db) throw new Error('Database not initialized')
     const stmt = this.db.prepare('SELECT * FROM movie_collections WHERE tmdb_collection_id = ?')
-    return (stmt.get(tmdbCollectionId) as MovieCollection) || null
+    const row = (stmt.get(tmdbCollectionId) as MovieCollection) || null
+    return row ? BetterSQLiteService.parseCollectionRow(row) : null
   }
 
   /**
@@ -3584,7 +3807,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
           AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
         ORDER BY mc.completeness_percentage ASC
       `)
-      return stmt.all(sourceId) as MovieCollection[]
+      return (stmt.all(sourceId) as MovieCollection[]).map(BetterSQLiteService.parseCollectionRow)
     }
 
     const stmt = this.db.prepare(`
@@ -3594,7 +3817,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
         AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
       ORDER BY mc.completeness_percentage ASC
     `)
-    return stmt.all() as MovieCollection[]
+    return (stmt.all() as MovieCollection[]).map(BetterSQLiteService.parseCollectionRow)
   }
 
   /**
@@ -4721,6 +4944,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       notification.metadata ? JSON.stringify(notification.metadata) : '{}'
     )
 
+    this.pruneReadNotifications()
     return Number(result.lastInsertRowid)
   }
 
@@ -4751,6 +4975,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       }
     })
     transaction()
+    this.pruneReadNotifications()
 
     return ids
   }
@@ -5195,12 +5420,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       task.completedAt || null, durationMs
     )
 
-    // Prune old entries
-    this.db.prepare(`
-      DELETE FROM task_history WHERE id NOT IN (
-        SELECT id FROM task_history ORDER BY recorded_at DESC LIMIT 200
-      )
-    `).run()
+    this.pruneTaskHistory()
   }
 
   getTaskHistory(limit = 50, offset = 0): Array<{
@@ -5238,12 +5458,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       'INSERT INTO activity_log (entry_type, message, task_id, task_type) VALUES (?, ?, ?, ?)'
     ).run(entry.entryType, entry.message, entry.taskId || null, entry.taskType || null)
 
-    // Prune old entries
-    this.db.prepare(`
-      DELETE FROM activity_log WHERE id NOT IN (
-        SELECT id FROM activity_log ORDER BY created_at DESC LIMIT 500
-      )
-    `).run()
+    this.pruneActivityLog()
   }
 
   getActivityLog(entryType?: string, limit = 100, offset = 0): Array<{
@@ -5282,5 +5497,42 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     } else {
       this.db.prepare('DELETE FROM activity_log').run()
     }
+  }
+
+  // ============================================================================
+  // Pending task queue persistence
+  // ============================================================================
+
+  savePendingTasks(tasks: Array<{
+    taskId: string; type: string; label: string
+    sourceId?: string; libraryId?: string; artistId?: number; createdAt: string
+  }>): void {
+    if (!this.db) return
+    const save = this.db.transaction(() => {
+      this.db!.prepare('DELETE FROM pending_tasks').run()
+      const insert = this.db!.prepare(
+        `INSERT INTO pending_tasks(position, task_id, type, label, source_id, library_id, artist_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      tasks.forEach((t, i) => {
+        insert.run(i, t.taskId, t.type, t.label, t.sourceId ?? null, t.libraryId ?? null, t.artistId ?? null, t.createdAt)
+      })
+    })
+    save()
+  }
+
+  getPendingTasks(): Array<{
+    taskId: string; type: string; label: string
+    sourceId: string | null; libraryId: string | null; artistId: number | null; createdAt: string
+  }> {
+    if (!this.db) return []
+    return (this.db.prepare(
+      'SELECT task_id as taskId, type, label, source_id as sourceId, library_id as libraryId, artist_id as artistId, created_at as createdAt FROM pending_tasks ORDER BY position ASC'
+    ).all() as Array<{ taskId: string; type: string; label: string; sourceId: string | null; libraryId: string | null; artistId: number | null; createdAt: string }>)
+  }
+
+  clearPendingTasks(): void {
+    if (!this.db) return
+    this.db.prepare('DELETE FROM pending_tasks').run()
   }
 }

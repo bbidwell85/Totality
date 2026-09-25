@@ -33,14 +33,7 @@ export function useCollections(
   const getCollectionForMovie = useCallback(
     (movie: MediaItem): MovieCollectionData | undefined => {
       if (!movie.tmdb_id) return undefined
-      return movieCollections.find((c) => {
-        try {
-          const ownedIds = JSON.parse(c.owned_movie_ids || '[]')
-          return ownedIds.includes(movie.tmdb_id)
-        } catch {
-          return false
-        }
-      })
+      return movieCollections.find((c) => (c.owned_movie_ids || []).includes(movie.tmdb_id!))
     },
     [movieCollections]
   )
@@ -48,14 +41,10 @@ export function useCollections(
   // Get owned movies for a collection
   const getOwnedMoviesForCollection = useCallback(
     (collection: MovieCollectionData): MediaItem[] => {
-      try {
-        const ownedIds = new Set(JSON.parse(collection.owned_movie_ids || '[]'))
-        return items.filter(
-          (item) => item.type === 'movie' && item.tmdb_id && ownedIds.has(item.tmdb_id)
-        )
-      } catch {
-        return []
-      }
+      const ownedIds = new Set(collection.owned_movie_ids || [])
+      return items.filter(
+        (item) => item.type === 'movie' && item.tmdb_id && ownedIds.has(item.tmdb_id)
+      )
     },
     [items]
   )

@@ -2691,6 +2691,34 @@ export class DatabaseService {
   }
 
   // ============================================================================
+  // TMDB CACHE (SQL.js: no-ops — in-memory DB has no persistence benefit)
+  // ============================================================================
+
+  getTmdbCache(_key: string): { data: string; cached_at: number } | null {
+    return null
+  }
+
+  setTmdbCache(_key: string, _data: string): void {
+    // no-op for SQL.js backend
+  }
+
+  // ============================================================================
+  // PENDING TASK QUEUE (SQL.js: no-ops — in-memory DB, no cross-restart persistence)
+  // ============================================================================
+
+  savePendingTasks(_tasks: Array<{
+    taskId: string; type: string; label: string
+    sourceId?: string; libraryId?: string; artistId?: number; createdAt: string
+  }>): void { /* no-op */ }
+
+  getPendingTasks(): Array<{
+    taskId: string; type: string; label: string
+    sourceId: string | null; libraryId: string | null; artistId: number | null; createdAt: string
+  }> { return [] }
+
+  clearPendingTasks(): void { /* no-op */ }
+
+  // ============================================================================
   // STATISTICS
   // ============================================================================
 
@@ -3058,6 +3086,7 @@ export class DatabaseService {
     isEnabled: boolean
     lastScanAt: string | null
     itemsScanned: number
+    upgradeMinTier: string | null
   }> {
     if (!this.db) throw new Error('Database not initialized')
 
@@ -3076,7 +3105,12 @@ export class DatabaseService {
       isEnabled: (row[3] as number) === 1,
       lastScanAt: row[4] as string | null,
       itemsScanned: (row[5] as number) || 0,
+      upgradeMinTier: null, // column added via migration in better-sqlite3 only
     }))
+  }
+
+  setLibraryUpgradeTier(_sourceId: string, _libraryId: string, _minTier: string | null): void {
+    // SQL.js: no-op — upgrade tier persisted only in better-sqlite3 production DB
   }
 
   /**
@@ -3418,8 +3452,8 @@ export class DatabaseService {
         data.total_episodes,
         data.owned_seasons,
         data.owned_episodes,
-        data.missing_seasons,
-        data.missing_episodes,
+        JSON.stringify(data.missing_seasons),
+        JSON.stringify(data.missing_episodes),
         data.completeness_percentage,
         data.tmdb_id || null,
         data.poster_url || null,
@@ -3446,8 +3480,8 @@ export class DatabaseService {
         data.total_episodes,
         data.owned_seasons,
         data.owned_episodes,
-        data.missing_seasons,
-        data.missing_episodes,
+        JSON.stringify(data.missing_seasons),
+        JSON.stringify(data.missing_episodes),
         data.completeness_percentage,
         data.tmdb_id || null,
         data.poster_url || null,
@@ -3495,7 +3529,31 @@ export class DatabaseService {
     `, sourceId ? [sourceId, sourceId] : [])
     if (!result.length) return []
 
-    return this.rowsToObjects<SeriesCompleteness>(result[0])
+    return this.rowsToObjects<SeriesCompleteness>(result[0]).map(DatabaseService.parseSeriesRow)
+  }
+
+  private static parseSeriesRow(row: SeriesCompleteness): SeriesCompleteness {
+    return {
+      ...row,
+      missing_seasons: Array.isArray(row.missing_seasons)
+        ? row.missing_seasons
+        : JSON.parse((row.missing_seasons as unknown as string) || '[]'),
+      missing_episodes: Array.isArray(row.missing_episodes)
+        ? row.missing_episodes
+        : JSON.parse((row.missing_episodes as unknown as string) || '[]'),
+    }
+  }
+
+  private static parseCollectionRow(row: MovieCollection): MovieCollection {
+    return {
+      ...row,
+      missing_movies: Array.isArray(row.missing_movies)
+        ? row.missing_movies
+        : JSON.parse((row.missing_movies as unknown as string) || '[]'),
+      owned_movie_ids: Array.isArray(row.owned_movie_ids)
+        ? row.owned_movie_ids
+        : JSON.parse((row.owned_movie_ids as unknown as string) || '[]'),
+    }
   }
 
   /**
@@ -3521,7 +3579,7 @@ export class DatabaseService {
     const result = this.db.exec(sql, params)
     if (!result.length) return []
 
-    return this.rowsToObjects<SeriesCompleteness>(result[0])
+    return this.rowsToObjects<SeriesCompleteness>(result[0]).map(DatabaseService.parseSeriesRow)
   }
 
   /**
@@ -3548,7 +3606,7 @@ export class DatabaseService {
     const result = this.db.exec(sql, params)
     if (!result.length) return null
 
-    const items = this.rowsToObjects<SeriesCompleteness>(result[0])
+    const items = this.rowsToObjects<SeriesCompleteness>(result[0]).map(DatabaseService.parseSeriesRow)
     return items[0] || null
   }
 
@@ -3580,7 +3638,7 @@ export class DatabaseService {
     `, params)
     if (!result.length) return []
 
-    return this.rowsToObjects<SeriesCompleteness>(result[0])
+    return this.rowsToObjects<SeriesCompleteness>(result[0]).map(DatabaseService.parseSeriesRow)
   }
 
   /**
@@ -3973,8 +4031,8 @@ export class DatabaseService {
         data.collection_name,
         data.total_movies,
         data.owned_movies,
-        data.missing_movies,
-        data.owned_movie_ids,
+        JSON.stringify(data.missing_movies),
+        JSON.stringify(data.owned_movie_ids),
         data.completeness_percentage,
         data.poster_url || null,
         data.backdrop_url || null,
@@ -3998,8 +4056,8 @@ export class DatabaseService {
         libraryId,
         data.total_movies,
         data.owned_movies,
-        data.missing_movies,
-        data.owned_movie_ids,
+        JSON.stringify(data.missing_movies),
+        JSON.stringify(data.owned_movie_ids),
         data.completeness_percentage,
         data.poster_url || null,
         data.backdrop_url || null,
@@ -4040,7 +4098,7 @@ export class DatabaseService {
     const result = this.db.exec(sql, params)
     if (!result.length) return []
 
-    return this.rowsToObjects<MovieCollection>(result[0])
+    return this.rowsToObjects<MovieCollection>(result[0]).map(DatabaseService.parseCollectionRow)
   }
 
   /**
@@ -4055,7 +4113,7 @@ export class DatabaseService {
     )
     if (!result.length) return null
 
-    const items = this.rowsToObjects<MovieCollection>(result[0])
+    const items = this.rowsToObjects<MovieCollection>(result[0]).map(DatabaseService.parseCollectionRow)
     return items[0] || null
   }
 
@@ -4072,7 +4130,7 @@ export class DatabaseService {
         [sourceId]
       )
       if (!result.length) return []
-      return this.rowsToObjects<MovieCollection>(result[0])
+      return this.rowsToObjects<MovieCollection>(result[0]).map(DatabaseService.parseCollectionRow)
     }
 
     const result = this.db.exec(
@@ -4080,7 +4138,7 @@ export class DatabaseService {
     )
     if (!result.length) return []
 
-    return this.rowsToObjects<MovieCollection>(result[0])
+    return this.rowsToObjects<MovieCollection>(result[0]).map(DatabaseService.parseCollectionRow)
   }
 
   /**

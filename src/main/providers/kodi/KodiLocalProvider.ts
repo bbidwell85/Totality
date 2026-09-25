@@ -1476,8 +1476,8 @@ export class KodiLocalProvider implements MediaProvider {
         library_id: 'movies',
         total_movies: movies.length,
         owned_movies: movies.length,
-        missing_movies: JSON.stringify([]), // Kodi doesn't track missing movies
-        owned_movie_ids: JSON.stringify(ownedTmdbIds),
+        missing_movies: [], // Kodi doesn't track missing movies
+        owned_movie_ids: ownedTmdbIds,
         completeness_percentage: 100, // All movies in Kodi set are owned
         poster_url: convertKodiImageUrl(collection.posterUrl) || convertKodiImageUrl(movies[0]?.posterUrl),
         backdrop_url: convertKodiImageUrl(collection.fanartUrl) || convertKodiImageUrl(movies[0]?.fanartUrl),

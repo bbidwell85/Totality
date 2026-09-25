@@ -131,25 +131,55 @@ export class TMDBService {
   }
 
   /**
-   * Cache management: Get from cache or return null
+   * Cache management: Get from cache or return null.
+   * Checks L1 (in-memory) first, then L2 (SQLite) on miss.
+   * A SQLite hit warms the in-memory cache so subsequent calls are free.
    */
   private getFromCache<T>(key: string): T | null {
+    // L1: in-memory
     const cached = this.cache.get(key)
-
-    if (cached && Date.now() - cached.timestamp < TMDBService.CACHE_DURATION) {
-      return cached.data as T
+    if (cached) {
+      if (Date.now() - cached.timestamp < TMDBService.CACHE_DURATION) {
+        return cached.data as T
+      }
+      this.cache.delete(key)
     }
 
-    // Remove expired cache
-    if (cached) {
-      this.cache.delete(key)
+    // L2: SQLite (persists across restarts)
+    try {
+      const row = getDatabase().getTmdbCache(key)
+      if (row && Date.now() - row.cached_at < TMDBService.CACHE_DURATION) {
+        const data = JSON.parse(row.data) as T
+        // Warm L1 so the next access is free
+        this.warmCache(key, data, row.cached_at)
+        getLoggingService().verbose('[TMDB]', `SQLite cache hit: ${key}`)
+        return data
+      }
+    } catch {
+      // DB unavailable — fall through to API call
     }
 
     return null
   }
 
   /**
-   * Cache management: Store in cache
+   * Write to L1 (in-memory) only, without touching SQLite.
+   * Used when restoring from the SQLite L2 cache.
+   */
+  private warmCache(key: string, data: unknown, timestamp: number): void {
+    if (this.cache.size >= TMDBService.MAX_CACHE_SIZE) {
+      let oldest: string | null = null
+      let oldestTime = Infinity
+      for (const [k, v] of this.cache) {
+        if (v.timestamp < oldestTime) { oldestTime = v.timestamp; oldest = k }
+      }
+      if (oldest) this.cache.delete(oldest)
+    }
+    this.cache.set(key, { data, timestamp })
+  }
+
+  /**
+   * Cache management: Store in L1 (in-memory) and L2 (SQLite).
    */
   private setCache(key: string, data: unknown): void {
     // Evict oldest entries when cache exceeds max size
@@ -157,17 +187,19 @@ export class TMDBService {
       let oldest: string | null = null
       let oldestTime = Infinity
       for (const [k, v] of this.cache) {
-        if (v.timestamp < oldestTime) {
-          oldestTime = v.timestamp
-          oldest = k
-        }
+        if (v.timestamp < oldestTime) { oldestTime = v.timestamp; oldest = k }
       }
       if (oldest) this.cache.delete(oldest)
     }
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now()
-    })
+    const now = Date.now()
+    this.cache.set(key, { data, timestamp: now })
+
+    // Persist to SQLite so the cache survives restarts
+    try {
+      getDatabase().setTmdbCache(key, JSON.stringify(data))
+    } catch {
+      // Non-fatal: DB write failure only means no persistence
+    }
   }
 
   /**

@@ -252,8 +252,8 @@ export class SeriesCompletenessService extends CancellableOperation {
         total_episodes: analysis.totalEpisodes,
         owned_seasons: analysis.ownedSeasons,
         owned_episodes: analysis.ownedEpisodes,
-        missing_seasons: JSON.stringify(analysis.missingSeasons),
-        missing_episodes: JSON.stringify(analysis.missingEpisodes),
+        missing_seasons: analysis.missingSeasons,
+        missing_episodes: analysis.missingEpisodes,
         completeness_percentage: analysis.completenessPercentage,
         tmdb_id: analysis.tmdbId,
         poster_url: analysis.posterUrl,
@@ -710,8 +710,8 @@ export class SeriesCompletenessService extends CancellableOperation {
       total_episodes: 0, // Unknown
       owned_seasons: uniqueSeasons.size,
       owned_episodes: nonSpecialEpisodes.length,
-      missing_seasons: '[]',
-      missing_episodes: '[]',
+      missing_seasons: [],
+      missing_episodes: [],
       completeness_percentage: 0, // Can't calculate without TMDB data
       tmdb_id: undefined,
       poster_url: undefined,

@@ -29,10 +29,14 @@ import {
   useAnalysisManager,
   useDismissHandlers,
   useLibraryEventListeners,
+  useViewPreferences,
+  useMoviePagination,
+  useTVShowPagination,
 } from './hooks'
 import {
   emitDismissUpgrade,
 } from '../../utils/dismissEvents'
+import { applyCollectionFilters, applySeriesFilters, buildTheatricalCutoff } from '../../utils/completenessFilters'
 
 // Import types from shared types file
 import type {
@@ -42,7 +46,6 @@ import type {
   MusicStats,
   MediaItem,
   TVShow,
-  TVShowSummary,
   TVSeason,
   LibraryStats,
   SeriesCompletenessData,
@@ -97,9 +100,9 @@ export function MediaBrowser({
   })
 
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const isRefreshing = false // Placeholder: set to true during source switching for dimmed UI
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false) // For background incremental scan on app start
-  const error: string | null = null // Placeholder: set during load failures
   const hasInitialLoadRef = useRef(false) // Track if initial load is complete
   const hasAutoSwitchedRef = useRef(false) // Track if auto-switch has been done (to prevent loop)
   const [stats, setStats] = useState<LibraryStats | null>(null)
@@ -133,22 +136,6 @@ export function MediaBrowser({
   const ALBUMS_PAGE_SIZE = 200
   const [albumSortColumn, setAlbumSortColumn] = useState<'title' | 'artist'>('title')
   const [albumSortDirection, setAlbumSortDirection] = useState<'asc' | 'desc'>('asc')
-  // Movie pagination state
-  const [paginatedMovies, setPaginatedMovies] = useState<MediaItem[]>([])
-  const [totalMovieCount, setTotalMovieCount] = useState(0)
-  const [moviesLoading, setMoviesLoading] = useState(false)
-  const moviesOffsetRef = useRef(0)
-  const MOVIES_PAGE_SIZE = 200
-  // TV show pagination state
-  const [paginatedShows, setPaginatedShows] = useState<TVShowSummary[]>([])
-  const [totalShowCount, setTotalShowCount] = useState(0)
-  const [totalEpisodeCount, setTotalEpisodeCount] = useState(0)
-  const [showsLoading, setShowsLoading] = useState(false)
-  const showsOffsetRef = useRef(0)
-  const SHOWS_PAGE_SIZE = 200
-  // Selected show episode loading (on-demand)
-  const [selectedShowEpisodes, setSelectedShowEpisodes] = useState<MediaItem[]>([])
-  const [selectedShowEpisodesLoading, setSelectedShowEpisodesLoading] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   // Filters (extracted to useLibraryFilters hook)
   const {
@@ -180,24 +167,22 @@ export function MediaBrowser({
   const listViewRef = useRef<HTMLButtonElement>(null)
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null)
   const [detailRefreshKey, setDetailRefreshKey] = useState(0) // Increment to force detail view refresh
-  const [viewType, setViewTypeState] = useState<'grid' | 'list'>('grid')
-  const [gridScale, setGridScaleState] = useState(4) // 1-7 scale for grid columns (4 = 50%)
-  const viewPrefsRef = useRef<Record<string, { viewType: 'grid' | 'list', gridScale: number }>>({})
-  const viewPrefsLoadedRef = useRef(false)
+  const { viewType, gridScale, setViewType, setGridScale, viewPrefsLoadedRef, loadViewPrefs } = useViewPreferences(view)
 
-  const setViewType = useCallback((vt: 'grid' | 'list') => {
-    setViewTypeState(vt)
-    if (!viewPrefsLoadedRef.current) return
-    viewPrefsRef.current[view] = { ...viewPrefsRef.current[view] || { viewType: 'grid', gridScale: 4 }, viewType: vt }
-    window.electronAPI.setSetting(SETTING_KEYS.library_view_prefs, JSON.stringify(viewPrefsRef.current))
-  }, [view])
+  // Library filter within current view (declared early — needed by pagination hooks)
+  const [activeLibraryId, setActiveLibraryId] = useState<string | null>(null)
 
-  const setGridScale = useCallback((gs: number) => {
-    setGridScaleState(gs)
-    if (!viewPrefsLoadedRef.current) return
-    viewPrefsRef.current[view] = { ...viewPrefsRef.current[view] || { viewType: 'grid', gridScale: 4 }, gridScale: gs }
-    window.electronAPI.setSetting(SETTING_KEYS.library_view_prefs, JSON.stringify(viewPrefsRef.current))
-  }, [view])
+  // Movie and TV show pagination (extracted hooks)
+  const {
+    paginatedMovies, setPaginatedMovies, totalMovieCount, moviesLoading,
+    loadPaginatedMovies, loadMoreMovies,
+  } = useMoviePagination({ activeSourceId, activeLibraryId, tierFilter: debouncedTierFilter, qualityFilter: debouncedQualityFilter, searchQuery, alphabetFilter })
+
+  const {
+    paginatedShows, totalShowCount, totalEpisodeCount, showsLoading,
+    selectedShowEpisodes, setSelectedShowEpisodes, selectedShowEpisodesLoading,
+    loadPaginatedShows, loadMoreShows, loadSelectedShowEpisodes,
+  } = useTVShowPagination({ activeSourceId, activeLibraryId, searchQuery, alphabetFilter })
 
   const [collectionsOnly, setCollectionsOnly] = useState(false)
 
@@ -232,9 +217,6 @@ export function MediaBrowser({
   const [activeSourceLibraries, setActiveSourceLibraries] = useState<Array<{ id: string; name: string; type: string }>>([])
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_librariesLoading, setLibrariesLoading] = useState(false)
-
-  // Library filter within current view
-  const [activeLibraryId, setActiveLibraryId] = useState<string | null>(null)
 
   // Libraries of the current view type (for library filter dropdown)
   const currentTypeLibraries = useMemo(() =>
@@ -399,8 +381,10 @@ export function MediaBrowser({
     try {
       const libraryStats = await window.electronAPI.getLibraryStats(sourceId || undefined)
       setStats(libraryStats)
+      setLoadError(null)
     } catch (err) {
       console.warn('Failed to load library stats:', err)
+      setLoadError('Failed to load library data. Check your source connection.')
     }
   }
 
@@ -424,67 +408,17 @@ export function MediaBrowser({
       const excludedCollectionMovies = new Set(collectionExclusions.map((e: { parent_key: string | null; reference_key: string | null }) => `${e.parent_key}:${e.reference_key}`))
       const excludedSeriesEpisodes = new Set(seriesExclusions.map((e: { parent_key: string | null; reference_key: string | null }) => `${e.parent_key}:${e.reference_key}`))
 
-      // Filter collections: remove excluded missing movies + theatrical-only films, adjust totals
-      const theatricalCutoff = theatricalLagDays > 0
-        ? (() => { const d = new Date(); d.setDate(d.getDate() - theatricalLagDays); return d.toISOString().split('T')[0] })()
-        : null
+      // Filter collections using shared utility
+      const theatricalCutoff = buildTheatricalCutoff(theatricalLagDays)
       const filteredCollections = (collectionsData as MovieCollectionData[])
-        .map(c => {
-          try {
-            const rawMissing = JSON.parse(c.missing_movies || '[]') as Array<{ tmdb_id: string; release_date?: string }>
-            let filtered = rawMissing.filter(m => !excludedCollectionMovies.has(`${c.tmdb_collection_id}:${m.tmdb_id}`))
-            if (theatricalCutoff) {
-              filtered = filtered.filter(m => !m.release_date || m.release_date <= theatricalCutoff)
-            }
-            if (filtered.length !== rawMissing.length) {
-              const excludedCount = rawMissing.length - filtered.length
-              const newTotal = c.total_movies - excludedCount
-              return {
-                ...c,
-                missing_movies: JSON.stringify(filtered),
-                total_movies: newTotal,
-                completeness_percentage: newTotal > 0 ? Math.round(c.owned_movies / newTotal * 100) : 100,
-              }
-            }
-          } catch { /* keep original */ }
-          return c
-        })
+        .map(c => applyCollectionFilters(c, excludedCollectionMovies, theatricalCutoff))
         .filter(c => c.total_movies > 1)
       setMovieCollections(filteredCollections)
 
-      // Filter series: remove excluded episodes + empty seasons, adjust totals
+      // Filter series using shared utility
       const seriesMap = new Map<string, SeriesCompletenessData>()
       ;(seriesData as SeriesCompletenessData[]).forEach(s => {
-        try {
-          const rawMissing: Array<{ season_number: number; episode_number: number }> = JSON.parse(s.missing_episodes || '[]')
-          const parentKey = s.tmdb_id || s.series_title
-
-          // Step 1: individual episode exclusions
-          let filtered = rawMissing.filter(ep =>
-            !excludedSeriesEpisodes.has(`${parentKey}:S${ep.season_number}E${ep.episode_number}`)
-          )
-
-          // Step 2: exclude seasons where user owns 0 episodes
-          if (excludeEmptySeasons) {
-            const emptySeasons = new Set<number>(JSON.parse(s.missing_seasons || '[]'))
-            filtered = filtered.filter(ep => !emptySeasons.has(ep.season_number))
-          }
-
-          const excludedCount = rawMissing.length - filtered.length
-          if (excludedCount > 0) {
-            const newTotal = Math.max(s.owned_episodes, s.total_episodes - excludedCount)
-            seriesMap.set(s.series_title, {
-              ...s,
-              missing_episodes: JSON.stringify(filtered),
-              total_episodes: newTotal,
-              completeness_percentage: newTotal > 0
-                ? Math.round((s.owned_episodes / newTotal) * 100)
-                : 100,
-            })
-            return
-          }
-        } catch { /* keep original */ }
-        seriesMap.set(s.series_title, s)
+        seriesMap.set(s.series_title, applySeriesFilters(s, excludedSeriesEpisodes, excludeEmptySeasons))
       })
       setSeriesCompleteness(seriesMap)
 
@@ -492,15 +426,9 @@ export function MediaBrowser({
       const seriesEntries = Array.from(seriesMap.values())
       setSeriesStats({
         totalSeries: seriesEntries.length,
-        completeSeries: seriesEntries.filter(s => {
-          try { return JSON.parse(s.missing_episodes || '[]').length === 0 } catch { return true }
-        }).length,
-        incompleteSeries: seriesEntries.filter(s => {
-          try { return JSON.parse(s.missing_episodes || '[]').length > 0 } catch { return false }
-        }).length,
-        totalMissingEpisodes: seriesEntries.reduce((sum, s) => {
-          try { return sum + JSON.parse(s.missing_episodes || '[]').length } catch { return sum }
-        }, 0),
+        completeSeries: seriesEntries.filter(s => (s.missing_episodes || []).length === 0).length,
+        incompleteSeries: seriesEntries.filter(s => (s.missing_episodes || []).length > 0).length,
+        totalMissingEpisodes: seriesEntries.reduce((sum, s) => sum + (s.missing_episodes || []).length, 0),
         averageCompleteness: seriesEntries.length > 0
           ? Math.round(seriesEntries.reduce((sum, s) => sum + (s.completeness_percentage || 0), 0) / seriesEntries.length)
           : 0,
@@ -509,9 +437,7 @@ export function MediaBrowser({
         total: filteredCollections.length,
         complete: filteredCollections.filter(c => c.completeness_percentage >= 100).length,
         incomplete: filteredCollections.filter(c => c.completeness_percentage < 100).length,
-        totalMissing: filteredCollections.reduce((sum, c) => {
-          try { return sum + JSON.parse(c.missing_movies || '[]').length } catch { return sum }
-        }, 0),
+        totalMissing: filteredCollections.reduce((sum, c) => sum + (c.missing_movies || []).length, 0),
         avgCompleteness: filteredCollections.length > 0
           ? Math.round(filteredCollections.reduce((sum, c) => sum + c.completeness_percentage, 0) / filteredCollections.length)
           : 0,
@@ -715,54 +641,6 @@ export function MediaBrowser({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, musicViewMode, activeSourceId, activeLibraryId,searchQuery, alphabetFilter, albumSortColumn, albumSortDirection, selectedArtist])
 
-  // Load paginated movies from server with current filters/sorting
-  const loadPaginatedMovies = useCallback(async (reset = true, startOffset?: number) => {
-    if (moviesLoading) return
-    setMoviesLoading(true)
-    try {
-      const offset = reset ? (startOffset ?? 0) : moviesOffsetRef.current
-      const filters: Record<string, unknown> = {
-        type: 'movie',
-        limit: MOVIES_PAGE_SIZE,
-        offset,
-        sortBy: 'title',
-        sortOrder: 'asc',
-      }
-      if (activeSourceId) filters.sourceId = activeSourceId
-      if (activeLibraryId) filters.libraryId = activeLibraryId
-
-      if (debouncedTierFilter !== 'all') filters.qualityTier = debouncedTierFilter
-      if (debouncedQualityFilter !== 'all') filters.tierQuality = debouncedQualityFilter.toUpperCase()
-      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
-
-      const [movieItems, count] = await Promise.all([
-        window.electronAPI.getMediaItems(filters),
-        window.electronAPI.countMediaItems(filters),
-      ])
-
-      if (reset) {
-        setPaginatedMovies(movieItems as MediaItem[])
-        moviesOffsetRef.current = MOVIES_PAGE_SIZE
-      } else {
-        setPaginatedMovies(prev => [...prev, ...(movieItems as MediaItem[])])
-        moviesOffsetRef.current = offset + MOVIES_PAGE_SIZE
-      }
-      setTotalMovieCount(count)
-    } catch (err) {
-      console.warn('Failed to load paginated movies:', err)
-    } finally {
-      setMoviesLoading(false)
-    }
-  }, [activeSourceId, activeLibraryId,debouncedTierFilter, debouncedQualityFilter, searchQuery, alphabetFilter, moviesLoading])
-
-  // Load more movies (infinite scroll callback)
-  const loadMoreMovies = useCallback(() => {
-    if (moviesOffsetRef.current < totalMovieCount && !moviesLoading) {
-      loadPaginatedMovies(false)
-    }
-  }, [totalMovieCount, moviesLoading, loadPaginatedMovies])
-
   // Trigger server-side movie loading when movies view is active and filters change
   useEffect(() => {
     if (view === 'movies') {
@@ -770,66 +648,6 @@ export function MediaBrowser({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, activeSourceId, activeLibraryId,debouncedTierFilter, debouncedQualityFilter, searchQuery, alphabetFilter])
-
-  // Load paginated TV shows from server with current filters
-  const loadPaginatedShows = useCallback(async (reset = true, startOffset?: number) => {
-    if (showsLoading) return
-    setShowsLoading(true)
-    try {
-      const offset = reset ? (startOffset ?? 0) : showsOffsetRef.current
-      const filters: Record<string, unknown> = {
-        limit: SHOWS_PAGE_SIZE,
-        offset,
-        sortBy: 'title',
-        sortOrder: 'asc',
-      }
-      if (activeSourceId) filters.sourceId = activeSourceId
-      if (activeLibraryId) filters.libraryId = activeLibraryId
-
-      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
-
-      const [newShows, count, episodeCount] = await Promise.all([
-        window.electronAPI.getTVShows(filters),
-        window.electronAPI.countTVShows(filters),
-        window.electronAPI.countTVEpisodes(filters)
-      ])
-
-      if (reset) {
-        setPaginatedShows(newShows as TVShowSummary[])
-        showsOffsetRef.current = SHOWS_PAGE_SIZE
-      } else {
-        setPaginatedShows(prev => [...prev, ...(newShows as TVShowSummary[])])
-        showsOffsetRef.current = offset + SHOWS_PAGE_SIZE
-      }
-      setTotalShowCount(count as number)
-      setTotalEpisodeCount(episodeCount as number)
-    } catch (err) {
-      console.error('Error loading TV shows:', err)
-    } finally {
-      setShowsLoading(false)
-    }
-  }, [showsLoading, activeSourceId, activeLibraryId,searchQuery, alphabetFilter])
-
-  const loadMoreShows = useCallback(() => {
-    if (showsOffsetRef.current < totalShowCount && !showsLoading) {
-      loadPaginatedShows(false)
-    }
-  }, [totalShowCount, showsLoading, loadPaginatedShows])
-
-  // Load episodes on demand when a show is selected
-  const loadSelectedShowEpisodes = useCallback(async (showTitle: string) => {
-    setSelectedShowEpisodesLoading(true)
-    try {
-      const episodes = await window.electronAPI.seriesGetEpisodes(showTitle, activeSourceId || undefined)
-      setSelectedShowEpisodes(episodes as MediaItem[])
-    } catch (err) {
-      console.error('Error loading episodes for show:', err)
-      setSelectedShowEpisodes([])
-    } finally {
-      setSelectedShowEpisodesLoading(false)
-    }
-  }, [activeSourceId])
 
   // Trigger server-side TV show loading when TV view is active and filters change
   useEffect(() => {
@@ -846,6 +664,7 @@ export function MediaBrowser({
     } else {
       setSelectedShowEpisodes([])
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedShow, loadSelectedShowEpisodes])
 
   // Event listeners and initial data load placed after loadMusicCompletenessData (see below)
@@ -1063,6 +882,7 @@ export function MediaBrowser({
   useEffect(() => {
     loadStats(activeSourceId || undefined).then(() => {
       hasInitialLoadRef.current = true
+    }).catch(() => { /* error already set in loadStats */ }).finally(() => {
       setLoading(false)
     })
     loadCompletenessData()
@@ -1070,22 +890,9 @@ export function MediaBrowser({
     loadMusicCompletenessData()
     loadEpSingleSettings()
     checkTmdbApiKey()
-    // Load per-tab view preferences
+    // Load per-tab view preferences (delegated to useViewPreferences hook)
     if (!viewPrefsLoadedRef.current) {
-      window.electronAPI.getSetting(SETTING_KEYS.library_view_prefs).then(val => {
-        if (val) {
-          try {
-            const prefs = JSON.parse(val)
-            viewPrefsRef.current = prefs
-            const tabPrefs = prefs[view]
-            if (tabPrefs) {
-              setViewTypeState(tabPrefs.viewType || 'grid')
-              setGridScaleState(tabPrefs.gridScale ?? 4)
-            }
-          } catch { /* ignore bad JSON */ }
-        }
-        viewPrefsLoadedRef.current = true
-      })
+      loadViewPrefs(view)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSourceId])
@@ -1093,11 +900,8 @@ export function MediaBrowser({
   // Apply per-tab view preferences when switching tabs
   useEffect(() => {
     if (!viewPrefsLoadedRef.current) return
-    const tabPrefs = viewPrefsRef.current[view]
-    if (tabPrefs) {
-      setViewTypeState(tabPrefs.viewType || 'grid')
-      setGridScaleState(tabPrefs.gridScale ?? 4)
-    }
+    loadViewPrefs(view)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view])
 
   // getCollectionForMovie, getOwnedMoviesForCollection, ownedMoviesForSelectedCollection
@@ -1497,11 +1301,11 @@ export function MediaBrowser({
     )
   }
 
-  if (error) {
+  if (loadError) {
     return (
       <div className="rounded-lg border bg-card p-6">
         <div className="rounded-lg border border-destructive bg-destructive/10 p-4">
-          <p className="text-destructive">{error}</p>
+          <p className="text-destructive">{loadError}</p>
         </div>
       </div>
     )

@@ -57,6 +57,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('sources:getLibrariesWithStatus', sourceId),
   sourcesToggleLibrary: (sourceId: string, libraryId: string, enabled: boolean) =>
     ipcRenderer.invoke('sources:toggleLibrary', sourceId, libraryId, enabled),
+  sourcesSetLibraryUpgradeTier: (sourceId: string, libraryId: string, minTier: string | null) =>
+    ipcRenderer.invoke('sources:setLibraryUpgradeTier', sourceId, libraryId, minTier),
   sourcesSetLibrariesEnabled: (sourceId: string, libraries: Array<{
     id: string
     name: string
@@ -778,6 +780,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('logs:new', handler)
     return () => ipcRenderer.removeListener('logs:new', handler)
   },
+
+  // ============================================================================
+  // ARR AUTOMATION (Radarr / Sonarr / Lidarr)
+  // ============================================================================
+  arrTestConnection: (params: { type: 'radarr' | 'sonarr' | 'lidarr'; url: string; apiKey: string }) =>
+    ipcRenderer.invoke('arr:testConnection', params),
+  arrGetQualityProfiles: (params: { type: 'radarr' | 'sonarr' | 'lidarr'; url: string; apiKey: string }) =>
+    ipcRenderer.invoke('arr:getQualityProfiles', params),
+  arrGetRootFolders: (params: { type: 'radarr' | 'sonarr' | 'lidarr'; url: string; apiKey: string }) =>
+    ipcRenderer.invoke('arr:getRootFolders', params),
+  arrGetConfiguredApps: () =>
+    ipcRenderer.invoke('arr:getConfiguredApps'),
+  arrAddMovie: (params: { tmdbId: string | number; title: string; year?: number }) =>
+    ipcRenderer.invoke('arr:addMovie', params),
+  arrAddSeries: (params: { title: string; year?: number }) =>
+    ipcRenderer.invoke('arr:addSeries', params),
+  arrAddArtist: (params: { name: string; mbId?: string }) =>
+    ipcRenderer.invoke('arr:addArtist', params),
+  arrGetQueue: (type?: 'radarr' | 'sonarr' | 'lidarr') =>
+    ipcRenderer.invoke('arr:getQueue', type),
+  arrRemoveFromQueue: (params: { type: 'radarr' | 'sonarr' | 'lidarr'; queueId: number; blacklist?: boolean }) =>
+    ipcRenderer.invoke('arr:removeFromQueue', params),
 })
 
 // Type definitions for multi-source support
@@ -885,8 +909,10 @@ export interface ElectronAPI {
     isEnabled: boolean
     lastScanAt: string | null
     itemsScanned: number
+    upgradeMinTier: string | null
   }>>
   sourcesToggleLibrary: (sourceId: string, libraryId: string, enabled: boolean) => Promise<{ success: boolean }>
+  sourcesSetLibraryUpgradeTier: (sourceId: string, libraryId: string, minTier: string | null) => Promise<{ success: boolean }>
   sourcesSetLibrariesEnabled: (sourceId: string, libraries: Array<{
     id: string
     name: string

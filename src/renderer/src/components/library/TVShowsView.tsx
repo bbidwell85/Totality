@@ -496,15 +496,7 @@ export function TVShowsView({
     const ownedSeasons = Array.from(selectedShowData.seasons.values()).sort((a, b) => a.seasonNumber - b.seasonNumber)
     const completenessData = seriesCompleteness.get(selectedShow)
 
-    // Parse missing seasons from completeness data
-    let missingSeasonNumbers: number[] = []
-    if (completenessData?.missing_seasons) {
-      try {
-        missingSeasonNumbers = JSON.parse(completenessData.missing_seasons) || []
-      } catch {
-        missingSeasonNumbers = []
-      }
-    }
+    const missingSeasonNumbers = completenessData?.missing_seasons || []
 
     // Build combined list of owned and missing seasons
     const ownedSeasonNumbers = new Set(ownedSeasons.map(s => s.seasonNumber))
@@ -666,18 +658,9 @@ export function TVShowsView({
     const ownedEpisodes = season ? season.episodes.filter(filterItem) : []
     const ownedEpisodeNumbers = new Set(ownedEpisodes.map(e => e.episode_number))
 
-    // Parse missing episodes from completeness data, filter by current season
-    let missingEpisodesForSeason: MissingEpisode[] = []
-    if (completenessData?.missing_episodes) {
-      try {
-        const allMissing: MissingEpisode[] = JSON.parse(completenessData.missing_episodes) || []
-        missingEpisodesForSeason = allMissing.filter(
-          ep => ep.season_number === selectedSeason && !ownedEpisodeNumbers.has(ep.episode_number)
-        )
-      } catch {
-        missingEpisodesForSeason = []
-      }
-    }
+    const missingEpisodesForSeason = (completenessData?.missing_episodes || []).filter(
+      ep => ep.season_number === selectedSeason && !ownedEpisodeNumbers.has(ep.episode_number)
+    )
 
     // Get fallback poster for missing episodes (season poster > series poster)
     const missingEpisodePoster = season?.posterUrl || completenessData?.poster_url || selectedShowData.poster_url

@@ -304,16 +304,12 @@ export function registerSourceHandlers(): void {
 
       // Get stored library settings from database
       const storedLibraries = db.getSourceLibraries(validSourceId) as Array<{
-        libraryId: string
-        libraryName: string
-        libraryType: string
-        isEnabled: boolean
-        lastScanAt: string | null
-        itemsScanned: number
+        libraryId: string; libraryName: string; libraryType: string
+        isEnabled: boolean; lastScanAt: string | null; itemsScanned: number; upgradeMinTier: string | null
       }>
       const storedMap = new Map(storedLibraries.map(l => [l.libraryId, l]))
 
-      // Merge: libraries from provider + enabled status from DB
+      // Merge: libraries from provider + enabled status + upgrade targets from DB
       return libraries.map(lib => {
         const stored = storedMap.get(lib.id)
         return {
@@ -321,6 +317,7 @@ export function registerSourceHandlers(): void {
           isEnabled: stored ? stored.isEnabled : true, // Default to enabled
           lastScanAt: stored?.lastScanAt || null,
           itemsScanned: stored?.itemsScanned || 0,
+          upgradeMinTier: stored?.upgradeMinTier ?? null,
         }
       })
     } catch (error: unknown) {
@@ -349,6 +346,27 @@ export function registerSourceHandlers(): void {
       return { success: true }
     } catch (error: unknown) {
       console.error('Error toggling library:', error)
+      throw error
+    }
+  })
+
+  /**
+   * Set or clear per-library upgrade minimum tier
+   */
+  ipcMain.handle('sources:setLibraryUpgradeTier', async (_event, sourceId: unknown, libraryId: unknown, minTier: unknown) => {
+    try {
+      const validSourceId = validateInput(SourceIdSchema, sourceId, 'sources:setLibraryUpgradeTier')
+      const validLibraryId = validateInput(SourceIdSchema, libraryId, 'sources:setLibraryUpgradeTier')
+      const validMinTier = (minTier === null || minTier === '' || minTier === undefined)
+        ? null
+        : String(minTier)
+      if (validMinTier !== null && !['SD', '720p', '1080p', '4K'].includes(validMinTier)) {
+        throw new Error(`Invalid upgrade_min_tier: ${validMinTier}`)
+      }
+      getDatabase().setLibraryUpgradeTier(validSourceId, validLibraryId, validMinTier)
+      return { success: true }
+    } catch (error: unknown) {
+      console.error('Error setting library upgrade tier:', error)
       throw error
     }
   })

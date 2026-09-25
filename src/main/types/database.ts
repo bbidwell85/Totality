@@ -303,8 +303,8 @@ export interface SeriesCompleteness {
   owned_seasons: number
   owned_episodes: number
 
-  missing_seasons: string // JSON array of numbers
-  missing_episodes: string // JSON array of MissingEpisode
+  missing_seasons: number[]
+  missing_episodes: MissingEpisode[]
 
   completeness_percentage: number
 
@@ -330,8 +330,8 @@ export interface MovieCollection {
   total_movies: number
   owned_movies: number
 
-  missing_movies: string // JSON array of MissingMovie
-  owned_movie_ids: string // JSON array of tmdb_ids (strings)
+  missing_movies: MissingMovie[]
+  owned_movie_ids: string[]
 
   completeness_percentage: number
 

@@ -196,6 +196,21 @@ export interface LibraryStats {
 // Completeness Types
 // ============================================================================
 
+export interface MissingEpisode {
+  season_number: number
+  episode_number: number
+  title?: string
+  air_date?: string
+}
+
+export interface MissingMovie {
+  tmdb_id: string
+  title: string
+  year?: number
+  poster_path?: string
+  release_date?: string
+}
+
 export interface SeriesCompletenessData {
   id: number
   series_title: string
@@ -203,8 +218,8 @@ export interface SeriesCompletenessData {
   total_episodes: number
   owned_seasons: number
   owned_episodes: number
-  missing_seasons: string
-  missing_episodes: string
+  missing_seasons: number[]
+  missing_episodes: MissingEpisode[]
   completeness_percentage: number
   tmdb_id?: string
   poster_url?: string
@@ -217,8 +232,8 @@ export interface MovieCollectionData {
   collection_name: string
   total_movies: number
   owned_movies: number
-  missing_movies: string
-  owned_movie_ids: string
+  missing_movies: MissingMovie[]
+  owned_movie_ids: string[]
   completeness_percentage: number
   poster_url?: string
 }

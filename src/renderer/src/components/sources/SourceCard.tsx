@@ -9,12 +9,20 @@ import { Server, HardDrive, Film, Tv, Music, Folder } from 'lucide-react'
 import { useSources, type ProviderType } from '../../contexts/SourceContext'
 import type { MediaSourceResponse, MediaLibraryResponse } from '../../../../preload/index'
 
-// Extended library type with enabled status
+// Extended library type with enabled status and upgrade target
 interface LibraryWithStatus extends MediaLibraryResponse {
   isEnabled: boolean
   lastScanAt: string | null
   itemsScanned: number
+  upgradeMinTier: string | null
 }
+
+const UPGRADE_TIER_OPTIONS = [
+  { value: '', label: 'Default (low quality)' },
+  { value: '720p', label: 'Below 720p' },
+  { value: '1080p', label: 'Below 1080p' },
+  { value: '4K', label: 'Below 4K' },
+]
 
 // Provider colors
 const providerColors: Record<ProviderType, string> = {
@@ -166,6 +174,19 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
       } finally {
         setIsLoadingLibraries(false)
       }
+    }
+  }
+
+  // Change per-library upgrade target tier
+  const handleSetUpgradeTier = async (libraryId: string, minTier: string) => {
+    const tierValue = minTier === '' ? null : minTier
+    try {
+      await window.electronAPI.sourcesSetLibraryUpgradeTier(source.source_id, libraryId, tierValue)
+      setLibraries(prev => prev.map(lib =>
+        lib.id === libraryId ? { ...lib, upgradeMinTier: tierValue } : lib
+      ))
+    } catch (err) {
+      console.error('Failed to set library upgrade tier:', err)
     }
   }
 
@@ -489,14 +510,30 @@ export function SourceCard({ source, onScan, expanded = false, onToggleExpand }:
                       <span className="text-xs text-muted-foreground">({lib.itemCount} items)</span>
                     )}
                   </div>
-                  <button
-                    onClick={() => handleScanLibrary(lib.id)}
-                    disabled={isScanning || !lib.isEnabled}
-                    className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={!lib.isEnabled ? 'Enable library to scan' : 'Scan library'}
-                  >
-                    Scan
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Per-library upgrade target (video/TV only) */}
+                    {lib.type !== 'music' && (
+                      <select
+                        value={lib.upgradeMinTier ?? ''}
+                        onChange={e => handleSetUpgradeTier(lib.id, e.target.value)}
+                        disabled={!lib.isEnabled}
+                        className="text-xs bg-background border border-border rounded px-1.5 py-0.5 text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Flag for upgrade if below this tier"
+                      >
+                        {UPGRADE_TIER_OPTIONS.map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      onClick={() => handleScanLibrary(lib.id)}
+                      disabled={isScanning || !lib.isEnabled}
+                      className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={!lib.isEnabled ? 'Enable library to scan' : 'Scan library'}
+                    >
+                      Scan
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

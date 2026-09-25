@@ -629,6 +629,18 @@ CREATE INDEX IF NOT EXISTS idx_exclusions_type_key ON exclusions(exclusion_type,
 -- TASK QUEUE HISTORY
 -- ============================================================================
 
+-- Pending queue snapshot: written on shutdown, read and cleared on next startup
+CREATE TABLE IF NOT EXISTS pending_tasks (
+  position   INTEGER PRIMARY KEY,  -- preserves original queue order
+  task_id    TEXT    NOT NULL,
+  type       TEXT    NOT NULL,
+  label      TEXT    NOT NULL,
+  source_id  TEXT,
+  library_id TEXT,
+  artist_id  INTEGER,
+  created_at TEXT    NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS task_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   task_id TEXT NOT NULL,
@@ -743,6 +755,18 @@ CREATE INDEX IF NOT EXISTS idx_wishlist_items_tmdb ON wishlist_items(tmdb_id);
 CREATE INDEX IF NOT EXISTS idx_wishlist_items_musicbrainz ON wishlist_items(musicbrainz_id);
 CREATE INDEX IF NOT EXISTS idx_wishlist_items_reason ON wishlist_items(reason);
 CREATE INDEX IF NOT EXISTS idx_wishlist_items_media_item ON wishlist_items(media_item_id);
+
+-- ============================================================================
+-- TMDB API CACHE (persisted across restarts to avoid cold-start re-fetching)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS tmdb_cache (
+  cache_key TEXT PRIMARY KEY,
+  data      TEXT    NOT NULL,       -- JSON-serialised TMDB response
+  cached_at INTEGER NOT NULL        -- Unix timestamp (ms) when stored
+);
+
+CREATE INDEX IF NOT EXISTS idx_tmdb_cache_expires ON tmdb_cache(cached_at);
 
 -- Create triggers for automatic updated_at timestamps
 CREATE TRIGGER IF NOT EXISTS update_media_items_timestamp

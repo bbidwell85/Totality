@@ -6,16 +6,19 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { FixedSizeList as VirtualList, VariableSizeList } from 'react-window'
-import { Sparkles, Library, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus, EyeOff } from 'lucide-react'
+import { Sparkles, Library, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus, EyeOff, Download } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
+import { ArrButtons } from '../arr/AddToArrButton'
+import { ArrQueuePanel } from '../arr/ArrQueuePanel'
 import { MediaDetails } from '../library/MediaDetails'
 import { useSources } from '../../contexts/SourceContext'
-import type { MediaItem, MovieCollectionData, SeriesCompletenessData, ArtistCompletenessData, MusicAlbum } from '../library/types'
+import type { MediaItem, MovieCollectionData, SeriesCompletenessData, ArtistCompletenessData, MusicAlbum, MissingMovie, MissingEpisode } from '../library/types'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import {
   emitDismissUpgrade,
   emitDismissCollectionMovie,
 } from '../../utils/dismissEvents'
+import { applyCollectionFilters, applySeriesFilters, applyArtistFilters } from '../../utils/completenessFilters'
 
 // Music album with quality info from the upgrade query
 interface MusicAlbumUpgrade extends MusicAlbum {
@@ -24,19 +27,6 @@ interface MusicAlbumUpgrade extends MusicAlbum {
   tier_score: number
 }
 
-// Missing item types for expanded rows
-interface MissingMovie {
-  tmdb_id: string
-  title: string
-  year?: number
-  poster_url?: string
-}
-
-interface MissingEpisode {
-  season_number: number
-  episode_number: number
-  episode_title?: string
-}
 
 interface MissingAlbumItem {
   musicbrainz_id: string
@@ -99,6 +89,8 @@ export function Dashboard({
   const [collections, setCollections] = useState<MovieCollectionData[]>([])
   const [series, setSeries] = useState<SeriesCompletenessData[]>([])
   const [artists, setArtists] = useState<ArtistCompletenessData[]>([])
+  const [arrApps, setArrApps] = useState<{ radarr: boolean; sonarr: boolean; lidarr: boolean }>({ radarr: false, sonarr: false, lidarr: false })
+  const [showArrQueue, setShowArrQueue] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [includeEps, setIncludeEps] = useState(true)
@@ -159,6 +151,17 @@ export function Dashboard({
 
   const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Load arr configured apps on mount and when settings change
+  useEffect(() => {
+    window.electronAPI.arrGetConfiguredApps().then(apps => setArrApps(apps as { radarr: boolean; sonarr: boolean; lidarr: boolean })).catch(() => {})
+    const cleanup = window.electronAPI.onSettingsChanged?.((ev: { key: string }) => {
+      if (ev.key.startsWith('radarr_') || ev.key.startsWith('sonarr_') || ev.key.startsWith('lidarr_')) {
+        window.electronAPI.arrGetConfiguredApps().then(apps => setArrApps(apps as { radarr: boolean; sonarr: boolean; lidarr: boolean })).catch(() => {})
+      }
+    })
+    return () => cleanup?.()
+  }, [])
+
   const loadDashboardData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -166,15 +169,39 @@ export function Dashboard({
       // Filter by active source if one is selected
       const sourceId = activeSourceId || undefined
 
-      // Read completeness settings and sort preferences
-      const [epsSettingVal, singlesSettingVal, upgSort, collSort, serSort, artSort] = await Promise.all([
+      // All IPC calls in one parallel batch — settings, data, and exclusions together
+      const val = <T,>(r: PromiseSettledResult<T>, fallback: T): T =>
+        r.status === 'fulfilled' ? r.value : fallback
+
+      const allResults = await Promise.allSettled([
+        // Settings (0-5)
         window.electronAPI.getSetting(SETTING_KEYS.completeness_include_eps),
         window.electronAPI.getSetting(SETTING_KEYS.completeness_include_singles),
         window.electronAPI.getSetting(SETTING_KEYS.dashboard_upgrade_sort),
         window.electronAPI.getSetting(SETTING_KEYS.dashboard_collection_sort),
         window.electronAPI.getSetting(SETTING_KEYS.dashboard_series_sort),
         window.electronAPI.getSetting(SETTING_KEYS.dashboard_artist_sort),
+        // Data (6-11)
+        window.electronAPI.getMediaItems({ needsUpgrade: true, type: 'movie', sortBy: 'tier_score', sortOrder: 'asc', sourceId }),
+        window.electronAPI.getMediaItems({ needsUpgrade: true, type: 'episode', sortBy: 'tier_score', sortOrder: 'asc', sourceId }),
+        window.electronAPI.musicGetAlbumsNeedingUpgrade(undefined, sourceId),
+        window.electronAPI.collectionsGetIncomplete(sourceId),
+        window.electronAPI.seriesGetIncomplete(sourceId),
+        window.electronAPI.musicGetAllArtistCompleteness(sourceId),
+        // Exclusions (12-15)
+        window.electronAPI.getExclusions('collection_movie'),
+        window.electronAPI.getExclusions('series_episode'),
+        window.electronAPI.getExclusions('artist_album'),
+        window.electronAPI.getExclusions('media_upgrade'),
       ])
+
+      const epsSettingVal = val(allResults[0], null)
+      const singlesSettingVal = val(allResults[1], null)
+      const upgSort = val(allResults[2], null)
+      const collSort = val(allResults[3], null)
+      const serSort = val(allResults[4], null)
+      const artSort = val(allResults[5], null)
+
       const epsEnabled = epsSettingVal !== 'false'
       const singlesEnabled = singlesSettingVal !== 'false'
       setIncludeEps(epsEnabled)
@@ -188,32 +215,17 @@ export function Dashboard({
       setSeriesSortBy(effectiveSerSort)
       setArtistSortBy(effectiveArtSort)
 
-      const results = await Promise.allSettled([
-        window.electronAPI.getMediaItems({ needsUpgrade: true, type: 'movie', sortBy: 'tier_score', sortOrder: 'asc', sourceId }),
-        window.electronAPI.getMediaItems({ needsUpgrade: true, type: 'episode', sortBy: 'tier_score', sortOrder: 'asc', sourceId }),
-        window.electronAPI.musicGetAlbumsNeedingUpgrade(undefined, sourceId),
-        window.electronAPI.collectionsGetIncomplete(sourceId),
-        window.electronAPI.seriesGetIncomplete(sourceId),
-        window.electronAPI.musicGetAllArtistCompleteness(sourceId),
-      ])
+      const movieUpgradeData = val(allResults[6], []) as MediaItem[]
+      const tvUpgradeData = val(allResults[7], []) as MediaItem[]
+      const musicUpgradeData = val(allResults[8], []) as MusicAlbumUpgrade[]
+      const collectionsData = val(allResults[9], []) as MovieCollectionData[]
+      const seriesData = val(allResults[10], []) as SeriesCompletenessData[]
+      const artistsData = val(allResults[11], []) as ArtistCompletenessData[]
 
-      const val = <T,>(r: PromiseSettledResult<T>, fallback: T): T =>
-        r.status === 'fulfilled' ? r.value : fallback
-
-      const movieUpgradeData = val(results[0], []) as MediaItem[]
-      const tvUpgradeData = val(results[1], []) as MediaItem[]
-      const musicUpgradeData = val(results[2], []) as MusicAlbumUpgrade[]
-      const collectionsData = val(results[3], []) as MovieCollectionData[]
-      const seriesData = val(results[4], []) as SeriesCompletenessData[]
-      const artistsData = val(results[5], []) as ArtistCompletenessData[]
-
-      // Load exclusions for completeness and upgrade filtering
-      const [collectionExclusions, seriesExclusions, artistExclusions, upgradeExclusions] = await Promise.all([
-        window.electronAPI.getExclusions('collection_movie'),
-        window.electronAPI.getExclusions('series_episode'),
-        window.electronAPI.getExclusions('artist_album'),
-        window.electronAPI.getExclusions('media_upgrade'),
-      ])
+      const collectionExclusions = val(allResults[12], []) as Array<{ parent_key: string | null; reference_key: string | null; reference_id: number | null }>
+      const seriesExclusions = val(allResults[13], []) as Array<{ parent_key: string | null; reference_key: string | null; reference_id: number | null }>
+      const artistExclusions = val(allResults[14], []) as Array<{ parent_key: string | null; reference_key: string | null; reference_id: number | null }>
+      const upgradeExclusions = val(allResults[15], []) as Array<{ parent_key: string | null; reference_key: string | null; reference_id: number | null }>
 
       // Build exclusion lookup sets
       const excludedCollectionMovies = new Set(collectionExclusions.map(e => `${e.parent_key}:${e.reference_key}`))
@@ -231,21 +243,9 @@ export function Dashboard({
       setTvUpgrades(sortUpgrades(tvUpgradeData.filter(e => !excludedUpgradeIds.has(e.id))))
       setMusicUpgrades((musicUpgradeData || []).filter(m => !excludedUpgradeIds.has(m.id)))
 
-      // Filter collections: remove excluded missing movies from JSON, adjust totals
+      // Filter collections, series, and artists using shared utility functions
       const filteredCollections = collectionsData
-        .map(c => {
-          try {
-            const missing = JSON.parse(c.missing_movies || '[]') as MissingMovie[]
-            const filtered = missing.filter(m => !excludedCollectionMovies.has(`${c.tmdb_collection_id}:${m.tmdb_id}`))
-            if (filtered.length !== missing.length) {
-              const excludedCount = missing.length - filtered.length
-              const newTotal = c.total_movies - excludedCount
-              const pct = newTotal > 0 ? (c.owned_movies / newTotal) * 100 : 100
-              return { ...c, missing_movies: JSON.stringify(filtered), total_movies: newTotal, completeness_percentage: pct }
-            }
-          } catch { /* keep original */ }
-          return c
-        })
+        .map(c => applyCollectionFilters(c, excludedCollectionMovies, null))
         .filter(c => c.total_movies > 1 && c.completeness_percentage < 100)
         .sort((a, b) => {
           if (effectiveCollSort === 'completeness') return b.completeness_percentage - a.completeness_percentage
@@ -254,21 +254,8 @@ export function Dashboard({
         })
       setCollections(filteredCollections)
 
-      // Filter series: remove excluded missing episodes from JSON
       const sortedSeries = seriesData
-        .map(s => {
-          try {
-            const missing = JSON.parse(s.missing_episodes || '[]') as MissingEpisode[]
-            const parentKey = s.tmdb_id || s.series_title
-            const filtered = missing.filter(ep => !excludedSeriesEpisodes.has(`${parentKey}:S${ep.season_number}E${ep.episode_number}`))
-            if (filtered.length !== missing.length) {
-              const owned = s.total_episodes - filtered.length
-              const pct = s.total_episodes > 0 ? (owned / s.total_episodes) * 100 : 100
-              return { ...s, missing_episodes: JSON.stringify(filtered), owned_episodes: owned, completeness_percentage: pct }
-            }
-          } catch { /* keep original */ }
-          return s
-        })
+        .map(s => applySeriesFilters(s, excludedSeriesEpisodes))
         .filter(s => s.completeness_percentage < 100)
         .sort((a, b) => {
           if (effectiveSerSort === 'completeness') return b.completeness_percentage - a.completeness_percentage
@@ -277,40 +264,8 @@ export function Dashboard({
         })
       setSeries(sortedSeries)
 
-      // Filter artists: remove excluded missing albums from JSON, recalculate completeness
       const incompleteArtists = (artistsData || [])
-        .map(a => {
-          const parentKey = a.musicbrainz_id || a.artist_name
-          const filterJson = (json: string | undefined): { filtered: string; removedCount: number } => {
-            try {
-              const parsed = JSON.parse(json || '[]') as Array<{ musicbrainz_id?: string }>
-              const filtered = parsed.filter(item => !excludedArtistAlbums.has(`${parentKey}:${item.musicbrainz_id}`))
-              if (filtered.length !== parsed.length) {
-                return { filtered: JSON.stringify(filtered), removedCount: parsed.length - filtered.length }
-              }
-            } catch { /* keep original */ }
-            return { filtered: json || '[]', removedCount: 0 }
-          }
-          const albums = filterJson(a.missing_albums)
-          const eps = filterJson(a.missing_eps)
-          const singles = filterJson(a.missing_singles)
-
-          // Recalculate completeness after exclusions
-          const adjTotalAlbums = a.total_albums - albums.removedCount
-          const adjTotalEps = a.total_eps - eps.removedCount
-          const adjTotalSingles = a.total_singles - singles.removedCount
-          const totalItems = adjTotalAlbums + (includeEps ? adjTotalEps : 0) + (includeSingles ? adjTotalSingles : 0)
-          const ownedItems = a.owned_albums + (includeEps ? a.owned_eps : 0) + (includeSingles ? a.owned_singles : 0)
-          const pct = totalItems > 0 ? Math.round((ownedItems / totalItems) * 100) : 100
-
-          return {
-            ...a,
-            missing_albums: albums.filtered,
-            missing_eps: eps.filtered,
-            missing_singles: singles.filtered,
-            completeness_percentage: pct,
-          }
-        })
+        .map(a => applyArtistFilters(a, excludedArtistAlbums, epsEnabled, singlesEnabled))
         .filter(a => a.completeness_percentage < 100)
         .sort((a, b) => {
           if (effectiveArtSort === 'completeness') return b.completeness_percentage - a.completeness_percentage
@@ -323,7 +278,6 @@ export function Dashboard({
     } finally {
       setIsLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- includeEps/includeSingles are read from settings inside, adding them would cause reload loops
   }, [activeSourceId])
 
   // Debounced reload coalesces rapid event-driven refreshes (300ms)
@@ -362,34 +316,11 @@ export function Dashboard({
     return () => window.removeEventListener('exclusions-changed', handler)
   }, [debouncedReload])
 
-  // Parse functions for missing items with basic validation
-  const parseMissingMovies = useCallback((collection: MovieCollectionData): MissingMovie[] => {
-    if (!collection.missing_movies) return []
-    try {
-      const parsed = JSON.parse(collection.missing_movies)
-      if (!Array.isArray(parsed)) return []
-      return parsed.filter((m): m is MissingMovie =>
-        m && typeof m === 'object' && typeof m.title === 'string'
-      )
-    } catch {
-      return []
-    }
-  }, [])
+  const parseMissingMovies = useCallback((collection: MovieCollectionData): MissingMovie[] =>
+    collection.missing_movies || [], [])
 
-  const parseMissingEpisodes = useCallback((s: SeriesCompletenessData): MissingEpisode[] => {
-    if (!s.missing_episodes) return []
-    try {
-      const parsed = JSON.parse(s.missing_episodes)
-      if (!Array.isArray(parsed)) return []
-      return parsed.filter((ep): ep is MissingEpisode =>
-        ep && typeof ep === 'object' &&
-        typeof ep.season_number === 'number' &&
-        typeof ep.episode_number === 'number'
-      )
-    } catch {
-      return []
-    }
-  }, [])
+  const parseMissingEpisodes = useCallback((s: SeriesCompletenessData): MissingEpisode[] =>
+    s.missing_episodes || [], [])
 
   const parseMissingAlbums = useCallback((artist: ArtistCompletenessData): MissingAlbumItem[] => {
     const albums: MissingAlbumItem[] = []
@@ -426,16 +357,7 @@ export function Dashboard({
     const episodes = parseMissingEpisodes(s)
     if (episodes.length === 0) return []
 
-    // Parse whole missing seasons (seasons with zero owned episodes)
-    let wholeMissingSeasons = new Set<number>()
-    try {
-      if (s.missing_seasons) {
-        const parsed = JSON.parse(s.missing_seasons)
-        wholeMissingSeasons = new Set(parsed)
-      }
-    } catch {
-      // Ignore parse errors
-    }
+    const wholeMissingSeasons = new Set<number>(s.missing_seasons || [])
 
     // Group episodes by season
     const groups = new Map<number, MissingEpisode[]>()
@@ -575,17 +497,14 @@ export function Dashboard({
     // Update the collection's missing movies, totals, and remove trivial collections
     setCollections(prev => prev.map((c, i) => {
       if (i !== collectionIndex) return c
-      try {
-        const missing = JSON.parse(c.missing_movies || '[]') as MissingMovie[]
-        const filtered = missing.filter(m => m.tmdb_id !== movie.tmdb_id)
-        const newTotal = c.total_movies - 1
-        return {
-          ...c,
-          missing_movies: JSON.stringify(filtered),
-          total_movies: newTotal,
-          completeness_percentage: newTotal > 0 ? c.owned_movies / newTotal * 100 : 100
-        }
-      } catch { return c }
+      const filtered = (c.missing_movies || []).filter(m => m.tmdb_id !== movie.tmdb_id)
+      const newTotal = c.total_movies - 1
+      return {
+        ...c,
+        missing_movies: filtered,
+        total_movies: newTotal,
+        completeness_percentage: newTotal > 0 ? c.owned_movies / newTotal * 100 : 100,
+      }
     }).filter(c => c.total_movies > 1))
     collectionsListInstanceRef.current?.resetAfterIndex(0)
     emitDismissCollectionMovie({ collectionId: collection.tmdb_collection_id, tmdbId: movie.tmdb_id })
@@ -598,11 +517,8 @@ export function Dashboard({
     await window.electronAPI.addExclusion('series_episode', undefined, refKey, s.tmdb_id || s.series_title, `${s.series_title} ${refKey}`)
     setSeries(prev => prev.map((ser, i) => {
       if (i !== seriesIndex) return ser
-      try {
-        const missing = JSON.parse(ser.missing_episodes || '[]') as MissingEpisode[]
-        const filtered = missing.filter(ep => !(ep.season_number === episode.season_number && ep.episode_number === episode.episode_number))
-        return { ...ser, missing_episodes: JSON.stringify(filtered) }
-      } catch { return ser }
+      const filtered = (ser.missing_episodes || []).filter(ep => !(ep.season_number === episode.season_number && ep.episode_number === episode.episode_number))
+      return { ...ser, missing_episodes: filtered }
     }))
   }, [series])
 
@@ -705,6 +621,7 @@ export function Dashboard({
           </div>
         </div>
         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+          <ArrButtons arrApps={arrApps} tmdbId={item.tmdb_id} title={item.title} year={item.year} mediaType="movie" compact />
           <AddToWishlistButton
             mediaType="movie"
             title={item.title}
@@ -729,7 +646,7 @@ export function Dashboard({
         </div>
       </div>
     )
-  }, [movieUpgrades, dismissMovieUpgrade])
+  }, [movieUpgrades, dismissMovieUpgrade, arrApps])
 
   const TvUpgradeRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const item = tvUpgrades[index]
@@ -759,6 +676,7 @@ export function Dashboard({
           </div>
         </div>
         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+          <ArrButtons arrApps={arrApps} title={item.series_title || item.title} year={item.year} mediaType="tv" compact />
           <AddToWishlistButton
             mediaType="episode"
             title={item.title}
@@ -786,7 +704,7 @@ export function Dashboard({
         </div>
       </div>
     )
-  }, [tvUpgrades, dismissTvUpgrade])
+  }, [tvUpgrades, dismissTvUpgrade, arrApps])
 
   const MusicUpgradeRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
     const album = musicUpgrades[index]
@@ -814,6 +732,7 @@ export function Dashboard({
             </div>
           </div>
           <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+            <ArrButtons arrApps={arrApps} title={album.artist_name || album.title} mbId={album.musicbrainz_id} mediaType="music" compact />
             <AddToWishlistButton
               mediaType="album"
               title={album.title}
@@ -834,7 +753,7 @@ export function Dashboard({
         </div>
       </div>
     )
-  }, [musicUpgrades, dismissMusicUpgrade])
+  }, [musicUpgrades, dismissMusicUpgrade, arrApps])
 
   // Collection row renderer with expandable missing items (shows all)
   const CollectionRow = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
@@ -912,7 +831,7 @@ export function Dashboard({
                   title={movie.title}
                   year={movie.year}
                   tmdbId={movie.tmdb_id}
-                  posterUrl={movie.poster_url}
+                  posterUrl={movie.poster_path}
                   reason="missing"
                   compact
                 />
@@ -1275,6 +1194,15 @@ export function Dashboard({
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Upgrades</h2>
                 </div>
                 <div className="flex items-center gap-2">
+                  {(arrApps.radarr || arrApps.sonarr || arrApps.lidarr) && (
+                    <button
+                      onClick={() => setShowArrQueue(true)}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                      title="View download queue"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <select
                     value={upgradeSortBy}
                     onChange={e => { const v = e.target.value as 'quality' | 'recent' | 'title'; setUpgradeSortBy(v); window.electronAPI.setSetting(SETTING_KEYS.dashboard_upgrade_sort, v) }}
@@ -1520,6 +1448,9 @@ export function Dashboard({
           )}
         </div>
       )}
+
+      {/* Arr Download Queue Panel */}
+      <ArrQueuePanel isOpen={showArrQueue} onClose={() => setShowArrQueue(false)} />
 
       {/* Media Detail Modal */}
       {selectedMediaId !== null && (

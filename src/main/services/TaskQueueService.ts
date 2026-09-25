@@ -396,10 +396,15 @@ export class TaskQueueService {
     } catch (err) {
       console.error('[TaskQueue] Failed to load persisted history:', getErrorMessage(err))
     }
+
+    // Re-enqueue tasks that were pending when the app last quit
+    this.restorePendingQueue()
   }
 
   /**
-   * Persist any in-flight or queued tasks as interrupted on app shutdown
+   * Persist any in-flight or queued tasks on app shutdown.
+   * Queued tasks (and the interrupted running task) are saved to pending_tasks so
+   * they can be restored on next startup. All are also logged as interrupted.
    */
   persistInterruptedTasks(): void {
     // Clear any pending progress throttle timer
@@ -412,7 +417,12 @@ export class TaskQueueService {
     try {
       const db = getDatabase()
 
+      // Build the list of tasks to restore on next startup:
+      // interrupted running task first, then remaining queued tasks (in order)
+      const toRestore: QueuedTask[] = []
+
       if (this.currentTask) {
+        toRestore.push(this.currentTask)
         db.saveTaskHistory({
           taskId: this.currentTask.id, type: this.currentTask.type, label: this.currentTask.label,
           sourceId: this.currentTask.sourceId, libraryId: this.currentTask.libraryId,
@@ -427,6 +437,7 @@ export class TaskQueueService {
       }
 
       for (const task of this.queue) {
+        toRestore.push(task)
         db.saveTaskHistory({
           taskId: task.id, type: task.type, label: task.label,
           sourceId: task.sourceId, libraryId: task.libraryId,
@@ -438,8 +449,51 @@ export class TaskQueueService {
           taskId: task.id, taskType: task.type,
         })
       }
+
+      // Persist the pending queue for restoration on next launch
+      if (toRestore.length > 0) {
+        db.savePendingTasks(toRestore.map(t => ({
+          taskId: t.id, type: t.type, label: t.label,
+          sourceId: t.sourceId, libraryId: t.libraryId, artistId: t.artistId, createdAt: t.createdAt,
+        })))
+        console.log(`[TaskQueue] Saved ${toRestore.length} task(s) to restore on next launch`)
+      } else {
+        db.clearPendingTasks()
+      }
     } catch (err) {
       console.error('[TaskQueue] Failed to persist interrupted tasks:', getErrorMessage(err))
+    }
+  }
+
+  /**
+   * Restore any tasks that were pending when the app last quit.
+   * Called once on startup after loadPersistedHistory().
+   */
+  restorePendingQueue(): void {
+    try {
+      const db = getDatabase()
+      const pending = db.getPendingTasks()
+      if (pending.length === 0) return
+
+      db.clearPendingTasks()
+
+      let restored = 0
+      for (const row of pending) {
+        const id = this.addTask({
+          type: row.type as TaskType,
+          label: row.label,
+          sourceId: row.sourceId ?? undefined,
+          libraryId: row.libraryId ?? undefined,
+          artistId: row.artistId ?? undefined,
+        })
+        if (id) restored++
+      }
+
+      if (restored > 0) {
+        console.log(`[TaskQueue] Restored ${restored} task(s) from previous session`)
+      }
+    } catch (err) {
+      console.error('[TaskQueue] Failed to restore pending queue:', getErrorMessage(err))
     }
   }
 

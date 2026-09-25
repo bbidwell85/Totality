@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, protocol, net, dialog, Tray, Menu, nativeImage, session } from 'electron'
 import path from 'node:path'
+import * as os from 'os'
 import * as fs from 'fs'
 
 
@@ -12,9 +13,27 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('no-sandbox')
 }
 
-// Disable hardware acceleration to prevent GPU process crashes on some systems
-// This uses software rendering instead, which is fine for a media library app
-app.disableHardwareAcceleration()
+// GPU crash fallback: disable hardware acceleration only if a previous crash was recorded.
+// On first run (no flag file) hardware acceleration is enabled for smooth rendering.
+// If the GPU process crashes, a flag file is written and the app prompts to restart in
+// software mode — keeping all other users on GPU-accelerated rendering.
+const getGpuFlagPath = (): string => {
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'totality', '.gpu-disabled')
+  }
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'totality', '.gpu-disabled')
+  }
+  return path.join(os.homedir(), '.config', 'totality', '.gpu-disabled')
+}
+
+const GPU_FLAG_PATH = getGpuFlagPath()
+const gpuDisabled = fs.existsSync(GPU_FLAG_PATH)
+
+if (gpuDisabled) {
+  console.log('[GPU] Hardware acceleration disabled (crash flag present)')
+  app.disableHardwareAcceleration()
+}
 
 // Register custom protocol for serving local artwork files
 // Must be registered before app is ready
@@ -47,6 +66,7 @@ import { registerLoggingHandlers } from './ipc/logging'
 import { registerAutoUpdateHandlers } from './ipc/autoUpdate'
 import { registerGeminiHandlers } from './ipc/gemini'
 import { registerMoodHandlers, setMoodMainWindow } from './ipc/mood'
+import { registerArrHandlers } from './ipc/arr'
 import { getLiveMonitoringService } from './services/LiveMonitoringService'
 import { getTaskQueueService } from './services/TaskQueueService'
 import { getLoggingService } from './services/LoggingService'
@@ -238,6 +258,34 @@ function createTray() {
   })
 }
 
+// GPU crash detection: if the GPU process dies, write a flag so the next launch
+// disables hardware acceleration and offers to restart in software mode.
+app.on('child-process-gone', (_event, details) => {
+  if (details.type !== 'GPU') return
+  console.error('[GPU] GPU process gone, reason:', details.reason)
+  try {
+    fs.mkdirSync(path.dirname(GPU_FLAG_PATH), { recursive: true })
+    fs.writeFileSync(GPU_FLAG_PATH, '1')
+    console.log('[GPU] Crash flag written — hardware acceleration will be disabled on next launch')
+  } catch (e) {
+    console.error('[GPU] Failed to write crash flag:', e)
+  }
+  if (win && !win.isDestroyed()) {
+    dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'GPU Crash Detected',
+      message: 'The GPU process crashed. Totality will restart with software rendering to prevent future crashes.',
+      buttons: ['Restart Now', 'Later'],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) {
+        app.relaunch()
+        app.exit(0)
+      }
+    }).catch(() => { /* ignore dialog error */ })
+  }
+})
+
 // Guard against double database close from concurrent quit events
 let isClosing = false
 
@@ -412,6 +460,7 @@ app.whenReady().then(async () => {
     registerAutoUpdateHandlers()
     registerGeminiHandlers()
     registerMoodHandlers()
+    registerArrHandlers()
 
     // Initialize live monitoring service
     const liveMonitoringService = getLiveMonitoringService()
@@ -427,16 +476,13 @@ app.whenReady().then(async () => {
       win?.hide()
     }
 
-    // Initialize task queue service and load persisted history
-    const taskQueueService = getTaskQueueService()
-    taskQueueService.loadPersistedHistory()
-    console.log('Task queue service initialized')
-
     // Initialize auto-update service
     const autoUpdateService = getAutoUpdateService()
     autoUpdateService.initialize()
 
-    // Set main window reference for services
+    // Set main window reference for services (must precede task queue restore
+    // so that restored tasks can emit IPC progress events immediately)
+    const taskQueueService = getTaskQueueService()
     if (win) {
       liveMonitoringService.setMainWindow(win)
       taskQueueService.setMainWindow(win)
@@ -445,6 +491,10 @@ app.whenReady().then(async () => {
       getWishlistCompletionService().setMainWindow(win)
       setMoodMainWindow(win)
     }
+
+    // Load persisted history and re-enqueue any tasks that were pending at last quit
+    taskQueueService.loadPersistedHistory()
+    console.log('Task queue service initialized')
 
   } catch (error) {
     console.error('Failed to initialize app:', error)

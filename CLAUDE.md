@@ -234,6 +234,10 @@ Events: `sources:scanProgress`, `quality:analysisProgress`, `series:progress`, `
 
 **Exclusions and Completeness Stats**: The `exclusions` table stores items dismissed by the user from completeness results. Completeness panel stats (Missing, Complete, Incomplete counts) are computed **client-side** from filtered data in `MediaBrowser.tsx:loadCompletenessData()` — the raw server stats don't account for exclusions, so stats are recalculated after filtering out excluded items. Dashboard also recalculates `completeness_percentage` for collections, series, and artists after exclusion filtering — artists with all missing items excluded reach 100% and are hidden from the panel.
 
+Two additional client-side completeness filters applied in `loadCompletenessData()`:
+- **`exclude_empty_seasons`** (setting): strips seasons with no owned episodes from series missing lists before displaying
+- **`collection_theatrical_lag_days`** (setting): removes missing collection movies whose `release_date` is within N days of today (avoids flagging theatrical-only releases as missing)
+
 ### Quality Analysis System
 
 **Video Quality Scoring** (`src/main/services/QualityAnalyzer.ts`):
@@ -344,6 +348,12 @@ Preferences persisted via `setSetting`/`getSetting`:
 - `dashboard_upgrade_sort`, `dashboard_collection_sort`, `dashboard_series_sort`, `dashboard_artist_sort`
 - `library_view_prefs` — JSON object storing per-tab `viewType` and `gridScale`
 - `quality_video_weight` — video/audio score weighting (default 70%)
+- `exclude_empty_seasons` — boolean string (`'true'`/`'false'`); hides seasons with no owned episodes in series completeness
+- `collection_theatrical_lag_days` — integer string; grace period for new theatrical releases in collection completeness
+- `completeness_include_eps` — include EPs in music artist completeness
+- `completeness_include_singles` — include singles in music artist completeness
+
+All setting keys are defined in `src/shared/settingKeys.ts` as `SETTING_KEYS` — always use this const, never bare strings.
 
 ### Logging & Diagnostics
 
@@ -420,6 +430,18 @@ await db.endBatch()  // Single write to disk
 ```
 
 Batch mode is reentrant (depth-counted) — nested `startBatch()`/`endBatch()` calls are safe. Only the outermost `endBatch()` flushes to disk.
+
+### HTTP Client
+
+**Location:** `src/main/services/utils/httpClient.ts`
+
+Lightweight native `fetch` wrapper (axios was removed). Provides:
+- `get(url, params?, options?)` / `post(url, data?, options?)` — typed responses
+- `buildUrl(base, params)` — appends query string, skips null/undefined values
+- `HttpError` (with `.status` and `.data`) + `isHttpError()` type guard for non-2xx responses
+- Timeout support via `AbortController` (`options.timeout` in ms)
+
+All providers use this wrapper instead of axios.
 
 ### Shared Utilities
 

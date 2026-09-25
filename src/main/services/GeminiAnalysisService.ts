@@ -1,6 +1,7 @@
 import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from './QualityAnalyzer'
 import { getGeminiService } from './GeminiService'
+import type { SeriesCompleteness, MovieCollection } from '../types/database'
 import {
   QUALITY_REPORT_SYSTEM_PROMPT,
   UPGRADE_PRIORITIES_SYSTEM_PROMPT,
@@ -174,16 +175,12 @@ export class GeminiAnalysisService {
       '',
       `## Incomplete TV Series (${incompleteSeries.length} total, showing up to 30)`,
       JSON.stringify(
-        incompleteSeries.slice(0, 30).map((s: Record<string, unknown>) => {
-          let missingCount = 0
-          let missingSample: string[] = []
-          try {
-            const parsed = JSON.parse((s.missing_episodes as string) || '[]')
-            missingCount = parsed.length
-            missingSample = parsed.slice(0, 5).map((e: Record<string, unknown>) =>
-              `S${e.season_number}E${e.episode_number}`,
-            )
-          } catch { /* empty */ }
+        (incompleteSeries as SeriesCompleteness[]).slice(0, 30).map((s) => {
+          const missingEps = s.missing_episodes || []
+          const missingCount = missingEps.length
+          const missingSample = missingEps.slice(0, 5).map((e) =>
+            `S${e.season_number}E${e.episode_number}`,
+          )
           return compact({
             series_title: s.series_title,
             total_episodes: s.total_episodes,
@@ -198,16 +195,12 @@ export class GeminiAnalysisService {
       '',
       `## Incomplete Movie Collections (${incompleteCollections.length} total, showing up to 30)`,
       JSON.stringify(
-        incompleteCollections.slice(0, 30).map((c: Record<string, unknown>) => {
-          let missingCount = 0
-          let missingSample: string[] = []
-          try {
-            const parsed = JSON.parse((c.missing_movies as string) || '[]')
-            missingCount = parsed.length
-            missingSample = parsed.slice(0, 5).map((m: Record<string, unknown>) =>
-              m.year ? `${m.title} (${m.year})` : `${m.title}`,
-            )
-          } catch { /* empty */ }
+        (incompleteCollections as MovieCollection[]).slice(0, 30).map((c) => {
+          const missingMovies = c.missing_movies || []
+          const missingCount = missingMovies.length
+          const missingSample = missingMovies.slice(0, 5).map((m) =>
+            m.year ? `${m.title} (${m.year})` : `${m.title}`,
+          )
           return compact({
             collection_name: c.collection_name,
             total_movies: c.total_movies,
