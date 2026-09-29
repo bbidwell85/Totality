@@ -4,7 +4,49 @@
  * All functions are pure — they return modified copies, never mutate inputs.
  */
 
-import type { MovieCollectionData, SeriesCompletenessData, ArtistCompletenessData } from '../components/library/types'
+import type { MovieCollectionData, SeriesCompletenessData, ArtistCompletenessData, MissingMovie, MissingEpisode } from '../components/library/types'
+
+// ---------------------------------------------------------------------------
+// Auto-Dismiss Rules
+// ---------------------------------------------------------------------------
+
+export interface AutoDismissRule {
+  id: string
+  field: 'year' | 'title'
+  operator: 'lt' | 'gt' | 'contains'
+  value: string | number
+}
+
+export function parseAutoRules(json: string | null): AutoDismissRule[] {
+  if (!json) return []
+  try { return JSON.parse(json) } catch { return [] }
+}
+
+function matchesAnyRule(item: { title?: string; year?: number; release_date?: string }, rules: AutoDismissRule[]): boolean {
+  for (const rule of rules) {
+    if (rule.field === 'year') {
+      const year = item.year || (item.release_date ? parseInt(item.release_date.split('-')[0], 10) : null)
+      if (year == null) continue
+      if (rule.operator === 'lt' && year < Number(rule.value)) return true
+      if (rule.operator === 'gt' && year > Number(rule.value)) return true
+    }
+    if (rule.field === 'title' && rule.operator === 'contains') {
+      const title = item.title || ''
+      if (title.toLowerCase().includes(String(rule.value).toLowerCase())) return true
+    }
+  }
+  return false
+}
+
+export function filterMissingMoviesByRules(movies: MissingMovie[], rules: AutoDismissRule[]): MissingMovie[] {
+  if (rules.length === 0) return movies
+  return movies.filter(m => !matchesAnyRule(m, rules))
+}
+
+export function filterMissingEpisodesByRules(episodes: MissingEpisode[], rules: AutoDismissRule[]): MissingEpisode[] {
+  if (rules.length === 0) return episodes
+  return episodes.filter(e => !matchesAnyRule(e, rules))
+}
 
 // ---------------------------------------------------------------------------
 // Collections

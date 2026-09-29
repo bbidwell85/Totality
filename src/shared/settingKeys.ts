@@ -8,6 +8,7 @@ export const SETTING_KEYS = {
   completeness_include_singles: 'completeness_include_singles',
   exclude_empty_seasons: 'exclude_empty_seasons',
   collection_theatrical_lag_days: 'collection_theatrical_lag_days',
+  auto_dismiss_rules: 'auto_dismiss_rules',
 
   // API keys & services
   tmdb_api_key: 'tmdb_api_key',
@@ -25,6 +26,7 @@ export const SETTING_KEYS = {
   dashboard_collection_sort: 'dashboard_collection_sort',
   dashboard_series_sort: 'dashboard_series_sort',
   dashboard_artist_sort: 'dashboard_artist_sort',
+  dashboard_person_sort: 'dashboard_person_sort',
 
   // Quality settings
   quality_video_weight: 'quality_video_weight',
@@ -91,6 +93,15 @@ export const SETTING_KEYS = {
   lidarr_api_key: 'lidarr_api_key',
   lidarr_quality_profile_id: 'lidarr_quality_profile_id',
   lidarr_root_folder: 'lidarr_root_folder',
+
+  // Sync settings (Trakt / Letterboxd)
+  trakt_username: 'trakt_username',
+  trakt_client_id: 'trakt_client_id',
+  letterboxd_username: 'letterboxd_username',
+
+  // Release alerts
+  release_alerts_enabled: 'release_alerts_enabled',
+  release_alert_days_ahead: 'release_alert_days_ahead',
 
   // Logging settings
   verbose_logging_enabled: 'verbose_logging_enabled',

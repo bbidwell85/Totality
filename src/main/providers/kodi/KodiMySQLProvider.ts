@@ -104,7 +104,9 @@ SELECT
   (SELECT url FROM art WHERE media_id = m.idMovie AND media_type = 'movie' AND type = 'fanart' LIMIT 1) AS fanartUrl,
   m.idSet AS setId,
   s.strSet AS setName,
-  (SELECT url FROM art WHERE media_id = m.idSet AND media_type = 'set' AND type = 'poster' LIMIT 1) AS setPosterUrl
+  (SELECT url FROM art WHERE media_id = m.idSet AND media_type = 'set' AND type = 'poster' LIMIT 1) AS setPosterUrl,
+  f.playCount AS playCount,
+  f.lastPlayed AS lastPlayed
 FROM movie m
 JOIN files f ON m.idFile = f.idFile
 JOIN path p ON f.idPath = p.idPath
@@ -135,7 +137,9 @@ SELECT
   (SELECT strAudioLanguage FROM streamdetails WHERE idFile = e.idFile AND iStreamType = 1 LIMIT 1) AS audioLanguage,
   (SELECT url FROM art WHERE media_id = e.idEpisode AND media_type = 'episode' AND type = 'thumb' LIMIT 1) AS thumbUrl,
   (SELECT url FROM art WHERE media_id = s.idShow AND media_type = 'tvshow' AND type = 'poster' LIMIT 1) AS showPosterUrl,
-  (SELECT url FROM art WHERE media_id = sea.idSeason AND media_type = 'season' AND type = 'poster' LIMIT 1) AS seasonPosterUrl
+  (SELECT url FROM art WHERE media_id = sea.idSeason AND media_type = 'season' AND type = 'poster' LIMIT 1) AS seasonPosterUrl,
+  f.playCount AS playCount,
+  f.lastPlayed AS lastPlayed
 FROM episode e
 JOIN tvshow s ON e.idShow = s.idShow
 JOIN files f ON e.idFile = f.idFile
@@ -814,6 +818,9 @@ export class KodiMySQLProvider implements MediaProvider {
       audioTracks: audioTracks.length > 0 ? audioTracks : undefined,
       posterUrl: movie.posterUrl || undefined,
       backdropUrl: movie.fanartUrl || undefined,
+      tmdbRating: movie.rating || undefined,
+      playCount: movie.playCount || 0,
+      lastWatched: movie.lastPlayed || undefined,
     }
   }
 
@@ -874,6 +881,8 @@ export class KodiMySQLProvider implements MediaProvider {
       episodeThumbUrl: episode.thumbUrl || undefined,
       posterUrl: episode.seasonPosterUrl || episode.showPosterUrl || undefined,
       seasonPosterUrl: episode.seasonPosterUrl || undefined,
+      playCount: episode.playCount || 0,
+      lastWatched: episode.lastPlayed || undefined,
     }
   }
 
@@ -933,6 +942,9 @@ export class KodiMySQLProvider implements MediaProvider {
       poster_url: metadata.posterUrl,
       episode_thumb_url: metadata.episodeThumbUrl,
       season_poster_url: metadata.seasonPosterUrl,
+      tmdb_rating: metadata.tmdbRating || undefined,
+      play_count: metadata.playCount || 0,
+      last_watched_at: metadata.lastWatched || undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

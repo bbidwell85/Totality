@@ -301,6 +301,200 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  ipcMain.handle('db:getStorageAnalytics', async () => {
+    try {
+      return db.getStorageAnalytics()
+    } catch (error) {
+      console.error('Error getting storage analytics:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('db:getDuplicateMedia', async () => {
+    try {
+      return db.getDuplicateMedia()
+    } catch (error) {
+      console.error('Error getting duplicate media:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('db:getLibraryHealthScores', async () => {
+    try {
+      return db.getLibraryHealthScores()
+    } catch (error) {
+      console.error('Error getting library health scores:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('db:getRecentlyUpgraded', async (_event, days?: unknown) => {
+    try {
+      const validDays = days !== undefined ? validateInput(z.number().int().min(1).max(365), days, 'db:getRecentlyUpgraded') : 30
+      return db.getRecentlyUpgraded(validDays)
+    } catch (error) {
+      console.error('Error getting recently upgraded items:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('db:getRecentlyAdded', async (_event, days?: unknown, limit?: unknown) => {
+    try {
+      const validDays = days !== undefined ? validateInput(z.number().int().min(1).max(365), days, 'db:getRecentlyAdded') : 14
+      const validLimit = limit !== undefined ? validateInput(z.number().int().min(1).max(500), limit, 'db:getRecentlyAdded') : 50
+      return db.getRecentlyAdded(validDays, validLimit)
+    } catch (error) {
+      console.error('Error getting recently added items:', error)
+      throw error
+    }
+  })
+
+  // ============================================================================
+  // PERSON FILMOGRAPHY COMPLETENESS
+  // ============================================================================
+
+  ipcMain.handle('person:getCompleteness', async (_event, personType?: unknown) => {
+    try {
+      const validType = personType ? validateInput(z.enum(['director', 'actor']), personType, 'person:getCompleteness') : undefined
+      return db.getPersonCompleteness(validType)
+    } catch (error) {
+      console.error('Error getting person completeness:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('person:analyze', async (_event, personName: unknown, personType: unknown) => {
+    try {
+      const name = validateInput(z.string().min(1).max(200), personName, 'person:analyze')
+      const type = validateInput(z.enum(['director', 'actor']), personType, 'person:analyze')
+
+      const tmdb = getTMDBService()
+      await tmdb.initialize()
+
+      // Search for the person
+      const searchResults = await tmdb.searchPerson(name)
+      if (!searchResults.results || searchResults.results.length === 0) {
+        throw new Error(`Person "${name}" not found on TMDB`)
+      }
+
+      const person = searchResults.results[0]
+      const credits = await tmdb.getPersonMovieCredits(person.id)
+
+      // Get the relevant credits based on type
+      const filmography = type === 'director'
+        ? credits.crew.filter(c => c.job === 'Director')
+        : credits.cast
+
+      // Filter to released movies only (no future releases, no TV specials)
+      const validMovies = filmography.filter(m =>
+        m.title && m.release_date && m.release_date <= new Date().toISOString().split('T')[0]
+      )
+
+      // Check which movies we own (by TMDB ID) — use getMediaItems with tmdb_id filter
+      const allOwnedMovies = db.getMediaItems({ type: 'movie' })
+      const ownedTmdbSet = new Set(allOwnedMovies.filter(m => m.tmdb_id).map(m => m.tmdb_id!))
+      const ownedTmdbIds = new Set<string>()
+      for (const movie of validMovies) {
+        if (ownedTmdbSet.has(movie.id.toString())) ownedTmdbIds.add(movie.id.toString())
+      }
+
+      const missingMovies = validMovies
+        .filter(m => !ownedTmdbIds.has(m.id.toString()))
+        .map(m => ({
+          tmdb_id: m.id.toString(),
+          title: m.title,
+          year: m.release_date ? parseInt(m.release_date.split('-')[0], 10) : null,
+          poster_path: m.poster_path,
+        }))
+
+      const totalMovies = validMovies.length
+      const ownedMovies = totalMovies - missingMovies.length
+      const pct = totalMovies > 0 ? Math.round((ownedMovies / totalMovies) * 100) : 100
+
+      db.upsertPersonCompleteness({
+        person_type: type,
+        person_name: person.name,
+        tmdb_person_id: person.id,
+        total_movies: totalMovies,
+        owned_movies: ownedMovies,
+        missing_movies: JSON.stringify(missingMovies),
+        owned_movie_ids: JSON.stringify(Array.from(ownedTmdbIds)),
+        completeness_percentage: pct,
+        profile_url: person.profile_path
+          ? `https://image.tmdb.org/t/p/w185${person.profile_path}`
+          : undefined,
+      })
+
+      return { name: person.name, totalMovies, ownedMovies, missingCount: missingMovies.length, percentage: pct }
+    } catch (error) {
+      console.error('Error analyzing person filmography:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('person:delete', async (_event, id: unknown) => {
+    try {
+      const validId = validateInput(PositiveIntSchema, id, 'person:delete')
+      db.deletePersonCompleteness(validId)
+    } catch (error) {
+      console.error('Error deleting person completeness:', error)
+      throw error
+    }
+  })
+
+  // ============================================================================
+  // WATCHLIST SYNC (Trakt / Letterboxd)
+  // ============================================================================
+
+  ipcMain.handle('sync:plex-watchlist', async () => {
+    try {
+      // Get Plex token from saved settings
+      const plexToken = db.getSetting('plex_token')
+      if (!plexToken) throw new Error('No Plex account connected. Add a Plex source first.')
+      const { getWatchlistSyncService } = await import('../services/WatchlistSyncService')
+      return await getWatchlistSyncService().syncPlex(plexToken)
+    } catch (error) {
+      console.error('Error syncing Plex watchlist:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('sync:trakt', async (_event, username: unknown) => {
+    try {
+      const validUsername = validateInput(z.string().min(1).max(100), username, 'sync:trakt')
+      const { getWatchlistSyncService } = await import('../services/WatchlistSyncService')
+      return await getWatchlistSyncService().syncTrakt(validUsername)
+    } catch (error) {
+      console.error('Error syncing Trakt watchlist:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('sync:letterboxd', async (_event, username: unknown) => {
+    try {
+      const validUsername = validateInput(z.string().min(1).max(100), username, 'sync:letterboxd')
+      const { getWatchlistSyncService } = await import('../services/WatchlistSyncService')
+      return await getWatchlistSyncService().syncLetterboxd(validUsername)
+    } catch (error) {
+      console.error('Error syncing Letterboxd watchlist:', error)
+      throw error
+    }
+  })
+
+  // ============================================================================
+  // RELEASE ALERTS
+  // ============================================================================
+
+  ipcMain.handle('release-alerts:check', async () => {
+    try {
+      const { getReleaseAlertService } = await import('../services/ReleaseAlertService')
+      return await getReleaseAlertService().checkForReleases()
+    } catch (error) {
+      console.error('Error checking release alerts:', error)
+      throw error
+    }
+  })
+
   // ============================================================================
   // MATCH FIXING - Fix incorrect TMDB matches for movies
   // ============================================================================

@@ -845,6 +845,10 @@
 @layer base {
   * {
     @apply border-border;
+  }
+  /* Allow text selection in content areas; restrict only UI chrome */
+  button, [role="button"], [role="tab"], [role="menuitem"],
+  label, nav, header, aside {
     user-select: none;
   }
   body {
@@ -889,9 +893,13 @@
 /* Global focus styles for keyboard navigation */
 button:focus-visible,
 [role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="option"]:focus-visible,
+[role="menuitem"]:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible,
+textarea:focus-visible,
 [tabindex]:focus-visible:not(.focus-poster-only) {
   @apply outline-hidden ring-2 ring-primary ring-offset-2 ring-offset-background;
 }
@@ -917,8 +925,8 @@ select:focus-visible,
 
 /* Custom scrollbar styles - matches media browser scrollbar */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -966,8 +974,8 @@ select:focus-visible,
 
 /* Always visible scrollbar for library views */
 .scrollbar-visible::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 .scrollbar-visible::-webkit-scrollbar-track {

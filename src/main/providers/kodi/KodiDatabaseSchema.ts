@@ -254,6 +254,11 @@ export interface KodiMovieWithDetails {
   setId: number | null
   setName: string | null
   setPosterUrl: string | null
+  // Rating
+  rating: number | null
+  // Watch history (from files table)
+  playCount: number | null
+  lastPlayed: string | null
   // Debug fields (raw values before transformation)
   c07_raw: string | null       // Raw c07 value (year string)
   premiered_raw: string | null // Raw premiered value (full date)
@@ -287,6 +292,9 @@ export interface KodiEpisodeWithDetails {
   thumbUrl: string | null
   showPosterUrl: string | null
   seasonPosterUrl: string | null
+  // Watch history (from files table)
+  playCount: number | null
+  lastPlayed: string | null
 }
 
 // ============================================================================
@@ -324,7 +332,10 @@ SELECT
   (SELECT url FROM art WHERE media_id = m.idMovie AND media_type = 'movie' AND type = 'fanart' LIMIT 1) AS fanartUrl,
   m.idSet AS setId,
   s.strSet AS setName,
-  (SELECT url FROM art WHERE media_id = m.idSet AND media_type = 'set' AND type = 'poster' LIMIT 1) AS setPosterUrl
+  (SELECT url FROM art WHERE media_id = m.idSet AND media_type = 'set' AND type = 'poster' LIMIT 1) AS setPosterUrl,
+  CAST(NULLIF(m.c05, '') AS REAL) AS rating,
+  f.playCount AS playCount,
+  f.lastPlayed AS lastPlayed
 FROM movie m
 JOIN files f ON m.idFile = f.idFile
 JOIN path p ON f.idPath = p.idPath
@@ -371,7 +382,9 @@ SELECT
   (SELECT strAudioLanguage FROM streamdetails WHERE idFile = e.idFile AND iStreamType = 1 LIMIT 1) AS audioLanguage,
   (SELECT url FROM art WHERE media_id = e.idEpisode AND media_type = 'episode' AND type = 'thumb' LIMIT 1) AS thumbUrl,
   (SELECT url FROM art WHERE media_id = s.idShow AND media_type = 'tvshow' AND type = 'poster' LIMIT 1) AS showPosterUrl,
-  (SELECT url FROM art WHERE media_id = sea.idSeason AND media_type = 'season' AND type = 'poster' LIMIT 1) AS seasonPosterUrl
+  (SELECT url FROM art WHERE media_id = sea.idSeason AND media_type = 'season' AND type = 'poster' LIMIT 1) AS seasonPosterUrl,
+  f.playCount AS playCount,
+  f.lastPlayed AS lastPlayed
 FROM episode e
 JOIN tvshow s ON e.idShow = s.idShow
 JOIN files f ON e.idFile = f.idFile

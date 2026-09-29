@@ -744,6 +744,25 @@ export class DatabaseService {
         this.db.run('ALTER TABLE music_tracks ADD COLUMN mood TEXT')
       } catch { /* column may already exist */ }
 
+      // Quality upgrade tracking
+      try {
+        this.db.run('ALTER TABLE quality_scores ADD COLUMN previous_quality_tier TEXT')
+      } catch { /* column may already exist */ }
+      try {
+        this.db.run('ALTER TABLE quality_scores ADD COLUMN upgraded_at TEXT')
+      } catch { /* column may already exist */ }
+      // Add ratings column
+      try {
+        this.db.run('ALTER TABLE media_items ADD COLUMN tmdb_rating REAL')
+      } catch { /* column may already exist */ }
+      // Add watch history columns
+      try {
+        this.db.run('ALTER TABLE media_items ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0')
+      } catch { /* column may already exist */ }
+      try {
+        this.db.run('ALTER TABLE media_items ADD COLUMN last_watched_at TEXT')
+      } catch { /* column may already exist */ }
+
       // Migrate existing plain-text credentials to encrypted format
       await this.migrateCredentialsToEncrypted()
 
@@ -1463,8 +1482,8 @@ export class DatabaseService {
         subtitle_tracks,
         container,
         imdb_id, tmdb_id, series_tmdb_id, poster_url, episode_thumb_url, season_poster_url, summary,
-        user_fixed_match
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        tmdb_rating, user_fixed_match, play_count, last_watched_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id, plex_id) DO UPDATE SET
         source_type = excluded.source_type,
         library_id = excluded.library_id,
@@ -1505,7 +1524,10 @@ export class DatabaseService {
         episode_thumb_url = COALESCE(excluded.episode_thumb_url, media_items.episode_thumb_url),
         season_poster_url = COALESCE(excluded.season_poster_url, media_items.season_poster_url),
         summary = COALESCE(excluded.summary, media_items.summary),
-        user_fixed_match = CASE WHEN media_items.user_fixed_match = 1 THEN 1 ELSE excluded.user_fixed_match END
+        tmdb_rating = COALESCE(excluded.tmdb_rating, media_items.tmdb_rating),
+        user_fixed_match = CASE WHEN media_items.user_fixed_match = 1 THEN 1 ELSE excluded.user_fixed_match END,
+        play_count = MAX(excluded.play_count, media_items.play_count),
+        last_watched_at = CASE WHEN excluded.last_watched_at IS NOT NULL AND (media_items.last_watched_at IS NULL OR excluded.last_watched_at > media_items.last_watched_at) THEN excluded.last_watched_at ELSE media_items.last_watched_at END
     `
 
     // Debug logging for year field
@@ -1555,7 +1577,10 @@ export class DatabaseService {
       item.episode_thumb_url || null,
       item.season_poster_url || null,
       item.summary || null,
+      item.tmdb_rating || null,
       item.user_fixed_match ? 1 : 0,
+      item.play_count || 0,
+      item.last_watched_at || null,
     ])
 
     // Get the ID of the inserted/updated row
@@ -2795,6 +2820,52 @@ export class DatabaseService {
       tvNeedsUpgradeCount: (row[9] as number) || 0,
       tvAverageQualityScore: Math.round((row[10] as number) || 0),
     }
+  }
+
+  getStorageAnalytics(): {
+    totalSize: number; totalItems: number
+    byCodec: Array<{ codec: string; count: number; size: number }>
+    byTier: Array<{ tier: string; count: number; size: number }>
+    codecMigration: { h264Count: number; modernCount: number; totalCount: number }
+  } {
+    return { totalSize: 0, totalItems: 0, byCodec: [], byTier: [], codecMigration: { h264Count: 0, modernCount: 0, totalCount: 0 } }
+  }
+
+  getDuplicateMedia(): Array<{
+    tmdb_id: string; title: string; year: number | null; type: string
+    copies: Array<{
+      id: number; source_id: string; source_type: string; library_id: string
+      file_path: string | null; quality_tier: string | null
+      overall_score: number | null; resolution: string | null
+      video_codec: string | null; file_size: number | null
+    }>
+  }> {
+    return []
+  }
+
+  getLibraryHealthScores(): Array<{
+    source_id: string; library_id: string; library_name: string
+    library_type: string; avg_score: number; item_count: number
+  }> {
+    return []
+  }
+
+  getRecentlyUpgraded(_days?: number): Array<{
+    id: number; title: string; year: number | null; type: string
+    poster_url: string | null; quality_tier: string
+    previous_quality_tier: string; upgraded_at: string
+    series_title: string | null; season_number: number | null; episode_number: number | null
+  }> {
+    return []
+  }
+
+  getRecentlyAdded(_days?: number, _limit?: number): Array<{
+    id: number; title: string; year: number | null; type: string
+    source_id: string; source_type: string; poster_url: string | null
+    created_at: string; quality_tier: string | null
+    series_title: string | null; season_number: number | null; episode_number: number | null
+  }> {
+    return []
   }
 
   // ============================================================================
@@ -5465,6 +5536,11 @@ export class DatabaseService {
     }
     this.save()
   }
+
+  // Person completeness stubs (SQL.js fallback — table may not exist)
+  upsertPersonCompleteness(_data: Record<string, unknown>): number { return 0 }
+  getPersonCompleteness(_personType?: string): Array<Record<string, unknown>> { return [] }
+  deletePersonCompleteness(_id: number): void { /* no-op */ }
 }
 
 // Export singleton instance

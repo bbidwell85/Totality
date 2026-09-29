@@ -868,7 +868,7 @@ export function MusicView({
                           <button
                             onClick={() => setSelectedTrackForQuality(null)}
                             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                            title="Dismiss"
+                            title="Hide from completeness"
                           >
                             <EyeOff className="w-4 h-4" />
                           </button>
@@ -1191,6 +1191,22 @@ export function MusicView({
   }
 
   // Main view - check for empty state
+  if (artists.length === 0 && artistsLoading) {
+    return (
+      <div className="space-y-2 mt-4">
+        {Array.from({ length: 14 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 p-2 rounded-lg">
+            <div className="w-10 h-10 bg-muted/50 rounded-full animate-pulse shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="h-3.5 bg-muted/50 rounded animate-pulse w-1/3" />
+              <div className="h-3 bg-muted/40 rounded animate-pulse w-1/5" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   const hasNoMusic = artists.length === 0 && totalArtistCount === 0 && albums.length === 0 && (stats?.totalTracks || 0) === 0
   if (hasNoMusic) {
     return (
@@ -1668,7 +1684,7 @@ export function MusicView({
                         <button
                           onClick={() => setSelectedTrackForQuality(null)}
                           className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                          title="Dismiss"
+                          title="Hide from completeness"
                         >
                           <EyeOff className="w-4 h-4" />
                         </button>
@@ -2430,7 +2446,7 @@ const MissingAlbumCard = memo(({ album, artistName, onDismiss }: {
             <button
               onClick={onDismiss}
               className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-              title="Dismiss"
+              title="Hide from completeness"
             >
               <EyeOff className="w-3.5 h-3.5" />
             </button>
@@ -2503,7 +2519,7 @@ const MissingAlbumListItem = memo(({ album, artistName, onDismiss }: {
           <button
             onClick={onDismiss}
             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            title="Dismiss"
+            title="Hide from completeness"
           >
             <EyeOff className="w-3.5 h-3.5" />
           </button>

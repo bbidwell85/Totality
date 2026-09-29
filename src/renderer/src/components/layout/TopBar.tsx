@@ -4,9 +4,9 @@
  * Contains logo, search, library tabs, and panel toggles.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
-import { Search, X, Home, Film, Tv, Music, Tags, BarChart2, Star, Settings, RefreshCw, Disc3, User, Bot, ArrowLeft, ArrowRight, Download } from 'lucide-react'
+import { Search, X, Home, Film, Tv, Music, Tags, ListChecks, Star, Settings, RefreshCw, Disc3, User, MessageSquare, ArrowLeft, ArrowRight, Download } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { useNavigation } from '../../contexts/NavigationContext'
@@ -48,6 +48,26 @@ interface TopBarProps {
   canGoBack?: boolean
   onForward?: () => void
   canGoForward?: boolean
+}
+
+// Small delayed tooltip for icon-only buttons
+function Tooltip({ label, children }: { label: string; children: ReactNode }) {
+  const [visible, setVisible] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const show = () => { timerRef.current = setTimeout(() => setVisible(true), 400) }
+  const hide = () => { if (timerRef.current) clearTimeout(timerRef.current); setVisible(false) }
+
+  return (
+    <div className="relative" onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>
+      {children}
+      {visible && (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-1 bg-popover border border-border text-xs text-popover-foreground rounded shadow-md whitespace-nowrap z-[200] pointer-events-none">
+          {label}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function TopBar({
@@ -123,6 +143,32 @@ export function TopBar({
     })
     return unsub
   }, [])
+
+  // Poll download queue count for badge
+  const [queueCount, setQueueCount] = useState(0)
+  useEffect(() => {
+    if (!arrAppsConfigured) {
+      setQueueCount(0)
+      return
+    }
+    const poll = () => {
+      window.electronAPI.arrGetQueue()
+        .then(items => setQueueCount((items as Array<unknown>).length))
+        .catch(() => {})
+    }
+    poll()
+    const interval = setInterval(poll, 30_000)
+    return () => clearInterval(interval)
+  }, [arrAppsConfigured])
+
+  // Refresh badge when panel closes
+  useEffect(() => {
+    if (!showArrQueue && arrAppsConfigured) {
+      window.electronAPI.arrGetQueue()
+        .then(items => setQueueCount((items as Array<unknown>).length))
+        .catch(() => {})
+    }
+  }, [showArrQueue, arrAppsConfigured])
 
   const showEmptyState = sources.length === 0
 
@@ -663,105 +709,116 @@ export function TopBar({
         {/* Right Section: Panel Toggles & Settings */}
         <div className="flex items-center justify-end flex-1 gap-2">
           {/* AI Chat Toggle */}
-          <button
-            onClick={onToggleChat}
-            className={`p-2 rounded-md transition-colors ${
-              showChatPanel
-                ? 'bg-white text-black'
-                : 'text-white hover:bg-white/10'
-            }`}
-            title="AI Assistant"
-            aria-label="Toggle AI chat"
-            aria-pressed={showChatPanel}
-          >
-            <Bot className="w-5 h-5" />
-          </button>
-
-          {/* Completeness Panel Toggle */}
-          <button
-            onClick={onToggleCompleteness}
-            className={`relative p-2 rounded-md transition-colors ${
-              showCompletenessPanel
-                ? 'bg-white text-black'
-                : 'text-white hover:bg-white/10'
-            }`}
-            title={!tmdbApiKeySet ? "TMDB API key needed for completeness" : "Completeness"}
-            aria-label="Toggle completeness panel"
-            aria-pressed={showCompletenessPanel}
-          >
-            <BarChart2 className="w-5 h-5" />
-            {!tmdbApiKeySet && (
-              <span
-                className="absolute top-1 right-1 w-2 h-2 rounded-full"
-                style={{ backgroundColor: themeAccentColor }}
-              />
-            )}
-          </button>
-
-          {/* Tag Sync Panel Toggle */}
-          <button
-            onClick={onToggleMoodSync}
-            className={`relative p-2 rounded-md transition-colors ${
-              showMoodSyncPanel
-                ? 'bg-white text-black'
-                : 'text-white hover:bg-white/10'
-            }`}
-            title="Tag Sync"
-            aria-label="Toggle tag sync panel"
-            aria-pressed={showMoodSyncPanel}
-          >
-            <Tags className="w-5 h-5" />
-          </button>
-
-          {/* Wishlist Panel Toggle */}
-          <button
-            onClick={onToggleWishlist}
-            className={`relative p-2 rounded-md transition-colors ${
-              showWishlistPanel
-                ? 'bg-white text-black'
-                : 'text-white hover:bg-white/10'
-            }`}
-            title="Wishlist (W)"
-            aria-label="Toggle wishlist panel"
-            aria-pressed={showWishlistPanel}
-          >
-            <Star className="w-5 h-5" />
-            {wishlistCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                {wishlistCount > 99 ? '99+' : wishlistCount}
-              </span>
-            )}
-          </button>
-
-          {/* Download Queue Toggle — only shown when arr apps are configured */}
-          {arrAppsConfigured && (
+          <Tooltip label="AI Chat">
             <button
-              onClick={onToggleArrQueue}
+              onClick={onToggleChat}
               className={`p-2 rounded-md transition-colors ${
-                showArrQueue
+                showChatPanel
                   ? 'bg-white text-black'
                   : 'text-white hover:bg-white/10'
               }`}
-              title="Download queue"
-              aria-label="Toggle download queue"
-              aria-pressed={showArrQueue}
+              aria-label="Toggle AI chat"
+              aria-pressed={showChatPanel}
             >
-              <Download className="w-5 h-5" />
+              <MessageSquare className="w-5 h-5" />
             </button>
+          </Tooltip>
+
+          {/* Completeness Panel Toggle */}
+          <Tooltip label={!tmdbApiKeySet ? 'Completeness — TMDB key needed' : 'Completeness'}>
+            <button
+              onClick={onToggleCompleteness}
+              className={`relative p-2 rounded-md transition-colors ${
+                showCompletenessPanel
+                  ? 'bg-white text-black'
+                  : 'text-white hover:bg-white/10'
+              }`}
+              aria-label="Toggle completeness panel"
+              aria-pressed={showCompletenessPanel}
+            >
+              <ListChecks className="w-5 h-5" />
+              {!tmdbApiKeySet && (
+                <span
+                  className="absolute top-1 right-1 w-2 h-2 rounded-full"
+                  style={{ backgroundColor: themeAccentColor }}
+                />
+              )}
+            </button>
+          </Tooltip>
+
+          {/* Tag Sync Panel Toggle */}
+          <Tooltip label="Tag Sync">
+            <button
+              onClick={onToggleMoodSync}
+              className={`relative p-2 rounded-md transition-colors ${
+                showMoodSyncPanel
+                  ? 'bg-white text-black'
+                  : 'text-white hover:bg-white/10'
+              }`}
+              aria-label="Toggle tag sync panel"
+              aria-pressed={showMoodSyncPanel}
+            >
+              <Tags className="w-5 h-5" />
+            </button>
+          </Tooltip>
+
+          {/* Wishlist Panel Toggle */}
+          <Tooltip label="Wishlist">
+            <button
+              onClick={onToggleWishlist}
+              className={`relative p-2 rounded-md transition-colors ${
+                showWishlistPanel
+                  ? 'bg-white text-black'
+                  : 'text-white hover:bg-white/10'
+              }`}
+              aria-label="Toggle wishlist panel"
+              aria-pressed={showWishlistPanel}
+            >
+              <Star className="w-5 h-5" />
+              {wishlistCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {wishlistCount > 99 ? '99+' : wishlistCount}
+                </span>
+              )}
+            </button>
+          </Tooltip>
+
+          {/* Download Queue Toggle — only shown when arr apps are configured */}
+          {arrAppsConfigured && (
+            <Tooltip label="Download Queue">
+              <button
+                onClick={onToggleArrQueue}
+                className={`relative p-2 rounded-md transition-colors ${
+                  showArrQueue
+                    ? 'bg-white text-black'
+                    : 'text-white hover:bg-white/10'
+                }`}
+                aria-label="Toggle download queue"
+                aria-pressed={showArrQueue}
+              >
+                <Download className="w-5 h-5" />
+                {queueCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                    {queueCount > 99 ? '99+' : queueCount}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
           )}
 
           {/* Activity Panel */}
           <ActivityPanel />
 
           {/* Settings */}
-          <button
-            onClick={onOpenSettings}
-            className="p-2 rounded-md transition-colors text-white hover:bg-white/10"
-            title="Settings"
-            aria-label="Open settings"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
+          <Tooltip label="Settings">
+            <button
+              onClick={onOpenSettings}
+              className="p-2 rounded-md transition-colors text-white hover:bg-white/10"
+              aria-label="Open settings"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+          </Tooltip>
         </div>
       </div>
     </header>

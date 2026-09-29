@@ -9,43 +9,14 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Loader2, FolderOpen, Download, Upload, Trash2, AlertTriangle, FileSpreadsheet, X, Database, RefreshCw } from 'lucide-react'
+import { Loader2, FolderOpen, Download, Upload, Trash2, AlertTriangle, FileSpreadsheet, X, Database, RefreshCw, HardDrive, ChevronDown } from 'lucide-react'
+import { Toggle } from '../../ui/Toggle'
 
 interface CSVExportOptions {
   includeUpgrades: boolean
   includeMissingMovies: boolean
   includeMissingEpisodes: boolean
   includeMissingAlbums: boolean
-}
-
-// Toggle switch component (matching MonitoringTab)
-function Toggle({
-  checked,
-  onChange,
-  disabled = false,
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => !disabled && onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
-        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-      } ${checked ? 'bg-primary' : 'bg-muted'}`}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition-transform ${
-          checked ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  )
 }
 
 export function DataManagementTab() {
@@ -57,6 +28,17 @@ export function DataManagementTab() {
   const [isResetting, setIsResetting] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [showCSVExportModal, setShowCSVExportModal] = useState(false)
+  useEffect(() => {
+    if (!showCSVExportModal) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setShowCSVExportModal(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showCSVExportModal])
   const [csvOptions, setCSVOptions] = useState<CSVExportOptions>({
     includeUpgrades: true,
     includeMissingMovies: true,
@@ -64,6 +46,17 @@ export function DataManagementTab() {
     includeMissingAlbums: true,
   })
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [storageExpanded, setStorageExpanded] = useState(false)
+  const [storageData, setStorageData] = useState<{
+    totalSize: number; totalItems: number
+    byCodec: Array<{ codec: string; count: number; size: number }>
+    byTier: Array<{ tier: string; count: number; size: number }>
+    codecMigration: { h264Count: number; modernCount: number; totalCount: number }
+  } | null>(null)
+  const [duplicates, setDuplicates] = useState<Array<{
+    tmdb_id: string; title: string; year: number | null
+    copies: Array<{ id: number; source_type: string; resolution: string | null; video_codec: string | null; file_size: number | null; overall_score: number | null }>
+  }>>([])
 
   useEffect(() => {
     loadDbPath()
@@ -161,6 +154,32 @@ export function DataManagementTab() {
     }
   }
 
+  const loadStorageAnalytics = async () => {
+    try {
+      const [analytics, dups] = await Promise.all([
+        window.electronAPI.getStorageAnalytics(),
+        window.electronAPI.getDuplicateMedia(),
+      ])
+      setStorageData(analytics)
+      setDuplicates(dups)
+    } catch (error) {
+      console.error('Failed to load storage analytics:', error)
+    }
+  }
+
+  const handleToggleStorage = () => {
+    const next = !storageExpanded
+    setStorageExpanded(next)
+    if (next && !storageData) loadStorageAnalytics()
+  }
+
+  const formatSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B'
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`
+  }
+
   const toggleCSVOption = (key: keyof CSVExportOptions) => {
     setCSVOptions(prev => ({ ...prev, [key]: !prev[key] }))
   }
@@ -198,6 +217,130 @@ export function DataManagementTab() {
           </div>
         </div>
       </div>
+
+      {/* Storage Analytics */}
+      <div className="space-y-2">
+        <button
+          onClick={handleToggleStorage}
+          className="flex items-center gap-2 w-full text-left"
+        >
+          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${storageExpanded ? 'rotate-0' : '-rotate-90'}`} />
+          <HardDrive className="w-4 h-4 text-muted-foreground" />
+          <h3 className="text-sm font-medium text-foreground">Storage Analytics</h3>
+        </button>
+
+        {storageExpanded && (
+          <div className="bg-muted/30 rounded-lg border border-border/40 p-4 space-y-4">
+            {!storageData ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                {/* Summary */}
+                <div className="flex items-center gap-6 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Total Size:</span>{' '}
+                    <span className="font-medium">{formatSize(storageData.totalSize)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Items:</span>{' '}
+                    <span className="font-medium">{storageData.totalItems.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Codec Migration Progress */}
+                {storageData.codecMigration.totalCount > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Codec Migration (H.264 → HEVC/AV1)</span>
+                      <span className="font-medium">
+                        {Math.round((storageData.codecMigration.modernCount / storageData.codecMigration.totalCount) * 100)}% modern
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden flex">
+                      <div
+                        className="h-full bg-green-500 transition-all"
+                        style={{ width: `${(storageData.codecMigration.modernCount / storageData.codecMigration.totalCount) * 100}%` }}
+                        title={`${storageData.codecMigration.modernCount} HEVC/AV1/VP9`}
+                      />
+                      <div
+                        className="h-full bg-amber-500 transition-all"
+                        style={{ width: `${(storageData.codecMigration.h264Count / storageData.codecMigration.totalCount) * 100}%` }}
+                        title={`${storageData.codecMigration.h264Count} H.264`}
+                      />
+                    </div>
+                    <div className="flex gap-4 text-[10px] text-muted-foreground">
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-500 rounded-full" /> HEVC/AV1 ({storageData.codecMigration.modernCount})</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full" /> H.264 ({storageData.codecMigration.h264Count})</span>
+                      {storageData.codecMigration.totalCount - storageData.codecMigration.modernCount - storageData.codecMigration.h264Count > 0 && (
+                        <span className="flex items-center gap-1"><span className="w-2 h-2 bg-muted-foreground/30 rounded-full" /> Other ({storageData.codecMigration.totalCount - storageData.codecMigration.modernCount - storageData.codecMigration.h264Count})</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* By Codec */}
+                {storageData.byCodec.length > 0 && (
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">By Codec</h4>
+                    <div className="space-y-1">
+                      {storageData.byCodec.map(c => (
+                        <div key={c.codec} className="flex items-center justify-between text-xs">
+                          <span className="font-mono">{c.codec || 'Unknown'}</span>
+                          <span className="text-muted-foreground">{c.count} items · {formatSize(c.size)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* By Quality Tier */}
+                {storageData.byTier.length > 0 && (
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">By Quality Tier</h4>
+                    <div className="space-y-1">
+                      {storageData.byTier.map(t => (
+                        <div key={t.tier} className="flex items-center justify-between text-xs">
+                          <span>{t.tier}</span>
+                          <span className="text-muted-foreground">{t.count} items · {formatSize(t.size)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Duplicates */}
+                {duplicates.length > 0 && (
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Duplicate Movies ({duplicates.length})</h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {duplicates.map(dup => (
+                        <div key={dup.tmdb_id} className="text-xs border border-border/30 rounded p-2">
+                          <div className="font-medium">{dup.title}{dup.year ? ` (${dup.year})` : ''}</div>
+                          <div className="mt-1 space-y-0.5">
+                            {dup.copies.map((copy, i) => (
+                              <div key={i} className="flex items-center gap-2 text-muted-foreground">
+                                <span className="capitalize">{copy.source_type}</span>
+                                <span>{copy.resolution || '?'}</span>
+                                <span className="font-mono">{copy.video_codec || '?'}</span>
+                                {copy.file_size && <span>{formatSize(copy.file_size)}</span>}
+                                {copy.overall_score != null && <span>Score: {Math.round(copy.overall_score)}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Auto-Hide Rules — moved to Library tab */}
 
       {/* Export Options */}
       <div className="space-y-2">
@@ -360,8 +503,8 @@ export function DataManagementTab() {
 
       {/* CSV Export Modal */}
       {showCSVExportModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background border border-border rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCSVExportModal(false)}>
+          <div className="bg-background border border-border rounded-lg shadow-xl w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-base font-medium">Export Working Document</h2>

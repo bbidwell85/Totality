@@ -1255,6 +1255,11 @@ export class PlexProvider implements MediaProvider {
         episode_thumb_url: episodeThumbUrl,
         season_poster_url: seasonPosterUrl,
         summary: item.summary || undefined,
+        tmdb_rating: item.audienceRating || item.rating || undefined,
+        play_count: item.viewCount || 0,
+        last_watched_at: item.lastViewedAt && item.lastViewedAt > 0
+          ? new Date(item.lastViewedAt * 1000).toISOString()
+          : undefined,
         created_at: item.addedAt && item.addedAt > 0
           ? new Date(item.addedAt * 1000).toISOString()
           : new Date().toISOString(),

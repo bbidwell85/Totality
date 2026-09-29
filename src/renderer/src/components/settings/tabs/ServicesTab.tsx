@@ -1,4 +1,4 @@
-import { useState, useEffect, useId, useCallback, useRef } from 'react'
+import { useState, useEffect, useId, useRef } from 'react'
 import {
   Eye,
   EyeOff,
@@ -16,7 +16,6 @@ import {
   Network,
   Circle,
   Bot,
-  Music,
 } from 'lucide-react'
 
 
@@ -87,13 +86,13 @@ function ServiceCard({
             role="switch"
             aria-checked={enableToggle.enabled}
             onClick={(e) => { e.stopPropagation(); enableToggle.onToggle() }}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
-              enableToggle.enabled ? 'bg-primary' : 'bg-muted-foreground/30'
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
+              enableToggle.enabled ? 'bg-primary' : 'bg-muted'
             }`}
           >
             <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition duration-200 ease-in-out ${
-                enableToggle.enabled ? 'translate-x-5' : 'translate-x-0'
+              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition ${
+                enableToggle.enabled ? 'translate-x-6' : 'translate-x-1'
               }`}
             />
           </button>
@@ -114,256 +113,6 @@ function ServiceCard({
         <div className="px-4 pb-4 pt-2 border-t border-border/30 bg-muted/10">{children}</div>
       )}
     </div>
-  )
-}
-
-// ─── Arr Service Card ─────────────────────────────────────────────────────────
-// Self-contained card for a single arr app (Radarr / Sonarr / Lidarr)
-
-type ArrType = 'radarr' | 'sonarr' | 'lidarr'
-
-const ARR_META: Record<ArrType, { label: string; description: string }> = {
-  radarr: { label: 'Radarr', description: 'Automated movie upgrade and download management' },
-  sonarr: { label: 'Sonarr', description: 'Automated TV series upgrade and download management' },
-  lidarr: { label: 'Lidarr', description: 'Automated music upgrade and download management' },
-}
-
-function ArrServiceCard({ type, expanded, onToggle }: { type: ArrType; expanded: boolean; onToggle: () => void }) {
-  const [url, setUrl] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [showKey, setShowKey] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'testing' | 'valid' | 'invalid'>('idle')
-  const [version, setVersion] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [profiles, setProfiles] = useState<Array<{ id: number; name: string }>>([])
-  const [rootFolders, setRootFolders] = useState<Array<{ id: number; path: string }>>([])
-  const [profileId, setProfileId] = useState('')
-  const [rootFolder, setRootFolder] = useState('')
-  const [savedField, setSavedField] = useState<'profile' | 'folder' | null>(null)
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { label } = ARR_META[type]
-
-  // Load saved settings on mount
-  useEffect(() => {
-    const loadArrSettings = async () => {
-      try {
-        const all = await window.electronAPI.getAllSettings()
-        const savedUrl = all[`${type}_url`] || ''
-        const savedKey = all[`${type}_api_key`] || ''
-        const savedProfile = all[`${type}_quality_profile_id`] || ''
-        const savedFolder = all[`${type}_root_folder`] || ''
-        setUrl(savedUrl)
-        setApiKey(savedKey)
-        setProfileId(savedProfile)
-        setRootFolder(savedFolder)
-        if (savedUrl && savedKey) {
-          setStatus('valid')
-          // Fetch profiles/folders in background
-          Promise.all([
-            window.electronAPI.arrGetQualityProfiles({ type, url: savedUrl, apiKey: savedKey }),
-            window.electronAPI.arrGetRootFolders({ type, url: savedUrl, apiKey: savedKey }),
-          ]).then(([p, f]) => {
-            setProfiles(p as Array<{ id: number; name: string }>)
-            setRootFolders(f as Array<{ id: number; path: string }>)
-          }).catch(() => {})
-        }
-      } catch { /* ignore */ }
-    }
-    loadArrSettings()
-  }, [type])
-
-  const handleTest = async () => {
-    if (!url.trim() || !apiKey.trim()) return
-    setStatus('testing')
-    setError(null)
-    try {
-      const result = await window.electronAPI.arrTestConnection({ type, url: url.trim(), apiKey: apiKey.trim() })
-      if (result.success) {
-        setStatus('valid')
-        setVersion(result.version || null)
-        await window.electronAPI.setSetting(`${type}_url`, url.trim())
-        await window.electronAPI.setSetting(`${type}_api_key`, apiKey.trim())
-        const [p, f] = await Promise.all([
-          window.electronAPI.arrGetQualityProfiles({ type, url: url.trim(), apiKey: apiKey.trim() }),
-          window.electronAPI.arrGetRootFolders({ type, url: url.trim(), apiKey: apiKey.trim() }),
-        ])
-        setProfiles(p as Array<{ id: number; name: string }>)
-        setRootFolders(f as Array<{ id: number; path: string }>)
-      } else {
-        setStatus('invalid')
-        setError(result.error || 'Connection failed')
-        setProfiles([])
-        setRootFolders([])
-      }
-    } catch (err) {
-      setStatus('invalid')
-      setError((err as Error).message || 'Connection failed')
-    }
-  }
-
-  const handleClear = async () => {
-    setUrl('')
-    setApiKey('')
-    setStatus('idle')
-    setVersion(null)
-    setError(null)
-    setProfiles([])
-    setRootFolders([])
-    setProfileId('')
-    setRootFolder('')
-    await Promise.all([
-      window.electronAPI.setSetting(`${type}_url`, ''),
-      window.electronAPI.setSetting(`${type}_api_key`, ''),
-      window.electronAPI.setSetting(`${type}_quality_profile_id`, ''),
-      window.electronAPI.setSetting(`${type}_root_folder`, ''),
-    ])
-  }
-
-  const showSaved = (field: 'profile' | 'folder') => {
-    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    setSavedField(field)
-    savedTimerRef.current = setTimeout(() => setSavedField(null), 2000)
-  }
-
-  const handleProfileChange = useCallback(async (id: string) => {
-    setProfileId(id)
-    await window.electronAPI.setSetting(`${type}_quality_profile_id`, id)
-    showSaved('profile')
-  }, [type])
-
-  const handleRootFolderChange = useCallback(async (path: string) => {
-    setRootFolder(path)
-    await window.electronAPI.setSetting(`${type}_root_folder`, path)
-    showSaved('folder')
-  }, [type])
-
-  const isConfigured = status === 'valid'
-
-  return (
-    <ServiceCard
-      title={label}
-      description={ARR_META[type].description}
-      icon={<Download className="w-5 h-5" />}
-      status={isConfigured && profileId && rootFolder ? 'configured' : isConfigured ? 'partial' : 'not-configured'}
-      statusText={
-        isConfigured && profileId && rootFolder
-          ? version ? `v${version}` : 'Configured'
-          : isConfigured
-            ? 'Connected — select profile & folder'
-            : 'Not configured'
-      }
-      expanded={expanded}
-      onToggle={onToggle}
-    >
-      <div className="space-y-3">
-        {/* URL */}
-        <div>
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">URL</label>
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => { setUrl(e.target.value); setStatus('idle'); setError(null) }}
-            placeholder={`http://localhost:${type === 'radarr' ? 7878 : type === 'sonarr' ? 8989 : 8686}`}
-            className="w-full mt-1 px-3 py-2 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
-          />
-        </div>
-
-        {/* API Key */}
-        <div>
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Key</label>
-          <div className="flex gap-2 mt-1">
-            <div className="relative flex-1">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => { setApiKey(e.target.value); setStatus('idle'); setError(null) }}
-                placeholder="Paste API key from Settings → General → Security"
-                className="w-full px-3 py-2 pr-10 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-              >
-                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            <button
-              onClick={handleTest}
-              disabled={!url.trim() || !apiKey.trim() || status === 'testing'}
-              className={`px-3 py-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-1.5 text-sm ${
-                status === 'valid' ? 'text-green-500' :
-                status === 'invalid' ? 'text-red-500 bg-red-500/10' :
-                'bg-muted hover:bg-muted/80'
-              }`}
-            >
-              {status === 'testing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
-               status === 'valid' ? <CheckCircle className="w-4 h-4" /> :
-               status === 'invalid' ? <><XCircle className="w-4 h-4" /><span>Invalid</span></> :
-               <span>Test</span>}
-            </button>
-            {(url || apiKey) && (
-              <button
-                onClick={handleClear}
-                className="px-3 py-2 text-muted-foreground hover:text-destructive rounded-md transition-colors"
-                title={`Clear ${label} settings`}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          {error && <p className="text-xs text-destructive mt-1">{error}</p>}
-        </div>
-
-        {/* Quality profile + root folder (shown after successful connection) */}
-        {isConfigured && (profiles.length > 0 || rootFolders.length > 0) && (
-          <div className="grid grid-cols-2 gap-3 pt-1 border-t border-border/20">
-            {profiles.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quality Profile</label>
-                  {savedField === 'profile' && <span className="text-xs text-green-400">Saved ✓</span>}
-                </div>
-                <select
-                  value={profileId}
-                  onChange={(e) => handleProfileChange(e.target.value)}
-                  className="w-full mt-1 px-2 py-1.5 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
-                >
-                  <option value="">Select profile…</option>
-                  {profiles.map((p) => (
-                    <option key={p.id} value={String(p.id)}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {rootFolders.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Root Folder</label>
-                  {savedField === 'folder' && <span className="text-xs text-green-400">Saved ✓</span>}
-                </div>
-                <select
-                  value={rootFolder}
-                  onChange={(e) => handleRootFolderChange(e.target.value)}
-                  className="w-full mt-1 px-2 py-1.5 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
-                >
-                  <option value="">Select folder…</option>
-                  {rootFolders.map((f) => (
-                    <option key={f.id} value={f.path}>{f.path}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-
-        {isConfigured && profiles.length === 0 && rootFolders.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            No quality profiles or root folders found — check your {label} configuration.
-          </p>
-        )}
-      </div>
-    </ServiceCard>
   )
 }
 
@@ -423,10 +172,6 @@ export function ServicesTab() {
   const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash')
   const [originalGeminiModel, setOriginalGeminiModel] = useState('gemini-2.5-flash')
   const [aiEnabled, setAiEnabled] = useState(true)
-
-  // Mood sync state
-  const [moodSources, setMoodSources] = useState<Array<{ sourceId: string; sourceName: string; tracksWithMoods: number; totalTracks: number }>>([])
-  const [moodSourceOfTruth, setMoodSourceOfTruth] = useState('')
 
   // General state
   const [isLoading, setIsLoading] = useState(true)
@@ -508,14 +253,6 @@ export function ServicesTab() {
         const ffmpegOk = await window.electronAPI.ffmpegIsAvailable()
         setFfmpegAvailable(ffmpegOk)
       } catch { setFfmpegAvailable(false) }
-
-      // Load mood sync sources
-      try {
-        const ms = await window.electronAPI.moodGetSources()
-        setMoodSources(ms)
-        const savedSot = allSettings.mood_source_of_truth || ''
-        setMoodSourceOfTruth(savedSot)
-      } catch { /* ignore */ }
 
       setNfsMappings(nfsMaps || {})
       setOriginalNfsMappings(nfsMaps || {})
@@ -1173,62 +910,7 @@ export function ServicesTab() {
         </div>
       </ServiceCard>
 
-      {/* Mood Sync Card */}
-      <ServiceCard
-        title="Mood Sync"
-        description="Sync mood tags between music sources"
-        icon={<Music className="w-5 h-5" />}
-        status={moodSourceOfTruth ? 'configured' : 'not-configured'}
-        statusText={moodSourceOfTruth ? 'Source of truth set' : 'Not configured'}
-        expanded={expandedCards.has('mood-sync')}
-        onToggle={() => toggleCard('mood-sync')}
-      >
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm font-medium text-foreground">Source of Truth</label>
-            <p className="text-xs text-muted-foreground mb-2">
-              The source with authoritative mood tags. Use the Mood Sync panel in the top bar to compare and push moods to other sources.
-            </p>
-            <select
-              value={moodSourceOfTruth}
-              onChange={(e) => {
-                setMoodSourceOfTruth(e.target.value)
-                window.electronAPI.setSetting('mood_source_of_truth', e.target.value)
-              }}
-              className="w-full px-3 py-2 rounded-lg bg-background border border-border/30 text-foreground text-sm focus:outline-hidden focus:ring-2 focus:ring-primary"
-            >
-              <option value="">None selected</option>
-              {moodSources.map(s => (
-                <option key={s.sourceId} value={s.sourceId}>
-                  {s.sourceName} ({s.tracksWithMoods}/{s.totalTracks} tracks with moods)
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </ServiceCard>
-
-      {/* Arr Automation Section */}
-      <div className="pt-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Automation</p>
-        <div className="space-y-2">
-          <ArrServiceCard
-            type="radarr"
-            expanded={expandedCards.has('radarr')}
-            onToggle={() => toggleCard('radarr')}
-          />
-          <ArrServiceCard
-            type="sonarr"
-            expanded={expandedCards.has('sonarr')}
-            onToggle={() => toggleCard('sonarr')}
-          />
-          <ArrServiceCard
-            type="lidarr"
-            expanded={expandedCards.has('lidarr')}
-            onToggle={() => toggleCard('lidarr')}
-          />
-        </div>
-      </div>
+      {/* Mood Sync — moved to Library tab */}
 
       {/* Save button */}
       {hasChanges && (

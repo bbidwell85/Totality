@@ -1454,6 +1454,7 @@ export class LocalFolderProvider implements MediaProvider {
           metadata.backdropUrl = match.backdropPath
             ? `https://image.tmdb.org/t/p/w1280${match.backdropPath}`
             : undefined
+          metadata.tmdbRating = match.voteAverage
 
           // Cache the result
           movieTmdbCache?.set(cacheKey, match)
@@ -1484,12 +1485,12 @@ export class LocalFolderProvider implements MediaProvider {
     normalizedTitle: string,
     year: number | undefined,
     tmdb: ReturnType<typeof getTMDBService>
-  ): Promise<{ tmdbId: number; title: string; year?: number; posterPath?: string; backdropPath?: string } | null> {
+  ): Promise<{ tmdbId: number; title: string; year?: number; posterPath?: string; backdropPath?: string; voteAverage?: number } | null> {
     // Helper to find best match from results
     const findBestMatch = (
-      results: Array<{ id: number; title: string; release_date?: string; poster_path?: string | null; backdrop_path?: string | null }>,
+      results: Array<{ id: number; title: string; release_date?: string; poster_path?: string | null; backdrop_path?: string | null; vote_average?: number }>,
       targetYear?: number
-    ): { tmdbId: number; title: string; year?: number; posterPath?: string; backdropPath?: string } | null => {
+    ): { tmdbId: number; title: string; year?: number; posterPath?: string; backdropPath?: string; voteAverage?: number } | null => {
       if (!results || results.length === 0) return null
 
       // If we have a target year, try to find an exact or close match
@@ -1505,6 +1506,7 @@ export class LocalFolderProvider implements MediaProvider {
             year: exactMatch.release_date ? parseInt(exactMatch.release_date.split('-')[0], 10) : undefined,
             posterPath: exactMatch.poster_path || undefined,
             backdropPath: exactMatch.backdrop_path || undefined,
+            voteAverage: exactMatch.vote_average,
           }
         }
 
@@ -1522,6 +1524,7 @@ export class LocalFolderProvider implements MediaProvider {
             year: fuzzyMatch.release_date ? parseInt(fuzzyMatch.release_date.split('-')[0], 10) : undefined,
             posterPath: fuzzyMatch.poster_path || undefined,
             backdropPath: fuzzyMatch.backdrop_path || undefined,
+            voteAverage: fuzzyMatch.vote_average,
           }
         }
       }
@@ -1534,6 +1537,7 @@ export class LocalFolderProvider implements MediaProvider {
         year: first.release_date ? parseInt(first.release_date.split('-')[0], 10) : undefined,
         posterPath: first.poster_path || undefined,
         backdropPath: first.backdrop_path || undefined,
+        voteAverage: first.vote_average,
       }
     }
 
@@ -1586,8 +1590,8 @@ export class LocalFolderProvider implements MediaProvider {
   private async tryAIDisambiguation(
     filename: string,
     year: number | undefined,
-    results: Array<{ id: number; title: string; release_date?: string; overview?: string; poster_path?: string | null; backdrop_path?: string | null }>,
-  ): Promise<{ tmdbId: number; title: string; year?: number; posterPath?: string; backdropPath?: string } | null> {
+    results: Array<{ id: number; title: string; release_date?: string; overview?: string; poster_path?: string | null; backdrop_path?: string | null; vote_average?: number }>,
+  ): Promise<{ tmdbId: number; title: string; year?: number; posterPath?: string; backdropPath?: string; voteAverage?: number } | null> {
     try {
       const gemini = getGeminiService()
       if (!gemini.isConfigured()) return null
@@ -1610,6 +1614,7 @@ export class LocalFolderProvider implements MediaProvider {
         year: best.release_date ? parseInt(best.release_date.split('-')[0], 10) : undefined,
         posterPath: best.poster_path || undefined,
         backdropPath: best.backdrop_path || undefined,
+        voteAverage: best.vote_average,
       }
     } catch {
       // AI not available or errored — fall through to normal matching

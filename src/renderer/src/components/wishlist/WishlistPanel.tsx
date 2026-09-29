@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { X, Filter, ArrowUpDown, Film, Tv, Music, Loader2, ListTodo, CircleFadingArrowUp, Download, CheckCircle2, Circle } from 'lucide-react'
+import { X, Filter, ArrowUpDown, Film, Tv, Music, Loader2, ListTodo, CircleFadingArrowUp, Download, CheckCircle2, Circle, RefreshCw } from 'lucide-react'
 import { useWishlist, WishlistMediaType, WishlistPriority, WishlistReason, WishlistStatus } from '../../contexts/WishlistContext'
 import { WishlistItemCard } from './WishlistItemCard'
 import { WishlistEmptyState } from './WishlistEmptyState'
+import { SETTING_KEYS } from '../../../../shared/settingKeys'
 
 export interface WishlistPanelProps {
   isOpen: boolean
   onClose: () => void
-  onOpenAIAdvice?: () => void
 }
 
 type SortOption = 'priority' | 'added_at' | 'title' | 'year' | 'completed_at'
@@ -31,6 +31,14 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
   const [activeCategory, setActiveCategory] = useState<CategoryType>('all')
   const [activeStatus, setActiveStatus] = useState<StatusType>('active')
   const [isExporting, setIsExporting] = useState(false)
+
+  // Sync state
+  const [syncingPlex, setSyncingPlex] = useState(false)
+  const [plexResult, setPlexResult] = useState<string | null>(null)
+  const [hasPlexSource, setHasPlexSource] = useState(false)
+  const [traktUser, setTraktUser] = useState('')
+  const [syncingTrakt, setSyncingTrakt] = useState(false)
+  const [traktResult, setTraktResult] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
   const [sortBy, setSortBy] = useState<SortOption>('priority')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -39,12 +47,16 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const exportButtonRef = useRef<HTMLButtonElement>(null)
 
-  // Auto-focus close button when panel opens
+  // Auto-focus close button when panel opens + load saved usernames
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => {
-        closeButtonRef.current?.focus()
-      }, 100)
+      setTimeout(() => closeButtonRef.current?.focus(), 100)
+      window.electronAPI.getSetting(SETTING_KEYS.trakt_username)
+        .then(val => { if (val) setTraktUser(val) })
+        .catch(() => {})
+      window.electronAPI.getSetting(SETTING_KEYS.plex_token)
+        .then(val => setHasPlexSource(!!val))
+        .catch(() => {})
     }
   }, [isOpen])
 
@@ -195,6 +207,56 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
           >
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
+        </div>
+      </div>
+
+      {/* Sync sections */}
+      <div className="px-3 pt-2 pb-1 border-b border-border/30 space-y-1.5">
+        {/* Plex watchlist sync */}
+        {hasPlexSource && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-muted-foreground w-14 shrink-0">Plex</span>
+            <span className="flex-1 text-[11px] text-muted-foreground/60">Plex Watchlist</span>
+            <button onClick={async () => {
+              if (syncingPlex) return
+              setSyncingPlex(true); setPlexResult(null)
+              try { const r = await window.electronAPI.syncPlexWatchlist(); setPlexResult(`+${r.added}`); window.dispatchEvent(new CustomEvent('wishlist-changed')) }
+              catch (err) { setPlexResult('Error') }
+              finally { setSyncingPlex(false) }
+            }} disabled={syncingPlex}
+              className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-50 shrink-0" title="Sync Plex watchlist">
+              {syncingPlex ? <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" /> : <RefreshCw className="w-3 h-3 text-muted-foreground" />}
+            </button>
+            {plexResult && <span className={`text-[10px] shrink-0 ${plexResult === 'Error' ? 'text-destructive' : 'text-emerald-500'}`}>{plexResult}</span>}
+          </div>
+        )}
+        {/* Trakt sync */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-muted-foreground w-14 shrink-0">Trakt</span>
+          <input type="text" value={traktUser} onChange={e => setTraktUser(e.target.value)}
+            onKeyDown={async e => {
+              if (e.key === 'Enter' && traktUser.trim() && !syncingTrakt) {
+                await window.electronAPI.setSetting(SETTING_KEYS.trakt_username, traktUser.trim())
+                setSyncingTrakt(true); setTraktResult(null)
+                try { const r = await window.electronAPI.syncTrakt(traktUser.trim()); setTraktResult(`+${r.added}`); window.dispatchEvent(new CustomEvent('wishlist-changed')) }
+                catch (err) { setTraktResult('Error') }
+                finally { setSyncingTrakt(false) }
+              }
+            }}
+            placeholder="username"
+            className="flex-1 px-2 py-1 bg-background border border-border/30 rounded text-[11px] focus:outline-hidden focus:ring-1 focus:ring-primary min-w-0" />
+          <button onClick={async () => {
+            if (!traktUser.trim() || syncingTrakt) return
+            await window.electronAPI.setSetting(SETTING_KEYS.trakt_username, traktUser.trim())
+            setSyncingTrakt(true); setTraktResult(null)
+            try { const r = await window.electronAPI.syncTrakt(traktUser.trim()); setTraktResult(`+${r.added}`); window.dispatchEvent(new CustomEvent('wishlist-changed')) }
+            catch (err) { setTraktResult('Error') }
+            finally { setSyncingTrakt(false) }
+          }} disabled={syncingTrakt || !traktUser.trim()}
+            className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-50 shrink-0" title="Sync Trakt watchlist">
+            {syncingTrakt ? <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" /> : <RefreshCw className="w-3 h-3 text-muted-foreground" />}
+          </button>
+          {traktResult && <span className={`text-[10px] shrink-0 ${traktResult === 'Error' ? 'text-destructive' : 'text-emerald-500'}`}>{traktResult}</span>}
         </div>
       </div>
 

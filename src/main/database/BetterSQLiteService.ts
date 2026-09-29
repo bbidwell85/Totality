@@ -257,6 +257,30 @@ export class BetterSQLiteService {
       'ALTER TABLE media_items ADD COLUMN summary TEXT',
       // Music track mood
       'ALTER TABLE music_tracks ADD COLUMN mood TEXT',
+      // Quality upgrade tracking
+      'ALTER TABLE quality_scores ADD COLUMN previous_quality_tier TEXT',
+      'ALTER TABLE quality_scores ADD COLUMN upgraded_at TEXT',
+      // Person completeness table
+      `CREATE TABLE IF NOT EXISTS person_completeness (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        person_type TEXT NOT NULL CHECK(person_type IN ('director', 'actor')),
+        person_name TEXT NOT NULL,
+        tmdb_person_id INTEGER NOT NULL,
+        total_movies INTEGER NOT NULL DEFAULT 0,
+        owned_movies INTEGER NOT NULL DEFAULT 0,
+        missing_movies TEXT NOT NULL DEFAULT '[]',
+        owned_movie_ids TEXT NOT NULL DEFAULT '[]',
+        completeness_percentage REAL NOT NULL DEFAULT 0,
+        profile_url TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(person_type, tmdb_person_id)
+      )`,
+      // Ratings
+      'ALTER TABLE media_items ADD COLUMN tmdb_rating REAL',
+      // Watch history
+      'ALTER TABLE media_items ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0',
+      'ALTER TABLE media_items ADD COLUMN last_watched_at TEXT',
     ]
 
     for (const statement of alterStatements) {
@@ -912,6 +936,266 @@ export class BetterSQLiteService {
     }
   }
 
+  /**
+   * Get storage analytics — codec breakdown, quality tiers, and size stats
+   */
+  getStorageAnalytics(): {
+    totalSize: number
+    totalItems: number
+    byCodec: Array<{ codec: string; count: number; size: number }>
+    byTier: Array<{ tier: string; count: number; size: number }>
+    codecMigration: { h264Count: number; modernCount: number; totalCount: number }
+  } {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const totalRow = this.db.prepare(`
+      SELECT COUNT(*) as count, COALESCE(SUM(m.file_size), 0) as size
+      FROM media_items m
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND m.file_size > 0
+    `).get() as { count: number; size: number }
+
+    const byCodec = this.db.prepare(`
+      SELECT
+        UPPER(COALESCE(m.video_codec, 'unknown')) as codec,
+        COUNT(*) as count,
+        COALESCE(SUM(m.file_size), 0) as size
+      FROM media_items m
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND m.file_size > 0
+      GROUP BY UPPER(COALESCE(m.video_codec, 'unknown'))
+      ORDER BY size DESC
+    `).all() as Array<{ codec: string; count: number; size: number }>
+
+    const byTier = this.db.prepare(`
+      SELECT
+        COALESCE(q.quality_tier, 'Unknown') as tier,
+        COUNT(*) as count,
+        COALESCE(SUM(m.file_size), 0) as size
+      FROM media_items m
+      LEFT JOIN quality_scores q ON m.id = q.media_item_id
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND m.file_size > 0
+      GROUP BY COALESCE(q.quality_tier, 'Unknown')
+      ORDER BY CASE tier WHEN '4K' THEN 1 WHEN '1080p' THEN 2 WHEN '720p' THEN 3 WHEN 'SD' THEN 4 ELSE 5 END
+    `).all() as Array<{ tier: string; count: number; size: number }>
+
+    const migration = this.db.prepare(`
+      SELECT
+        SUM(CASE WHEN UPPER(m.video_codec) IN ('H264', 'AVC', 'X264') THEN 1 ELSE 0 END) as h264Count,
+        SUM(CASE WHEN UPPER(m.video_codec) IN ('HEVC', 'H265', 'X265', 'AV1', 'VP9') THEN 1 ELSE 0 END) as modernCount,
+        COUNT(*) as totalCount
+      FROM media_items m
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND m.video_codec IS NOT NULL AND m.video_codec != ''
+    `).get() as { h264Count: number; modernCount: number; totalCount: number }
+
+    return {
+      totalSize: totalRow?.size || 0,
+      totalItems: totalRow?.count || 0,
+      byCodec,
+      byTier,
+      codecMigration: {
+        h264Count: migration?.h264Count || 0,
+        modernCount: migration?.modernCount || 0,
+        totalCount: migration?.totalCount || 0,
+      },
+    }
+  }
+
+  /**
+   * Get duplicate media items (same TMDB ID across different sources or paths)
+   */
+  getDuplicateMedia(): Array<{
+    tmdb_id: string
+    title: string
+    year: number | null
+    type: string
+    copies: Array<{
+      id: number
+      source_id: string
+      source_type: string
+      library_id: string
+      file_path: string | null
+      quality_tier: string | null
+      overall_score: number | null
+      resolution: string | null
+      video_codec: string | null
+      file_size: number | null
+    }>
+  }> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const sql = `
+      SELECT m.tmdb_id, m.title, m.year, m.type,
+             m.id, m.source_id, m.source_type, m.library_id, m.file_path, m.file_size,
+             m.resolution, m.video_codec,
+             q.quality_tier, q.overall_score
+      FROM media_items m
+      LEFT JOIN quality_scores q ON m.id = q.media_item_id
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE m.tmdb_id IS NOT NULL AND m.tmdb_id != ''
+        AND m.type = 'movie'
+        AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND m.tmdb_id IN (
+          SELECT tmdb_id FROM media_items
+          WHERE tmdb_id IS NOT NULL AND tmdb_id != '' AND type = 'movie'
+          GROUP BY tmdb_id HAVING COUNT(*) > 1
+        )
+      ORDER BY m.tmdb_id, q.overall_score DESC
+    `
+    const rows = this.db.prepare(sql).all() as Array<{
+      tmdb_id: string; title: string; year: number | null; type: string
+      id: number; source_id: string; source_type: string; library_id: string
+      file_path: string | null; file_size: number | null
+      resolution: string | null; video_codec: string | null
+      quality_tier: string | null; overall_score: number | null
+    }>
+
+    const grouped = new Map<string, {
+      tmdb_id: string; title: string; year: number | null; type: string
+      copies: Array<{
+        id: number; source_id: string; source_type: string; library_id: string
+        file_path: string | null; quality_tier: string | null
+        overall_score: number | null; resolution: string | null
+        video_codec: string | null; file_size: number | null
+      }>
+    }>()
+
+    for (const row of rows) {
+      if (!grouped.has(row.tmdb_id)) {
+        grouped.set(row.tmdb_id, {
+          tmdb_id: row.tmdb_id,
+          title: row.title,
+          year: row.year,
+          type: row.type,
+          copies: [],
+        })
+      }
+      grouped.get(row.tmdb_id)!.copies.push({
+        id: row.id,
+        source_id: row.source_id,
+        source_type: row.source_type,
+        library_id: row.library_id,
+        file_path: row.file_path,
+        quality_tier: row.quality_tier,
+        overall_score: row.overall_score,
+        resolution: row.resolution,
+        video_codec: row.video_codec,
+        file_size: row.file_size,
+      })
+    }
+
+    return Array.from(grouped.values())
+  }
+
+  /**
+   * Get health scores per library (average quality score)
+   */
+  getLibraryHealthScores(): Array<{
+    source_id: string
+    library_id: string
+    library_name: string
+    library_type: string
+    avg_score: number
+    item_count: number
+  }> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const sql = `
+      SELECT
+        ls.source_id,
+        ls.library_id,
+        ls.library_name,
+        ls.library_type,
+        ROUND(COALESCE(AVG(q.overall_score), 0)) as avg_score,
+        COUNT(q.media_item_id) as item_count
+      FROM library_scans ls
+      INNER JOIN media_items m ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      INNER JOIN quality_scores q ON m.id = q.media_item_id
+      WHERE ls.is_enabled = 1
+      GROUP BY ls.source_id, ls.library_id
+      HAVING item_count > 0
+    `
+    return this.db.prepare(sql).all() as Array<{
+      source_id: string; library_id: string; library_name: string
+      library_type: string; avg_score: number; item_count: number
+    }>
+  }
+
+  /**
+   * Get recently added items across all sources
+   */
+  getRecentlyAdded(days: number = 14, limit: number = 50): Array<{
+    id: number
+    title: string
+    year: number | null
+    type: string
+    source_id: string
+    source_type: string
+    poster_url: string | null
+    created_at: string
+    quality_tier: string | null
+    series_title: string | null
+    season_number: number | null
+    episode_number: number | null
+  }> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const sql = `
+      SELECT m.id, m.title, m.year, m.type, m.source_id, m.source_type,
+             m.poster_url, m.created_at, q.quality_tier,
+             m.series_title, m.season_number, m.episode_number
+      FROM media_items m
+      LEFT JOIN quality_scores q ON m.id = q.media_item_id
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND m.created_at >= datetime('now', ?)
+      ORDER BY m.created_at DESC
+      LIMIT ?
+    `
+    return this.db.prepare(sql).all(`-${days} days`, limit) as Array<{
+      id: number; title: string; year: number | null; type: string
+      source_id: string; source_type: string; poster_url: string | null
+      created_at: string; quality_tier: string | null
+      series_title: string | null; season_number: number | null; episode_number: number | null
+    }>
+  }
+
+  /**
+   * Get items that recently received a quality tier upgrade
+   */
+  getRecentlyUpgraded(days: number = 30): Array<{
+    id: number; title: string; year: number | null; type: string
+    poster_url: string | null; quality_tier: string
+    previous_quality_tier: string; upgraded_at: string
+    series_title: string | null; season_number: number | null; episode_number: number | null
+  }> {
+    if (!this.db) throw new Error('Database not initialized')
+    return this.db.prepare(`
+      SELECT m.id, m.title, m.year, m.type, m.poster_url,
+        qs.quality_tier, qs.previous_quality_tier, qs.upgraded_at,
+        m.series_title, m.season_number, m.episode_number
+      FROM quality_scores qs
+      JOIN media_items m ON m.id = qs.media_item_id
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE qs.upgraded_at IS NOT NULL
+        AND qs.upgraded_at >= datetime('now', ?)
+        AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+      ORDER BY qs.upgraded_at DESC
+      LIMIT 50
+    `).all(`-${days} days`) as Array<{
+      id: number; title: string; year: number | null; type: string
+      poster_url: string | null; quality_tier: string
+      previous_quality_tier: string; upgraded_at: string
+      series_title: string | null; season_number: number | null; episode_number: number | null
+    }>
+  }
+
   // ============================================================================
   // MEDIA ITEMS
   // ============================================================================
@@ -992,14 +1276,24 @@ export class BetterSQLiteService {
     const sortColumnMap: Record<string, string> = {
       'title': 'COALESCE(m.sort_title, m.title)',
       'year': 'm.year',
+      'play_count': 'm.play_count',
+      'last_watched_at': 'm.last_watched_at',
       'updated_at': 'm.updated_at',
       'created_at': 'm.created_at',
       'tier_score': 'q.tier_score',
-      'overall_score': 'q.overall_score'
+      'overall_score': 'q.overall_score',
+      'tmdb_rating': 'm.tmdb_rating'
     }
     const sortColumn = sortColumnMap[filters?.sortBy || 'title'] || 'COALESCE(m.sort_title, m.title)'
     const sortOrder = filters?.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
-    sql += ` ORDER BY ${sortColumn} ${sortOrder}`
+    // For watch history / rating sorts: NULLs last, secondary sort by title
+    if (filters?.sortBy === 'last_watched_at' || filters?.sortBy === 'tmdb_rating') {
+      sql += ` ORDER BY ${sortColumn} IS NULL ASC, ${sortColumn} ${sortOrder}, COALESCE(m.sort_title, m.title) ASC`
+    } else if (filters?.sortBy === 'play_count') {
+      sql += ` ORDER BY ${sortColumn} ${sortOrder}, COALESCE(m.sort_title, m.title) ASC`
+    } else {
+      sql += ` ORDER BY ${sortColumn} ${sortOrder}`
+    }
 
     // Pagination
     if (filters?.limit) {
@@ -1144,11 +1438,12 @@ export class BetterSQLiteService {
         audio_profile, audio_sample_rate, has_object_audio, audio_tracks,
         subtitle_tracks,
         container, file_mtime, imdb_id, tmdb_id, series_tmdb_id, poster_url,
-        episode_thumb_url, season_poster_url, summary, user_fixed_match,
+        episode_thumb_url, season_poster_url, summary, tmdb_rating, user_fixed_match,
+        play_count, last_watched_at,
         created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
       )
       ON CONFLICT(source_id, plex_id) DO UPDATE SET
         library_id = excluded.library_id,
@@ -1190,7 +1485,10 @@ export class BetterSQLiteService {
         episode_thumb_url = COALESCE(excluded.episode_thumb_url, media_items.episode_thumb_url),
         season_poster_url = COALESCE(excluded.season_poster_url, media_items.season_poster_url),
         summary = COALESCE(excluded.summary, media_items.summary),
+        tmdb_rating = COALESCE(excluded.tmdb_rating, media_items.tmdb_rating),
         user_fixed_match = CASE WHEN media_items.user_fixed_match = 1 THEN 1 ELSE excluded.user_fixed_match END,
+        play_count = MAX(excluded.play_count, media_items.play_count),
+        last_watched_at = CASE WHEN excluded.last_watched_at IS NOT NULL AND (media_items.last_watched_at IS NULL OR excluded.last_watched_at > media_items.last_watched_at) THEN excluded.last_watched_at ELSE media_items.last_watched_at END,
         updated_at = datetime('now')
     `)
 
@@ -1237,7 +1535,10 @@ export class BetterSQLiteService {
       item.episode_thumb_url || null,
       item.season_poster_url || null,
       item.summary || null,
-      item.user_fixed_match ? 1 : 0
+      item.tmdb_rating || null,
+      item.user_fixed_match ? 1 : 0,
+      item.play_count || 0,
+      item.last_watched_at || null
     )
 
     // Always look up by unique key — lastInsertRowid is unreliable after
@@ -1891,8 +2192,32 @@ export class BetterSQLiteService {
   /**
    * Upsert quality score
    */
+  private static readonly TIER_RANK: Record<string, number> = { 'SD': 0, '720p': 1, '1080p': 2, '4K': 3 }
+
   upsertQualityScore(score: QualityScore): void {
     if (!this.db) throw new Error('Database not initialized')
+
+    // Check existing tier to detect upgrades
+    const existing = this.db.prepare(
+      'SELECT quality_tier, previous_quality_tier, upgraded_at FROM quality_scores WHERE media_item_id = ?'
+    ).get(score.media_item_id) as { quality_tier: string; previous_quality_tier: string | null; upgraded_at: string | null } | undefined
+
+    let prevTier: string | null = null
+    let upgradedAt: string | null = null
+
+    if (existing) {
+      const oldRank = BetterSQLiteService.TIER_RANK[existing.quality_tier] ?? 0
+      const newRank = BetterSQLiteService.TIER_RANK[score.quality_tier] ?? 0
+      if (newRank > oldRank) {
+        // Tier improved — record the upgrade
+        prevTier = existing.quality_tier
+        upgradedAt = new Date().toISOString()
+      } else {
+        // No improvement — preserve existing upgrade history
+        prevTier = existing.previous_quality_tier
+        upgradedAt = existing.upgraded_at
+      }
+    }
 
     const stmt = this.db.prepare(`
       INSERT INTO quality_scores (
@@ -1900,8 +2225,9 @@ export class BetterSQLiteService {
         bitrate_tier_score, audio_tier_score, overall_score,
         resolution_score, bitrate_score, audio_score,
         is_low_quality, needs_upgrade, issues,
+        previous_quality_tier, upgraded_at,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       ON CONFLICT(media_item_id) DO UPDATE SET
         quality_tier = excluded.quality_tier,
         tier_quality = excluded.tier_quality,
@@ -1915,6 +2241,8 @@ export class BetterSQLiteService {
         is_low_quality = excluded.is_low_quality,
         needs_upgrade = excluded.needs_upgrade,
         issues = excluded.issues,
+        previous_quality_tier = excluded.previous_quality_tier,
+        upgraded_at = excluded.upgraded_at,
         updated_at = datetime('now')
     `)
 
@@ -1931,7 +2259,9 @@ export class BetterSQLiteService {
       score.audio_score,
       score.is_low_quality ? 1 : 0,
       score.needs_upgrade ? 1 : 0,
-      score.issues
+      score.issues,
+      prevTier,
+      upgradedAt,
     )
   }
 
@@ -3392,7 +3722,9 @@ export class BetterSQLiteService {
         COUNT(DISTINCT m.season_number) as season_count,
         MAX(m.poster_url) as poster_url,
         MIN(m.source_id) as source_id,
-        MIN(m.source_type) as source_type
+        MIN(m.source_type) as source_type,
+        COALESCE(SUM(m.play_count), 0) as total_play_count,
+        MAX(m.last_watched_at) as last_watched_at
       FROM media_items m
       WHERE m.type = 'episode'
     `
@@ -3432,6 +3764,12 @@ export class BetterSQLiteService {
         break
       case 'season_count':
         sql += ` ORDER BY season_count ${sortOrder}`
+        break
+      case 'play_count':
+        sql += ` ORDER BY total_play_count ${sortOrder}, COALESCE(sort_title, series_title) ASC`
+        break
+      case 'last_watched_at':
+        sql += ` ORDER BY last_watched_at IS NULL ASC, last_watched_at ${sortOrder}, COALESCE(sort_title, series_title) ASC`
         break
       default:
         sql += ` ORDER BY COALESCE(sort_title, series_title) ${sortOrder}`
@@ -5534,5 +5872,64 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   clearPendingTasks(): void {
     if (!this.db) return
     this.db.prepare('DELETE FROM pending_tasks').run()
+  }
+
+  // ============================================================================
+  // PERSON FILMOGRAPHY COMPLETENESS
+  // ============================================================================
+
+  upsertPersonCompleteness(data: {
+    person_type: string; person_name: string; tmdb_person_id: number
+    total_movies: number; owned_movies: number
+    missing_movies: string; owned_movie_ids: string
+    completeness_percentage: number; profile_url?: string
+  }): number {
+    if (!this.db) throw new Error('Database not initialized')
+    this.db.prepare(`
+      INSERT INTO person_completeness (person_type, person_name, tmdb_person_id, total_movies, owned_movies, missing_movies, owned_movie_ids, completeness_percentage, profile_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(person_type, tmdb_person_id) DO UPDATE SET
+        person_name = excluded.person_name,
+        total_movies = excluded.total_movies,
+        owned_movies = excluded.owned_movies,
+        missing_movies = excluded.missing_movies,
+        owned_movie_ids = excluded.owned_movie_ids,
+        completeness_percentage = excluded.completeness_percentage,
+        profile_url = COALESCE(excluded.profile_url, person_completeness.profile_url),
+        updated_at = datetime('now')
+    `).run(
+      data.person_type, data.person_name, data.tmdb_person_id,
+      data.total_movies, data.owned_movies,
+      data.missing_movies, data.owned_movie_ids,
+      data.completeness_percentage, data.profile_url || null
+    )
+    const row = this.db.prepare(
+      'SELECT id FROM person_completeness WHERE person_type = ? AND tmdb_person_id = ?'
+    ).get(data.person_type, data.tmdb_person_id) as { id: number } | undefined
+    return row?.id || 0
+  }
+
+  getPersonCompleteness(personType?: string): Array<{
+    id: number; person_type: string; person_name: string; tmdb_person_id: number
+    total_movies: number; owned_movies: number
+    missing_movies: string; owned_movie_ids: string
+    completeness_percentage: number; profile_url: string | null
+  }> {
+    if (!this.db) return []
+    const where = personType ? ' WHERE person_type = ?' : ''
+    const params = personType ? [personType] : []
+    return this.db.prepare(
+      `SELECT * FROM person_completeness${where} ORDER BY completeness_percentage DESC, person_name ASC`
+    ).all(...params) as Array<{
+      id: number; person_type: string; person_name: string; tmdb_person_id: number
+      total_movies: number; owned_movies: number
+      missing_movies: string; owned_movie_ids: string
+      completeness_percentage: number; profile_url: string | null
+    }>
+  }
+
+  deletePersonCompleteness(id: number): void {
+    if (!this.db) return
+    this.db.prepare('DELETE FROM person_completeness WHERE id = ?').run(id)
   }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react'
-import { Layers, RefreshCw, MoreVertical, Pencil, CircleFadingArrowUp, EyeOff } from 'lucide-react'
+import { Layers, RefreshCw, MoreVertical, Pencil, CircleFadingArrowUp, EyeOff, ArrowUpDown } from 'lucide-react'
+import type { MovieSortBy } from './hooks/useMoviePagination'
 import { MoviePlaceholder } from '../ui/MediaPlaceholders'
 import { useMenuClose } from '../../hooks/useMenuClose'
 import { providerColors } from './mediaUtils'
@@ -24,6 +25,8 @@ export function MoviesView({
   onDismissUpgrade,
   totalMovieCount,
   moviesLoading,
+  movieSortBy = 'title',
+  onMovieSortChange,
   onLoadMoreMovies,
   collectionsOnly = false
 }: {
@@ -40,6 +43,8 @@ export function MoviesView({
   onDismissUpgrade?: (movie: MediaItem) => void
   totalMovieCount: number
   moviesLoading: boolean
+  movieSortBy?: MovieSortBy
+  onMovieSortChange?: (sort: MovieSortBy) => void
   onLoadMoreMovies: () => void
   collectionsOnly?: boolean
 }) {
@@ -79,12 +84,15 @@ export function MoviesView({
   const prevDisplayItemsRef = useRef<MovieDisplayItem[]>([])
   const prevCollectionsIdRef = useRef<MovieCollectionData[]>([])
 
-  // Helper: build sorted display items from a set of movies and collections
+  // Helper: build display items from a set of movies and collections.
+  // For title sort: collections first then movies, sorted alphabetically.
+  // For other sorts: preserve server order, inserting collection headers inline.
   const buildDisplayItems = useCallback((
     movieList: MediaItem[],
     collections: MovieCollectionData[],
     collectionLookup: (movie: MediaItem) => MovieCollectionData | undefined,
-    onlyCollections: boolean
+    onlyCollections: boolean,
+    sortBy: MovieSortBy = 'title'
   ): MovieDisplayItem[] => {
     const moviesInCollections = new Set<number>()
     const collectionMovieMap = new Map<string, MediaItem[]>()
@@ -99,29 +107,45 @@ export function MoviesView({
       }
     }
 
-    const items: MovieDisplayItem[] = []
-    const addedCollections = new Set<string>()
-    for (const collection of collections) {
-      if (collectionMovieMap.has(collection.tmdb_collection_id) && !addedCollections.has(collection.tmdb_collection_id)) {
-        items.push({ type: 'collection', collection })
-        addedCollections.add(collection.tmdb_collection_id)
-      }
-    }
-
-    if (!onlyCollections) {
-      for (const movie of movieList) {
-        if (!moviesInCollections.has(movie.id)) {
-          items.push({ type: 'movie', movie })
+    if (sortBy === 'title') {
+      // Original behaviour: collections first, then standalone movies, all sorted by title
+      const items: MovieDisplayItem[] = []
+      const addedCollections = new Set<string>()
+      for (const collection of collections) {
+        if (collectionMovieMap.has(collection.tmdb_collection_id) && !addedCollections.has(collection.tmdb_collection_id)) {
+          items.push({ type: 'collection', collection })
+          addedCollections.add(collection.tmdb_collection_id)
         }
       }
+      if (!onlyCollections) {
+        for (const movie of movieList) {
+          if (!moviesInCollections.has(movie.id)) {
+            items.push({ type: 'movie', movie })
+          }
+        }
+      }
+      items.sort((a, b) => {
+        const titleA = a.type === 'collection' ? a.collection.collection_name : a.movie.title
+        const titleB = b.type === 'collection' ? b.collection.collection_name : b.movie.title
+        return titleA.localeCompare(titleB)
+      })
+      return items
     }
 
-    items.sort((a, b) => {
-      const titleA = a.type === 'collection' ? a.collection.collection_name : a.movie.title
-      const titleB = b.type === 'collection' ? b.collection.collection_name : b.movie.title
-      return titleA.localeCompare(titleB)
-    })
-
+    // Non-title sorts: preserve server order, insert collection header at first occurrence
+    const items: MovieDisplayItem[] = []
+    const addedCollections = new Set<string>()
+    for (const movie of movieList) {
+      const collection = collectionLookup(movie)
+      if (collection) {
+        if (!addedCollections.has(collection.tmdb_collection_id)) {
+          items.push({ type: 'collection', collection })
+          addedCollections.add(collection.tmdb_collection_id)
+        }
+      } else {
+        items.push({ type: 'movie', movie })
+      }
+    }
     return items
   }, [])
 
@@ -151,7 +175,7 @@ export function MoviesView({
     if (isAppend) {
       // Only process newly appended movies — don't rebuild the full list
       const newMovies = movies.slice(prevMoviesLenRef.current)
-      const newItems = buildDisplayItems(newMovies, movieCollections, getCollectionForMovie, false)
+      const newItems = buildDisplayItems(newMovies, movieCollections, getCollectionForMovie, false, movieSortBy)
 
       // Filter out collections already shown in previous items
       const existingCollectionIds = new Set(
@@ -166,16 +190,32 @@ export function MoviesView({
       result = [...prevDisplayItemsRef.current, ...dedupedNewItems]
     } else {
       // Full rebuild (initial load, filter change, or reset)
-      result = buildDisplayItems(movies, movieCollections, getCollectionForMovie, false)
+      result = buildDisplayItems(movies, movieCollections, getCollectionForMovie, false, movieSortBy)
     }
 
     prevMoviesLenRef.current = movies.length
     prevDisplayItemsRef.current = result
     prevCollectionsIdRef.current = movieCollections
     return result
-  }, [movies, movieCollections, getCollectionForMovie, collectionsOnly, buildDisplayItems])
+  }, [movies, movieCollections, getCollectionForMovie, collectionsOnly, buildDisplayItems, movieSortBy])
 
   if (displayItems.length === 0) {
+    if (moviesLoading) {
+      return (
+        <div
+          className="grid gap-8 mt-4"
+          style={{ gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }}
+        >
+          {Array.from({ length: 18 }).map((_, i) => (
+            <div key={i}>
+              <div className="aspect-2/3 bg-muted/50 rounded-md animate-pulse" />
+              <div className="mt-2 h-3 bg-muted/50 rounded animate-pulse" />
+              <div className="mt-1 h-3 w-2/3 bg-muted/40 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      )
+    }
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <MoviePlaceholder className="w-20 h-20 text-muted-foreground mb-4" />
@@ -187,9 +227,33 @@ export function MoviesView({
     )
   }
 
+  const sortOptions: { value: MovieSortBy; label: string }[] = [
+    { value: 'title', label: 'Title' },
+    { value: 'year', label: 'Year' },
+    { value: 'tmdb_rating', label: 'Rating' },
+    { value: 'play_count', label: 'Most Watched' },
+    { value: 'last_watched_at', label: 'Recently Watched' },
+  ]
+
   const statsBar = (
-    <div className="flex items-center gap-6 text-sm text-muted-foreground">
+    <div className="flex items-center gap-4 text-sm text-muted-foreground">
       <span>{totalMovieCount.toLocaleString()} Movies</span>
+      {onMovieSortChange && (
+        <div className="flex items-center gap-1.5 ml-auto">
+          <ArrowUpDown className="w-3.5 h-3.5 shrink-0" />
+          <select
+            value={movieSortBy}
+            onChange={(e) => onMovieSortChange(e.target.value as MovieSortBy)}
+            className="bg-transparent text-xs text-muted-foreground border-none outline-none cursor-pointer hover:text-foreground transition-colors"
+          >
+            {sortOptions.map(opt => (
+              <option key={opt.value} value={opt.value} className="bg-popover text-popover-foreground">
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   )
 

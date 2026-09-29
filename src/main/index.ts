@@ -480,6 +480,13 @@ app.whenReady().then(async () => {
     const autoUpdateService = getAutoUpdateService()
     autoUpdateService.initialize()
 
+    // Start release alert polling (if enabled)
+    import('./services/ReleaseAlertService').then(({ getReleaseAlertService }) => {
+      getReleaseAlertService().start().catch(err =>
+        console.error('[ReleaseAlertService] Failed to start:', err)
+      )
+    })
+
     // Set main window reference for services (must precede task queue restore
     // so that restored tasks can emit IPC progress events immediately)
     const taskQueueService = getTaskQueueService()

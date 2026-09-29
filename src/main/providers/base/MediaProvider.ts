@@ -197,6 +197,13 @@ export interface MediaMetadata {
   seasonPosterUrl?: string
   backdropUrl?: string
 
+  // Ratings
+  tmdbRating?: number // 0-10 scale
+
+  // Watch history
+  playCount?: number
+  lastWatched?: string // ISO 8601
+
   // Original raw data for debugging
   rawData?: unknown
 }

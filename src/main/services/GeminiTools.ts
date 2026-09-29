@@ -318,6 +318,82 @@ export const LIBRARY_TOOLS: GeminiToolDefinition[] = [
       required: ['items'],
     },
   },
+  // ── New data insight tools ──────────────────────────────────────────
+  {
+    name: 'get_watch_history',
+    description: 'Get the user\'s most-watched or recently-watched items. Shows play count and last watched date.',
+    parameters: {
+      type: 'object',
+      properties: {
+        sort_by: { type: 'string', enum: ['play_count', 'last_watched_at'], description: 'Sort by play count or last watched (default: play_count)' },
+        media_type: { type: 'string', enum: ['movie', 'episode'], description: 'Filter by media type' },
+        limit: { type: 'number', description: 'Max results (default 20, max 50)' },
+      },
+    },
+  },
+  {
+    name: 'get_storage_breakdown',
+    description: 'Get storage analytics: total size, codec breakdown (count + size per codec), quality tier breakdown, and H.264 vs modern codec migration percentage.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'find_duplicates',
+    description: 'Find duplicate movies (same TMDB ID) across different sources or paths. Shows each copy\'s quality, codec, resolution, and file size.',
+    parameters: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Max results (default 20)' },
+      },
+    },
+  },
+  {
+    name: 'get_library_health',
+    description: 'Get average quality score per library/source. Identifies which libraries have the best or worst overall quality.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_upgrade_history',
+    description: 'Get items that recently improved in quality tier (e.g., 720p→1080p). Shows before/after tier and upgrade date.',
+    parameters: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Look back N days (default 30)' },
+      },
+    },
+  },
+  {
+    name: 'get_person_completeness',
+    description: 'Get filmography completeness for tracked directors and actors. Shows how many of their movies you own vs total, and lists missing films.',
+    parameters: {
+      type: 'object',
+      properties: {
+        person_type: { type: 'string', enum: ['director', 'actor'], description: 'Filter by person type' },
+      },
+    },
+  },
+  {
+    name: 'get_highly_rated',
+    description: 'Get movies or TV episodes from your library sorted by TMDB audience rating. Use for finding your highest-rated content.',
+    parameters: {
+      type: 'object',
+      properties: {
+        media_type: { type: 'string', enum: ['movie', 'episode'], description: 'Filter by type (default: movie)' },
+        min_rating: { type: 'number', description: 'Minimum TMDB rating 0-10 (default: 7.5)' },
+        limit: { type: 'number', description: 'Max results (default 20, max 50)' },
+      },
+    },
+  },
+  {
+    name: 'get_recently_added',
+    description: 'Get items recently added to the library across all sources. Shows title, type, source, and quality tier.',
+    parameters: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Look back N days (default 14)' },
+        limit: { type: 'number', description: 'Max results (default 20, max 50)' },
+      },
+    },
+  },
 ]
 
 /** Genre name aliases → TMDB canonical names */
@@ -1513,6 +1589,126 @@ export async function executeTool(
       })
 
       return JSON.stringify(details)
+    }
+
+    // ── New data insight tools ──────────────────────────────────────────
+
+    case 'get_watch_history': {
+      const sortBy = toolString(input, 'sort_by') || 'play_count'
+      const mediaType = toolString(input, 'media_type') as 'movie' | 'episode' | undefined
+      const limit = Math.min(toolNumber(input, 'limit') || 20, 50)
+      const items = db.getMediaItems({
+        type: mediaType,
+        sortBy: sortBy as 'play_count' | 'last_watched_at',
+        sortOrder: 'desc',
+        limit,
+      })
+      const filtered = items.filter((i: Record<string, unknown>) => (i.play_count as number) > 0)
+      return JSON.stringify(compact(filtered.map((i: Record<string, unknown>) => ({
+        title: i.title, year: i.year, type: i.type,
+        play_count: i.play_count, last_watched_at: i.last_watched_at,
+        quality_tier: i.quality_tier, series_title: i.series_title,
+      }))))
+    }
+
+    case 'get_storage_breakdown': {
+      const analytics = db.getStorageAnalytics()
+      const formatSize = (b: number) => b >= 1e12 ? `${(b / 1e12).toFixed(1)} TB` : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${(b / 1e6).toFixed(0)} MB`
+      return JSON.stringify({
+        total_size: formatSize(analytics.totalSize),
+        total_items: analytics.totalItems,
+        by_codec: analytics.byCodec.map((c: { codec: string; count: number; size: number }) => ({ codec: c.codec, count: c.count, size: formatSize(c.size) })),
+        by_tier: analytics.byTier.map((t: { tier: string; count: number; size: number }) => ({ tier: t.tier, count: t.count, size: formatSize(t.size) })),
+        codec_migration: {
+          h264_count: analytics.codecMigration.h264Count,
+          modern_count: analytics.codecMigration.modernCount,
+          total: analytics.codecMigration.totalCount,
+          modern_percentage: analytics.codecMigration.totalCount > 0
+            ? Math.round((analytics.codecMigration.modernCount / analytics.codecMigration.totalCount) * 100) : 0,
+        },
+      })
+    }
+
+    case 'find_duplicates': {
+      const limit = Math.min(toolNumber(input, 'limit') || 20, 50)
+      const dupes = db.getDuplicateMedia()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return JSON.stringify(dupes.slice(0, limit).map((d: any) => ({
+        title: d.title, year: d.year, tmdb_id: d.tmdb_id,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        copies: d.copies.map((c: any) => ({
+          source_type: c.source_type, resolution: c.resolution,
+          video_codec: c.video_codec, quality_score: c.overall_score,
+          file_size: c.file_size ? `${(c.file_size / 1e9).toFixed(1)} GB` : null,
+        })),
+      })))
+    }
+
+    case 'get_library_health': {
+      const scores = db.getLibraryHealthScores()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return JSON.stringify(scores.map((s: any) => ({
+        source_id: s.source_id, library_name: s.library_name,
+        library_type: s.library_type, avg_score: s.avg_score,
+        item_count: s.item_count,
+      })))
+    }
+
+    case 'get_upgrade_history': {
+      const days = toolNumber(input, 'days') || 30
+      const items = db.getRecentlyUpgraded(days)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return JSON.stringify(items.map((i: any) => ({
+        title: i.title, year: i.year, type: i.type,
+        previous_tier: i.previous_quality_tier, new_tier: i.quality_tier,
+        upgraded_at: i.upgraded_at,
+      })))
+    }
+
+    case 'get_person_completeness': {
+      const personType = toolString(input, 'person_type') || undefined
+      const persons = db.getPersonCompleteness(personType)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return JSON.stringify(persons.map((p: any) => {
+        let missingMovies: Array<{ title: string; year?: number }> = []
+        try { missingMovies = JSON.parse(p.missing_movies).slice(0, 10) } catch { /* ignore */ }
+        return {
+          person_name: p.person_name, person_type: p.person_type,
+          total_movies: p.total_movies, owned_movies: p.owned_movies,
+          completeness_percentage: p.completeness_percentage,
+          missing_movies: missingMovies.map(m => ({ title: m.title, year: m.year })),
+        }
+      }))
+    }
+
+    case 'get_highly_rated': {
+      const mediaType = (toolString(input, 'media_type') || 'movie') as 'movie' | 'episode'
+      const limit = Math.min(toolNumber(input, 'limit') || 20, 50)
+      const items = db.getMediaItems({
+        type: mediaType,
+        sortBy: 'tmdb_rating',
+        sortOrder: 'desc',
+        limit,
+      })
+      const minRating = toolNumber(input, 'min_rating') || 7.5
+      const filtered = items.filter((i: Record<string, unknown>) => ((i.tmdb_rating as number) || 0) >= minRating)
+      return JSON.stringify(compact(filtered.map((i: Record<string, unknown>) => ({
+        title: i.title, year: i.year, type: i.type,
+        tmdb_rating: i.tmdb_rating, quality_tier: i.quality_tier,
+        series_title: i.series_title,
+      }))))
+    }
+
+    case 'get_recently_added': {
+      const days = toolNumber(input, 'days') || 14
+      const limit = Math.min(toolNumber(input, 'limit') || 20, 50)
+      const items = db.getRecentlyAdded(days, limit)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return JSON.stringify(items.map((i: any) => ({
+        title: i.title, year: i.year, type: i.type,
+        quality_tier: i.quality_tier, created_at: i.created_at,
+        series_title: i.series_title,
+      })))
     }
 
     default:

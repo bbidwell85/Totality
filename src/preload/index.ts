@@ -472,6 +472,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Database - Statistics
   getLibraryStats: (sourceId?: string) => ipcRenderer.invoke('db:getLibraryStats', sourceId),
+  getStorageAnalytics: () => ipcRenderer.invoke('db:getStorageAnalytics'),
+  // Person filmography completeness
+  personGetCompleteness: (personType?: string) => ipcRenderer.invoke('person:getCompleteness', personType),
+  personAnalyze: (personName: string, personType: string) => ipcRenderer.invoke('person:analyze', personName, personType),
+  personDelete: (id: number) => ipcRenderer.invoke('person:delete', id),
+  // Watchlist sync
+  syncPlexWatchlist: () => ipcRenderer.invoke('sync:plex-watchlist'),
+  syncTrakt: (username: string) => ipcRenderer.invoke('sync:trakt', username),
+  syncLetterboxd: (username: string) => ipcRenderer.invoke('sync:letterboxd', username),
+  // Release alerts
+  releaseAlertsCheck: () => ipcRenderer.invoke('release-alerts:check'),
+  getDuplicateMedia: () => ipcRenderer.invoke('db:getDuplicateMedia'),
+  getLibraryHealthScores: () => ipcRenderer.invoke('db:getLibraryHealthScores'),
+  getRecentlyUpgraded: (days?: number) => ipcRenderer.invoke('db:getRecentlyUpgraded', days),
+  getRecentlyAdded: (days?: number, limit?: number) => ipcRenderer.invoke('db:getRecentlyAdded', days, limit),
 
   // Database - Global Search
   mediaSearch: (query: string) => ipcRenderer.invoke('media:search', query),
@@ -1506,6 +1521,58 @@ export interface ElectronAPI {
     tvNeedsUpgradeCount: number
     tvAverageQualityScore: number
   }>
+
+  // Person filmography completeness
+  personGetCompleteness: (personType?: string) => Promise<Array<{
+    id: number; person_type: string; person_name: string; tmdb_person_id: number
+    total_movies: number; owned_movies: number; missing_movies: string; owned_movie_ids: string
+    completeness_percentage: number; profile_url: string | null
+  }>>
+  personAnalyze: (personName: string, personType: string) => Promise<{
+    name: string; totalMovies: number; ownedMovies: number; missingCount: number; percentage: number
+  }>
+  personDelete: (id: number) => Promise<void>
+  // Watchlist sync
+  syncPlexWatchlist: () => Promise<{ added: number; total: number }>
+  syncTrakt: (username: string) => Promise<{ added: number; total: number }>
+  syncLetterboxd: (username: string) => Promise<{ added: number; total: number }>
+  // Release alerts
+  releaseAlertsCheck: () => Promise<number>
+
+  getStorageAnalytics: () => Promise<{
+    totalSize: number; totalItems: number
+    byCodec: Array<{ codec: string; count: number; size: number }>
+    byTier: Array<{ tier: string; count: number; size: number }>
+    codecMigration: { h264Count: number; modernCount: number; totalCount: number }
+  }>
+  getDuplicateMedia: () => Promise<Array<{
+    tmdb_id: string
+    title: string
+    year: number | null
+    type: string
+    copies: Array<{
+      id: number; source_id: string; source_type: string; library_id: string
+      file_path: string | null; quality_tier: string | null
+      overall_score: number | null; resolution: string | null
+      video_codec: string | null; file_size: number | null
+    }>
+  }>>
+  getLibraryHealthScores: () => Promise<Array<{
+    source_id: string; library_id: string; library_name: string
+    library_type: string; avg_score: number; item_count: number
+  }>>
+  getRecentlyUpgraded: (days?: number) => Promise<Array<{
+    id: number; title: string; year: number | null; type: string
+    poster_url: string | null; quality_tier: string
+    previous_quality_tier: string; upgraded_at: string
+    series_title: string | null; season_number: number | null; episode_number: number | null
+  }>>
+  getRecentlyAdded: (days?: number, limit?: number) => Promise<Array<{
+    id: number; title: string; year: number | null; type: string
+    source_id: string; source_type: string; poster_url: string | null
+    created_at: string; quality_tier: string | null
+    series_title: string | null; season_number: number | null; episode_number: number | null
+  }>>
 
   // Database - Global Search
   mediaSearch: (query: string) => Promise<{

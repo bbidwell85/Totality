@@ -15,7 +15,6 @@ import { useSources } from '../../contexts/SourceContext'
 import { useNavigation } from '../../contexts/NavigationContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { useToast } from '../../contexts/ToastContext'
-import { EnhancedEmptyState } from '../onboarding'
 import logoImage from '../../assets/totality_header_logo.png'
 import { MoviePlaceholder, TvPlaceholder, EpisodePlaceholder } from '../ui/MediaPlaceholders'
 
@@ -174,11 +173,12 @@ export function MediaBrowser({
   // Movie and TV show pagination (extracted hooks)
   const {
     paginatedMovies, setPaginatedMovies, totalMovieCount, moviesLoading,
-    loadPaginatedMovies, loadMoreMovies,
+    movieSortBy, setMovieSortBy, loadPaginatedMovies, loadMoreMovies,
   } = useMoviePagination({ activeSourceId, activeLibraryId, tierFilter: debouncedTierFilter, qualityFilter: debouncedQualityFilter, searchQuery, alphabetFilter })
 
   const {
     paginatedShows, totalShowCount, totalEpisodeCount, showsLoading,
+    tvSortBy, setTvSortBy,
     selectedShowEpisodes, setSelectedShowEpisodes, selectedShowEpisodesLoading,
     loadPaginatedShows, loadMoreShows, loadSelectedShowEpisodes,
   } = useTVShowPagination({ activeSourceId, activeLibraryId, searchQuery, alphabetFilter })
@@ -2005,7 +2005,10 @@ export function MediaBrowser({
 
         {/* Content Display */}
         {showEmptyState ? (
-          <EnhancedEmptyState />
+          <div className="h-full flex flex-col items-center justify-center px-8">
+            <h2 className="text-xl font-semibold text-foreground mb-2 text-center">No Media Sources</h2>
+            <p className="text-muted-foreground text-center max-w-md">Add a media server from the sidebar to start analyzing your library</p>
+          </div>
         ) : (
           view === 'movies' ? (
             <MoviesView
@@ -2025,6 +2028,12 @@ export function MediaBrowser({
               onDismissUpgrade={handleDismissUpgrade}
               totalMovieCount={totalMovieCount}
               moviesLoading={moviesLoading}
+              movieSortBy={movieSortBy}
+              onMovieSortChange={(sort) => {
+                setMovieSortBy(sort)
+                // Trigger reload on next tick (after ref is updated)
+                setTimeout(() => loadPaginatedMovies(true), 0)
+              }}
               onLoadMoreMovies={loadMoreMovies}
               collectionsOnly={collectionsOnly}
             />
@@ -2064,6 +2073,11 @@ export function MediaBrowser({
             totalEpisodeCount={totalEpisodeCount}
             showsLoading={showsLoading}
             onLoadMoreShows={loadMoreShows}
+            tvSortBy={tvSortBy}
+            onTvSortChange={(sort) => {
+              setTvSortBy(sort as 'title' | 'play_count' | 'last_watched_at')
+              setTimeout(() => loadPaginatedShows(true), 0)
+            }}
           />
         ) : (
           <MusicView

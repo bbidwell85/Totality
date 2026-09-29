@@ -240,6 +240,8 @@ export function MatchFixModal({
   return createPortal(
     <div
       className="fixed inset-0 z-200 flex items-center justify-center bg-black/60"
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
     >
       <div

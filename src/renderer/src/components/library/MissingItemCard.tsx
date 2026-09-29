@@ -1,6 +1,7 @@
 import { memo, useRef } from 'react'
 import { Tv, EyeOff } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
+import { ArrButtons } from '../arr/AddToArrButton'
 import type { WishlistMediaType } from '../../contexts/WishlistContext'
 
 interface MissingItemCardProps {
@@ -14,6 +15,8 @@ interface MissingItemCardProps {
   seriesTitle?: string
   seasonNumber?: number
   year?: number
+  // Arr apps
+  arrApps?: { radarr: boolean; sonarr: boolean; lidarr: boolean }
   // Dismiss
   onDismiss?: () => void
 }
@@ -28,6 +31,7 @@ export const MissingItemCard = memo(function MissingItemCard({
   seriesTitle,
   seasonNumber,
   year,
+  arrApps,
   onDismiss
 }: MissingItemCardProps) {
   const cardRef = useRef<HTMLDivElement>(null)
@@ -77,11 +81,21 @@ export const MissingItemCard = memo(function MissingItemCard({
         </div>
         {/* Action buttons */}
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {arrApps && (
+            <ArrButtons
+              arrApps={arrApps}
+              tmdbId={type === 'movie' ? tmdbId : undefined}
+              title={type === 'movie' ? title : (seriesTitle || title)}
+              year={year}
+              mediaType={type === 'movie' ? 'movie' : 'tv'}
+              compact
+            />
+          )}
           {onDismiss && (
             <button
               onClick={onDismiss}
               className="flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-              title="Dismiss"
+              title="Hide from completeness"
             >
               <EyeOff className="w-4 h-4" />
             </button>

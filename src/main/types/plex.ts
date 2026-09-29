@@ -53,6 +53,8 @@ export interface PlexMediaItem {
   originallyAvailableAt?: string
   addedAt: number
   updatedAt: number
+  viewCount?: number
+  lastViewedAt?: number
 
   // Video/Audio stream info
   Media?: PlexMedia[]

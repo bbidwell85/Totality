@@ -96,6 +96,13 @@ CREATE TABLE IF NOT EXISTS media_items (
   season_poster_url TEXT,
   summary TEXT,
 
+  -- Ratings
+  tmdb_rating REAL,
+
+  -- Watch history
+  play_count INTEGER NOT NULL DEFAULT 0,
+  last_watched_at TEXT,
+
   -- Timestamps
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -188,6 +195,10 @@ CREATE TABLE IF NOT EXISTS quality_scores (
 
   -- Analysis details (JSON)
   issues TEXT NOT NULL DEFAULT '[]',
+
+  -- Upgrade tracking
+  previous_quality_tier TEXT,
+  upgraded_at TEXT,
 
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -601,6 +612,26 @@ CREATE TABLE IF NOT EXISTS notifications (
   is_read INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   read_at TEXT
+);
+
+-- ============================================================================
+-- PERSON FILMOGRAPHY COMPLETENESS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS person_completeness (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_type TEXT NOT NULL CHECK(person_type IN ('director', 'actor')),
+  person_name TEXT NOT NULL,
+  tmdb_person_id INTEGER NOT NULL,
+  total_movies INTEGER NOT NULL DEFAULT 0,
+  owned_movies INTEGER NOT NULL DEFAULT 0,
+  missing_movies TEXT NOT NULL DEFAULT '[]',
+  owned_movie_ids TEXT NOT NULL DEFAULT '[]',
+  completeness_percentage REAL NOT NULL DEFAULT 0,
+  profile_url TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(person_type, tmdb_person_id)
 );
 
 -- ============================================================================

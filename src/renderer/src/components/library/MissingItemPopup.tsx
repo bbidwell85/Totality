@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X, EyeOff, Copy, Check } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
+import { ArrButtons } from '../arr/AddToArrButton'
 
 // Helper function to format season label (Season 0 = Specials)
 const formatSeasonLabel = (seasonNumber: number): string => {
@@ -47,6 +48,13 @@ export function MissingItemPopup({
   const [seasonDetails, setSeasonDetails] = useState<SeasonDetails | null>(null)
   const [movieOverview, setMovieOverview] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [arrApps, setArrApps] = useState({ radarr: false, sonarr: false, lidarr: false })
+
+  useEffect(() => {
+    window.electronAPI.arrGetConfiguredApps()
+      .then((apps: { radarr: boolean; sonarr: boolean; lidarr: boolean }) => setArrApps(apps))
+      .catch(() => {})
+  }, [])
 
   // Fetch details from TMDB when popup opens
   useEffect(() => {
@@ -88,7 +96,7 @@ export function MissingItemPopup({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-150 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-150 flex items-center justify-center p-4" role="dialog" aria-modal="true">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60"
@@ -101,6 +109,14 @@ export function MissingItemPopup({
         <div className="flex items-center justify-between p-4 border-b border-border/30 bg-sidebar-gradient rounded-t-xl">
           <span className="text-sm font-medium capitalize">{type}</span>
           <div className="flex items-center gap-1">
+            <ArrButtons
+              arrApps={arrApps}
+              tmdbId={type === 'movie' ? tmdbId : undefined}
+              title={type === 'movie' ? title : (seriesTitle || title)}
+              year={year}
+              mediaType={type === 'movie' ? 'movie' : 'tv'}
+              compact
+            />
             <AddToWishlistButton
               mediaType={type}
               title={title}
@@ -117,7 +133,7 @@ export function MissingItemPopup({
               <button
                 onClick={() => { onDismiss(); onClose() }}
                 className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                title="Dismiss"
+                title="Hide from completeness"
               >
                 <EyeOff className="w-4 h-4" />
               </button>

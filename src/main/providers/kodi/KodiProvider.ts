@@ -64,8 +64,11 @@ interface KodiMovie {
   year?: number
   runtime?: number // Duration in minutes
   plot?: string
+  rating?: number
   streamdetails: KodiStreamDetails
   imdbnumber?: string
+  playcount?: number
+  lastplayed?: string
   art?: {
     poster?: string
     fanart?: string
@@ -93,6 +96,8 @@ interface KodiEpisode {
   runtime?: number // Duration in minutes
   plot?: string
   streamdetails: KodiStreamDetails
+  playcount?: number
+  lastplayed?: string
   art?: {
     thumb?: string
     'season.poster'?: string
@@ -337,7 +342,7 @@ export class KodiProvider implements MediaProvider {
 
   private async getMovies(): Promise<MediaMetadata[]> {
     const result = await this.rpcCall<{ movies: KodiMovie[] }>('VideoLibrary.GetMovies', {
-      properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art', 'runtime', 'plot'],
+      properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art', 'runtime', 'plot', 'playcount', 'lastplayed', 'rating'],
     })
 
     const movies = result.movies || []
@@ -371,7 +376,7 @@ export class KodiProvider implements MediaProvider {
   private async getEpisodesForShow(tvshowid: number, showtitle: string): Promise<MediaMetadata[]> {
     const result = await this.rpcCall<{ episodes: KodiEpisode[] }>('VideoLibrary.GetEpisodes', {
       tvshowid,
-      properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'art', 'runtime', 'plot'],
+      properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'art', 'runtime', 'plot', 'playcount', 'lastplayed'],
     })
 
     const episodes = result.episodes || []
@@ -416,7 +421,7 @@ export class KodiProvider implements MediaProvider {
     const dateStr = sinceTimestamp.toISOString().replace('T', ' ').split('.')[0]
 
     const result = await this.rpcCall<{ movies: KodiMovie[] }>('VideoLibrary.GetMovies', {
-      properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art', 'runtime', 'plot'],
+      properties: ['title', 'year', 'file', 'streamdetails', 'imdbnumber', 'art', 'runtime', 'plot', 'playcount', 'lastplayed', 'rating'],
       filter: {
         operator: 'greaterthan',
         field: 'dateadded',
@@ -452,7 +457,7 @@ export class KodiProvider implements MediaProvider {
     const dateStr = sinceTimestamp.toISOString().replace('T', ' ').split('.')[0]
 
     const result = await this.rpcCall<{ episodes: KodiEpisode[] }>('VideoLibrary.GetEpisodes', {
-      properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'showtitle', 'art', 'runtime', 'plot'],
+      properties: ['title', 'file', 'season', 'episode', 'streamdetails', 'showtitle', 'art', 'runtime', 'plot', 'playcount', 'lastplayed'],
       filter: {
         operator: 'greaterthan',
         field: 'dateadded',
@@ -842,6 +847,9 @@ export class KodiProvider implements MediaProvider {
       hasObjectAudio: hasAnyObjectAudio,
       audioTracks: audioTracks.length > 0 ? audioTracks : undefined,
       posterUrl: movie.art?.poster,
+      tmdbRating: movie.rating || undefined,
+      playCount: movie.playcount || 0,
+      lastWatched: movie.lastplayed || undefined,
       rawData: movie.plot ? { plot: movie.plot } : undefined,
     }
   }
@@ -937,6 +945,8 @@ export class KodiProvider implements MediaProvider {
       episodeThumbUrl: episode.art?.thumb,
       posterUrl: seasonPosterUrl || showPosterUrl,
       seasonPosterUrl: seasonPosterUrl,
+      playCount: episode.playcount || 0,
+      lastWatched: episode.lastplayed || undefined,
       rawData: episode.plot ? { plot: episode.plot } : undefined,
     }
   }
@@ -1001,6 +1011,9 @@ export class KodiProvider implements MediaProvider {
       episode_thumb_url: metadata.episodeThumbUrl,
       season_poster_url: metadata.seasonPosterUrl,
       summary: (metadata.rawData as { plot?: string })?.plot || undefined,
+      tmdb_rating: metadata.tmdbRating || undefined,
+      play_count: metadata.playCount || 0,
+      last_watched_at: metadata.lastWatched || undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

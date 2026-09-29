@@ -1574,6 +1574,9 @@ export class KodiLocalProvider implements MediaProvider {
       audioTracks: audioTracks.length > 0 ? audioTracks : undefined,
       posterUrl: convertKodiImageUrl(movie.posterUrl),
       backdropUrl: convertKodiImageUrl(movie.fanartUrl),
+      tmdbRating: movie.rating || undefined,
+      playCount: movie.playCount || 0,
+      lastWatched: movie.lastPlayed || undefined,
     }
   }
 
@@ -1645,6 +1648,8 @@ export class KodiLocalProvider implements MediaProvider {
       episodeThumbUrl: convertKodiImageUrl(episode.thumbUrl),
       posterUrl: convertKodiImageUrl(episode.seasonPosterUrl) || convertKodiImageUrl(episode.showPosterUrl),
       seasonPosterUrl: convertKodiImageUrl(episode.seasonPosterUrl),
+      playCount: episode.playCount || 0,
+      lastWatched: episode.lastPlayed || undefined,
     }
   }
 
@@ -1717,6 +1722,9 @@ export class KodiLocalProvider implements MediaProvider {
       poster_url: metadata.posterUrl,
       episode_thumb_url: metadata.episodeThumbUrl,
       season_poster_url: metadata.seasonPosterUrl,
+      tmdb_rating: metadata.tmdbRating || undefined,
+      play_count: metadata.playCount || 0,
+      last_watched_at: metadata.lastWatched || undefined,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }

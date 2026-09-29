@@ -3,6 +3,8 @@ import type { MediaItem, TVShowSummary } from '../types'
 
 const SHOWS_PAGE_SIZE = 200
 
+export type TVShowSortBy = 'title' | 'play_count' | 'last_watched_at'
+
 interface UseTVShowPaginationOptions {
   activeSourceId: string | null
   activeLibraryId: string | null
@@ -16,6 +18,8 @@ interface UseTVShowPaginationReturn {
   totalShowCount: number
   totalEpisodeCount: number
   showsLoading: boolean
+  tvSortBy: TVShowSortBy
+  setTvSortBy: (sort: TVShowSortBy) => void
   selectedShowEpisodes: MediaItem[]
   setSelectedShowEpisodes: React.Dispatch<React.SetStateAction<MediaItem[]>>
   selectedShowEpisodesLoading: boolean
@@ -37,6 +41,12 @@ export function useTVShowPagination({
   const [totalShowCount, setTotalShowCount] = useState(0)
   const [totalEpisodeCount, setTotalEpisodeCount] = useState(0)
   const [showsLoading, setShowsLoading] = useState(false)
+  const [tvSortBy, setTvSortByState] = useState<TVShowSortBy>('title')
+  const tvSortByRef = useRef<TVShowSortBy>('title')
+  const setTvSortBy = useCallback((sort: TVShowSortBy) => {
+    tvSortByRef.current = sort
+    setTvSortByState(sort)
+  }, [])
   const showsOffsetRef = useRef(0)
   const [selectedShowEpisodes, setSelectedShowEpisodes] = useState<MediaItem[]>([])
   const [selectedShowEpisodesLoading, setSelectedShowEpisodesLoading] = useState(false)
@@ -46,11 +56,13 @@ export function useTVShowPagination({
     setShowsLoading(true)
     try {
       const offset = reset ? (startOffset ?? 0) : showsOffsetRef.current
+      const sortBy = tvSortByRef.current
+      const sortOrder = (sortBy === 'play_count' || sortBy === 'last_watched_at') ? 'desc' : 'asc'
       const filters: Record<string, unknown> = {
         limit: SHOWS_PAGE_SIZE,
         offset,
-        sortBy: 'title',
-        sortOrder: 'asc',
+        sortBy,
+        sortOrder,
       }
       if (activeSourceId) filters.sourceId = activeSourceId
       if (activeLibraryId) filters.libraryId = activeLibraryId
@@ -101,6 +113,7 @@ export function useTVShowPagination({
   return {
     paginatedShows, setPaginatedShows,
     totalShowCount, totalEpisodeCount, showsLoading,
+    tvSortBy, setTvSortBy,
     selectedShowEpisodes, setSelectedShowEpisodes, selectedShowEpisodesLoading,
     loadPaginatedShows, loadMoreShows, loadSelectedShowEpisodes,
   }

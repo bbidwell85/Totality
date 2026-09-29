@@ -438,6 +438,33 @@ export class TMDBService {
   }
 
   /**
+   * Search for a person (actor/director) by name
+   */
+  async searchPerson(query: string): Promise<TMDBSearchResponse<{
+    id: number; name: string; profile_path: string | null
+    known_for_department: string
+  }>> {
+    return await this.request('/search/person', { query })
+  }
+
+  /**
+   * Get a person's movie credits (cast + crew)
+   */
+  async getPersonMovieCredits(personId: number): Promise<{
+    cast: Array<{ id: number; title: string; character: string; release_date?: string; poster_path?: string | null; vote_average?: number }>
+    crew: Array<{ id: number; title: string; job: string; department: string; release_date?: string; poster_path?: string | null; vote_average?: number }>
+  }> {
+    return await this.request(`/person/${personId}/movie_credits`)
+  }
+
+  /**
+   * Get upcoming movies (next N days)
+   */
+  async getUpcomingMovies(page = 1): Promise<TMDBSearchResponse<TMDBMovieSearchResult>> {
+    return await this.request('/movie/upcoming', { page: page.toString() })
+  }
+
+  /**
    * Get TMDB configuration (image base URLs, etc.)
    */
   async getConfiguration(): Promise<TMDBConfiguration> {

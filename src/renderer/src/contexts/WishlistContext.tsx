@@ -171,6 +171,13 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     return () => cleanup?.()
   }, [loadWishlist])
 
+  // Listen for manual wishlist-changed events (e.g., after Trakt/Letterboxd sync)
+  useEffect(() => {
+    const handler = () => loadWishlist()
+    window.addEventListener('wishlist-changed', handler)
+    return () => window.removeEventListener('wishlist-changed', handler)
+  }, [loadWishlist])
+
   // Load region on mount
   useEffect(() => {
     loadRegion()

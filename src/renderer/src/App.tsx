@@ -10,7 +10,6 @@ import { ChatPanel } from './components/chat/ChatPanel'
 import { MoodSyncPanel } from './components/mood/MoodSyncPanel'
 import { ArrQueuePanel } from './components/arr/ArrQueuePanel'
 import type { ViewContext } from './hooks/useChat'
-import { AIInsightsPanel } from './components/library/AIInsightsPanel'
 import { SourceProvider, useSources } from './contexts/SourceContext'
 import { WishlistProvider } from './contexts/WishlistContext'
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
@@ -19,7 +18,6 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import { AddSourceModal } from './components/sources/AddSourceModal'
 import { AboutModal } from './components/ui/AboutModal'
 import { SettingsPanel } from './components/settings'
-import { OnboardingWizard } from './components/onboarding'
 import { SplashScreen } from './components/layout/SplashScreen'
 import { ToastContainer } from './components/ui/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -34,7 +32,6 @@ function AppContent() {
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined)
-  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null)
   const [splashComplete, setSplashComplete] = useState(() => sessionStorage.getItem('splashShown') === 'true')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true')
   const [currentView, setCurrentView] = useState<AppView>('dashboard')
@@ -50,9 +47,6 @@ function AppContent() {
   const [showChatPanel, setShowChatPanel] = useState(false)
   const [showMoodSyncPanel, setShowMoodSyncPanel] = useState(false)
   const [showArrQueue, setShowArrQueue] = useState(false)
-  const [showAIInsights, setShowAIInsights] = useState(false)
-  const [aiInsightsInitialReport, setAiInsightsInitialReport] = useState<string | undefined>(undefined)
-
   // Auto-refresh state (passed up from MediaBrowser)
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false)
 
@@ -75,25 +69,16 @@ function AppContent() {
     setSplashComplete(true)
   }
 
-  useEffect(() => {
-    window.electronAPI.getSetting(SETTING_KEYS.onboarding_completed)
-      .then(value => setOnboardingComplete(value === 'true'))
-      .catch(err => {
-        console.error('Failed to load onboarding state:', err)
-        setOnboardingComplete(false)
-      })
-  }, [])
-
   // Signal to main process that we're ready to show content
   useEffect(() => {
-    if (!hasSignaledReady.current && !isLoading && onboardingComplete !== null) {
+    if (!hasSignaledReady.current && !isLoading) {
       hasSignaledReady.current = true
       // Small delay to ensure content is painted
       setTimeout(() => {
         window.electronAPI.appReady()
       }, 50)
     }
-  }, [isLoading, onboardingComplete])
+  }, [isLoading])
 
   // Load completeness stats data
   const loadCompletenessData = useCallback(async () => {
@@ -280,19 +265,8 @@ function AppContent() {
     loadMusicCompletenessData()
   }, [loadCompletenessData, loadMusicCompletenessData])
 
-  const handleOnboardingComplete = async () => {
-    try {
-      await window.electronAPI.setSetting(SETTING_KEYS.onboarding_completed, 'true')
-      markSplashShown()
-      setOnboardingComplete(true)
-    } catch (error) {
-      console.error('Failed to save onboarding state:', error)
-    }
-  }
-
-  const handleAddSourceSuccess = async () => {
+  const handleAddSourceSuccess = () => {
     setShowAddSourceModal(false)
-    if (!onboardingComplete) await handleOnboardingComplete()
   }
 
   const handleNavigateToLibrary = (tab?: MediaViewType) => {
@@ -403,7 +377,7 @@ function AppContent() {
     activeSourceId: activeSourceId || undefined,
   }), [currentView, libraryTab, activeSourceId])
 
-  if (isLoading || onboardingComplete === null) {
+  if (isLoading) {
     return (
       <div className="h-screen bg-background flex items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
@@ -411,27 +385,7 @@ function AppContent() {
     )
   }
 
-  // Onboarding disabled for now - to re-enable, uncomment the line below
-  // const showOnboarding = sources.length === 0 && !onboardingComplete
-  const showOnboarding = false
   const showSplash = !splashComplete
-
-  if (showOnboarding) {
-    return (
-      <>
-        <OnboardingWizard
-          onComplete={handleOnboardingComplete}
-          onAddSource={() => setShowAddSourceModal(true)}
-        />
-        {showAddSourceModal && (
-          <AddSourceModal
-            onClose={() => setShowAddSourceModal(false)}
-            onSuccess={handleAddSourceSuccess}
-          />
-        )}
-      </>
-    )
-  }
 
   return (
     <>
@@ -552,10 +506,6 @@ function AppContent() {
               <WishlistPanel
                 isOpen={showWishlistPanel}
                 onClose={() => setShowWishlistPanel(false)}
-                onOpenAIAdvice={() => {
-                  setAiInsightsInitialReport('wishlist')
-                  setShowAIInsights(true)
-                }}
               />
             </SectionErrorBoundary>
           </>
@@ -576,15 +526,6 @@ function AppContent() {
           onClose={() => setShowChatPanel(false)}
           onOpenSettings={() => handleOpenSettings('services')}
           viewContext={chatViewContext}
-        />
-        <AIInsightsPanel
-          isOpen={showAIInsights}
-          onClose={() => {
-            setShowAIInsights(false)
-            setAiInsightsInitialReport(undefined)
-          }}
-          onOpenSettings={() => handleOpenSettings('services')}
-          initialReport={aiInsightsInitialReport as 'quality' | 'upgrades' | 'completeness' | 'wishlist' | undefined}
         />
       </div>
       {/* Splash screen overlays the app and fades out to reveal it */}

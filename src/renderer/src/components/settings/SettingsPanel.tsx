@@ -1,20 +1,21 @@
 import { useState, useCallback, useId, useRef, useEffect } from 'react'
-import { X, Settings, Sliders, Wrench, Palette, Database, Bug, ArrowUpCircle, Library } from 'lucide-react'
+import { X, Settings, Sliders, Wrench, Palette, Database, Bug, Library, Radio, Zap } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { GeneralTab } from './tabs/GeneralTab'
 import { QualitySettingsTab } from './tabs/QualitySettingsTab'
 import { ServicesTab } from './tabs/ServicesTab'
+import { AutomationTab } from './tabs/AutomationTab'
 import { AppearanceTab } from './tabs/AppearanceTab'
 import { DataManagementTab } from './tabs/DataManagementTab'
 import { TroubleshootTab } from './tabs/TroubleshootTab'
-import { UpdateTab } from './tabs/UpdateTab'
+import { MonitoringTab } from './tabs/MonitoringTab'
 import { LibrarySettingsTab } from './tabs/LibrarySettingsTab'
-type TabId = 'general' | 'library' | 'quality' | 'services' | 'appearance' | 'data' | 'update' | 'troubleshoot'
+type TabId = 'general' | 'services' | 'automation' | 'library' | 'quality' | 'appearance' | 'monitoring' | 'data' | 'troubleshoot'
 
 interface SettingsPanelProps {
   isOpen: boolean
   onClose: () => void
-  initialTab?: TabId
+  initialTab?: TabId | string
 }
 
 interface Tab {
@@ -25,17 +26,18 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: 'general', label: 'General', icon: Settings },
+  { id: 'services', label: 'Services', icon: Wrench },
+  { id: 'automation', label: 'Automation', icon: Zap },
   { id: 'library', label: 'Library', icon: Library },
   { id: 'quality', label: 'Quality', icon: Sliders },
-  { id: 'services', label: 'Services', icon: Wrench },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'monitoring', label: 'Monitoring', icon: Radio },
   { id: 'data', label: 'Data', icon: Database },
-  { id: 'update', label: 'Update', icon: ArrowUpCircle },
   { id: 'troubleshoot', label: 'Troubleshoot', icon: Bug },
 ]
 
 export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab || 'general')
+  const [activeTab, setActiveTab] = useState<TabId>((initialTab as TabId) || 'general')
   const titleId = useId()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const tabListRef = useRef<HTMLDivElement>(null)
@@ -47,7 +49,10 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
   // Focus close button when modal opens, and set initial tab
   useEffect(() => {
     if (isOpen) {
-      setActiveTab(initialTab || 'general')
+      // Map legacy tab IDs to new ones
+      let tab = (initialTab as TabId) || 'general'
+      if (tab === 'update' as string) tab = 'general'
+      setActiveTab(tab)
       setTimeout(() => {
         closeButtonRef.current?.focus()
       }, 100)
@@ -107,18 +112,20 @@ export function SettingsPanel({ isOpen, onClose, initialTab }: SettingsPanelProp
     switch (currentTab) {
       case 'general':
         return <GeneralTab />
+      case 'services':
+        return <ServicesTab />
+      case 'automation':
+        return <AutomationTab />
       case 'library':
         return <LibrarySettingsTab />
       case 'quality':
         return <QualitySettingsTab />
-      case 'services':
-        return <ServicesTab />
       case 'appearance':
         return <AppearanceTab />
+      case 'monitoring':
+        return <MonitoringTab />
       case 'data':
         return <DataManagementTab />
-      case 'update':
-        return <UpdateTab />
       case 'troubleshoot':
         return <TroubleshootTab />
       default:

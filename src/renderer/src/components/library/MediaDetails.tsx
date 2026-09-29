@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { MoreVertical, RefreshCw, Pencil, EyeOff, X, Copy, Check } from 'lucide-react'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
@@ -6,6 +6,7 @@ import { getQualityLevelColors } from '../../utils/qualityColors'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import type { WishlistMediaType } from '../../contexts/WishlistContext'
 import { useMenuClose } from '../../hooks/useMenuClose'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 
 interface MediaDetailsProps {
   mediaId: number
@@ -121,6 +122,9 @@ interface MediaWithQuality {
   overall_score?: number
   needs_upgrade?: boolean
   issues?: string
+  tmdb_rating?: number
+  play_count?: number
+  last_watched_at?: string
 }
 
 interface QualityThresholds {
@@ -191,6 +195,10 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
     })
     return cleanup
   }, [])
+
+  // Focus trap — must be before any conditional returns (Rules of Hooks)
+  const modalRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(true, modalRef)
 
   const loadMediaDetails = async () => {
     try {
@@ -517,6 +525,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   return createPortal(
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-150 p-6" role="dialog" aria-modal="true" onClick={onClose}>
       <div
+        ref={modalRef}
         className="bg-card rounded-xl w-full max-w-4xl max-h-[calc(100vh-48px)] overflow-hidden flex flex-col shadow-2xl border border-border"
         onClick={(e) => e.stopPropagation()}
       >
@@ -644,6 +653,15 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
               {(sv?.duration ?? media.duration) > 0 && <><span className="mx-0.5">·</span><span>{formatDuration(sv?.duration ?? media.duration)}</span></>}
               {(sv?.file_size ?? media.file_size) > 0 && <><span className="mx-0.5">·</span><span>{formatFileSize(sv?.file_size ?? media.file_size)}</span></>}
               {(sv?.container ?? media.container) && <><span className="mx-0.5">·</span><span className="uppercase">{sv?.container ?? media.container}</span></>}
+              {media.tmdb_rating != null && media.tmdb_rating > 0 && (
+                <><span className="mx-0.5">·</span><span title="TMDB Rating">★ {media.tmdb_rating.toFixed(1)}</span></>
+              )}
+              {(media.play_count ?? 0) > 0 && (
+                <><span className="mx-0.5">·</span><span>{media.play_count === 1 ? 'Watched once' : `Watched ${media.play_count}×`}</span></>
+              )}
+              {media.last_watched_at && (
+                <><span className="mx-0.5">·</span><span title={new Date(media.last_watched_at).toLocaleString()}>Last watched {new Date(media.last_watched_at).toLocaleDateString()}</span></>
+              )}
             </div>
 
             {/* Summary */}

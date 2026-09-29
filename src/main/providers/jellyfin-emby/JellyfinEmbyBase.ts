@@ -119,6 +119,13 @@ export interface JellyfinMediaItem {
   PremiereDate?: string
   // Sort title
   SortName?: string
+  // Rating
+  CommunityRating?: number
+  // Watch history
+  UserData?: {
+    PlayCount?: number
+    LastPlayedDate?: string
+  }
 }
 
 export interface JellyfinMediaSource {
@@ -686,7 +693,8 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
           ParentId: libraryId,
           Recursive: true,
           IncludeItemTypes: 'Movie,Episode',
-          Fields: 'Path,MediaSources,ProviderIds,Overview',
+          Fields: 'Path,MediaSources,ProviderIds,Overview,UserData',
+          UserId: this.userId || undefined,
           StartIndex: offset,
           Limit: limit,
         }),
@@ -1559,6 +1567,9 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         episode_thumb_url: episodeThumbUrl,
         season_poster_url: seasonPosterUrl,
         summary: item.Overview || undefined,
+        tmdb_rating: item.CommunityRating || undefined,
+        play_count: item.UserData?.PlayCount || 0,
+        last_watched_at: item.UserData?.LastPlayedDate || undefined,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },

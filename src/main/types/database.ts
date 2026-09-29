@@ -179,8 +179,15 @@ export interface MediaItem {
   season_poster_url?: string
   summary?: string
 
+  // Ratings
+  tmdb_rating?: number            // 0-10 scale from TMDB vote_average
+
   // User override flag (preserves user-selected metadata during rescans)
   user_fixed_match?: boolean
+
+  // Watch history
+  play_count?: number
+  last_watched_at?: string        // ISO 8601
 
   // Multi-version support
   version_count?: number          // Cached count of versions (default 1)
@@ -278,6 +285,10 @@ export interface QualityScore {
   // Analysis details
   issues: string // JSON array of issues
 
+  // Upgrade tracking
+  previous_quality_tier?: string
+  upgraded_at?: string
+
   created_at: string
   updated_at: string
 }
@@ -371,7 +382,7 @@ export interface MediaItemFilters {
   sourceType?: ProviderType
   libraryId?: string
   // Sorting
-  sortBy?: 'title' | 'year' | 'updated_at' | 'created_at' | 'tier_score' | 'overall_score'
+  sortBy?: 'title' | 'year' | 'updated_at' | 'created_at' | 'tier_score' | 'overall_score' | 'play_count' | 'last_watched_at' | 'tmdb_rating'
   sortOrder?: 'asc' | 'desc'
   // Server-side filtering
   alphabetFilter?: string
@@ -391,6 +402,8 @@ export interface TVShowSummary {
   poster_url?: string
   source_id?: string
   source_type?: string
+  total_play_count?: number
+  last_watched_at?: string
 }
 
 export interface TVShowFilters {
@@ -398,7 +411,7 @@ export interface TVShowFilters {
   libraryId?: string
   alphabetFilter?: string    // 'A'-'Z' or '#' for non-alpha
   searchQuery?: string
-  sortBy?: 'title' | 'episode_count' | 'season_count'
+  sortBy?: 'title' | 'episode_count' | 'season_count' | 'play_count' | 'last_watched_at'
   sortOrder?: 'asc' | 'desc'
   limit?: number
   offset?: number

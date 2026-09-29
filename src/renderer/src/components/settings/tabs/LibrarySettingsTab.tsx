@@ -19,6 +19,7 @@ import {
   CheckCircle,
   Circle,
 } from 'lucide-react'
+import { Toggle } from '../../ui/Toggle'
 
 const THEATRICAL_LAG_OPTIONS = [
   { value: '0', label: 'None (show all)' },
@@ -101,35 +102,6 @@ function SettingsCard({
         <div className="px-4 pb-4 pt-2 border-t border-border/30 bg-muted/10">{children}</div>
       )}
     </div>
-  )
-}
-
-function Toggle({
-  checked,
-  onChange,
-  disabled = false,
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  disabled?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => !disabled && onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
-        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-      } ${checked ? 'bg-primary' : 'bg-muted'}`}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition-transform ${
-          checked ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
   )
 }
 
