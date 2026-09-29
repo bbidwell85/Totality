@@ -4,7 +4,7 @@
 
 import { getDatabase } from '../database/getDatabase'
 import { getTMDBService } from './TMDBService'
-import { fetchJSON, fetchWithTimeout } from './utils/httpClient'
+import { fetchJSON } from './utils/httpClient'
 
 interface TraktWatchlistItem {
   type: 'movie' | 'show'
@@ -18,42 +18,6 @@ interface TraktWatchlistItem {
     year: number
     ids: { trakt: number; slug: string; imdb?: string; tmdb?: number }
   }
-}
-
-interface LetterboxdRSSItem {
-  title: string
-  year?: number
-  tmdbId?: string
-}
-
-function parseLetterboxdRSS(xml: string): LetterboxdRSSItem[] {
-  const items: LetterboxdRSSItem[] = []
-  // Simple RSS XML parsing — extract <item> elements
-  const itemRegex = /<item>([\s\S]*?)<\/item>/g
-  let match
-  while ((match = itemRegex.exec(xml)) !== null) {
-    const itemXml = match[1]
-    const titleMatch = /<letterboxd:filmTitle>(.*?)<\/letterboxd:filmTitle>/.exec(itemXml)
-      || /<title>(.*?)<\/title>/.exec(itemXml)
-    const yearMatch = /<letterboxd:filmYear>(\d{4})<\/letterboxd:filmYear>/.exec(itemXml)
-    if (titleMatch) {
-      // Clean HTML entities from title
-      const title = titleMatch[1]
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#039;/g, "'")
-
-      items.push({
-        title,
-        year: yearMatch ? parseInt(yearMatch[1], 10) : undefined,
-      })
-    }
-    // Stop after 200 items to prevent memory issues
-    if (items.length >= 200) break
-  }
-  return items
 }
 
 export class WatchlistSyncService {
@@ -165,23 +129,37 @@ export class WatchlistSyncService {
 
     let watchlistItems: PlexWatchlistItem[]
     try {
-      const response = await fetchJSON<{ MediaContainer: { Metadata?: PlexWatchlistItem[] } }>(
+      // Try discover endpoint first, fall back to metadata endpoint
+      let rawResponse: { MediaContainer: { Metadata?: PlexWatchlistItem[] } } | undefined
+      const plexHeaders = {
+        'Accept': 'application/json',
+        'X-Plex-Token': plexToken,
+        'X-Plex-Client-Identifier': 'totality-media-analyzer',
+        'X-Plex-Product': 'Totality',
+      }
+      const endpoints = [
+        'https://discover.provider.plex.tv/library/sections/watchlist/all',
         'https://metadata.provider.plex.tv/library/sections/watchlist/all',
-        {
-          headers: {
-            'Accept': 'application/json',
-            'X-Plex-Token': plexToken,
-            'X-Plex-Client-Identifier': 'totality-media-analyzer',
-            'X-Plex-Product': 'Totality',
-          },
-          timeoutMs: 15000,
+      ]
+      for (const endpoint of endpoints) {
+        try {
+          rawResponse = await fetchJSON<{ MediaContainer: { Metadata?: PlexWatchlistItem[] } }>(
+            endpoint,
+            { headers: plexHeaders, timeoutMs: 15000 }
+          )
+          break
+        } catch (err) {
+          const msg = (err as Error).message || ''
+          if (msg.includes('401')) throw new Error('Plex token expired. Try removing and re-adding your Plex source.')
+          // Try next endpoint on 404
+          if (!msg.includes('404')) throw err
         }
-      )
+      }
+      const response = rawResponse
+      if (!response) throw new Error('Could not reach Plex watchlist API. Try removing and re-adding your Plex source.')
       watchlistItems = response?.MediaContainer?.Metadata || []
     } catch (err) {
-      const msg = (err as Error).message || ''
-      if (msg.includes('401')) throw new Error('Plex token expired. Try removing and re-adding your Plex source.')
-      throw new Error(`Failed to fetch Plex watchlist: ${msg}`)
+      throw err instanceof Error ? err : new Error(`Failed to fetch Plex watchlist: ${err}`)
     }
 
     if (watchlistItems.length === 0) {
@@ -197,19 +175,20 @@ export class WatchlistSyncService {
         media_type: (item.type === 'show' ? 'season' : 'movie') as 'movie' | 'season',
         year: item.year || undefined,
         tmdb_id: tmdbId,
-        poster_url: item.thumb ? `https://metadata-static.plex.tv${item.thumb}` : undefined,
+        poster_url: undefined as string | undefined, // fetched from TMDB below
         reason: 'missing' as const,
         priority: 3,
         notes: 'Imported from Plex Watchlist',
       }
     }).filter(item => item.title)
 
-    // For items without posters from Plex, try TMDB
+    // Fetch posters from TMDB
     const tmdb = getTMDBService()
     try { await tmdb.initialize() } catch { /* continue */ }
     for (const item of items) {
-      if (item.tmdb_id && !item.poster_url) {
-        try {
+      try {
+        if (item.tmdb_id) {
+          // Have TMDB ID — fetch details directly
           if (item.media_type === 'movie') {
             const details = await tmdb.getMovieDetails(item.tmdb_id)
             if (details.poster_path) item.poster_url = `https://image.tmdb.org/t/p/w300${details.poster_path}`
@@ -217,76 +196,25 @@ export class WatchlistSyncService {
             const details = await tmdb.getTVShowDetails(item.tmdb_id)
             if (details.poster_path) item.poster_url = `https://image.tmdb.org/t/p/w300${details.poster_path}`
           }
-        } catch { /* continue */ }
-      }
-    }
-
-    const db = getDatabase()
-    const added = await db.addWishlistItemsBulk(items)
-    return { added, total: items.length }
-  }
-
-  /**
-   * Import Letterboxd watchlist via RSS feed
-   */
-  async syncLetterboxd(username: string): Promise<{ added: number; total: number }> {
-    const url = `https://letterboxd.com/${encodeURIComponent(username)}/watchlist/rss/`
-    const res = await fetchWithTimeout(url, {
-      headers: { 'User-Agent': 'Totality/1.0' },
-    }, 15000)
-    const response = await res.text()
-
-    if (!response || (!response.includes('<item>') && !response.includes('<rss'))) {
-      if (response?.includes('challenge') || response?.includes('cloudflare')) {
-        throw new Error('Letterboxd is blocking automated access (Cloudflare protection). Try again later, or use Trakt instead.')
-      }
-      throw new Error('Could not load Letterboxd watchlist. Check the username is correct and the watchlist is public.')
-    }
-
-    const rssItems = parseLetterboxdRSS(response)
-    if (rssItems.length === 0) {
-      return { added: 0, total: 0 }
-    }
-
-    // Look up TMDB IDs for items that don't have them
-    const tmdb = getTMDBService()
-    await tmdb.initialize()
-
-    const items = []
-    for (const rssItem of rssItems) {
-      let tmdbId: string | undefined
-
-      // Try TMDB search to get an ID + poster
-      let posterUrl: string | undefined
-      try {
-        const results = await tmdb.searchMovie(rssItem.title, rssItem.year)
-        if (results.results.length > 0) {
-          const best = rssItem.year
-            ? results.results.find(r => r.release_date?.startsWith(String(rssItem.year))) || results.results[0]
-            : results.results[0]
-          tmdbId = best.id.toString()
-          if (best.poster_path) posterUrl = `https://image.tmdb.org/t/p/w300${best.poster_path}`
+        } else {
+          // No TMDB ID — search by title
+          const results = item.media_type === 'movie'
+            ? await tmdb.searchMovie(item.title, item.year)
+            : await tmdb.searchTVShow(item.title)
+          if (results.results.length > 0) {
+            const best = results.results[0]
+            item.tmdb_id = best.id.toString()
+            if (best.poster_path) item.poster_url = `https://image.tmdb.org/t/p/w300${best.poster_path}`
+          }
         }
-      } catch {
-        // TMDB lookup failed — add without ID
-      }
-
-      items.push({
-        title: rssItem.title,
-        media_type: 'movie' as const,
-        year: rssItem.year,
-        tmdb_id: tmdbId,
-        poster_url: posterUrl,
-        reason: 'missing' as const,
-        priority: 3,
-        notes: 'Imported from Letterboxd',
-      })
+      } catch { /* continue without poster */ }
     }
 
     const db = getDatabase()
     const added = await db.addWishlistItemsBulk(items)
     return { added, total: items.length }
   }
+
 }
 
 let instance: WatchlistSyncService | null = null

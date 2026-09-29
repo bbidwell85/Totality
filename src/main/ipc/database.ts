@@ -470,16 +470,7 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  ipcMain.handle('sync:letterboxd', async (_event, username: unknown) => {
-    try {
-      const validUsername = validateInput(z.string().min(1).max(100), username, 'sync:letterboxd')
-      const { getWatchlistSyncService } = await import('../services/WatchlistSyncService')
-      return await getWatchlistSyncService().syncLetterboxd(validUsername)
-    } catch (error) {
-      console.error('Error syncing Letterboxd watchlist:', error)
-      throw error
-    }
-  })
+
 
   // ============================================================================
   // RELEASE ALERTS

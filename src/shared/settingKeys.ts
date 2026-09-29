@@ -97,7 +97,6 @@ export const SETTING_KEYS = {
   // Sync settings (Trakt / Letterboxd)
   trakt_username: 'trakt_username',
   trakt_client_id: 'trakt_client_id',
-  letterboxd_username: 'letterboxd_username',
 
   // Release alerts
   release_alerts_enabled: 'release_alerts_enabled',

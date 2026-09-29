@@ -87,7 +87,6 @@ export function MatchFixModal({
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return
 
-    console.log('[MatchFixModal] Searching for:', searchQuery, 'type:', type)
     setIsSearching(true)
     setError(null)
     setSearchResults([])
@@ -113,7 +112,6 @@ export function MatchFixModal({
           break
       }
 
-      console.log('[MatchFixModal] Got results:', results.length, results)
       setSearchResults(results)
     } catch (err: unknown) {
       console.error('[MatchFixModal] Search error:', err)

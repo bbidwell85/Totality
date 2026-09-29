@@ -480,7 +480,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Watchlist sync
   syncPlexWatchlist: () => ipcRenderer.invoke('sync:plex-watchlist'),
   syncTrakt: (username: string) => ipcRenderer.invoke('sync:trakt', username),
-  syncLetterboxd: (username: string) => ipcRenderer.invoke('sync:letterboxd', username),
   // Release alerts
   releaseAlertsCheck: () => ipcRenderer.invoke('release-alerts:check'),
   getDuplicateMedia: () => ipcRenderer.invoke('db:getDuplicateMedia'),
@@ -1535,7 +1534,6 @@ export interface ElectronAPI {
   // Watchlist sync
   syncPlexWatchlist: () => Promise<{ added: number; total: number }>
   syncTrakt: (username: string) => Promise<{ added: number; total: number }>
-  syncLetterboxd: (username: string) => Promise<{ added: number; total: number }>
   // Release alerts
   releaseAlertsCheck: () => Promise<number>
 
