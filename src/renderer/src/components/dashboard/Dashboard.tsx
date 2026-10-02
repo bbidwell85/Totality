@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useToast } from '../../contexts/ToastContext'
 import { FixedSizeList as VirtualList, VariableSizeList } from 'react-window'
-import { Sparkles, Library, ListChecks, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus, EyeOff, HardDrive, BarChart3, Users, Search, Loader2, X, ArrowUpDown } from 'lucide-react'
+import { Sparkles, Library, ListChecks, Tv, Film, Music, Disc3, CircleFadingArrowUp, ChevronDown, Plus, EyeOff, HardDrive, BarChart3, Users, Search, Loader2, X, ArrowUpDown, Star } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { MediaDetails } from '../library/MediaDetails'
 import { useSources } from '../../contexts/SourceContext'
@@ -90,6 +90,7 @@ export function Dashboard({
   const [series, setSeries] = useState<SeriesCompletenessData[]>([])
   const [artists, setArtists] = useState<ArtistCompletenessData[]>([])
   const [duplicateCount, setDuplicateCount] = useState(0)
+  const [wishlistCounts, setWishlistCounts] = useState<{ missing: number; upgrade: number; active: number; completed: number; total: number }>({ missing: 0, upgrade: 0, active: 0, completed: 0, total: 0 })
   const [recentlyUpgraded, setRecentlyUpgraded] = useState<Array<{
     id: number; title: string; year: number | null; type: string
     poster_url: string | null; quality_tier: string
@@ -228,6 +229,7 @@ export function Dashboard({
         window.electronAPI.collectionsGetStats(),
         window.electronAPI.seriesGetStats(),
         window.electronAPI.qualityGetDistribution(),
+        window.electronAPI.wishlistGetCountsByReason(),
       ])
 
       const epsSettingVal = val(allResults[0], null)
@@ -288,6 +290,7 @@ export function Dashboard({
       const cStatsData = val(allResults[25], null) as typeof collectionStatsData
       const sStatsData = val(allResults[26], null) as typeof seriesStatsData
       const qDistribution = val(allResults[27], null) as typeof qualityDistribution
+      const wCounts = val(allResults[28], { missing: 0, upgrade: 0, active: 0, completed: 0, total: 0 }) as typeof wishlistCounts
 
       setDuplicateCount(dupData.length)
       setRecentlyUpgraded(upgradeData)
@@ -297,6 +300,7 @@ export function Dashboard({
       setCollectionStatsData(cStatsData)
       setSeriesStatsData(sStatsData)
       setQualityDistribution(qDistribution)
+      setWishlistCounts(wCounts)
       setExcludedPersonMovieSet(excludedPersonMovies)
       setPersonCompleteness(personData.filter(p => p.completeness_percentage < 100)
         .sort((a, b) => effectivePersonSort === 'completeness'
@@ -1409,30 +1413,50 @@ export function Dashboard({
                 <Library className="w-4 h-4 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground font-medium">Library</span>
               </div>
-              {(() => {
-                const videoItems = libraryStats ? (libraryStats.totalItems || 0) : 0
-                const musicTracks = musicStats ? (musicStats.totalTracks || 0) : 0
-                const total = videoItems + musicTracks
-                return (
-                  <>
-                    <div className="text-2xl font-bold">{total > 0 ? total.toLocaleString() : '—'}</div>
-                    <div className="text-xs text-muted-foreground mt-1">items</div>
-                  </>
-                )
-              })()}
-              <div className="flex flex-col gap-1.5 mt-3 text-[10px] text-muted-foreground">
-                {libraryStats && libraryStats.totalMovies > 0 && (
-                  <span className="flex items-center gap-1.5"><Film className="w-3 h-3" />{libraryStats.totalMovies.toLocaleString()} movies</span>
-                )}
-                {libraryStats && libraryStats.totalShows > 0 && (
-                  <span className="flex items-center gap-1.5"><Tv className="w-3 h-3" />{libraryStats.totalShows.toLocaleString()} shows · {(libraryStats.totalEpisodes || 0).toLocaleString()} episodes</span>
-                )}
-                {musicStats && musicStats.totalTracks > 0 && (
-                  <span className="flex items-center gap-1.5"><Music className="w-3 h-3" />{musicStats.totalArtists} artists · {musicStats.totalAlbums} albums · {musicStats.totalTracks.toLocaleString()} tracks</span>
-                )}
-                {duplicateCount > 0 && (
-                  <span className="flex items-center gap-1.5"><Library className="w-3 h-3" />{duplicateCount} duplicate{duplicateCount !== 1 ? 's' : ''}</span>
-                )}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Owned */}
+                <div>
+                  <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Owned</div>
+                  <div className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                    {libraryStats && libraryStats.totalMovies > 0 && (
+                      <span className="flex items-center gap-1.5"><Film className="w-3 h-3" />{libraryStats.totalMovies.toLocaleString()} movies</span>
+                    )}
+                    {libraryStats && libraryStats.totalShows > 0 && (
+                      <span className="flex items-center gap-1.5"><Tv className="w-3 h-3" />{libraryStats.totalShows.toLocaleString()} shows</span>
+                    )}
+                    {musicStats && musicStats.totalTracks > 0 && (
+                      <span className="flex items-center gap-1.5"><Music className="w-3 h-3" />{musicStats.totalTracks.toLocaleString()} tracks</span>
+                    )}
+                    {duplicateCount > 0 && (
+                      <span className="flex items-center gap-1.5"><Library className="w-3 h-3" />{duplicateCount} dupes</span>
+                    )}
+                    {sources.length > 0 && (
+                      <span className="flex items-center gap-1.5"><Users className="w-3 h-3" />{sources.length} source{sources.length !== 1 ? 's' : ''}</span>
+                    )}
+                  </div>
+                </div>
+                {/* Wishlist */}
+                <div>
+                  <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Wishlist</div>
+                  <div className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                    {wishlistCounts.active > 0 ? (
+                      <>
+                        <span className="flex items-center gap-1.5"><Star className="w-3 h-3" />{wishlistCounts.active} active</span>
+                        {wishlistCounts.missing > 0 && (
+                          <span className="flex items-center gap-1.5"><ListChecks className="w-3 h-3" />{wishlistCounts.missing} missing</span>
+                        )}
+                        {wishlistCounts.upgrade > 0 && (
+                          <span className="flex items-center gap-1.5"><CircleFadingArrowUp className="w-3 h-3" />{wishlistCounts.upgrade} upgrades</span>
+                        )}
+                        {wishlistCounts.completed > 0 && (
+                          <span className="flex items-center gap-1.5 text-muted-foreground/50">{wishlistCounts.completed} completed</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground/40">No items</span>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
