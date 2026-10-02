@@ -113,6 +113,132 @@ export class WatchlistSyncService {
   }
 
   /**
+   * Fetch Trakt watchlist for preview (no DB insert)
+   */
+  async fetchTrakt(username: string): Promise<Array<{
+    title: string; media_type: string; year?: number; tmdb_id?: string; poster_url?: string
+  }>> {
+    const apiKey = WatchlistSyncService.TRAKT_CLIENT_ID
+    const headers = {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Totality/1.0',
+      'trakt-api-version': '2',
+      'trakt-api-key': apiKey,
+    }
+
+    let response: TraktWatchlistItem[]
+    try {
+      response = await fetchJSON<TraktWatchlistItem[]>(
+        `https://api.trakt.tv/users/${encodeURIComponent(username)}/watchlist`,
+        { headers, timeoutMs: 15000 }
+      )
+    } catch (err) {
+      const msg = (err as Error).message || ''
+      if (msg.includes('401')) throw new Error('API authentication failed.')
+      if (msg.includes('403')) throw new Error('Watchlist may be private — set to public in Trakt Settings.')
+      if (msg.includes('404')) throw new Error(`User "${username}" not found on Trakt.`)
+      throw err
+    }
+    if (!Array.isArray(response)) throw new Error('Unexpected response from Trakt.')
+
+    const items = response.map(entry => {
+      const data = entry.type === 'movie' ? entry.movie : entry.show
+      if (!data) return null
+      return {
+        title: data.title,
+        media_type: entry.type === 'movie' ? 'movie' : 'season',
+        year: data.year || undefined,
+        tmdb_id: data.ids.tmdb?.toString(),
+        poster_url: undefined as string | undefined,
+      }
+    }).filter((item): item is NonNullable<typeof item> => item !== null && !!item.title)
+
+    const tmdb = getTMDBService()
+    try { await tmdb.initialize() } catch { return items }
+    for (const item of items) {
+      try {
+        if (item.tmdb_id) {
+          const details = item.media_type === 'movie'
+            ? await tmdb.getMovieDetails(item.tmdb_id)
+            : await tmdb.getTVShowDetails(item.tmdb_id)
+          if (details.poster_path) item.poster_url = `https://image.tmdb.org/t/p/w300${details.poster_path}`
+        }
+      } catch { /* continue */ }
+    }
+    return items
+  }
+
+  /**
+   * Fetch Plex watchlist for preview (no DB insert)
+   */
+  async fetchPlex(plexToken: string): Promise<Array<{
+    title: string; media_type: string; year?: number; tmdb_id?: string; poster_url?: string
+  }>> {
+    if (!plexToken) throw new Error('No Plex token available.')
+
+    interface PlexWatchlistItem {
+      ratingKey: string; title: string; year?: number; type: 'movie' | 'show'; thumb?: string
+      Guid?: Array<{ id: string }>
+    }
+
+    const plexHeaders = {
+      'Accept': 'application/json',
+      'X-Plex-Token': plexToken,
+      'X-Plex-Client-Identifier': 'totality-media-analyzer',
+      'X-Plex-Product': 'Totality',
+    }
+    let watchlistItems: PlexWatchlistItem[] = []
+    for (const endpoint of [
+      'https://discover.provider.plex.tv/library/sections/watchlist/all',
+      'https://metadata.provider.plex.tv/library/sections/watchlist/all',
+    ]) {
+      try {
+        const raw = await fetchJSON<{ MediaContainer: { Metadata?: PlexWatchlistItem[] } }>(endpoint, { headers: plexHeaders, timeoutMs: 15000 })
+        watchlistItems = raw?.MediaContainer?.Metadata || []
+        break
+      } catch (err) {
+        const msg = (err as Error).message || ''
+        if (msg.includes('401')) throw new Error('Plex token expired.')
+        if (!msg.includes('404')) throw err
+      }
+    }
+
+    const items = watchlistItems.map(item => {
+      const tmdbGuid = item.Guid?.find(g => g.id.startsWith('tmdb://'))
+      return {
+        title: item.title,
+        media_type: item.type === 'show' ? 'season' : 'movie',
+        year: item.year || undefined,
+        tmdb_id: tmdbGuid?.id.replace('tmdb://', ''),
+        poster_url: undefined as string | undefined,
+      }
+    }).filter(item => item.title)
+
+    const tmdb = getTMDBService()
+    try { await tmdb.initialize() } catch { return items }
+    for (const item of items) {
+      try {
+        if (item.tmdb_id) {
+          const details = item.media_type === 'movie'
+            ? await tmdb.getMovieDetails(item.tmdb_id)
+            : await tmdb.getTVShowDetails(item.tmdb_id)
+          if (details.poster_path) item.poster_url = `https://image.tmdb.org/t/p/w300${details.poster_path}`
+        } else {
+          const results = item.media_type === 'movie'
+            ? await tmdb.searchMovie(item.title, item.year)
+            : await tmdb.searchTVShow(item.title)
+          if (results.results.length > 0) {
+            const best = results.results[0]
+            item.tmdb_id = best.id.toString()
+            if (best.poster_path) item.poster_url = `https://image.tmdb.org/t/p/w300${best.poster_path}`
+          }
+        }
+      } catch { /* continue */ }
+    }
+    return items
+  }
+
+  /**
    * Import Plex watchlist using the user's Plex token
    */
   async syncPlex(plexToken: string): Promise<{ added: number; total: number }> {

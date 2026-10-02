@@ -93,8 +93,15 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
   }, [viewContext?.currentView, viewContext?.libraryTab])
 
   return (
+    <>
+    <div
+      className={`fixed inset-0 bg-black/40 z-[45] transition-opacity duration-300 ${
+        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+      onClick={onClose}
+    />
     <aside
-      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
+      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-[46] flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
         isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
       }`}
       role="complementary"
@@ -103,14 +110,14 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
         <div className="flex items-center gap-2">
-          <Bot className="w-4 h-4 text-primary" />
+          <Bot className="w-4 h-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold">AI Assistant</h2>
         </div>
         <div className="flex items-center gap-1">
           {messages.length > 0 && (
             <button
               onClick={clearHistory}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 focus:outline-hidden focus:ring-2 focus:ring-primary transition-colors"
               title="Clear chat history"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -118,7 +125,7 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
           )}
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 focus:outline-hidden focus:ring-2 focus:ring-primary transition-colors"
             title="Close chat"
           >
             <X className="w-3.5 h-3.5" />
@@ -129,7 +136,7 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
       {/* Not configured state */}
       {isConfigured === false && (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <Bot className="w-10 h-10 text-muted-foreground mb-3" />
+          <Bot className="w-8 h-8 text-muted-foreground mb-3" />
           <p className="text-sm font-medium mb-1">Gemini AI not configured</p>
           <p className="text-xs text-muted-foreground mb-4">
             Get a free Gemini API key from Google AI Studio in Settings &gt; Services.
@@ -230,5 +237,6 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
         </>
       )}
     </aside>
+    </>
   )
 }

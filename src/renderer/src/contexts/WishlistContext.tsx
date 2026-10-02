@@ -178,6 +178,14 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     return () => window.removeEventListener('wishlist-changed', handler)
   }, [loadWishlist])
 
+  // Listen for IPC wishlist-changed events (e.g., after AI adds items)
+  useEffect(() => {
+    const cleanup = window.electronAPI.onWishlistChanged?.(() => {
+      loadWishlist()
+    })
+    return () => cleanup?.()
+  }, [loadWishlist])
+
   // Load region on mount
   useEffect(() => {
     loadRegion()

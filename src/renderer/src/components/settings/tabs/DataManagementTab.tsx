@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Loader2, FolderOpen, Download, Upload, Trash2, AlertTriangle, FileSpreadsheet, X, Database, RefreshCw, HardDrive, ChevronDown } from 'lucide-react'
+import { Loader2, FolderOpen, Download, Upload, Trash2, AlertTriangle, FileSpreadsheet, X, Database, RefreshCw, HardDrive } from 'lucide-react'
 import { Toggle } from '../../ui/Toggle'
 
 interface CSVExportOptions {
@@ -46,12 +46,12 @@ export function DataManagementTab() {
     includeMissingAlbums: true,
   })
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-  const [storageExpanded, setStorageExpanded] = useState(false)
   const [storageData, setStorageData] = useState<{
     totalSize: number; totalItems: number
     byCodec: Array<{ codec: string; count: number; size: number }>
     byTier: Array<{ tier: string; count: number; size: number }>
     codecMigration: { h264Count: number; modernCount: number; totalCount: number }
+    music?: { totalSize: number; totalTracks: number; byCodec: Array<{ codec: string; count: number; size: number }>; byTier: Array<{ tier: string; count: number; size: number }> }
   } | null>(null)
   const [duplicates, setDuplicates] = useState<Array<{
     tmdb_id: string; title: string; year: number | null
@@ -167,11 +167,10 @@ export function DataManagementTab() {
     }
   }
 
-  const handleToggleStorage = () => {
-    const next = !storageExpanded
-    setStorageExpanded(next)
-    if (next && !storageData) loadStorageAnalytics()
-  }
+  // Load storage analytics on mount
+  useEffect(() => {
+    loadStorageAnalytics()
+  }, [])
 
   const formatSize = (bytes: number): string => {
     if (bytes === 0) return '0 B'
@@ -220,22 +219,17 @@ export function DataManagementTab() {
 
       {/* Storage Analytics */}
       <div className="space-y-2">
-        <button
-          onClick={handleToggleStorage}
-          className="flex items-center gap-2 w-full text-left"
-        >
-          <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${storageExpanded ? 'rotate-0' : '-rotate-90'}`} />
+        <div className="flex items-center gap-2">
           <HardDrive className="w-4 h-4 text-muted-foreground" />
           <h3 className="text-sm font-medium text-foreground">Storage Analytics</h3>
-        </button>
+        </div>
 
-        {storageExpanded && (
-          <div className="bg-muted/30 rounded-lg border border-border/40 p-4 space-y-4">
-            {!storageData ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
+        <div className="bg-muted/30 rounded-lg border border-border/40 p-4 space-y-4">
+          {!storageData ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
               <>
                 {/* Summary */}
                 <div className="flex items-center gap-6 text-sm">
@@ -248,37 +242,6 @@ export function DataManagementTab() {
                     <span className="font-medium">{storageData.totalItems.toLocaleString()}</span>
                   </div>
                 </div>
-
-                {/* Codec Migration Progress */}
-                {storageData.codecMigration.totalCount > 0 && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Codec Migration (H.264 → HEVC/AV1)</span>
-                      <span className="font-medium">
-                        {Math.round((storageData.codecMigration.modernCount / storageData.codecMigration.totalCount) * 100)}% modern
-                      </span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden flex">
-                      <div
-                        className="h-full bg-green-500 transition-all"
-                        style={{ width: `${(storageData.codecMigration.modernCount / storageData.codecMigration.totalCount) * 100}%` }}
-                        title={`${storageData.codecMigration.modernCount} HEVC/AV1/VP9`}
-                      />
-                      <div
-                        className="h-full bg-amber-500 transition-all"
-                        style={{ width: `${(storageData.codecMigration.h264Count / storageData.codecMigration.totalCount) * 100}%` }}
-                        title={`${storageData.codecMigration.h264Count} H.264`}
-                      />
-                    </div>
-                    <div className="flex gap-4 text-[10px] text-muted-foreground">
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-500 rounded-full" /> HEVC/AV1 ({storageData.codecMigration.modernCount})</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-2 bg-amber-500 rounded-full" /> H.264 ({storageData.codecMigration.h264Count})</span>
-                      {storageData.codecMigration.totalCount - storageData.codecMigration.modernCount - storageData.codecMigration.h264Count > 0 && (
-                        <span className="flex items-center gap-1"><span className="w-2 h-2 bg-muted-foreground/30 rounded-full" /> Other ({storageData.codecMigration.totalCount - storageData.codecMigration.modernCount - storageData.codecMigration.h264Count})</span>
-                      )}
-                    </div>
-                  </div>
-                )}
 
                 {/* By Codec */}
                 {storageData.byCodec.length > 0 && (
@@ -310,6 +273,50 @@ export function DataManagementTab() {
                   </div>
                 )}
 
+                {/* Music Storage */}
+                {storageData.music && storageData.music.totalTracks > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-border/30">
+                    <div className="flex items-center gap-6 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Music:</span>{' '}
+                        <span className="font-medium">{formatSize(storageData.music.totalSize)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Tracks:</span>{' '}
+                        <span className="font-medium">{storageData.music.totalTracks.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {storageData.music.byCodec.length > 0 && (
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Audio Codecs</h4>
+                        <div className="space-y-1">
+                          {storageData.music.byCodec.map(c => (
+                            <div key={c.codec} className="flex items-center justify-between text-xs">
+                              <span className="font-mono">{c.codec || 'Unknown'}</span>
+                              <span className="text-muted-foreground">{c.count} tracks · {formatSize(c.size)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {storageData.music.byTier.length > 0 && (
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Audio Quality</h4>
+                        <div className="space-y-1">
+                          {storageData.music.byTier.map(t => (
+                            <div key={t.tier} className="flex items-center justify-between text-xs">
+                              <span>{t.tier}</span>
+                              <span className="text-muted-foreground">{t.count} tracks · {formatSize(t.size)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Duplicates */}
                 {duplicates.length > 0 && (
                   <div className="space-y-1">
@@ -337,7 +344,6 @@ export function DataManagementTab() {
               </>
             )}
           </div>
-        )}
       </div>
 
       {/* Auto-Hide Rules — moved to Library tab */}

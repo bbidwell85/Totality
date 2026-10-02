@@ -10,8 +10,8 @@ Totality is an Electron desktop application that analyzes media library quality 
 
 ```bash
 npm run electron:dev     # Start Vite + Electron together (recommended for development)
-npm run build            # TypeScript compile + Vite build + Electron Builder
-npm run lint             # Run ESLint (flat config, eslint.config.js)
+npm run build            # Run tests + TypeScript compile + Vite build + Electron Builder
+npm run lint             # Run ESLint with --max-warnings 0 (warnings are errors)
 npm run preview          # Preview Vite production build
 npm run test             # Run Vitest in watch mode
 npm run test:run         # Run all tests once

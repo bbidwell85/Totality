@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
-import { X, RefreshCw, Tv, Film, Music, Square, Settings, Clock, Loader2 } from 'lucide-react'
+import { X, RefreshCw, Tv, Film, Music, Square, Settings, Clock, Loader2, ListChecks } from 'lucide-react'
 
 type CompletenessTaskType = 'series-completeness' | 'collection-completeness' | 'music-completeness'
 
@@ -283,10 +283,17 @@ export function CompletenessPanel({
   }
 
   return (
+    <>
+    <div
+      className={`fixed inset-0 bg-black/40 z-[45] transition-opacity duration-300 ${
+        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+      onClick={onClose}
+    />
     <aside
       ref={panelRef}
       id="completeness-panel"
-      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
+      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-[46] flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
         isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
       }`}
       onKeyDown={handleKeyDown}
@@ -294,17 +301,18 @@ export function CompletenessPanel({
       aria-label="Collection completeness analysis"
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4">
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider" id="completeness-panel-title">
-          Completeness
-        </h2>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
+        <div className="flex items-center gap-2">
+          <ListChecks className="w-4 h-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold" id="completeness-panel-title">Completeness</h2>
+        </div>
         <button
           ref={closeButtonRef}
           onClick={onClose}
-          className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary"
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary"
           aria-label="Close completeness panel"
         >
-          <X className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+          <X className="w-4 h-4" aria-hidden="true" />
         </button>
       </div>
 
@@ -678,5 +686,6 @@ export function CompletenessPanel({
       </div>
 
     </aside>
+    </>
   )
 }

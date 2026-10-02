@@ -8,7 +8,7 @@ import { WishlistPanel } from './components/wishlist/WishlistPanel'
 import { CompletenessPanel } from './components/library/CompletenessPanel'
 import { ChatPanel } from './components/chat/ChatPanel'
 import { MoodSyncPanel } from './components/mood/MoodSyncPanel'
-import { ArrQueuePanel } from './components/arr/ArrQueuePanel'
+import { TaskQueuePanel } from './components/ui/TaskQueuePanel'
 import type { ViewContext } from './hooks/useChat'
 import { SourceProvider, useSources } from './contexts/SourceContext'
 import { WishlistProvider } from './contexts/WishlistContext'
@@ -46,7 +46,7 @@ function AppContent() {
   const [showWishlistPanel, setShowWishlistPanel] = useState(false)
   const [showChatPanel, setShowChatPanel] = useState(false)
   const [showMoodSyncPanel, setShowMoodSyncPanel] = useState(false)
-  const [showArrQueue, setShowArrQueue] = useState(false)
+  const [showTaskQueuePanel, setShowTaskQueuePanel] = useState(false)
   // Auto-refresh state (passed up from MediaBrowser)
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false)
 
@@ -331,44 +331,26 @@ function AppContent() {
     setShowSettingsModal(true)
   }
 
+  const closeAllPanels = () => { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false); setShowTaskQueuePanel(false) }
+
   const handleToggleCompleteness = () => {
-    setShowCompletenessPanel(prev => {
-      const newState = !prev
-      if (newState) { setShowWishlistPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false); setShowArrQueue(false) }
-      return newState
-    })
+    setShowCompletenessPanel(prev => { const v = !prev; if (v) closeAllPanels(); setShowCompletenessPanel(v); return v })
   }
 
   const handleToggleWishlist = () => {
-    setShowWishlistPanel(prev => {
-      const newState = !prev
-      if (newState) { setShowCompletenessPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false); setShowArrQueue(false) }
-      return newState
-    })
+    setShowWishlistPanel(prev => { const v = !prev; if (v) closeAllPanels(); setShowWishlistPanel(v); return v })
   }
 
   const handleToggleChat = () => {
-    setShowChatPanel(prev => {
-      const newState = !prev
-      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowMoodSyncPanel(false); setShowArrQueue(false) }
-      return newState
-    })
+    setShowChatPanel(prev => { const v = !prev; if (v) closeAllPanels(); setShowChatPanel(v); return v })
   }
 
   const handleToggleMoodSync = () => {
-    setShowMoodSyncPanel(prev => {
-      const newState = !prev
-      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowChatPanel(false); setShowArrQueue(false) }
-      return newState
-    })
+    setShowMoodSyncPanel(prev => { const v = !prev; if (v) closeAllPanels(); setShowMoodSyncPanel(v); return v })
   }
 
-  const handleToggleArrQueue = () => {
-    setShowArrQueue(prev => {
-      const newState = !prev
-      if (newState) { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false) }
-      return newState
-    })
+  const handleToggleTaskQueue = () => {
+    setShowTaskQueuePanel(prev => { const v = !prev; if (v) closeAllPanels(); setShowTaskQueuePanel(v); return v })
   }
 
   const chatViewContext = useMemo((): ViewContext => ({
@@ -408,12 +390,12 @@ function AppContent() {
           onToggleWishlist={handleToggleWishlist}
           onToggleChat={handleToggleChat}
           onToggleMoodSync={handleToggleMoodSync}
-          onToggleArrQueue={handleToggleArrQueue}
+          onToggleTaskQueue={handleToggleTaskQueue}
           showCompletenessPanel={showCompletenessPanel}
           showWishlistPanel={showWishlistPanel}
           showChatPanel={showChatPanel}
           showMoodSyncPanel={showMoodSyncPanel}
-          showArrQueue={showArrQueue}
+          showTaskQueuePanel={showTaskQueuePanel}
           isAutoRefreshing={isAutoRefreshing}
           hasMovies={hasMovies}
           hasTV={hasTV}
@@ -515,10 +497,10 @@ function AppContent() {
           isOpen={showMoodSyncPanel}
           onClose={() => setShowMoodSyncPanel(false)}
         />
-        {/* Arr Download Queue Panel - rendered at App level, available in all views */}
-        <ArrQueuePanel
-          isOpen={showArrQueue}
-          onClose={() => setShowArrQueue(false)}
+        {/* Task Queue Panel */}
+        <TaskQueuePanel
+          isOpen={showTaskQueuePanel}
+          onClose={() => setShowTaskQueuePanel(false)}
         />
         {/* Chat Panel - rendered at App level, available in all views */}
         <ChatPanel

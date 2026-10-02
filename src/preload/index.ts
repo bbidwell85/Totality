@@ -475,11 +475,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getStorageAnalytics: () => ipcRenderer.invoke('db:getStorageAnalytics'),
   // Person filmography completeness
   personGetCompleteness: (personType?: string) => ipcRenderer.invoke('person:getCompleteness', personType),
+  personSearchTMDB: (query: string) => ipcRenderer.invoke('person:searchTMDB', query),
   personAnalyze: (personName: string, personType: string) => ipcRenderer.invoke('person:analyze', personName, personType),
   personDelete: (id: number) => ipcRenderer.invoke('person:delete', id),
   // Watchlist sync
   syncPlexWatchlist: () => ipcRenderer.invoke('sync:plex-watchlist'),
   syncTrakt: (username: string) => ipcRenderer.invoke('sync:trakt', username),
+  fetchPlexWatchlist: () => ipcRenderer.invoke('sync:fetchPlex') as Promise<Array<{ title: string; media_type: string; year?: number; tmdb_id?: string; poster_url?: string }>>,
+  fetchTraktWatchlist: (username: string) => ipcRenderer.invoke('sync:fetchTrakt', username) as Promise<Array<{ title: string; media_type: string; year?: number; tmdb_id?: string; poster_url?: string }>>,
   // Release alerts
   releaseAlertsCheck: () => ipcRenderer.invoke('release-alerts:check'),
   getDuplicateMedia: () => ipcRenderer.invoke('db:getDuplicateMedia'),
@@ -656,6 +659,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('wishlist:autoCompleted', handler)
     return () => ipcRenderer.removeListener('wishlist:autoCompleted', handler)
   },
+  onWishlistChanged: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('wishlist:changed', handler)
+    return () => ipcRenderer.removeListener('wishlist:changed', handler)
+  },
 
   // General
   onMessage: (callback: (message: string) => void) => {
@@ -764,6 +772,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   aiWishlistAdvice: (params: { requestId: string }) =>
     ipcRenderer.invoke('ai:wishlistAdvice', params),
+  aiStorageOptimization: (params: { requestId: string }) =>
+    ipcRenderer.invoke('ai:storageOptimization', params),
+  aiMusicQualityReport: (params: { requestId: string }) =>
+    ipcRenderer.invoke('ai:musicQualityReport', params),
   aiExplainQuality: (params: {
     title: string
     resolution?: string
@@ -795,27 +807,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('logs:new', handler)
   },
 
-  // ============================================================================
-  // ARR AUTOMATION (Radarr / Sonarr / Lidarr)
-  // ============================================================================
-  arrTestConnection: (params: { type: 'radarr' | 'sonarr' | 'lidarr'; url: string; apiKey: string }) =>
-    ipcRenderer.invoke('arr:testConnection', params),
-  arrGetQualityProfiles: (params: { type: 'radarr' | 'sonarr' | 'lidarr'; url: string; apiKey: string }) =>
-    ipcRenderer.invoke('arr:getQualityProfiles', params),
-  arrGetRootFolders: (params: { type: 'radarr' | 'sonarr' | 'lidarr'; url: string; apiKey: string }) =>
-    ipcRenderer.invoke('arr:getRootFolders', params),
-  arrGetConfiguredApps: () =>
-    ipcRenderer.invoke('arr:getConfiguredApps'),
-  arrAddMovie: (params: { tmdbId: string | number; title: string; year?: number }) =>
-    ipcRenderer.invoke('arr:addMovie', params),
-  arrAddSeries: (params: { title: string; year?: number }) =>
-    ipcRenderer.invoke('arr:addSeries', params),
-  arrAddArtist: (params: { name: string; mbId?: string }) =>
-    ipcRenderer.invoke('arr:addArtist', params),
-  arrGetQueue: (type?: 'radarr' | 'sonarr' | 'lidarr') =>
-    ipcRenderer.invoke('arr:getQueue', type),
-  arrRemoveFromQueue: (params: { type: 'radarr' | 'sonarr' | 'lidarr'; queueId: number; blacklist?: boolean }) =>
-    ipcRenderer.invoke('arr:removeFromQueue', params),
 })
 
 // Type definitions for multi-source support
@@ -1407,6 +1398,7 @@ export interface ElectronAPI {
     id: number
     title: string
     release_date: string
+    physical_release_date: string | null
     overview: string
     poster_url: string | null
     vote_average: number
@@ -1527,6 +1519,7 @@ export interface ElectronAPI {
     total_movies: number; owned_movies: number; missing_movies: string; owned_movie_ids: string
     completeness_percentage: number; profile_url: string | null
   }>>
+  personSearchTMDB: (query: string) => Promise<Array<{ id: number; name: string; profile_url: string | null; known_for: string; roles: string[] }>>
   personAnalyze: (personName: string, personType: string) => Promise<{
     name: string; totalMovies: number; ownedMovies: number; missingCount: number; percentage: number
   }>
@@ -1534,6 +1527,8 @@ export interface ElectronAPI {
   // Watchlist sync
   syncPlexWatchlist: () => Promise<{ added: number; total: number }>
   syncTrakt: (username: string) => Promise<{ added: number; total: number }>
+  fetchPlexWatchlist: () => Promise<Array<{ title: string; media_type: string; year?: number; tmdb_id?: string; poster_url?: string }>>
+  fetchTraktWatchlist: (username: string) => Promise<Array<{ title: string; media_type: string; year?: number; tmdb_id?: string; poster_url?: string }>>
   // Release alerts
   releaseAlertsCheck: () => Promise<number>
 
@@ -2004,6 +1999,7 @@ export interface ElectronAPI {
     }>
   }) => void) => () => void
   onWishlistAutoCompleted: (callback: (items: Array<{ id: number; title: string; reason: string; media_type: string }>) => void) => () => void
+  onWishlistChanged: (callback: () => void) => () => void
 
   // General
   onMessage: (callback: (message: string) => void) => () => void

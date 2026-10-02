@@ -7,6 +7,8 @@ import {
   UPGRADE_PRIORITIES_SYSTEM_PROMPT,
   COMPLETENESS_INSIGHTS_SYSTEM_PROMPT,
   WISHLIST_ADVICE_SYSTEM_PROMPT,
+  STORAGE_OPTIMIZATION_SYSTEM_PROMPT,
+  MUSIC_QUALITY_SYSTEM_PROMPT,
 } from './ai-system-prompts'
 
 /** Strip null/undefined/empty fields to reduce token usage */
@@ -271,6 +273,138 @@ export class GeminiAnalysisService {
           },
         ],
         system: WISHLIST_ADVICE_SYSTEM_PROMPT,
+        maxTokens: 4096,
+      },
+      onDelta,
+    )
+
+    return { text: result.text }
+  }
+
+  /**
+   * Generate a storage optimization report.
+   */
+  async generateStorageOptimization(
+    onDelta: (text: string) => void,
+  ): Promise<{ text: string }> {
+    const db = getDatabase()
+    const stats = db.getLibraryStats()
+    const analytics = db.getStorageAnalytics()
+
+    const formatSize = (b: number) => b >= 1e12 ? `${(b / 1e12).toFixed(1)} TB` : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${(b / 1e6).toFixed(0)} MB`
+
+    const dataContext = [
+      '## Library Stats',
+      JSON.stringify(stats),
+      '',
+      '## Storage Analytics',
+      JSON.stringify({
+        total_size: formatSize(analytics.totalSize),
+        total_items: analytics.totalItems,
+        by_codec: analytics.byCodec.map((c: { codec: string; count: number; size: number }) => ({
+          codec: c.codec, count: c.count, size: formatSize(c.size),
+        })),
+        by_tier: analytics.byTier.map((t: { tier: string; count: number; size: number }) => ({
+          tier: t.tier, count: t.count, size: formatSize(t.size),
+        })),
+        codec_migration: {
+          h264_count: analytics.codecMigration.h264Count,
+          modern_count: analytics.codecMigration.modernCount,
+          total: analytics.codecMigration.totalCount,
+          modern_percentage: analytics.codecMigration.totalCount > 0
+            ? Math.round((analytics.codecMigration.modernCount / analytics.codecMigration.totalCount) * 100) : 0,
+        },
+      }),
+    ].join('\n')
+
+    const result = await getGeminiService().streamMessage(
+      {
+        messages: [
+          {
+            role: 'user',
+            content: `Here is my library storage and codec data. Please analyze it and recommend an optimization strategy.\n\n${dataContext}`,
+          },
+        ],
+        system: STORAGE_OPTIMIZATION_SYSTEM_PROMPT,
+        maxTokens: 4096,
+      },
+      onDelta,
+    )
+
+    return { text: result.text }
+  }
+
+  /**
+   * Generate a music quality report.
+   */
+  async generateMusicQualityReport(
+    onDelta: (text: string) => void,
+  ): Promise<{ text: string }> {
+    const db = getDatabase()
+    const musicStats = db.getMusicStats()
+
+    // Get quality distribution
+    const allAlbums = db.getMusicAlbums({ limit: 10000 }) as Record<string, unknown>[]
+    const tiers: Record<string, number> = {
+      HI_RES: 0, LOSSLESS: 0, LOSSY_HIGH: 0, LOSSY_MID: 0, LOSSY_LOW: 0, UNSCORED: 0,
+    }
+    for (const album of allAlbums) {
+      const quality = db.getMusicQualityScore(album.id as number)
+      if (quality) {
+        const tier = (quality as Record<string, unknown>).quality_tier as string
+        if (tier in tiers) tiers[tier]++
+        else tiers.UNSCORED++
+      } else {
+        tiers.UNSCORED++
+      }
+    }
+
+    // Get albums needing upgrade
+    const upgradeAlbums = db.getAlbumsNeedingUpgrade(20)
+
+    // Get artist completeness summary
+    const artistCompleteness = db.getAllArtistCompleteness() as Record<string, unknown>[]
+    const incompleteArtists = artistCompleteness
+      .filter(a => (a.completeness_percentage as number) < 100)
+      .slice(0, 15)
+
+    const dataContext = [
+      '## Music Library Stats',
+      JSON.stringify(musicStats),
+      '',
+      '## Quality Distribution',
+      JSON.stringify({ total_albums: allAlbums.length, distribution: tiers,
+        lossless_percentage: allAlbums.length > 0
+          ? Math.round(((tiers.LOSSLESS + tiers.HI_RES) / allAlbums.length) * 100) : 0,
+      }),
+      '',
+      '## Albums Needing Upgrade (up to 20)',
+      JSON.stringify(upgradeAlbums.map((a: Record<string, unknown>) => compact({
+        title: a.title,
+        artist_name: a.artist_name,
+        best_audio_codec: a.best_audio_codec,
+        avg_audio_bitrate: a.avg_audio_bitrate,
+        track_count: a.track_count,
+      }))),
+      '',
+      `## Incomplete Artists (${incompleteArtists.length} of ${artistCompleteness.length})`,
+      JSON.stringify(incompleteArtists.map((a: Record<string, unknown>) => compact({
+        artist_name: a.artist_name,
+        total_albums: a.total_albums,
+        owned_albums: a.owned_albums,
+        completeness_percentage: a.completeness_percentage,
+      }))),
+    ].join('\n')
+
+    const result = await getGeminiService().streamMessage(
+      {
+        messages: [
+          {
+            role: 'user',
+            content: `Here is my music library quality data. Please analyze it and recommend a quality upgrade strategy.\n\n${dataContext}`,
+          },
+        ],
+        system: MUSIC_QUALITY_SYSTEM_PROMPT,
         maxTokens: 4096,
       },
       onDelta,

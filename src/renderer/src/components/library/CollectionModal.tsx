@@ -4,7 +4,6 @@ import { X, CircleFadingArrowUp, EyeOff } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { MissingItemPopup } from './MissingItemPopup'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
-import { AddToArrButton } from '../arr/AddToArrButton'
 
 interface MissingMovie {
   tmdb_id: string
@@ -54,14 +53,7 @@ export const CollectionModal = memo(function CollectionModal({
   onDismissAllMissingInCollection,
 }: CollectionModalProps) {
   const [selectedMissing, setSelectedMissing] = useState<MissingMovie | null>(null)
-  const [radarrEnabled, setRadarrEnabled] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    window.electronAPI.arrGetConfiguredApps()
-      .then((apps: { radarr: boolean }) => setRadarrEnabled(apps.radarr))
-      .catch(() => {})
-  }, [])
 
   // Focus trap
   useFocusTrap(true, modalRef)
@@ -219,15 +211,6 @@ export const CollectionModal = memo(function CollectionModal({
                           >
                             <EyeOff className="w-4 h-4" />
                           </button>
-                        )}
-                        {radarrEnabled && movie.tmdb_id && (
-                          <AddToArrButton
-                            type="radarr"
-                            tmdbId={movie.tmdb_id}
-                            title={movie.title}
-                            year={movie.year}
-                            compact
-                          />
                         )}
                         <AddToWishlistButton
                           mediaType="movie"

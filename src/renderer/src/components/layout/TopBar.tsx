@@ -6,11 +6,11 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
-import { Search, X, Home, Film, Tv, Music, Tags, ListChecks, Star, Settings, RefreshCw, Disc3, User, MessageSquare, ArrowLeft, ArrowRight, Download } from 'lucide-react'
+import { Search, X, Home, Film, Tv, Music, Tags, ListChecks, Star, Settings, RefreshCw, Disc3, User, MessageSquare, ArrowLeft, ArrowRight, Activity, Loader2 } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { useNavigation } from '../../contexts/NavigationContext'
-import { ActivityPanel } from '../ui/ActivityPanel'
+import { NotificationBell } from '../ui/NotificationBell'
 import logoImage from '../../assets/totality_header_logo.png'
 import type { MediaViewType } from '../library/types'
 
@@ -34,12 +34,12 @@ interface TopBarProps {
   onToggleWishlist: () => void
   onToggleChat: () => void
   onToggleMoodSync: () => void
-  onToggleArrQueue: () => void
-  showArrQueue: boolean
+  onToggleTaskQueue: () => void
   showCompletenessPanel: boolean
   showWishlistPanel: boolean
   showChatPanel: boolean
   showMoodSyncPanel: boolean
+  showTaskQueuePanel: boolean
   isAutoRefreshing?: boolean
   hasMovies?: boolean
   hasTV?: boolean
@@ -80,12 +80,12 @@ export function TopBar({
   onToggleWishlist,
   onToggleChat,
   onToggleMoodSync,
-  onToggleArrQueue,
-  showArrQueue,
+  onToggleTaskQueue,
   showCompletenessPanel,
   showWishlistPanel,
   showChatPanel,
   showMoodSyncPanel,
+  showTaskQueuePanel,
   isAutoRefreshing = false,
   hasMovies = false,
   hasTV = false,
@@ -124,51 +124,20 @@ export function TopBar({
     return unsubscribe
   }, [])
 
-  // Check if any arr apps are configured
-  const [arrAppsConfigured, setArrAppsConfigured] = useState(false)
+  // Track task queue pending count for badge
+  const [taskPendingCount, setTaskPendingCount] = useState(0)
+  const [hasRunningTask, setHasRunningTask] = useState(false)
   useEffect(() => {
-    const checkArr = () => {
-      window.electronAPI.arrGetConfiguredApps()
-        .then(apps => {
-          const a = apps as { radarr: boolean; sonarr: boolean; lidarr: boolean }
-          setArrAppsConfigured(a.radarr || a.sonarr || a.lidarr)
-        })
-        .catch(() => {})
-    }
-    checkArr()
-    const unsub = window.electronAPI.onSettingsChanged(({ key }) => {
-      if (key.startsWith('radarr') || key.startsWith('sonarr') || key.startsWith('lidarr')) {
-        checkArr()
-      }
+    const unsubscribe = window.electronAPI.onTaskQueueUpdated?.((state: { currentTask: unknown; queue: unknown[] }) => {
+      setTaskPendingCount(state.queue.length + (state.currentTask ? 1 : 0))
+      setHasRunningTask(!!state.currentTask)
     })
-    return unsub
+    window.electronAPI.taskQueueGetState?.().then((state: { currentTask: unknown; queue: unknown[] }) => {
+      setTaskPendingCount(state.queue.length + (state.currentTask ? 1 : 0))
+      setHasRunningTask(!!state.currentTask)
+    })
+    return () => unsubscribe?.()
   }, [])
-
-  // Poll download queue count for badge
-  const [queueCount, setQueueCount] = useState(0)
-  useEffect(() => {
-    if (!arrAppsConfigured) {
-      setQueueCount(0)
-      return
-    }
-    const poll = () => {
-      window.electronAPI.arrGetQueue()
-        .then(items => setQueueCount((items as Array<unknown>).length))
-        .catch(() => {})
-    }
-    poll()
-    const interval = setInterval(poll, 30_000)
-    return () => clearInterval(interval)
-  }, [arrAppsConfigured])
-
-  // Refresh badge when panel closes
-  useEffect(() => {
-    if (!showArrQueue && arrAppsConfigured) {
-      window.electronAPI.arrGetQueue()
-        .then(items => setQueueCount((items as Array<unknown>).length))
-        .catch(() => {})
-    }
-  }, [showArrQueue, arrAppsConfigured])
 
   const showEmptyState = sources.length === 0
 
@@ -783,31 +752,33 @@ export function TopBar({
             </button>
           </Tooltip>
 
-          {/* Download Queue Toggle — only shown when arr apps are configured */}
-          {arrAppsConfigured && (
-            <Tooltip label="Download Queue">
-              <button
-                onClick={onToggleArrQueue}
-                className={`relative p-2 rounded-md transition-colors ${
-                  showArrQueue
-                    ? 'bg-white text-black'
-                    : 'text-white hover:bg-white/10'
-                }`}
-                aria-label="Toggle download queue"
-                aria-pressed={showArrQueue}
-              >
-                <Download className="w-5 h-5" />
-                {queueCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                    {queueCount > 99 ? '99+' : queueCount}
-                  </span>
-                )}
-              </button>
-            </Tooltip>
-          )}
+          {/* Task Queue */}
+          <Tooltip label="Task Queue">
+            <button
+              onClick={onToggleTaskQueue}
+              className={`relative p-2 rounded-md transition-colors ${
+                showTaskQueuePanel
+                  ? 'bg-white text-black'
+                  : 'text-white hover:bg-white/10'
+              }`}
+              aria-label="Toggle task queue"
+              aria-pressed={showTaskQueuePanel}
+            >
+              {hasRunningTask ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Activity className="w-5 h-5" />
+              )}
+              {taskPendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-medium rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {taskPendingCount > 99 ? '99+' : taskPendingCount}
+                </span>
+              )}
+            </button>
+          </Tooltip>
 
-          {/* Activity Panel */}
-          <ActivityPanel />
+          {/* Notifications */}
+          <NotificationBell />
 
           {/* Settings */}
           <Tooltip label="Settings">

@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react'
 import { RefreshCw, MoreVertical, Pencil, Folder, CircleFadingArrowUp, EyeOff, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 import { TvPlaceholder, EpisodePlaceholder } from '../ui/MediaPlaceholders'
 import { MissingItemCard } from './MissingItemCard'
-import { ArrButtons } from '../arr/AddToArrButton'
 import { useMenuClose } from '../../hooks/useMenuClose'
 import { providerColors, formatSeasonLabel, getStatusBadge } from './mediaUtils'
 import type { MediaItem, TVShow, TVShowSummary, SeasonInfo, TVSeason, SeriesCompletenessData, MissingEpisode } from './types'
@@ -339,14 +338,6 @@ export function TVShowsView({
   tvSortBy?: string
   onTvSortChange?: (sort: string) => void
 }) {
-  const [arrApps, setArrApps] = useState<{ radarr: boolean; sonarr: boolean; lidarr: boolean }>({ radarr: false, sonarr: false, lidarr: false })
-
-  useEffect(() => {
-    window.electronAPI.arrGetConfiguredApps()
-      .then((apps: { radarr: boolean; sonarr: boolean; lidarr: boolean }) => setArrApps(apps))
-      .catch(() => {})
-  }, [])
-
   // Breadcrumb navigation
   const handleBack = () => {
     if (selectedSeason !== null) {
@@ -702,7 +693,6 @@ export function TVShowsView({
                 showTitle={selectedShowData.title}
                 tmdbId={completenessData?.tmdb_id}
                 fallbackPosterUrl={completenessData?.poster_url || selectedShowData.poster_url}
-                arrApps={arrApps}
                 onClick={() => onMissingItemClick({
                   type: 'season',
                   title: formatSeasonLabel(item.seasonNumber),
@@ -780,8 +770,6 @@ export function TVShowsView({
                 episode={item.missing}
                 tmdbId={completenessData?.tmdb_id}
                 fallbackPosterUrl={missingEpisodePoster}
-                seriesTitle={selectedShowData.title}
-                arrApps={arrApps}
                 onClick={() => onMissingItemClick({
                   type: 'episode',
                   title: item.missing.title || `Episode ${item.missing.episode_number}`,
@@ -959,7 +947,6 @@ const MissingSeasonCardWithArtwork = memo(({
   showTitle,
   tmdbId,
   fallbackPosterUrl,
-  arrApps,
   onClick,
   onDismiss
 }: {
@@ -967,7 +954,6 @@ const MissingSeasonCardWithArtwork = memo(({
   showTitle: string
   tmdbId?: string
   fallbackPosterUrl?: string
-  arrApps?: { radarr: boolean; sonarr: boolean; lidarr: boolean }
   onClick: () => void
   onDismiss?: () => void
 }) => {
@@ -996,7 +982,6 @@ const MissingSeasonCardWithArtwork = memo(({
       tmdbId={tmdbId}
       seriesTitle={showTitle}
       seasonNumber={seasonNumber}
-      arrApps={arrApps}
     />
   )
 })
@@ -1006,16 +991,12 @@ const MissingEpisodeRowWithArtwork = memo(({
   episode,
   tmdbId,
   fallbackPosterUrl,
-  seriesTitle,
-  arrApps,
   onClick,
   onDismiss
 }: {
   episode: MissingEpisode
   tmdbId?: string
   fallbackPosterUrl?: string
-  seriesTitle?: string
-  arrApps?: { radarr: boolean; sonarr: boolean; lidarr: boolean }
   onClick: () => void
   onDismiss?: () => void
 }) => {
@@ -1085,12 +1066,6 @@ const MissingEpisodeRowWithArtwork = memo(({
         )}
       </div>
 
-      {/* Arr + dismiss actions */}
-      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-        {arrApps && (
-          <ArrButtons arrApps={arrApps} title={seriesTitle} mediaType="tv" compact />
-        )}
-      </div>
       {/* 3-dot menu */}
       {onDismiss && (
         <div ref={menuRef} className="relative shrink-0">

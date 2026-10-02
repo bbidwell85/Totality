@@ -1,3 +1,4 @@
+import { BrowserWindow } from 'electron'
 import type { GeminiToolDefinition } from './GeminiService'
 import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from './QualityAnalyzer'
@@ -390,6 +391,40 @@ export const LIBRARY_TOOLS: GeminiToolDefinition[] = [
       type: 'object',
       properties: {
         days: { type: 'number', description: 'Look back N days (default 14)' },
+        limit: { type: 'number', description: 'Max results (default 20, max 50)' },
+      },
+    },
+  },
+  {
+    name: 'get_album_completeness',
+    description: 'Get album-level completeness for a specific artist. Shows which albums you own vs which are missing from their discography (via MusicBrainz). Use for "what albums am I missing from [artist]?"',
+    parameters: {
+      type: 'object',
+      properties: {
+        artist_name: { type: 'string', description: 'Artist name to check album completeness for' },
+        limit: { type: 'number', description: 'Max results (default 50)' },
+      },
+      required: ['artist_name'],
+    },
+  },
+  {
+    name: 'get_mood_tags',
+    description: 'Get mood and genre tags for music tracks across sources. Shows tag distribution and which tracks have mood/genre metadata.',
+    parameters: {
+      type: 'object',
+      properties: {
+        artist_name: { type: 'string', description: 'Optional: filter by artist name' },
+        limit: { type: 'number', description: 'Max results (default 20)' },
+      },
+    },
+  },
+  {
+    name: 'get_recent_notifications',
+    description: 'Get recent app notifications and events (scan completions, errors, source changes). Use for "what happened recently?" or "any scan errors?"',
+    parameters: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['scan_complete', 'source_change', 'error', 'info'], description: 'Filter by notification type' },
         limit: { type: 'number', description: 'Max results (default 20, max 50)' },
       },
     },
@@ -1345,6 +1380,20 @@ export async function executeTool(
           : item.media_type === 'track' ? 'track'
           : 'movie'
 
+        // Auto-detect reason: check if user already owns it (upgrade) or not (missing)
+        let reason = item.reason
+        if (!reason) {
+          if (item.media_type === 'movie' && tmdbId) {
+            const ownedMap = db.getMediaItemsByTmdbIds([tmdbId])
+            reason = ownedMap.has(tmdbId) ? 'upgrade' : 'missing'
+          } else if (item.media_type === 'tv') {
+            const ownership = checkTVShowOwnership(db, tmdbId || '', resolvedTitle)
+            reason = ownership.owned ? 'upgrade' : 'missing'
+          } else {
+            reason = 'missing'
+          }
+        }
+
         wishlistItems.push({
           media_type: wishlistMediaType,
           title: resolvedTitle,
@@ -1352,7 +1401,7 @@ export async function executeTool(
           tmdb_id: tmdbId,
           poster_url: posterUrl,
           artist_name: item.artist_name,
-          reason: item.reason || 'missing',
+          reason,
           priority: Math.max(1, Math.min(5, item.priority || 3)),
           notes: item.notes,
           status: 'active',
@@ -1361,6 +1410,13 @@ export async function executeTool(
 
       const added = db.addWishlistItemsBulk(wishlistItems as never[])
       const skipped = wishlistItems.length - added
+
+      // Notify renderer to refresh wishlist immediately
+      if (added > 0) {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('wishlist:changed')
+        }
+      }
 
       return JSON.stringify({
         added,
@@ -1708,6 +1764,104 @@ export async function executeTool(
         title: i.title, year: i.year, type: i.type,
         quality_tier: i.quality_tier, created_at: i.created_at,
         series_title: i.series_title,
+      })))
+    }
+
+    case 'get_album_completeness': {
+      const artistName = toolString(input, 'artist_name', 300)
+      if (!artistName) return JSON.stringify({ error: 'artist_name is required' })
+      const limit = toolNumber(input, 'limit', 1, 100) || 50
+
+      // Get artist completeness data
+      const completeness = db.getArtistCompleteness(artistName)
+      if (!completeness) {
+        return JSON.stringify({ error: `No completeness data found for "${artistName}". Run completeness analysis first.` })
+      }
+
+      const comp = completeness as Record<string, unknown>
+      let missingAlbums: Array<Record<string, unknown>> = []
+      try {
+        missingAlbums = JSON.parse((comp.missing_albums as string) || '[]')
+      } catch { /* empty */ }
+
+      // Get owned albums
+      const ownedAlbums = db.getMusicAlbumsByArtistName(artistName, limit) as Record<string, unknown>[]
+
+      return JSON.stringify(compact({
+        artist_name: comp.artist_name,
+        total_albums: comp.total_albums,
+        owned_albums: comp.owned_albums,
+        completeness_percentage: comp.completeness_percentage,
+        owned: ownedAlbums.slice(0, limit).map((a: Record<string, unknown>) => compact({
+          title: a.title,
+          year: a.year,
+          album_type: a.album_type,
+          best_audio_codec: a.best_audio_codec,
+        })),
+        missing: missingAlbums.slice(0, limit).map((m: Record<string, unknown>) => compact({
+          title: m.title,
+          year: m.year,
+          type: m.type,
+          musicbrainz_id: m.musicbrainz_id,
+        })),
+      }))
+    }
+
+    case 'get_mood_tags': {
+      const artistName = toolString(input, 'artist_name', 300) || undefined
+      const limit = toolNumber(input, 'limit', 1, 50) || 20
+
+      // Get tracks with mood/genre data
+      const tracks = db.getMusicTracks({
+        artistName,
+        limit: limit * 5, // fetch more to filter
+      }) as Record<string, unknown>[]
+
+      // Aggregate mood/genre tags
+      const moodCounts: Record<string, number> = {}
+      const genreCounts: Record<string, number> = {}
+      const tracksWithMoods: Array<Record<string, unknown>> = []
+
+      for (const track of tracks) {
+        const moods = (track.mood as string || '').split(';').map(s => s.trim()).filter(Boolean)
+        const genres = (track.genre as string || '').split(';').map(s => s.trim()).filter(Boolean)
+
+        for (const m of moods) moodCounts[m] = (moodCounts[m] || 0) + 1
+        for (const g of genres) genreCounts[g] = (genreCounts[g] || 0) + 1
+
+        if (moods.length > 0 || genres.length > 0) {
+          tracksWithMoods.push(compact({
+            title: track.title,
+            artist_name: track.artist_name,
+            moods: moods.length > 0 ? moods : undefined,
+            genres: genres.length > 0 ? genres : undefined,
+          }))
+        }
+      }
+
+      const sortedMoods = Object.entries(moodCounts).sort((a, b) => b[1] - a[1]).slice(0, 20)
+      const sortedGenres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).slice(0, 20)
+
+      return JSON.stringify(compact({
+        total_tracks_scanned: tracks.length,
+        tracks_with_tags: tracksWithMoods.length,
+        top_moods: sortedMoods.length > 0 ? sortedMoods.map(([name, count]) => ({ name, count })) : undefined,
+        top_genres: sortedGenres.length > 0 ? sortedGenres.map(([name, count]) => ({ name, count })) : undefined,
+        sample_tracks: tracksWithMoods.slice(0, limit),
+      }))
+    }
+
+    case 'get_recent_notifications': {
+      const notifType = toolString(input, 'type') || undefined
+      const limit = Math.min(toolNumber(input, 'limit') || 20, 50)
+
+      const notifications = db.getNotifications({ limit, type: notifType })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return JSON.stringify(notifications.map((n: any) => compact({
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        created_at: n.created_at,
       })))
     }
 

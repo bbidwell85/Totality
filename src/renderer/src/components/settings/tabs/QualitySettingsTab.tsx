@@ -714,24 +714,21 @@ function NumberInput({
 }
 
 // Detailed Handbrake presets for power users - focused on HIGH quality with minimal visual loss
+// Updated for HandBrake 1.11.2 with SVT-AV1 support
+interface CodecPreset {
+  rf: string
+  preset: string
+  tune: string
+  profile: string
+  level: string
+  extraOptions: string
+}
+
 const HANDBRAKE_DETAILED_PRESETS: Record<ResolutionTier, {
   description: string
-  x264: {
-    rf: string
-    preset: string
-    tune: string
-    profile: string
-    level: string
-    extraOptions: string
-  }
-  x265: {
-    rf: string
-    preset: string
-    tune: string
-    profile: string
-    level: string
-    extraOptions: string
-  }
+  x264: CodecPreset
+  x265: CodecPreset
+  svtav1: CodecPreset
   audio: {
     primary: string
     fallback: string
@@ -757,14 +754,23 @@ const HANDBRAKE_DETAILED_PRESETS: Record<ResolutionTier, {
       level: '4.0',
       extraOptions: 'ref=5:bframes=8:rd=4:psy-rd=2.0:psy-rdoq=1.0:aq-mode=3:rc-lookahead=60:deblock=-1,-1',
     },
+    svtav1: {
+      rf: '25-27',
+      preset: '5',
+      tune: '1',
+      profile: 'main',
+      level: '4.0',
+      extraOptions: 'film-grain=8:film-grain-denoise=0',
+    },
     audio: {
       primary: 'Passthrough (AC3/DTS)',
       fallback: 'AAC 192 kbps stereo',
       bitrate: '192+',
     },
     notes: [
-      'Use "film" tune for live action, "animation" for cartoons/anime',
-      'Grain preservation: add grain=1 to extra options if source is grainy',
+      'SVT-AV1 preset 5 balances speed and quality — lower = slower/better',
+      'Use x264 "film" tune for live action, "animation" for cartoons/anime',
+      'AV1 film-grain synthesis preserves grain at smaller file sizes',
     ],
   },
   '720p': {
@@ -785,14 +791,23 @@ const HANDBRAKE_DETAILED_PRESETS: Record<ResolutionTier, {
       level: '4.1',
       extraOptions: 'ref=5:bframes=8:rd=4:psy-rd=2.0:psy-rdoq=1.0:aq-mode=3:rc-lookahead=60:deblock=-1,-1:sao=0',
     },
+    svtav1: {
+      rf: '24-26',
+      preset: '5',
+      tune: '1',
+      profile: 'main',
+      level: '4.1',
+      extraOptions: 'film-grain=8:film-grain-denoise=0',
+    },
     audio: {
       primary: 'Passthrough (AC3/DTS/E-AC3)',
       fallback: 'AAC 256 kbps or AC3 448 kbps',
       bitrate: '320+',
     },
     notes: [
+      'AV1 produces ~30% smaller files than HEVC at same visual quality',
       'main10 profile for x265 reduces banding in gradients',
-      'sao=0 disables sample adaptive offset for sharper output',
+      'sao=0 disables sample adaptive offset for sharper x265 output',
     ],
   },
   '1080p': {
@@ -813,15 +828,24 @@ const HANDBRAKE_DETAILED_PRESETS: Record<ResolutionTier, {
       level: '5.0',
       extraOptions: 'ref=5:bframes=8:rd=5:psy-rd=2.0:psy-rdoq=1.5:aq-mode=3:aq-strength=0.8:rc-lookahead=60:deblock=-1,-1:sao=0:selective-sao=0',
     },
+    svtav1: {
+      rf: '22-24',
+      preset: '4',
+      tune: '1',
+      profile: 'main',
+      level: '5.0',
+      extraOptions: 'film-grain=8:film-grain-denoise=0:enable-overlays=1',
+    },
     audio: {
       primary: 'Passthrough (TrueHD/DTS-HD MA/Atmos)',
       fallback: 'E-AC3 640 kbps or AAC 320 kbps',
       bitrate: '640+',
     },
     notes: [
-      'Use "slower" preset for best quality-to-size ratio',
-      'For grain preservation: add grain tune or set aq-strength=1.0',
-      'For animation: use tune=animation with aq-mode=1',
+      'SVT-AV1 preset 4 for best quality — encode time is longer but worth it',
+      'AV1 enable-overlays=1 improves quality around scene transitions',
+      'For grain preservation: AV1 film-grain is superior to x265 grain tune',
+      'For animation: use x265 tune=animation or AV1 with film-grain=0',
     ],
   },
   '4k': {
@@ -842,16 +866,25 @@ const HANDBRAKE_DETAILED_PRESETS: Record<ResolutionTier, {
       level: '5.1',
       extraOptions: 'ref=4:bframes=8:rd=4:psy-rd=2.0:psy-rdoq=1.0:aq-mode=3:rc-lookahead=40:deblock=0,0:sao=0:hdr-opt=1:repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc',
     },
+    svtav1: {
+      rf: '20-22',
+      preset: '5',
+      tune: '1',
+      profile: 'main',
+      level: '5.1',
+      extraOptions: 'film-grain=8:film-grain-denoise=0:enable-overlays=1:chroma-qm-min=0',
+    },
     audio: {
       primary: 'Passthrough (TrueHD Atmos/DTS:X)',
       fallback: 'E-AC3 Atmos 768 kbps or TrueHD',
       bitrate: '1000+',
     },
     notes: [
-      'Always use 10-bit (main10) for HDR content',
-      'hdr-opt=1 preserves HDR metadata',
-      'Keep ref frames ≤4 for 4K to avoid memory issues',
-      'For SDR 4K: remove HDR color options',
+      'SVT-AV1 handles HDR10 natively — no extra color options needed',
+      'Always use 10-bit for HDR content (both x265 and AV1)',
+      'x265: hdr-opt=1 preserves HDR metadata, keep ref ≤4 for 4K',
+      'AV1 preset 5 recommended for 4K — preset 4 is very slow at this resolution',
+      'For SDR 4K: remove x265 HDR color options',
     ],
   },
 }
@@ -866,16 +899,18 @@ function HandbrakeGuide({
   setSelectedTier: (tier: ResolutionTier) => void
   settings: SettingsState
 }) {
-  const [selectedCodec, setSelectedCodec] = useState<'x264' | 'x265'>('x265')
+  const [selectedCodec, setSelectedCodec] = useState<'x264' | 'x265' | 'svtav1'>('svtav1')
 
   // Get current thresholds for the selected tier
   const videoHigh = settings[`quality_video_${selectedTier}_high` as keyof SettingsState] as number
   const audioHigh = settings[`quality_audio_${selectedTier}_high` as keyof SettingsState] as number
 
   // Adjust target bitrate based on codec efficiency multiplier
-  const codecMultiplier = selectedCodec === 'x265'
-    ? settings.quality_codec_h265
-    : settings.quality_codec_h264
+  const codecMultiplier = selectedCodec === 'svtav1'
+    ? settings.quality_codec_av1
+    : selectedCodec === 'x265'
+      ? settings.quality_codec_h265
+      : settings.quality_codec_h264
   const adjustedVideoHigh = Math.round(videoHigh / codecMultiplier)
 
   const preset = HANDBRAKE_DETAILED_PRESETS[selectedTier]
@@ -914,6 +949,16 @@ function HandbrakeGuide({
       {/* Codec Selection */}
       <div className="flex gap-2">
         <button
+          onClick={() => setSelectedCodec('svtav1')}
+          className={`flex-1 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+            selectedCodec === 'svtav1'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+          }`}
+        >
+          SVT-AV1 (Best)
+        </button>
+        <button
           onClick={() => setSelectedCodec('x265')}
           className={`flex-1 px-3 py-2 text-xs font-medium rounded-md transition-colors ${
             selectedCodec === 'x265'
@@ -921,7 +966,7 @@ function HandbrakeGuide({
               : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}
         >
-          x265/HEVC (Recommended)
+          x265/HEVC
         </button>
         <button
           onClick={() => setSelectedCodec('x264')}
@@ -931,8 +976,21 @@ function HandbrakeGuide({
               : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}
         >
-          x264/H.264 (Compatibility)
+          x264/H.264
         </button>
+      </div>
+
+      {/* Codec Info */}
+      <div className="bg-background/50 border border-border/30 rounded-lg p-3 text-[10px] text-muted-foreground">
+        {selectedCodec === 'svtav1' && (
+          <div><span className="text-foreground font-medium">SVT-AV1</span> — Best quality per bit. ~30% smaller than HEVC at same quality. Slowest to encode. Playback requires a 2018+ device, modern smart TVs, or VLC/Plex. Not supported on older Roku, some budget Android boxes, or Safari before macOS Ventura.</div>
+        )}
+        {selectedCodec === 'x265' && (
+          <div><span className="text-foreground font-medium">x265/HEVC</span> — Excellent quality, ~50% smaller than H.264. Widely supported on most devices from 2016+, all modern smart TVs, game consoles, Apple devices, and streaming players. Best balance of quality, size, and compatibility.</div>
+        )}
+        {selectedCodec === 'x264' && (
+          <div><span className="text-foreground font-medium">x264/H.264</span> — Universal compatibility. Plays on everything — old phones, budget TVs, legacy hardware, web browsers. Largest files at equivalent quality. Use only when targeting devices that don't support HEVC or AV1.</div>
+        )}
       </div>
 
       {/* Target Bitrate */}
@@ -952,7 +1010,7 @@ function HandbrakeGuide({
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Encoder:</span>
-              <span className="text-foreground font-mono">{selectedCodec}</span>
+              <span className="text-foreground font-mono">{selectedCodec === 'svtav1' ? 'SVT-AV1' : selectedCodec}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Quality (RF):</span>
@@ -1034,8 +1092,8 @@ function HandbrakeGuide({
       </div>
 
       <p className="text-[10px] text-muted-foreground italic">
-        Based on HandBrake 1.10.2. Lower RF = higher quality/larger file. These settings prioritize
-        visual transparency over file size.
+        Based on HandBrake 1.11.2+. Lower RF = higher quality/larger file. SVT-AV1 presets range 1-13
+        (lower = slower/better). These settings prioritize visual transparency over file size.
       </p>
     </div>
   )
@@ -1063,7 +1121,7 @@ function ExtraOptionsCopyable({ extraOptions }: { extraOptions: string }) {
           title="Copy to clipboard"
         >
           {copied ? (
-            <Check className="w-3.5 h-3.5 text-green-500" />
+            <Check className="w-3.5 h-3.5 text-primary" />
           ) : (
             <Copy className="w-3.5 h-3.5" />
           )}

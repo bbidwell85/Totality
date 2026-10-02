@@ -260,10 +260,13 @@ export class BetterSQLiteService {
       // Quality upgrade tracking
       'ALTER TABLE quality_scores ADD COLUMN previous_quality_tier TEXT',
       'ALTER TABLE quality_scores ADD COLUMN upgraded_at TEXT',
+      // Music quality upgrade tracking
+      'ALTER TABLE music_quality_scores ADD COLUMN previous_quality_tier TEXT',
+      'ALTER TABLE music_quality_scores ADD COLUMN upgraded_at TEXT',
       // Person completeness table
       `CREATE TABLE IF NOT EXISTS person_completeness (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        person_type TEXT NOT NULL CHECK(person_type IN ('director', 'actor')),
+        person_type TEXT NOT NULL CHECK(person_type IN ('director', 'actor', 'writer', 'composer', 'cinematographer', 'editor')),
         person_name TEXT NOT NULL,
         tmdb_person_id INTEGER NOT NULL,
         total_movies INTEGER NOT NULL DEFAULT 0,
@@ -392,6 +395,82 @@ export class BetterSQLiteService {
       }
     } catch (error: unknown) {
       console.log('[BetterSQLite] mediamonkey CHECK migration error:', getErrorMessage(error))
+    }
+
+    // Migration: Expand person_type CHECK to include writer, composer, cinematographer, editor
+    try {
+      let needsPersonMigration = false
+      try {
+        this.db.exec("INSERT INTO person_completeness (person_type, person_name, tmdb_person_id) VALUES ('writer', '__test__', -1)")
+        this.db.exec("DELETE FROM person_completeness WHERE tmdb_person_id = -1")
+      } catch {
+        needsPersonMigration = true
+      }
+      if (needsPersonMigration) {
+        console.log('[BetterSQLite] Expanding person_type CHECK constraint...')
+        const row = this.db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='person_completeness'").get() as { sql: string } | undefined
+        if (row?.sql) {
+          const newSql = row.sql.replace(
+            /CHECK\s*\(\s*person_type\s+IN\s*\([^)]+\)\s*\)/i,
+            "CHECK(person_type IN ('director','actor','writer','composer','cinematographer','editor'))"
+          ).replace(/CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?person_completeness/i, 'CREATE TABLE person_completeness_new')
+          this.db.pragma('foreign_keys = OFF')
+          this.db.exec('BEGIN TRANSACTION')
+          try {
+            this.db.exec(newSql)
+            this.db.exec('INSERT INTO person_completeness_new SELECT * FROM person_completeness')
+            this.db.exec('DROP TABLE person_completeness')
+            this.db.exec('ALTER TABLE person_completeness_new RENAME TO person_completeness')
+            this.db.exec('COMMIT')
+            console.log('[BetterSQLite] Migration: person_type CHECK constraint expanded')
+          } catch (e) {
+            this.db.exec('ROLLBACK')
+            throw e
+          } finally {
+            this.db.pragma('foreign_keys = ON')
+          }
+        }
+      }
+    } catch (error: unknown) {
+      console.log('[BetterSQLite] person_type CHECK migration error:', getErrorMessage(error))
+    }
+
+    // Migration: Expand exclusion_type CHECK to include person_movie
+    try {
+      let needsExclusionMigration = false
+      try {
+        this.db.exec("INSERT INTO exclusions (exclusion_type, title) VALUES ('person_movie', '__test__')")
+        this.db.exec("DELETE FROM exclusions WHERE title = '__test__'")
+      } catch {
+        needsExclusionMigration = true
+      }
+      if (needsExclusionMigration) {
+        console.log('[BetterSQLite] Expanding exclusion_type CHECK constraint...')
+        const row = this.db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='exclusions'").get() as { sql: string } | undefined
+        if (row?.sql) {
+          const newSql = row.sql.replace(
+            /CHECK\s*\(\s*exclusion_type\s+IN\s*\([^)]+\)\s*\)/i,
+            "CHECK(exclusion_type IN ('media_upgrade','collection_movie','series_episode','artist_album','person_movie'))"
+          ).replace(/CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?exclusions/i, 'CREATE TABLE exclusions_new')
+          this.db.pragma('foreign_keys = OFF')
+          this.db.exec('BEGIN TRANSACTION')
+          try {
+            this.db.exec(newSql)
+            this.db.exec('INSERT INTO exclusions_new SELECT * FROM exclusions')
+            this.db.exec('DROP TABLE exclusions')
+            this.db.exec('ALTER TABLE exclusions_new RENAME TO exclusions')
+            this.db.exec('COMMIT')
+            console.log('[BetterSQLite] Migration: exclusion_type CHECK constraint expanded')
+          } catch (e) {
+            this.db.exec('ROLLBACK')
+            throw e
+          } finally {
+            this.db.pragma('foreign_keys = ON')
+          }
+        }
+      }
+    } catch (error: unknown) {
+      console.log('[BetterSQLite] exclusion_type CHECK migration error:', getErrorMessage(error))
     }
 
     // Create indexes for performance
@@ -945,6 +1024,12 @@ export class BetterSQLiteService {
     byCodec: Array<{ codec: string; count: number; size: number }>
     byTier: Array<{ tier: string; count: number; size: number }>
     codecMigration: { h264Count: number; modernCount: number; totalCount: number }
+    music: {
+      totalSize: number
+      totalTracks: number
+      byCodec: Array<{ codec: string; count: number; size: number }>
+      byTier: Array<{ tier: string; count: number; size: number }>
+    }
   } {
     if (!this.db) throw new Error('Database not initialized')
 
@@ -994,15 +1079,62 @@ export class BetterSQLiteService {
         AND m.video_codec IS NOT NULL AND m.video_codec != ''
     `).get() as { h264Count: number; modernCount: number; totalCount: number }
 
+    // Music storage analytics
+    const musicTotal = this.db.prepare(`
+      SELECT COUNT(*) as count, COALESCE(SUM(t.file_size), 0) as size
+      FROM music_tracks t
+      LEFT JOIN library_scans ls ON t.source_id = ls.source_id AND t.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND t.file_size > 0
+    `).get() as { count: number; size: number } | undefined
+
+    const musicByCodec = this.db.prepare(`
+      SELECT
+        UPPER(COALESCE(t.audio_codec, 'unknown')) as codec,
+        COUNT(*) as count,
+        COALESCE(SUM(t.file_size), 0) as size
+      FROM music_tracks t
+      LEFT JOIN library_scans ls ON t.source_id = ls.source_id AND t.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND t.file_size > 0
+      GROUP BY UPPER(COALESCE(t.audio_codec, 'unknown'))
+      ORDER BY size DESC
+    `).all() as Array<{ codec: string; count: number; size: number }>
+
+    const musicByTier = this.db.prepare(`
+      SELECT
+        CASE
+          WHEN t.is_hi_res = 1 THEN 'Hi-Res'
+          WHEN t.is_lossless = 1 THEN 'Lossless'
+          WHEN t.audio_bitrate >= 256 THEN 'High Lossy'
+          WHEN t.audio_bitrate >= 128 THEN 'Medium Lossy'
+          ELSE 'Low Lossy'
+        END as tier,
+        COUNT(*) as count,
+        COALESCE(SUM(t.file_size), 0) as size
+      FROM music_tracks t
+      LEFT JOIN library_scans ls ON t.source_id = ls.source_id AND t.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND t.file_size > 0
+      GROUP BY tier
+      ORDER BY size DESC
+    `).all() as Array<{ tier: string; count: number; size: number }>
+
     return {
-      totalSize: totalRow?.size || 0,
-      totalItems: totalRow?.count || 0,
+      totalSize: (totalRow?.size || 0) + (musicTotal?.size || 0),
+      totalItems: (totalRow?.count || 0) + (musicTotal?.count || 0),
       byCodec,
       byTier,
       codecMigration: {
         h264Count: migration?.h264Count || 0,
         modernCount: migration?.modernCount || 0,
         totalCount: migration?.totalCount || 0,
+      },
+      music: {
+        totalSize: musicTotal?.size || 0,
+        totalTracks: musicTotal?.count || 0,
+        byCodec: musicByCodec,
+        byTier: musicByTier,
       },
     }
   }
@@ -1193,6 +1325,26 @@ export class BetterSQLiteService {
       poster_url: string | null; quality_tier: string
       previous_quality_tier: string; upgraded_at: string
       series_title: string | null; season_number: number | null; episode_number: number | null
+    }>
+  }
+
+  getRecentlyUpgradedMusic(days: number = 30): Array<{
+    album_id: number; title: string; artist_name: string
+    quality_tier: string; previous_quality_tier: string; upgraded_at: string
+  }> {
+    if (!this.db) throw new Error('Database not initialized')
+    return this.db.prepare(`
+      SELECT a.id as album_id, a.title, a.artist_name,
+        mqs.quality_tier, mqs.previous_quality_tier, mqs.upgraded_at
+      FROM music_quality_scores mqs
+      JOIN music_albums a ON a.id = mqs.album_id
+      WHERE mqs.upgraded_at IS NOT NULL
+        AND mqs.upgraded_at >= datetime('now', ?)
+      ORDER BY mqs.upgraded_at DESC
+      LIMIT 50
+    `).all(`-${days} days`) as Array<{
+      album_id: number; title: string; artist_name: string
+      quality_tier: string; previous_quality_tier: string; upgraded_at: string
     }>
   }
 
@@ -2193,6 +2345,7 @@ export class BetterSQLiteService {
    * Upsert quality score
    */
   private static readonly TIER_RANK: Record<string, number> = { 'SD': 0, '720p': 1, '1080p': 2, '4K': 3 }
+  private static readonly MUSIC_TIER_RANK: Record<string, number> = { 'LOSSY_LOW': 0, 'LOSSY_MID': 1, 'LOSSY_HIGH': 2, 'LOSSLESS': 3, 'HI_RES': 4 }
 
   upsertQualityScore(score: QualityScore): void {
     if (!this.db) throw new Error('Database not initialized')
@@ -4250,12 +4403,33 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   upsertMusicQualityScore(score: MusicQualityScore): void {
     if (!this.db) throw new Error('Database not initialized')
 
+    // Check existing tier to detect upgrades
+    const existing = this.db.prepare(
+      'SELECT quality_tier, previous_quality_tier, upgraded_at FROM music_quality_scores WHERE album_id = ?'
+    ).get(score.album_id) as { quality_tier: string; previous_quality_tier: string | null; upgraded_at: string | null } | undefined
+
+    let prevTier: string | null = null
+    let upgradedAt: string | null = null
+
+    if (existing) {
+      const oldRank = BetterSQLiteService.MUSIC_TIER_RANK[existing.quality_tier] ?? 0
+      const newRank = BetterSQLiteService.MUSIC_TIER_RANK[score.quality_tier] ?? 0
+      if (newRank > oldRank) {
+        prevTier = existing.quality_tier
+        upgradedAt = new Date().toISOString()
+      } else {
+        prevTier = existing.previous_quality_tier
+        upgradedAt = existing.upgraded_at
+      }
+    }
+
     const stmt = this.db.prepare(`
       INSERT INTO music_quality_scores (
         album_id, quality_tier, tier_quality, tier_score,
         codec_score, bitrate_score, needs_upgrade, issues,
+        previous_quality_tier, upgraded_at,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       ON CONFLICT(album_id) DO UPDATE SET
         quality_tier = excluded.quality_tier,
         tier_quality = excluded.tier_quality,
@@ -4264,11 +4438,14 @@ WHERE m.type = 'episode' AND m.series_title = ?`
         bitrate_score = excluded.bitrate_score,
         needs_upgrade = excluded.needs_upgrade,
         issues = excluded.issues,
+        previous_quality_tier = excluded.previous_quality_tier,
+        upgraded_at = excluded.upgraded_at,
         updated_at = datetime('now')
     `)
     stmt.run(
       score.album_id, score.quality_tier, score.tier_quality, score.tier_score,
-      score.codec_score, score.bitrate_score, score.needs_upgrade ? 1 : 0, score.issues
+      score.codec_score, score.bitrate_score, score.needs_upgrade ? 1 : 0, score.issues,
+      prevTier, upgradedAt
     )
   }
 

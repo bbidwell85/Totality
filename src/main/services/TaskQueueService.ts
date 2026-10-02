@@ -1038,6 +1038,37 @@ export class TaskQueueService {
         emitNotificationCreated()
       } catch { /* ignore notification errors */ }
 
+      // Check for quality upgrades detected during this scan (video + music)
+      try {
+        if (task.startedAt) {
+          const db = getDatabase()
+          const videoUpgrades = db.getRecentlyUpgraded(1)
+            .filter((u: { upgraded_at: string }) => u.upgraded_at >= task.startedAt!)
+            .map((u: { title: string; previous_quality_tier: string; quality_tier: string }) =>
+              `${u.title}: ${u.previous_quality_tier} → ${u.quality_tier}`)
+          const musicUpgrades = db.getRecentlyUpgradedMusic(1)
+            .filter((u: { upgraded_at: string }) => u.upgraded_at >= task.startedAt!)
+            .map((u: { title: string; artist_name: string; previous_quality_tier: string; quality_tier: string }) =>
+              `${u.title} (${u.artist_name}): ${u.previous_quality_tier} → ${u.quality_tier}`)
+          const allUpgrades = [...videoUpgrades, ...musicUpgrades]
+          if (allUpgrades.length > 0) {
+            const summaries = allUpgrades.slice(0, 5)
+            const message = allUpgrades.length <= 5
+              ? summaries.join(', ')
+              : `${summaries.join(', ')} + ${allUpgrades.length - 5} more`
+            db.createNotification({
+              type: 'info',
+              title: `${allUpgrades.length} quality upgrade${allUpgrades.length !== 1 ? 's' : ''} detected`,
+              message,
+              sourceId: task.sourceId,
+              sourceName: task.label,
+              itemCount: allUpgrades.length,
+            })
+            emitNotificationCreated()
+          }
+        }
+      } catch { /* ignore upgrade notification errors */ }
+
       // Check wishlist for auto-completion after items were added or updated
       if ((task.result?.itemsAdded || 0) > 0 || (task.result?.itemsUpdated || 0) > 0) {
         getWishlistCompletionService().checkAndComplete().catch((err) => {

@@ -126,12 +126,12 @@ export function MediaBrowser({
   const [totalArtistCount, setTotalArtistCount] = useState(0)
   const [artistsLoading, setArtistsLoading] = useState(false)
   const artistsOffsetRef = useRef(0)
-  const ARTISTS_PAGE_SIZE = 50
+  const ARTISTS_PAGE_SIZE = 10000
   // Album pagination state
   const [totalAlbumCount, setTotalAlbumCount] = useState(0)
   const [albumsLoading, setAlbumsLoading] = useState(false)
   const albumsOffsetRef = useRef(0)
-  const ALBUMS_PAGE_SIZE = 200
+  const ALBUMS_PAGE_SIZE = 10000
   const [albumSortColumn, setAlbumSortColumn] = useState<'title' | 'artist'>('title')
   const [albumSortDirection, setAlbumSortDirection] = useState<'asc' | 'desc'>('asc')
   const [searchInput, setSearchInput] = useState('')
@@ -174,14 +174,14 @@ export function MediaBrowser({
   const {
     paginatedMovies, setPaginatedMovies, totalMovieCount, moviesLoading,
     movieSortBy, setMovieSortBy, loadPaginatedMovies, loadMoreMovies,
-  } = useMoviePagination({ activeSourceId, activeLibraryId, tierFilter: debouncedTierFilter, qualityFilter: debouncedQualityFilter, searchQuery, alphabetFilter })
+  } = useMoviePagination({ activeSourceId, activeLibraryId, tierFilter: debouncedTierFilter, qualityFilter: debouncedQualityFilter, searchQuery })
 
   const {
     paginatedShows, totalShowCount, totalEpisodeCount, showsLoading,
     tvSortBy, setTvSortBy,
     selectedShowEpisodes, setSelectedShowEpisodes, selectedShowEpisodesLoading,
     loadPaginatedShows, loadMoreShows, loadSelectedShowEpisodes,
-  } = useTVShowPagination({ activeSourceId, activeLibraryId, searchQuery, alphabetFilter })
+  } = useTVShowPagination({ activeSourceId, activeLibraryId, searchQuery })
 
   const [collectionsOnly, setCollectionsOnly] = useState(false)
 
@@ -494,7 +494,7 @@ export function MediaBrowser({
       if (activeLibraryId) filters.libraryId = activeLibraryId
 
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      // alphabetFilter no longer filters — scroll-to-letter handles navigation
 
       const [artists, count] = await Promise.all([
         window.electronAPI.musicGetArtists(filters),
@@ -514,7 +514,7 @@ export function MediaBrowser({
     } finally {
       setArtistsLoading(false)
     }
-  }, [activeSourceId, activeLibraryId,searchQuery, alphabetFilter, artistsLoading])
+  }, [activeSourceId, activeLibraryId, searchQuery, artistsLoading])
 
   // Load more artists (infinite scroll callback)
   const loadMoreArtists = useCallback(() => {
@@ -591,7 +591,7 @@ export function MediaBrowser({
       if (activeLibraryId) filters.libraryId = activeLibraryId
 
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      // alphabetFilter no longer filters — scroll-to-letter handles navigation
       if (selectedArtist) {
         filters.artistId = selectedArtist.id
         filters.artistName = selectedArtist.name
@@ -615,7 +615,7 @@ export function MediaBrowser({
     } finally {
       setAlbumsLoading(false)
     }
-  }, [activeSourceId, activeLibraryId,searchQuery, alphabetFilter, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
+  }, [activeSourceId, activeLibraryId, searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
 
   // Load more albums (infinite scroll callback)
   const loadMoreAlbums = useCallback(() => {
@@ -630,7 +630,7 @@ export function MediaBrowser({
       loadPaginatedArtists(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, activeLibraryId,searchQuery, alphabetFilter])
+  }, [view, musicViewMode, activeSourceId, activeLibraryId, searchQuery])
 
   // Trigger server-side album loading when albums tab is active and filters change
   useEffect(() => {
@@ -638,7 +638,7 @@ export function MediaBrowser({
       loadPaginatedAlbums(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, activeLibraryId,searchQuery, alphabetFilter, albumSortColumn, albumSortDirection, selectedArtist])
+  }, [view, musicViewMode, activeSourceId, activeLibraryId, searchQuery, albumSortColumn, albumSortDirection, selectedArtist])
 
   // Trigger server-side movie loading when movies view is active and filters change
   useEffect(() => {
@@ -646,7 +646,7 @@ export function MediaBrowser({
       loadPaginatedMovies(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, activeSourceId, activeLibraryId,debouncedTierFilter, debouncedQualityFilter, searchQuery, alphabetFilter])
+  }, [view, activeSourceId, activeLibraryId, debouncedTierFilter, debouncedQualityFilter, searchQuery])
 
   // Trigger server-side TV show loading when TV view is active and filters change
   useEffect(() => {
@@ -654,7 +654,7 @@ export function MediaBrowser({
       loadPaginatedShows(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, activeSourceId, activeLibraryId,searchQuery, alphabetFilter])
+  }, [view, activeSourceId, activeLibraryId, searchQuery])
 
   // Load episodes when a show is selected
   useEffect(() => {
@@ -961,28 +961,81 @@ export function MediaBrowser({
     return true
   }, [searchQuery, debouncedTierFilter, debouncedQualityFilter])
 
-  // Alphabet navigation — jump-to for collections-only (all in DOM), filter for paginated views
+  // Smooth scroll with ease-in-out cubic easing
+  const smoothScrollTo = useCallback((element: HTMLElement, targetTop: number, duration = 400) => {
+    const start = element.scrollTop
+    const distance = targetTop - start
+    if (Math.abs(distance) < 1) return
+    const startTime = performance.now()
+    function step(currentTime: number) {
+      const elapsed = currentTime - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const ease = progress < 0.5
+        ? 4 * progress * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2
+      element.scrollTop = start + distance * ease
+      if (progress < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }, [])
+
+  // Alphabet navigation — smooth scroll to the first item starting with the selected letter
   const scrollToLetter = useCallback((letter: string | null) => {
-    // Collections-only: all items in DOM, so scroll to the matching element
-    if (collectionsOnly && letter && letter !== '#') {
+    setAlphabetFilter(letter)
+
+    if (!letter) {
+      // "All" — scroll to top
       const container = scrollContainerRef.current
-      if (container) {
-        const upperLetter = letter.toUpperCase()
-        const allTitled = container.querySelectorAll('[data-title]')
-        for (const el of allTitled) {
-          const title = (el as HTMLElement).dataset.title || ''
-          if (title.toUpperCase().startsWith(upperLetter)) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            return
-          }
+      if (container) smoothScrollTo(container, 0)
+      return
+    }
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const allTitled = container.querySelectorAll('[data-title]')
+    if (letter === '#') {
+      // Find first item that starts with a non-letter character
+      for (const el of allTitled) {
+        const title = (el as HTMLElement).dataset.title || ''
+        if (title.length > 0 && !/^[A-Za-z]/.test(title)) {
+          const elTop = (el as HTMLElement).offsetTop - container.offsetTop
+          smoothScrollTo(container, elTop)
+          return
         }
       }
       return
     }
-    // Paginated views: filter by letter via backend query
-    setAlphabetFilter(letter)
-    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [setAlphabetFilter, collectionsOnly])
+
+    const upperLetter = letter.toUpperCase()
+    for (const el of allTitled) {
+      const title = (el as HTMLElement).dataset.title || ''
+      if (title.toUpperCase().startsWith(upperLetter)) {
+        const elTop = (el as HTMLElement).offsetTop - container.offsetTop
+        smoothScrollTo(container, elTop)
+        return
+      }
+    }
+  }, [setAlphabetFilter, smoothScrollTo])
+
+  // Compute which letters have items for the current view (to dim empty letters)
+  const availableLetters = useMemo(() => {
+    const letters = new Set<string>()
+    let items: Array<{ title?: string; name?: string; series_title?: string }> = []
+
+    if (view === 'movies') items = paginatedMovies
+    else if (view === 'tv') items = paginatedShows as Array<{ series_title?: string }>
+    else if (view === 'music') items = musicArtists as Array<{ name?: string }>
+
+    for (const item of items) {
+      const title = (item.title || item.name || item.series_title || '').trim()
+      if (!title) continue
+      const first = title[0].toUpperCase()
+      if (/[A-Z]/.test(first)) letters.add(first)
+      else letters.add('#')
+    }
+    return letters
+  }, [view, paginatedMovies, paginatedShows, musicArtists])
 
   // Movies are now loaded from the server pre-filtered/sorted/paginated
   const movies = paginatedMovies
@@ -2181,37 +2234,45 @@ export function MediaBrowser({
                 if (el) alphabetFilterRefs.current.set('#', el)
                 else alphabetFilterRefs.current.delete('#')
               }}
-              onClick={() => scrollToLetter('#')}
+              onClick={() => availableLetters.has('#') && scrollToLetter('#')}
               className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-hidden ${
                 alphabetFilter === '#'
                   ? 'text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+                  : availableLetters.has('#')
+                    ? 'text-muted-foreground hover:text-foreground'
+                    : 'text-muted-foreground/20 cursor-default'
               }`}
               title="Numbers and special characters"
               aria-label="Filter by numbers and special characters"
               aria-pressed={alphabetFilter === '#'}
+              aria-disabled={!availableLetters.has('#')}
             >
               #
             </button>
-            {Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ').map((letter) => (
+            {Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ').map((letter) => {
+              const hasItems = availableLetters.has(letter)
+              return (
               <button
                 key={letter}
                 ref={(el) => {
                   if (el) alphabetFilterRefs.current.set(letter, el)
                   else alphabetFilterRefs.current.delete(letter)
                 }}
-                onClick={() => scrollToLetter(letter)}
+                onClick={() => hasItems && scrollToLetter(letter)}
                 className={`w-5 h-5 flex items-center justify-center text-[10px] font-medium transition-colors focus:outline-hidden ${
                   alphabetFilter === letter
                     ? 'text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
+                    : hasItems
+                      ? 'text-muted-foreground hover:text-foreground'
+                      : 'text-muted-foreground/20 cursor-default'
                 }`}
-                aria-label={`Filter by letter ${letter}`}
+                aria-label={`Scroll to letter ${letter}`}
                 aria-pressed={alphabetFilter === letter}
+                aria-disabled={!hasItems}
               >
                 {letter}
               </button>
-            ))}
+              )})}
           </div>
         </div>
       </main>

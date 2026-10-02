@@ -2827,8 +2827,9 @@ export class DatabaseService {
     byCodec: Array<{ codec: string; count: number; size: number }>
     byTier: Array<{ tier: string; count: number; size: number }>
     codecMigration: { h264Count: number; modernCount: number; totalCount: number }
+    music: { totalSize: number; totalTracks: number; byCodec: Array<{ codec: string; count: number; size: number }>; byTier: Array<{ tier: string; count: number; size: number }> }
   } {
-    return { totalSize: 0, totalItems: 0, byCodec: [], byTier: [], codecMigration: { h264Count: 0, modernCount: 0, totalCount: 0 } }
+    return { totalSize: 0, totalItems: 0, byCodec: [], byTier: [], codecMigration: { h264Count: 0, modernCount: 0, totalCount: 0 }, music: { totalSize: 0, totalTracks: 0, byCodec: [], byTier: [] } }
   }
 
   getDuplicateMedia(): Array<{
@@ -2855,6 +2856,13 @@ export class DatabaseService {
     poster_url: string | null; quality_tier: string
     previous_quality_tier: string; upgraded_at: string
     series_title: string | null; season_number: number | null; episode_number: number | null
+  }> {
+    return []
+  }
+
+  getRecentlyUpgradedMusic(_days?: number): Array<{
+    album_id: number; title: string; artist_name: string
+    quality_tier: string; previous_quality_tier: string; upgraded_at: string
   }> {
     return []
   }

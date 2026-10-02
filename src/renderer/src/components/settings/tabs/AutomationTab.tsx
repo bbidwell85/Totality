@@ -1,13 +1,14 @@
 /**
- * AutomationTab - Arr apps (Radarr/Sonarr/Lidarr) + external sync (Trakt/Letterboxd) + Release Alerts
+ * AutomationTab - External sync (Trakt) + Release Alerts
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { SETTING_KEYS } from '../../../../../shared/settingKeys'
 import {
-  Eye, EyeOff, Loader2, CheckCircle, XCircle, Trash2, Download,
+  Loader2, CheckCircle,
   RefreshCw, ChevronDown, Film, Circle,
 } from 'lucide-react'
+import { Toggle } from '../../ui/Toggle'
 
 interface ServiceCardProps {
   title: string
@@ -27,8 +28,8 @@ function ServiceCard({ title, description, icon, status, statusText, expanded, o
       <div className="flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors">
         <button onClick={onToggle} className="flex items-center gap-3 flex-1 min-w-0 text-left">
           <div className="shrink-0">
-            {status === 'configured' ? <CheckCircle className="w-5 h-5 text-green-500" /> :
-             status === 'partial' ? <CheckCircle className="w-5 h-5 text-amber-500" /> :
+            {status === 'configured' ? <CheckCircle className="w-5 h-5 text-primary" /> :
+             status === 'partial' ? <CheckCircle className="w-5 h-5 text-muted-foreground" /> :
              <Circle className="w-5 h-5 text-muted-foreground/50" />}
           </div>
           <div className="shrink-0 text-muted-foreground">{icon}</div>
@@ -41,11 +42,9 @@ function ServiceCard({ title, description, icon, status, statusText, expanded, o
           </div>
         </button>
         {enableToggle && (
-          <button id={enableToggle.id} role="switch" aria-checked={enableToggle.enabled}
-            onClick={(e) => { e.stopPropagation(); enableToggle.onToggle() }}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${enableToggle.enabled ? 'bg-primary' : 'bg-muted'}`}>
-            <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition ${enableToggle.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
+          <div onClick={(e) => e.stopPropagation()}>
+            <Toggle checked={enableToggle.enabled} onChange={() => enableToggle.onToggle()} />
+          </div>
         )}
         <button onClick={onToggle} className="p-1 shrink-0">
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -53,168 +52,6 @@ function ServiceCard({ title, description, icon, status, statusText, expanded, o
       </div>
       {expanded && <div className="px-4 pb-4 pt-2 border-t border-border/30 bg-muted/10">{children}</div>}
     </div>
-  )
-}
-
-type ArrType = 'radarr' | 'sonarr' | 'lidarr'
-
-const ARR_META: Record<ArrType, { label: string; description: string }> = {
-  radarr: { label: 'Radarr', description: 'Automated movie upgrade and download management' },
-  sonarr: { label: 'Sonarr', description: 'Automated TV series upgrade and download management' },
-  lidarr: { label: 'Lidarr', description: 'Automated music upgrade and download management' },
-}
-
-function ArrServiceCard({ type, expanded, onToggle }: { type: ArrType; expanded: boolean; onToggle: () => void }) {
-  const [url, setUrl] = useState('')
-  const [apiKey, setApiKey] = useState('')
-  const [showKey, setShowKey] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'testing' | 'valid' | 'invalid'>('idle')
-  const [version, setVersion] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [profiles, setProfiles] = useState<Array<{ id: number; name: string }>>([])
-  const [rootFolders, setRootFolders] = useState<Array<{ id: number; path: string }>>([])
-  const [profileId, setProfileId] = useState('')
-  const [rootFolder, setRootFolder] = useState('')
-  const [savedField, setSavedField] = useState<'profile' | 'folder' | null>(null)
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { label } = ARR_META[type]
-
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const all = await window.electronAPI.getAllSettings()
-        const savedUrl = all[`${type}_url`] || ''
-        const savedKey = all[`${type}_api_key`] || ''
-        setUrl(savedUrl); setApiKey(savedKey)
-        setProfileId(all[`${type}_quality_profile_id`] || '')
-        setRootFolder(all[`${type}_root_folder`] || '')
-        if (savedUrl && savedKey) {
-          setStatus('valid')
-          // Don't fetch profiles/folders until card is expanded — avoids errors when arr apps are offline
-        }
-      } catch { /* ignore */ }
-    }
-    load()
-  }, [type])
-
-  // Lazy-load profiles/folders when card is expanded
-  useEffect(() => {
-    if (expanded && status === 'valid' && url && apiKey && profiles.length === 0 && rootFolders.length === 0) {
-      Promise.all([
-        window.electronAPI.arrGetQualityProfiles({ type, url, apiKey }),
-        window.electronAPI.arrGetRootFolders({ type, url, apiKey }),
-      ]).then(([p, f]) => {
-        setProfiles(p as Array<{ id: number; name: string }>)
-        setRootFolders(f as Array<{ id: number; path: string }>)
-      }).catch(() => {})
-    }
-  }, [expanded, status, url, apiKey, type, profiles.length, rootFolders.length])
-
-  const handleTest = async () => {
-    if (!url.trim() || !apiKey.trim()) return
-    setStatus('testing'); setError(null)
-    try {
-      const result = await window.electronAPI.arrTestConnection({ type, url: url.trim(), apiKey: apiKey.trim() })
-      if (result.success) {
-        setStatus('valid'); setVersion(result.version || null)
-        await window.electronAPI.setSetting(`${type}_url`, url.trim())
-        await window.electronAPI.setSetting(`${type}_api_key`, apiKey.trim())
-        const [p, f] = await Promise.all([
-          window.electronAPI.arrGetQualityProfiles({ type, url: url.trim(), apiKey: apiKey.trim() }),
-          window.electronAPI.arrGetRootFolders({ type, url: url.trim(), apiKey: apiKey.trim() }),
-        ])
-        setProfiles(p as Array<{ id: number; name: string }>)
-        setRootFolders(f as Array<{ id: number; path: string }>)
-      } else { setStatus('invalid'); setError(result.error || 'Connection failed'); setProfiles([]); setRootFolders([]) }
-    } catch (err) { setStatus('invalid'); setError((err as Error).message || 'Connection failed') }
-  }
-
-  const handleClear = async () => {
-    setUrl(''); setApiKey(''); setStatus('idle'); setVersion(null); setError(null); setProfiles([]); setRootFolders([]); setProfileId(''); setRootFolder('')
-    await Promise.all([
-      window.electronAPI.setSetting(`${type}_url`, ''), window.electronAPI.setSetting(`${type}_api_key`, ''),
-      window.electronAPI.setSetting(`${type}_quality_profile_id`, ''), window.electronAPI.setSetting(`${type}_root_folder`, ''),
-    ])
-  }
-
-  const showSaved = (field: 'profile' | 'folder') => {
-    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    setSavedField(field)
-    savedTimerRef.current = setTimeout(() => setSavedField(null), 2000)
-  }
-
-  const handleProfileChange = useCallback(async (id: string) => { setProfileId(id); await window.electronAPI.setSetting(`${type}_quality_profile_id`, id); showSaved('profile') }, [type])
-  const handleRootFolderChange = useCallback(async (path: string) => { setRootFolder(path); await window.electronAPI.setSetting(`${type}_root_folder`, path); showSaved('folder') }, [type])
-
-  const isConfigured = status === 'valid'
-
-  return (
-    <ServiceCard title={label} description={ARR_META[type].description} icon={<Download className="w-5 h-5" />}
-      status={isConfigured && profileId && rootFolder ? 'configured' : isConfigured ? 'partial' : 'not-configured'}
-      statusText={isConfigured && profileId && rootFolder ? (version ? `v${version}` : 'Configured') : isConfigured ? 'Connected — select profile & folder' : 'Not configured'}
-      expanded={expanded} onToggle={onToggle}>
-      <div className="space-y-3">
-        <div>
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">URL</label>
-          <input type="url" value={url} onChange={(e) => { setUrl(e.target.value); setStatus('idle'); setError(null) }}
-            placeholder={`http://localhost:${type === 'radarr' ? 7878 : type === 'sonarr' ? 8989 : 8686}`}
-            className="w-full mt-1 px-3 py-2 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary" />
-        </div>
-        <div>
-          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">API Key</label>
-          <div className="flex gap-2 mt-1">
-            <div className="relative flex-1">
-              <input type={showKey ? 'text' : 'password'} value={apiKey} onChange={(e) => { setApiKey(e.target.value); setStatus('idle'); setError(null) }}
-                placeholder="Paste API key from Settings → General → Security"
-                className="w-full px-3 py-2 pr-10 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary" />
-              <button type="button" onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground">
-                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            <button onClick={handleTest} disabled={!url.trim() || !apiKey.trim() || status === 'testing'}
-              className={`px-3 py-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-1.5 text-sm ${status === 'valid' ? 'text-green-500' : status === 'invalid' ? 'text-red-500 bg-red-500/10' : 'bg-muted hover:bg-muted/80'}`}>
-              {status === 'testing' ? <Loader2 className="w-4 h-4 animate-spin" /> : status === 'valid' ? <CheckCircle className="w-4 h-4" /> : status === 'invalid' ? <><XCircle className="w-4 h-4" /><span>Invalid</span></> : <span>Test</span>}
-            </button>
-            {(url || apiKey) && (
-              <button onClick={handleClear} className="px-3 py-2 text-muted-foreground hover:text-destructive rounded-md transition-colors" title={`Clear ${label} settings`}>
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          {error && <p className="text-xs text-destructive mt-1">{error}</p>}
-        </div>
-        {isConfigured && (profiles.length > 0 || rootFolders.length > 0) && (
-          <div className="grid grid-cols-2 gap-3 pt-1 border-t border-border/20">
-            {profiles.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quality Profile</label>
-                  {savedField === 'profile' && <span className="text-xs text-green-400">Saved</span>}
-                </div>
-                <select value={profileId} onChange={(e) => handleProfileChange(e.target.value)}
-                  className="w-full mt-1 px-2 py-1.5 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary">
-                  <option value="">Select profile...</option>
-                  {profiles.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
-                </select>
-              </div>
-            )}
-            {rootFolders.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Root Folder</label>
-                  {savedField === 'folder' && <span className="text-xs text-green-400">Saved</span>}
-                </div>
-                <select value={rootFolder} onChange={(e) => handleRootFolderChange(e.target.value)}
-                  className="w-full mt-1 px-2 py-1.5 bg-background border border-border/30 rounded-md text-sm focus:outline-hidden focus:ring-2 focus:ring-primary">
-                  <option value="">Select folder...</option>
-                  {rootFolders.map((f) => <option key={f.id} value={f.path}>{f.path}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </ServiceCard>
   )
 }
 
@@ -249,16 +86,6 @@ export function AutomationTab() {
 
   return (
     <div className="p-6 space-y-5 overflow-y-auto">
-      {/* Arr Apps */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium text-foreground">Download Automation</h3>
-        <div className="space-y-2">
-          <ArrServiceCard type="radarr" expanded={expandedCards.has('radarr')} onToggle={() => toggleCard('radarr')} />
-          <ArrServiceCard type="sonarr" expanded={expandedCards.has('sonarr')} onToggle={() => toggleCard('sonarr')} />
-          <ArrServiceCard type="lidarr" expanded={expandedCards.has('lidarr')} onToggle={() => toggleCard('lidarr')} />
-        </div>
-      </div>
-
       {/* External Sync */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-foreground">Watchlist Import</h3>

@@ -13,6 +13,12 @@ const TOOL_LABELS: Record<string, string> = {
   get_series_completeness: 'Checking series completeness',
   get_collection_completeness: 'Checking collections',
   get_music_stats: 'Loading music stats',
+  get_music_albums: 'Browsing albums',
+  get_music_quality_distribution: 'Loading music quality',
+  get_artist_completeness: 'Checking artist completeness',
+  get_album_details: 'Loading album details',
+  get_album_completeness: 'Checking album completeness',
+  check_music_ownership: 'Checking music ownership',
   get_source_list: 'Loading sources',
   get_wishlist: 'Loading wishlist',
   search_tmdb: 'Searching TMDB',
@@ -21,6 +27,16 @@ const TOOL_LABELS: Record<string, string> = {
   check_ownership: 'Checking ownership',
   get_item_details: 'Getting item details',
   add_to_wishlist: 'Adding to wishlist',
+  get_watch_history: 'Loading watch history',
+  get_storage_breakdown: 'Loading storage data',
+  find_duplicates: 'Finding duplicates',
+  get_library_health: 'Checking library health',
+  get_upgrade_history: 'Loading upgrade history',
+  get_person_completeness: 'Checking filmography',
+  get_highly_rated: 'Finding top-rated content',
+  get_recently_added: 'Loading recent additions',
+  get_mood_tags: 'Loading mood tags',
+  get_recent_notifications: 'Loading notifications',
 }
 
 interface ChatMessageProps {
@@ -212,6 +228,28 @@ function InlineMarkdown({ text }: { text: string }) {
       continue
     }
 
+    // Links [text](url)
+    const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/)
+    if (linkMatch) {
+      parts.push(
+        <a key={key++} href={linkMatch[2]} target="_blank" rel="noopener noreferrer"
+          className="text-primary underline hover:text-primary/80 cursor-pointer"
+          onClick={(e) => { e.preventDefault(); window.electronAPI.openExternal(linkMatch[2]) }}>
+          {linkMatch[1]}
+        </a>,
+      )
+      remaining = remaining.slice(linkMatch[0].length)
+      continue
+    }
+
+    // Strikethrough ~~text~~
+    const strikeMatch = remaining.match(/^~~(.+?)~~/)
+    if (strikeMatch) {
+      parts.push(<del key={key++}>{strikeMatch[1]}</del>)
+      remaining = remaining.slice(strikeMatch[0].length)
+      continue
+    }
+
     // Bold
     const boldMatch = remaining.match(/^\*\*(.+?)\*\*/)
     if (boldMatch) {
@@ -229,7 +267,7 @@ function InlineMarkdown({ text }: { text: string }) {
     }
 
     // Regular text until next special char
-    const nextSpecial = remaining.search(/[`*]/)
+    const nextSpecial = remaining.search(/[`*[~]/)
     if (nextSpecial === -1) {
       parts.push(remaining)
       break

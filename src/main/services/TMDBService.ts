@@ -465,6 +465,19 @@ export class TMDBService {
   }
 
   /**
+   * Get release dates for a movie by country (includes theatrical, digital, physical)
+   * Type 1=Premiere, 2=Theatrical (limited), 3=Theatrical, 4=Digital, 5=Physical
+   */
+  async getMovieReleaseDates(tmdbId: string): Promise<{
+    results: Array<{
+      iso_3166_1: string
+      release_dates: Array<{ type: number; release_date: string; note?: string }>
+    }>
+  }> {
+    return await this.request(`/movie/${tmdbId}/release_dates`)
+  }
+
+  /**
    * Get TMDB configuration (image base URLs, etc.)
    */
   async getConfiguration(): Promise<TMDBConfiguration> {

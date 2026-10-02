@@ -18,6 +18,7 @@ import {
   Library,
   CheckCircle,
   Circle,
+  Users,
 } from 'lucide-react'
 import { Toggle } from '../../ui/Toggle'
 
@@ -45,6 +46,7 @@ const EXCLUSION_SECTIONS = [
   { type: 'collection_movie', label: 'Dismissed Collection Movies', icon: Film },
   { type: 'series_episode', label: 'Dismissed Episodes', icon: Tv },
   { type: 'artist_album', label: 'Dismissed Albums', icon: Music },
+  { type: 'person_movie', label: 'Dismissed Filmography', icon: Users },
 ] as const
 
 // Collapsible card matching Services tab design
@@ -77,9 +79,9 @@ function SettingsCard({
       >
         <div className="shrink-0">
           {status === 'configured' ? (
-            <CheckCircle className="w-5 h-5 text-green-500" />
+            <CheckCircle className="w-5 h-5 text-primary" />
           ) : status === 'partial' ? (
-            <CheckCircle className="w-5 h-5 text-amber-500" />
+            <CheckCircle className="w-5 h-5 text-muted-foreground" />
           ) : (
             <Circle className="w-5 h-5 text-muted-foreground/50" />
           )}
@@ -127,6 +129,7 @@ export function LibrarySettingsTab() {
     collection_movie: [],
     series_episode: [],
     artist_album: [],
+    person_movie: [],
   })
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
 
@@ -152,6 +155,7 @@ export function LibrarySettingsTab() {
           collectionMovie,
           seriesEpisode,
           artistAlbum,
+          personMovie,
         ] = await Promise.all([
           window.electronAPI.getSetting(SETTING_KEYS.completeness_include_eps),
           window.electronAPI.getSetting(SETTING_KEYS.completeness_include_singles),
@@ -161,6 +165,7 @@ export function LibrarySettingsTab() {
           window.electronAPI.getExclusions('collection_movie'),
           window.electronAPI.getExclusions('series_episode'),
           window.electronAPI.getExclusions('artist_album'),
+          window.electronAPI.getExclusions('person_movie'),
         ])
 
         setIncludeEps((epsVal as string) !== 'false')
@@ -172,6 +177,7 @@ export function LibrarySettingsTab() {
           collection_movie: collectionMovie as ExclusionRecord[],
           series_episode: seriesEpisode as ExclusionRecord[],
           artist_album: artistAlbum as ExclusionRecord[],
+          person_movie: personMovie as ExclusionRecord[],
         })
       } catch (error) {
         console.error('Failed to load library settings:', error)
@@ -184,17 +190,19 @@ export function LibrarySettingsTab() {
 
   const reloadExclusions = useCallback(async () => {
     try {
-      const [mediaUpgrade, collectionMovie, seriesEpisode, artistAlbum] = await Promise.all([
+      const [mediaUpgrade, collectionMovie, seriesEpisode, artistAlbum, personMovie] = await Promise.all([
         window.electronAPI.getExclusions('media_upgrade'),
         window.electronAPI.getExclusions('collection_movie'),
         window.electronAPI.getExclusions('series_episode'),
         window.electronAPI.getExclusions('artist_album'),
+        window.electronAPI.getExclusions('person_movie'),
       ])
       setExclusions({
         media_upgrade: mediaUpgrade as ExclusionRecord[],
         collection_movie: collectionMovie as ExclusionRecord[],
         series_episode: seriesEpisode as ExclusionRecord[],
         artist_album: artistAlbum as ExclusionRecord[],
+        person_movie: personMovie as ExclusionRecord[],
       })
     } catch (error) {
       console.error('Failed to reload exclusions:', error)

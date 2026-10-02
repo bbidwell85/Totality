@@ -6,11 +6,11 @@
   "scripts": {
     "postinstall": "electron-rebuild",
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "build": "vitest run && tsc && vite build && electron-builder",
     "lint": "eslint --max-warnings 0",
     "preview": "vite preview",
     "electron:dev": "vite",
-    "electron:build": "tsc && vite build && electron-builder",
+    "electron:build": "vitest run && tsc && vite build && electron-builder",
     "generate-icons": "node scripts/generate-icons.js",
     "test": "vitest",
     "test:run": "vitest run",

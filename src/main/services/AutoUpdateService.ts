@@ -171,9 +171,13 @@ export class AutoUpdateService {
   async installUpdate(): Promise<void> {
     if (!app.isPackaged) return
 
-    // Save database before quitting
+    // Flush and close database before quitting
     try {
       const db = getDatabaseServiceSync()
+      if (db.forceSave) {
+        const result = db.forceSave()
+        if (result && typeof result.then === 'function') await result
+      }
       await db.close()
     } catch (err) {
       console.error('[AutoUpdate] Failed to close database before update:', err)

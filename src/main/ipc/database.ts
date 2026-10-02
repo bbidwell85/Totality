@@ -363,10 +363,54 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  ipcMain.handle('person:searchTMDB', async (_event, query: unknown) => {
+    try {
+      const name = validateInput(z.string().min(1).max(200), query, 'person:searchTMDB')
+      const tmdb = getTMDBService()
+      await tmdb.initialize()
+      const results = await tmdb.searchPerson(name)
+      const persons = (results.results || []).slice(0, 6)
+
+      // Fetch credits for each person to determine available roles
+      const enriched = await Promise.all(persons.map(async (p: { id: number; name: string; profile_path: string | null; known_for_department: string }) => {
+        try {
+          const credits = await tmdb.getPersonMovieCredits(p.id)
+          const roles: string[] = []
+          if (credits.cast.length > 0) roles.push('actor')
+          const crewJobs = new Set(credits.crew.map(c => c.job))
+          if (crewJobs.has('Director')) roles.push('director')
+          if (crewJobs.has('Writer') || crewJobs.has('Screenplay') || crewJobs.has('Story')) roles.push('writer')
+          if (crewJobs.has('Original Music Composer') || crewJobs.has('Music')) roles.push('composer')
+          if (crewJobs.has('Director of Photography')) roles.push('cinematographer')
+          if (crewJobs.has('Editor')) roles.push('editor')
+          return {
+            id: p.id,
+            name: p.name,
+            profile_url: p.profile_path ? tmdb.buildImageUrl(p.profile_path, 'w300') : null,
+            known_for: p.known_for_department,
+            roles,
+          }
+        } catch {
+          return {
+            id: p.id,
+            name: p.name,
+            profile_url: p.profile_path ? tmdb.buildImageUrl(p.profile_path, 'w300') : null,
+            known_for: p.known_for_department,
+            roles: [p.known_for_department === 'Directing' ? 'director' : 'actor'],
+          }
+        }
+      }))
+      return enriched
+    } catch (error) {
+      console.error('Error searching TMDB persons:', error)
+      return []
+    }
+  })
+
   ipcMain.handle('person:analyze', async (_event, personName: unknown, personType: unknown) => {
     try {
       const name = validateInput(z.string().min(1).max(200), personName, 'person:analyze')
-      const type = validateInput(z.enum(['director', 'actor']), personType, 'person:analyze')
+      const type = validateInput(z.enum(['director', 'actor', 'writer', 'composer', 'cinematographer', 'editor']), personType, 'person:analyze')
 
       const tmdb = getTMDBService()
       await tmdb.initialize()
@@ -380,10 +424,19 @@ export function registerDatabaseHandlers() {
       const person = searchResults.results[0]
       const credits = await tmdb.getPersonMovieCredits(person.id)
 
+      // Map person type to crew job filter
+      const crewJobMap: Record<string, string[]> = {
+        director: ['Director'],
+        writer: ['Writer', 'Screenplay', 'Story'],
+        composer: ['Original Music Composer', 'Music'],
+        cinematographer: ['Director of Photography'],
+        editor: ['Editor'],
+      }
+
       // Get the relevant credits based on type
-      const filmography = type === 'director'
-        ? credits.crew.filter(c => c.job === 'Director')
-        : credits.cast
+      const filmography = type === 'actor'
+        ? credits.cast
+        : credits.crew.filter(c => (crewJobMap[type] || []).includes(c.job))
 
       // Filter to released movies only (no future releases, no TV specials)
       const validMovies = filmography.filter(m =>
@@ -392,7 +445,7 @@ export function registerDatabaseHandlers() {
 
       // Check which movies we own (by TMDB ID) — use getMediaItems with tmdb_id filter
       const allOwnedMovies = db.getMediaItems({ type: 'movie' })
-      const ownedTmdbSet = new Set(allOwnedMovies.filter(m => m.tmdb_id).map(m => m.tmdb_id!))
+      const ownedTmdbSet = new Set(allOwnedMovies.filter((m: Record<string, unknown>) => m.tmdb_id).map((m: Record<string, unknown>) => m.tmdb_id as string))
       const ownedTmdbIds = new Set<string>()
       for (const movie of validMovies) {
         if (ownedTmdbSet.has(movie.id.toString())) ownedTmdbIds.add(movie.id.toString())
@@ -472,6 +525,29 @@ export function registerDatabaseHandlers() {
 
 
 
+  ipcMain.handle('sync:fetchPlex', async () => {
+    try {
+      const plexToken = db.getSetting('plex_token')
+      if (!plexToken) throw new Error('No Plex account connected.')
+      const { getWatchlistSyncService } = await import('../services/WatchlistSyncService')
+      return await getWatchlistSyncService().fetchPlex(plexToken)
+    } catch (error) {
+      console.error('Error fetching Plex watchlist:', error)
+      throw error
+    }
+  })
+
+  ipcMain.handle('sync:fetchTrakt', async (_event, username: unknown) => {
+    try {
+      const validUsername = validateInput(z.string().min(1).max(100), username, 'sync:fetchTrakt')
+      const { getWatchlistSyncService } = await import('../services/WatchlistSyncService')
+      return await getWatchlistSyncService().fetchTrakt(validUsername)
+    } catch (error) {
+      console.error('Error fetching Trakt watchlist:', error)
+      throw error
+    }
+  })
+
   // ============================================================================
   // RELEASE ALERTS
   // ============================================================================
@@ -513,14 +589,31 @@ export function registerDatabaseHandlers() {
 
       console.log('[movie:searchTMDB] Got', response.results.length, 'results')
 
-      // Transform results to include poster URLs
-      const results = response.results.map(movie => ({
-        id: movie.id,
-        title: movie.title,
-        release_date: movie.release_date,
-        overview: movie.overview,
-        poster_url: tmdb.buildImageUrl(movie.poster_path, 'w500'),
-        vote_average: movie.vote_average,
+      // Transform results and enrich with physical/digital release dates
+      const region = (db.getSetting('store_region') || 'US').toUpperCase()
+      const results = await Promise.all(response.results.slice(0, 10).map(async movie => {
+        let physical_release_date: string | null = null
+        try {
+          const releaseDates = await tmdb.getMovieReleaseDates(movie.id.toString())
+          let countryReleases = releaseDates.results.find(r => r.iso_3166_1 === region)
+          if (!countryReleases && region !== 'US') countryReleases = releaseDates.results.find(r => r.iso_3166_1 === 'US')
+          if (countryReleases) {
+            // Prefer Physical (5), fall back to Digital (4)
+            const physical = countryReleases.release_dates.find(r => r.type === 5)
+            const digital = countryReleases.release_dates.find(r => r.type === 4)
+            const best = physical || digital
+            if (best) physical_release_date = best.release_date.split('T')[0]
+          }
+        } catch { /* continue without release date */ }
+        return {
+          id: movie.id,
+          title: movie.title,
+          release_date: movie.release_date,
+          physical_release_date,
+          overview: movie.overview,
+          poster_url: tmdb.buildImageUrl(movie.poster_path, 'w500'),
+          vote_average: movie.vote_average,
+        }
       }))
       console.log('[movie:searchTMDB] Returning', results.length, 'transformed results')
       return results

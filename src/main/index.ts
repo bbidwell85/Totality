@@ -66,7 +66,6 @@ import { registerLoggingHandlers } from './ipc/logging'
 import { registerAutoUpdateHandlers } from './ipc/autoUpdate'
 import { registerGeminiHandlers } from './ipc/gemini'
 import { registerMoodHandlers, setMoodMainWindow } from './ipc/mood'
-import { registerArrHandlers } from './ipc/arr'
 import { getLiveMonitoringService } from './services/LiveMonitoringService'
 import { getTaskQueueService } from './services/TaskQueueService'
 import { getLoggingService } from './services/LoggingService'
@@ -433,6 +432,9 @@ app.whenReady().then(async () => {
     await db.initialize()
     console.log(`Database initialized successfully (backend: ${getDatabaseBackend()})`)
 
+    // Note: BetterSQLiteService runs PRAGMA integrity_check during initialize().
+    // If integrity fails, it logs an error but continues (data is still usable).
+
     // Inject database getter into logging service (replaces dynamic require)
     getLoggingService().setDatabaseGetter(() => getDatabase())
 
@@ -460,7 +462,6 @@ app.whenReady().then(async () => {
     registerAutoUpdateHandlers()
     registerGeminiHandlers()
     registerMoodHandlers()
-    registerArrHandlers()
 
     // Initialize live monitoring service
     const liveMonitoringService = getLiveMonitoringService()

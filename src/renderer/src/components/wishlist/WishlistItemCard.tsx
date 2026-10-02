@@ -5,7 +5,6 @@ import { StoreLinksMenu } from './StoreLinksMenu'
 import type { WishlistItem, StoreLink, WishlistPriority } from '../../contexts/WishlistContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { getResolutionColors } from '../../utils/qualityColors'
-import { AddToArrButton } from '../arr/AddToArrButton'
 
 interface WishlistItemCardProps {
   item: WishlistItem
@@ -44,13 +43,6 @@ export const WishlistItemCard = memo(function WishlistItemCard({
   const [storeLinks, setStoreLinks] = useState<StoreLink[]>([])
   const [isLoadingLinks, setIsLoadingLinks] = useState(false)
   const [showConfirmDelete, setShowConfirmDelete] = useState(false)
-  const [arrApps, setArrApps] = useState<{ radarr: boolean; sonarr: boolean; lidarr: boolean }>({ radarr: false, sonarr: false, lidarr: false })
-
-  useEffect(() => {
-    window.electronAPI.arrGetConfiguredApps()
-      .then((apps) => setArrApps(apps as { radarr: boolean; sonarr: boolean; lidarr: boolean }))
-      .catch(() => {})
-  }, [])
 
   // Load store links on mount
   useEffect(() => {
@@ -231,15 +223,6 @@ export const WishlistItemCard = memo(function WishlistItemCard({
               size="sm"
             />
             <div className="flex items-center gap-1">
-              {item.media_type === 'movie' && arrApps.radarr && (
-                <AddToArrButton type="radarr" tmdbId={item.tmdb_id} title={item.title} year={item.year} compact />
-              )}
-              {(item.media_type === 'episode' || item.media_type === 'season') && arrApps.sonarr && (
-                <AddToArrButton type="sonarr" title={item.series_title || item.title} year={item.year} compact />
-              )}
-              {(item.media_type === 'album' || item.media_type === 'track') && arrApps.lidarr && (
-                <AddToArrButton type="lidarr" title={item.artist_name || item.title} mbId={item.musicbrainz_id} compact />
-              )}
               <StoreLinksMenu
                 storeLinks={storeLinks}
                 onOpenLink={openStoreLink}

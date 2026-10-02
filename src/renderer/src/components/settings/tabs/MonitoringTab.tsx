@@ -8,8 +8,9 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Loader2, Radio } from 'lucide-react'
+import { Loader2, Radio, Bell } from 'lucide-react'
 import { Toggle } from '../../ui/Toggle'
+import { SETTING_KEYS } from '../../../../../shared/settingKeys'
 
 interface MonitoringConfig {
   enabled: boolean
@@ -67,14 +68,23 @@ export function MonitoringTab() {
   })
   const [configuredProviders, setConfiguredProviders] = useState<Set<string>>(new Set())
 
+  // Release alerts
+  const [releaseAlertsEnabled, setReleaseAlertsEnabled] = useState(false)
+  const [releaseAlertDays, setReleaseAlertDays] = useState('30')
+  const [alertStatus, setAlertStatus] = useState<string | null>(null)
+
   useEffect(() => {
     const load = async () => {
       try {
-        const [mConfig, sources] = await Promise.all([
+        const [mConfig, sources, alertEnabled, alertDays] = await Promise.all([
           window.electronAPI.monitoringGetConfig(),
           window.electronAPI.sourcesList(),
+          window.electronAPI.getSetting(SETTING_KEYS.release_alerts_enabled),
+          window.electronAPI.getSetting(SETTING_KEYS.release_alert_days_ahead),
         ])
         setMonitoringConfig(mConfig)
+        setReleaseAlertsEnabled(alertEnabled === 'true')
+        setReleaseAlertDays((alertDays as string) || '30')
         const providerTypes = new Set<string>()
         ;(sources as MediaSource[]).forEach((source) => {
           if (source.is_enabled) providerTypes.add(source.source_type)
@@ -171,6 +181,52 @@ export function MonitoringTab() {
             <span className="text-sm text-foreground">Pause during manual scans</span>
             <Toggle checked={monitoringConfig.pauseDuringManualScan} onChange={(pauseDuringManualScan) => saveMonitoringConfig({ pauseDuringManualScan })} disabled={isSaving || !monitoringConfig.enabled} />
           </div>
+        </div>
+      </div>
+
+      {/* Release Alerts */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 mb-1">
+          <Bell className="w-4 h-4 text-muted-foreground" />
+          <h3 className="text-sm font-medium text-foreground">Release Alerts</h3>
+        </div>
+        <div className="bg-muted/30 rounded-lg border border-border/40 divide-y divide-border/30">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div>
+              <p className="text-sm text-foreground">Wishlist release alerts</p>
+              <p className="text-xs text-muted-foreground">Get notified when wishlist movies get release dates</p>
+            </div>
+            <Toggle checked={releaseAlertsEnabled} onChange={async (checked) => {
+              setReleaseAlertsEnabled(checked)
+              await window.electronAPI.setSetting(SETTING_KEYS.release_alerts_enabled, checked.toString())
+            }} />
+          </div>
+          {releaseAlertsEnabled && (
+            <>
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-sm text-foreground">Alert window (days ahead)</span>
+                <input type="number" value={releaseAlertDays} onChange={async e => {
+                  setReleaseAlertDays(e.target.value)
+                  await window.electronAPI.setSetting(SETTING_KEYS.release_alert_days_ahead, e.target.value)
+                }} min={7} max={180} className="w-20 px-2 py-1 bg-background border border-border/30 rounded text-sm text-right focus:outline-hidden focus:ring-2 focus:ring-primary" />
+              </div>
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-sm text-foreground">Check for upcoming releases</span>
+                <div className="flex items-center gap-2">
+                  {alertStatus && <span className="text-xs text-muted-foreground">{alertStatus}</span>}
+                  <button onClick={async () => {
+                    setAlertStatus(null)
+                    try {
+                      const c = await window.electronAPI.releaseAlertsCheck()
+                      setAlertStatus(c > 0 ? `${c} found` : 'None found')
+                    } catch { setAlertStatus('Error') }
+                  }} className="px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+                    Check Now
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

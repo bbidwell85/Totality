@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import type { MediaItem } from '../types'
 
-const MOVIES_PAGE_SIZE = 200
+const MOVIES_PAGE_SIZE = 10000
 
 export type MovieSortBy = 'title' | 'year' | 'play_count' | 'last_watched_at' | 'tmdb_rating'
 
@@ -11,7 +11,6 @@ interface UseMoviePaginationOptions {
   tierFilter: string
   qualityFilter: string
   searchQuery: string
-  alphabetFilter: string | null
 }
 
 interface UseMoviePaginationReturn {
@@ -34,7 +33,6 @@ export function useMoviePagination({
   tierFilter,
   qualityFilter,
   searchQuery,
-  alphabetFilter,
 }: UseMoviePaginationOptions): UseMoviePaginationReturn {
   const [paginatedMovies, setPaginatedMovies] = useState<MediaItem[]>([])
   const [totalMovieCount, setTotalMovieCount] = useState(0)
@@ -67,7 +65,7 @@ export function useMoviePagination({
       if (tierFilter !== 'all') filters.qualityTier = tierFilter
       if (qualityFilter !== 'all') filters.tierQuality = qualityFilter.toUpperCase()
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      // alphabetFilter no longer filters — scroll-to-letter handles navigation
 
       const [movieItems, count] = await Promise.all([
         window.electronAPI.getMediaItems(filters),
@@ -87,7 +85,7 @@ export function useMoviePagination({
     } finally {
       setMoviesLoading(false)
     }
-  }, [activeSourceId, activeLibraryId, tierFilter, qualityFilter, searchQuery, alphabetFilter, moviesLoading])
+  }, [activeSourceId, activeLibraryId, tierFilter, qualityFilter, searchQuery, moviesLoading])
 
   const loadMoreMovies = useCallback(() => {
     if (moviesOffsetRef.current < totalMovieCount && !moviesLoading) {

@@ -750,7 +750,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                             <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(sv?.audio_tier_score ?? media.audio_tier_score ?? 0, 100)}%` }} />
                           </div>
                           <div className="text-sm text-muted-foreground mt-0.5">
-                            {formatBitrate(bestAudioBitrate)} · Target: {getAudioThresholdRange(sv?.quality_tier ?? media.quality_tier)}
+                            {bestAudioBitrate > 0 ? formatBitrate(bestAudioBitrate) : 'Lossless'} · Target: {getAudioThresholdRange(sv?.quality_tier ?? media.quality_tier)}
                           </div>
                         </div>
                       )}
@@ -885,7 +885,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                 <div className="text-sm">
                   <div className="font-medium">{(sv?.audio_codec ?? media.audio_codec)?.toUpperCase()} {formatChannels(sv?.audio_channels ?? media.audio_channels)}</div>
                   <div className="text-xs text-muted-foreground flex items-center">
-                    <span>{formatBitrate(sv?.audio_bitrate ?? media.audio_bitrate)}</span>
+                    <span>{(sv?.audio_bitrate ?? media.audio_bitrate) > 0 ? formatBitrate(sv?.audio_bitrate ?? media.audio_bitrate) : 'Lossless'}</span>
                     {isAudioBitrateRawLow(sv?.audio_bitrate ?? media.audio_bitrate, sv?.quality_tier ?? media.quality_tier) && <LowIndicator />}
                   </div>
                 </div>

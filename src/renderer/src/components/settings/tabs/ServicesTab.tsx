@@ -17,8 +17,7 @@ import {
   Circle,
   Bot,
 } from 'lucide-react'
-
-
+import { Toggle } from '../../ui/Toggle'
 
 interface ServiceCardProps {
   title: string
@@ -57,9 +56,9 @@ function ServiceCard({
           {/* Status indicator */}
           <div className="shrink-0">
             {status === 'configured' ? (
-              <CheckCircle className="w-5 h-5 text-green-500" />
+              <CheckCircle className="w-5 h-5 text-primary" />
             ) : status === 'partial' ? (
-              <CheckCircle className="w-5 h-5 text-amber-500" />
+              <CheckCircle className="w-5 h-5 text-muted-foreground" />
             ) : (
               <Circle className="w-5 h-5 text-muted-foreground/50" />
             )}
@@ -81,21 +80,9 @@ function ServiceCard({
 
         {/* Enable toggle */}
         {enableToggle && (
-          <button
-            id={enableToggle.id}
-            role="switch"
-            aria-checked={enableToggle.enabled}
-            onClick={(e) => { e.stopPropagation(); enableToggle.onToggle() }}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background ${
-              enableToggle.enabled ? 'bg-primary' : 'bg-muted'
-            }`}
-          >
-            <span
-              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-md ring-1 ring-border/50 transition ${
-                enableToggle.enabled ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
+          <div onClick={(e) => e.stopPropagation()}>
+            <Toggle checked={enableToggle.enabled} onChange={() => enableToggle.onToggle()} />
+          </div>
         )}
 
         {/* Expand indicator */}
@@ -131,7 +118,6 @@ export function ServicesTab() {
   const [ffprobeBundled, setFfprobeBundled] = useState(false)
   const [ffprobeVersion, setFfprobeVersion] = useState<string | null>(null)
   const [ffprobeEnabled, setFfprobeEnabled] = useState(false)
-  const [ffmpegAvailable, setFfmpegAvailable] = useState(false)
   const [isInstalling, setIsInstalling] = useState(false)
   const [isUninstalling, setIsUninstalling] = useState(false)
   const [confirmUninstall, setConfirmUninstall] = useState(false)
@@ -247,12 +233,6 @@ export function ServicesTab() {
       setFfprobeBundled(ffBundled)
       setFfprobeVersion(ffVersion)
       setFfprobeEnabled(allSettings.ffprobe_enabled === 'true')
-
-      // Check FFmpeg availability (installed alongside FFprobe)
-      try {
-        const ffmpegOk = await window.electronAPI.ffmpegIsAvailable()
-        setFfmpegAvailable(ffmpegOk)
-      } catch { setFfmpegAvailable(false) }
 
       setNfsMappings(nfsMaps || {})
       setOriginalNfsMappings(nfsMaps || {})
@@ -504,8 +484,8 @@ export function ServicesTab() {
                 onClick={handleTestTmdb}
                 disabled={!tmdbApiKey.trim() || tmdbStatus === 'testing' || tmdbStatus === 'valid'}
                 className={`px-3 py-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2 ${
-                  tmdbStatus === 'valid' ? 'text-green-500' :
-                  tmdbStatus === 'invalid' ? 'text-red-500 bg-red-500/10' :
+                  tmdbStatus === 'valid' ? 'text-primary' :
+                  tmdbStatus === 'invalid' ? 'text-destructive bg-destructive/10' :
                   'text-sm bg-muted hover:bg-muted/80'
                 }`}
                 title={tmdbStatus === 'valid' ? 'API key is valid' : tmdbStatus === 'invalid' ? 'Invalid API key' : 'Test API key'}
@@ -547,143 +527,74 @@ export function ServicesTab() {
         enableToggle={ffprobeAvailable ? { enabled: ffprobeEnabled, onToggle: handleToggleFFprobe, id: toggleId } : undefined}
       >
         <div className="space-y-3">
-
-          {/* Installation controls */}
-          <div className="flex items-center justify-between">
-            {ffprobeVersion && (
-              <span className="text-xs text-muted-foreground">v{ffprobeVersion}</span>
-            )}
-            {!ffprobeVersion && <span />}
-            <div className="flex items-center gap-2">
-              {ffprobeAvailable && (
-                <button
-                  onClick={handleCheckForUpdate}
-                  disabled={checkingUpdate || isInstalling}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded transition-colors disabled:opacity-50 ${
-                    latestVersion && !updateAvailable
-                      ? 'text-green-500'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
-                  title="Check for updates"
-                >
-                  {checkingUpdate ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : latestVersion && !updateAvailable ? (
-                    <CheckCircle className="w-3.5 h-3.5" />
-                  ) : (
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  )}
-                  {checkingUpdate
-                    ? 'Checking...'
-                    : latestVersion && !updateAvailable
-                      ? 'Up to date'
-                      : 'Check for updates'}
-                </button>
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <p className="text-sm font-medium">
+                {ffprobeAvailable ? `FFprobe v${ffprobeVersion || '?'}` : 'FFprobe not installed'}
+              </p>
+              {ffprobeAvailable && !updateAvailable && latestVersion && (
+                <p className="text-xs text-muted-foreground">Up to date</p>
               )}
-              {ffprobeAvailable && ffprobeBundled ? (
-                <button
-                  onClick={handleUninstallFFprobe}
-                  disabled={isUninstalling || isInstalling}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded transition-colors disabled:opacity-50 ${
-                    confirmUninstall
-                      ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                      : 'text-red-400 hover:text-red-300 hover:bg-red-500/10'
-                  }`}
-                >
-                  {isUninstalling ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-3.5 h-3.5" />
-                  )}
-                  {isUninstalling ? 'Uninstalling…' : confirmUninstall ? 'Click again to confirm' : 'Uninstall'}
-                </button>
-              ) : ffprobeAvailable && !ffprobeBundled ? (
-                <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-muted-foreground">
-                  System installed
-                </span>
-              ) : (
-                <button
-                  onClick={handleInstallFFprobe}
-                  disabled={isInstalling}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
-                >
-                  {isInstalling ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Download className="w-3.5 h-3.5" />
-                  )}
-                  Install (~80MB)
-                </button>
+              {ffprobeAvailable && !updateAvailable && !latestVersion && (
+                <p className="text-xs text-muted-foreground">{ffprobeBundled ? 'Bundled' : 'System installed'}</p>
+              )}
+              {updateAvailable && latestVersion && (
+                <p className="text-xs text-primary">Version {latestVersion} available</p>
+              )}
+              {!ffprobeAvailable && (
+                <p className="text-xs text-muted-foreground">Required for local file analysis</p>
               )}
             </div>
-          </div>
-
-          {/* Update Available */}
-          {updateAvailable && latestVersion && (
-            <div className="flex items-center justify-between p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-              <div className="flex items-center gap-2 text-amber-400">
-                <RefreshCw className="w-4 h-4" />
-                <span className="text-sm">Update available: v{latestVersion}</span>
-              </div>
+            {ffprobeAvailable ? (
+              <button
+                onClick={updateAvailable ? handleInstallFFprobe : handleCheckForUpdate}
+                disabled={checkingUpdate || isInstalling}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {(checkingUpdate) ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> :
+                 updateAvailable ? <Download className="w-3.5 h-3.5" /> :
+                 <RefreshCw className="w-3.5 h-3.5" />}
+                {checkingUpdate ? 'Checking...' :
+                 updateAvailable ? 'Update' :
+                 'Check for Updates'}
+              </button>
+            ) : (
               <button
                 onClick={handleInstallFFprobe}
                 disabled={isInstalling}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-amber-500 text-black font-medium rounded hover:bg-amber-400 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
-                {isInstalling ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Download className="w-3.5 h-3.5" />
-                )}
-                Update
+                {isInstalling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                Install (~80MB)
               </button>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Install Progress */}
+          {/* Install/Update Progress */}
           {isInstalling && installProgress && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{installProgress.stage}</span>
-                <span>{installProgress.percent}%</span>
-              </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all duration-300"
-                  style={{ width: `${installProgress.percent}%` }}
-                />
-              </div>
+            <div className="w-full bg-muted rounded-full h-1.5">
+              <div className="bg-primary h-1.5 rounded-full transition-all" style={{ width: `${installProgress.percent}%` }} />
             </div>
           )}
-
 
           {/* Error */}
           {ffprobeError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
-              {ffprobeError}
-            </div>
+            <p className="text-xs text-destructive">{ffprobeError}</p>
           )}
 
-          {/* FFmpeg status */}
-          {ffprobeAvailable && (
-            <div className={`p-3 rounded-lg text-sm ${
-              ffmpegAvailable
-                ? 'bg-green-500/10 border border-green-500/30 text-green-400'
-                : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
-            }`}>
-              <div className="flex items-center justify-between">
-                <span>
-                  {ffmpegAvailable
-                    ? 'FFmpeg installed — embedded artwork extraction enabled'
-                    : 'FFmpeg not found — embedded artwork extraction unavailable'}
-                </span>
-              </div>
-              {!ffmpegAvailable && ffprobeBundled && (
-                <p className="text-xs mt-1 text-muted-foreground">
-                  Reinstall FFprobe above to also install FFmpeg.
-                </p>
-              )}
-            </div>
+          {/* Uninstall */}
+          {ffprobeAvailable && ffprobeBundled && (
+            <button
+              onClick={handleUninstallFFprobe}
+              disabled={isUninstalling || isInstalling}
+              className={`text-xs transition-colors disabled:opacity-50 ${
+                confirmUninstall
+                  ? 'text-destructive'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {isUninstalling ? 'Uninstalling…' : confirmUninstall ? 'Click again to confirm' : 'Uninstall'}
+            </button>
           )}
 
         </div>
@@ -736,8 +647,8 @@ export function ServicesTab() {
                 onClick={handleTestGemini}
                 disabled={!geminiApiKey.trim() || geminiStatus === 'testing' || geminiStatus === 'valid'}
                 className={`px-3 py-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2 ${
-                  geminiStatus === 'valid' ? 'text-green-500' :
-                  geminiStatus === 'invalid' ? 'text-red-500 bg-red-500/10' :
+                  geminiStatus === 'valid' ? 'text-primary' :
+                  geminiStatus === 'invalid' ? 'text-destructive bg-destructive/10' :
                   'text-sm bg-muted hover:bg-muted/80'
                 }`}
                 title={geminiStatus === 'valid' ? 'API key is valid' : geminiStatus === 'invalid' ? (geminiError || 'Invalid API key') : 'Test API key'}
@@ -844,8 +755,8 @@ export function ServicesTab() {
                       <div
                         className={`flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-lg ${
                           testResult.success
-                            ? 'bg-green-500/10 text-green-500'
-                            : 'bg-red-500/10 text-red-400'
+                            ? 'bg-primary/10 text-primary'
+                            : 'bg-destructive/10 text-destructive'
                         }`}
                       >
                         {testResult.success ? (

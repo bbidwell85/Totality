@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import type { MediaItem, TVShowSummary } from '../types'
 
-const SHOWS_PAGE_SIZE = 200
+const SHOWS_PAGE_SIZE = 10000
 
 export type TVShowSortBy = 'title' | 'play_count' | 'last_watched_at'
 
@@ -9,7 +9,6 @@ interface UseTVShowPaginationOptions {
   activeSourceId: string | null
   activeLibraryId: string | null
   searchQuery: string
-  alphabetFilter: string | null
 }
 
 interface UseTVShowPaginationReturn {
@@ -35,7 +34,6 @@ export function useTVShowPagination({
   activeSourceId,
   activeLibraryId,
   searchQuery,
-  alphabetFilter,
 }: UseTVShowPaginationOptions): UseTVShowPaginationReturn {
   const [paginatedShows, setPaginatedShows] = useState<TVShowSummary[]>([])
   const [totalShowCount, setTotalShowCount] = useState(0)
@@ -67,7 +65,7 @@ export function useTVShowPagination({
       if (activeSourceId) filters.sourceId = activeSourceId
       if (activeLibraryId) filters.libraryId = activeLibraryId
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      if (alphabetFilter) filters.alphabetFilter = alphabetFilter
+      // alphabetFilter no longer filters — scroll-to-letter handles navigation
 
       const [newShows, count, episodeCount] = await Promise.all([
         window.electronAPI.getTVShows(filters),
@@ -89,7 +87,7 @@ export function useTVShowPagination({
     } finally {
       setShowsLoading(false)
     }
-  }, [showsLoading, activeSourceId, activeLibraryId, searchQuery, alphabetFilter])
+  }, [showsLoading, activeSourceId, activeLibraryId, searchQuery])
 
   const loadMoreShows = useCallback(() => {
     if (showsOffsetRef.current < totalShowCount && !showsLoading) {

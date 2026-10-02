@@ -80,20 +80,6 @@ export const SETTING_KEYS = {
   nfs_mount_mappings: 'nfs_mount_mappings',
   last_scan_time: 'last_scan_time',
 
-  // Arr automation (Radarr / Sonarr / Lidarr)
-  radarr_url: 'radarr_url',
-  radarr_api_key: 'radarr_api_key',
-  radarr_quality_profile_id: 'radarr_quality_profile_id',
-  radarr_root_folder: 'radarr_root_folder',
-  sonarr_url: 'sonarr_url',
-  sonarr_api_key: 'sonarr_api_key',
-  sonarr_quality_profile_id: 'sonarr_quality_profile_id',
-  sonarr_root_folder: 'sonarr_root_folder',
-  lidarr_url: 'lidarr_url',
-  lidarr_api_key: 'lidarr_api_key',
-  lidarr_quality_profile_id: 'lidarr_quality_profile_id',
-  lidarr_root_folder: 'lidarr_root_folder',
-
   // Sync settings (Trakt / Letterboxd)
   trakt_username: 'trakt_username',
   trakt_client_id: 'trakt_client_id',

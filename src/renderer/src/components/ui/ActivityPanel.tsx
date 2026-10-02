@@ -208,7 +208,9 @@ export function ActivityPanel() {
       'frost',
       'slate-light', 'ember-light', 'midnight-light',
       'velvet-light', 'emerald-light', 'cobalt-light', 'carbon-light',
-      'slate', 'ember', 'midnight', 'oled', 'velvet', 'emerald', 'cobalt', 'carbon', 'dark',
+      'matrix-light', 'fury-light', 'gotham-light', 'neon-light', 'whimsy-light',
+      'slate', 'ember', 'midnight', 'oled', 'velvet', 'emerald', 'cobalt', 'carbon',
+      'matrix', 'fury', 'gotham', 'neon', 'whimsy', 'dark',
     ]
     for (const theme of themes) {
       if (document.documentElement.classList.contains(theme)) return theme

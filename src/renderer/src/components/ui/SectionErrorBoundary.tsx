@@ -188,19 +188,3 @@ export class SectionErrorBoundary extends Component<Props, State> {
   }
 }
 
-/**
- * Higher-order component for adding error boundary to a component
- */
-export function withErrorBoundary<P extends object>(
-  WrappedComponent: React.ComponentType<P>,
-  section: string,
-  options?: Omit<Props, 'children' | 'section'>
-) {
-  return function WithErrorBoundary(props: P) {
-    return (
-      <SectionErrorBoundary section={section} {...options}>
-        <WrappedComponent {...props} />
-      </SectionErrorBoundary>
-    )
-  }
-}

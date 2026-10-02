@@ -383,12 +383,19 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
   }
 
   return (
+    <>
+    <div
+      className={`fixed inset-0 bg-black/40 z-[45] transition-opacity duration-300 ${
+        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+      }`}
+      onClick={onClose}
+    />
     <div
       ref={panelRef}
       id="tag-sync-panel"
       role="complementary"
       aria-label="Tag Sync"
-      className={`fixed top-[76px] bottom-4 right-4 w-96 bg-sidebar-gradient rounded-2xl shadow-xl z-40 flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
+      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-[46] flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
         isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
       }`}
       onKeyDown={handleKeyDown}
@@ -406,7 +413,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           <button
             onClick={() => loadComparison()}
             disabled={loading || !sourceOfTruthId}
-            className="p-1.5 rounded-md hover:bg-muted transition-colors disabled:opacity-50 text-muted-foreground hover:text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50 focus:outline-hidden focus:ring-2 focus:ring-primary"
             title="Refresh"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -414,7 +421,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
           <button
             ref={closeButtonRef}
             onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary"
             aria-label="Close tag sync panel"
           >
             <X className="w-4 h-4" />
@@ -834,5 +841,6 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
         </div>
       )}
     </div>
+    </>
   )
 }

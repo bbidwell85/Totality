@@ -141,11 +141,15 @@ function AboutTab() {
           Features
         </h3>
         <ul className="text-sm text-muted-foreground space-y-2">
-          <li>• Multi-source library scanning (Plex, Jellyfin, Emby, Kodi, Local Folders)</li>
-          <li>• Video and audio quality analysis with tier-based scoring</li>
-          <li>• TV series, movie collection, and music completeness tracking</li>
-          <li>• AI-powered assistant for library insights and recommendations</li>
-          <li>• Shopping wishlist for missing and upgrade items</li>
+          <li>• Multi-source library scanning (Plex, Jellyfin, Emby, Kodi, Local Folders, MediaMonkey)</li>
+          <li>• Video and audio quality analysis with tier-based scoring and TMDB ratings</li>
+          <li>• TV series, movie collection, music, and director/actor filmography completeness</li>
+          <li>• AI-powered assistant with 29 tools for library insights and recommendations</li>
+          <li>• Wishlist with Plex and Trakt watchlist sync</li>
+          <li>• Storage analytics, codec migration tracking, and duplicate detection</li>
+          <li>• Watch history tracking with smart upgrade priority</li>
+          <li>• Tag sync (mood/genre) across Plex, MediaMonkey, and Kodi</li>
+          <li>• Release alerts for upcoming wishlist items</li>
         </ul>
       </div>
 
@@ -207,6 +211,25 @@ function CreditsTab() {
                 Cover Art Archive
               </ExtLink>
               .
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Watchlist Services */}
+      <section>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
+          Watchlist Services
+        </h3>
+        <div className="p-3 bg-muted/30 rounded-lg">
+          <div className="text-xs text-muted-foreground leading-relaxed">
+            <p className="font-medium text-foreground mb-1">Trakt</p>
+            <p>
+              Watchlist import powered by the{' '}
+              <ExtLink href="https://trakt.tv">
+                Trakt
+              </ExtLink>
+              {' '}API. Trakt is a platform for tracking movies and TV shows you watch.
             </p>
           </div>
         </div>
@@ -280,7 +303,6 @@ function CreditsTab() {
           <TechLink name="electron-updater" url="https://www.electron.build/auto-update" license="MIT" />
           <TechLink name="react-window" url="https://react-window.vercel.app" license="MIT" />
           <TechLink name="dnd-kit" url="https://dndkit.com" license="MIT" />
-          <TechLink name="Axios" url="https://axios-http.com" license="MIT" />
           <TechLink name="Zod" url="https://zod.dev" license="MIT" />
           <TechLink name="react-markdown" url="https://github.com/remarkjs/react-markdown" license="MIT" />
         </div>
@@ -293,11 +315,14 @@ function CreditsTab() {
         </h3>
         <div className="text-xs text-muted-foreground leading-relaxed p-3 bg-muted/30 rounded-lg space-y-2">
           <p>
-            The wishlist feature provides convenience links to search for physical media on external retailers including Amazon, eBay, and Discogs, as well as music services like Bandcamp and HDtracks.
+            <strong className="text-foreground">Watchlist Sync:</strong> Import watchlists from Plex and Trakt to track movies and shows you want to acquire.
+          </p>
+          <p>
+            <strong className="text-foreground">Store Links:</strong> The wishlist provides convenience links to search for physical media on Amazon, eBay, Discogs, Bandcamp, and HDtracks.
             Totality is not affiliated with these services and does not receive compensation for referrals.
           </p>
           <p>
-            Automatic updates are delivered via GitHub Releases and checked periodically using electron-updater.
+            <strong className="text-foreground">Updates:</strong> Automatic updates delivered via GitHub Releases using electron-updater.
           </p>
         </div>
       </section>
@@ -319,7 +344,7 @@ function LegalTab() {
             <strong className="text-foreground">Local Storage:</strong> All media library data is stored locally on your device in an SQLite database and is never transmitted to external servers.
           </p>
           <p>
-            <strong className="text-foreground">API Communication:</strong> Totality communicates with your configured media servers (Plex, Jellyfin, Emby, Kodi) and metadata APIs (TMDB, MusicBrainz) to retrieve library and metadata information.
+            <strong className="text-foreground">API Communication:</strong> Totality communicates with your configured media servers (Plex, Jellyfin, Emby, Kodi) and metadata APIs (TMDB, MusicBrainz) to retrieve library and metadata information. Watchlist sync connects to Plex and Trakt APIs.
           </p>
           <p>
             <strong className="text-foreground">Credential Security:</strong> Server credentials and API keys are encrypted using your operating system's secure storage (Windows DPAPI, macOS Keychain, or Linux Secret Service).
@@ -343,7 +368,10 @@ function LegalTab() {
         </h3>
         <div className="p-3 bg-muted/30 rounded-lg space-y-2">
           <p>
-            <strong className="text-foreground">Media Servers:</strong> Plex is a trademark of Plex, Inc. Jellyfin is a trademark of the Jellyfin Contributors. Emby is a trademark of Emby LLC. Kodi is a trademark of the XBMC Foundation.
+            <strong className="text-foreground">Media Servers:</strong> Plex is a trademark of Plex, Inc. Jellyfin is a trademark of the Jellyfin Contributors. Emby is a trademark of Emby LLC. Kodi is a trademark of the XBMC Foundation. MediaMonkey is a trademark of Ventis Media Inc.
+          </p>
+          <p>
+            <strong className="text-foreground">Sync:</strong> Trakt is a trademark of Trakt, Inc.
           </p>
           <p>
             <strong className="text-foreground">Retailers:</strong> Amazon, eBay, Discogs, Bandcamp, and HDtracks are trademarks of their respective owners.

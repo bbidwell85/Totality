@@ -292,6 +292,58 @@ export function registerGeminiHandlers() {
     }
   })
 
+  ipcMain.handle('ai:storageOptimization', async (event, params: unknown) => {
+    try {
+      const { requestId } = validateInput(
+        z.object({ requestId: z.string().min(1).max(100) }),
+        params,
+        'ai:storageOptimization',
+      )
+      const win = BrowserWindow.fromWebContents(event.sender)
+
+      console.log('[IPC ai:storageOptimization] Generating storage optimization report')
+      const result = await getGeminiAnalysisService().generateStorageOptimization(
+        (delta) => {
+          win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
+        },
+      )
+
+      win?.webContents.send('ai:analysisStreamComplete', { requestId })
+      return { text: result.text, requestId }
+    } catch (error) {
+      console.error('Error in ai:storageOptimization:', error)
+      const formatted = formatError(error)
+      if (formatted.rateLimited) return formatted
+      throw formatted
+    }
+  })
+
+  ipcMain.handle('ai:musicQualityReport', async (event, params: unknown) => {
+    try {
+      const { requestId } = validateInput(
+        z.object({ requestId: z.string().min(1).max(100) }),
+        params,
+        'ai:musicQualityReport',
+      )
+      const win = BrowserWindow.fromWebContents(event.sender)
+
+      console.log('[IPC ai:musicQualityReport] Generating music quality report')
+      const result = await getGeminiAnalysisService().generateMusicQualityReport(
+        (delta) => {
+          win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
+        },
+      )
+
+      win?.webContents.send('ai:analysisStreamComplete', { requestId })
+      return { text: result.text, requestId }
+    } catch (error) {
+      console.error('Error in ai:musicQualityReport:', error)
+      const formatted = formatError(error)
+      if (formatted.rateLimited) return formatted
+      throw formatted
+    }
+  })
+
   ipcMain.handle('ai:explainQuality', async (_event, params: unknown) => {
     try {
       const validated = validateInput(
