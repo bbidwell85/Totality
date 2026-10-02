@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.4.0](https://github.com/bbidwell85/totality/compare/v0.3.2...v0.4.0) (2026-10-02)
+
+
+### Features
+
+* completeness UX improvements — ignored episode fix, empty season exclusion, collection bulk dismiss, theatrical lag filter ([a960524](https://github.com/bbidwell85/totality/commit/a96052426ee5a90274d3f3661b48b82f36d7cd40))
+* library card two-column layout with wishlist data ([0046ecb](https://github.com/bbidwell85/totality/commit/0046ecb947a2b71a4d3bca5dd2b8f1c7adf3fda4))
+* major feature expansion — watchlist sync, ratings, dashboard redesign, settings reorganization ([24facce](https://github.com/bbidwell85/totality/commit/24faccef9b12710a157fca28581208a7007a87db))
+* major release — dashboard bento redesign, ARR removal, AI improvements, UI overhaul ([9cdba31](https://github.com/bbidwell85/totality/commit/9cdba31b65eb32cf3a1f8a3828f6af4f3b94ff83))
+* Radarr/Sonarr/Lidarr integration + MediaBrowser hook extraction ([0e20b8c](https://github.com/bbidwell85/totality/commit/0e20b8c9ee2d1ad088c98f7df3ac4f873267114a))
+* show episode count per season in TV show season grid ([e6e53be](https://github.com/bbidwell85/totality/commit/e6e53be6871648ee5b29d9e7cb06adddc5f5d96e))
+* UI improvements — queue panel in TopBar, undo on dismiss, inline confirm, filter condensing ([bed80e4](https://github.com/bbidwell85/totality/commit/bed80e43e24501dd81a563223ea4900f6cfc0acd))
+
+
+### Bug Fixes
+
+* make all panels pure overlays — remove push behavior in Library view ([3cf3a4a](https://github.com/bbidwell85/totality/commit/3cf3a4a29290b20c1abe74c9e8dfe7bab041e27a))
+* resolve all 45 npm audit vulnerabilities ([d205882](https://github.com/bbidwell85/totality/commit/d2058822cf4d951ca91c791225fdb25a0676c20f))
+
 ### [0.3.2](https://github.com/bbidwell85/totality/compare/v0.3.1...v0.3.2) (2026-04-07)
 
 
