@@ -40,7 +40,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@google/genai": "^1.43.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.1",
     "better-sqlite3": "^12.8.0",
     "chokidar": "^5.0.0",
     "electron-updater": "^6.8.3",
@@ -55,6 +55,7 @@
     "sql.js": "^1.10.3"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/adm-zip": "^0.5.8",
     "@types/better-sqlite3": "^7.6.13",
@@ -75,7 +76,7 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "postcss": "^8.4.32",
     "prettier": "^3.1.1",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.4",
     "standard-version": "^9.5.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.2.2",
@@ -84,5 +85,14 @@
     "vite-plugin-electron": "^0.29.1",
     "vite-plugin-electron-renderer": "^0.14.5",
     "vitest": "^4.0.18"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.8.0": true,
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.27.2": true,
+    "electron@41.10.7": true,
+    "protobufjs@7.6.6": true,
+    "sharp@0.35.4": true
   }
 }
