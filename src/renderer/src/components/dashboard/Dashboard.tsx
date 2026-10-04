@@ -232,6 +232,12 @@ export function Dashboard({
         window.electronAPI.wishlistGetCountsByReason(),
       ])
 
+      const failures = allResults.filter(r => r.status === 'rejected')
+      if (failures.length > 0) {
+        console.warn(`[Dashboard] ${failures.length}/${allResults.length} IPC calls failed:`,
+          failures.map(f => (f as PromiseRejectedResult).reason))
+      }
+
       const epsSettingVal = val(allResults[0], null)
       const singlesSettingVal = val(allResults[1], null)
       const upgSort = val(allResults[2], null)

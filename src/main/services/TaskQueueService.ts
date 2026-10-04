@@ -630,7 +630,8 @@ export class TaskQueueService {
     this.emitTaskComplete(task)
 
     // Process next task (this will resume monitoring if queue is empty)
-    this.processNext()
+    // Use setImmediate to avoid growing call stack with many sequential tasks
+    setImmediate(() => this.processNext())
   }
 
   /**

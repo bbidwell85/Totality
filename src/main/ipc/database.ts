@@ -445,7 +445,7 @@ export function registerDatabaseHandlers() {
 
       // Check which movies we own (by TMDB ID) — use getMediaItems with tmdb_id filter
       const allOwnedMovies = db.getMediaItems({ type: 'movie' })
-      const ownedTmdbSet = new Set(allOwnedMovies.filter((m: Record<string, unknown>) => m.tmdb_id).map((m: Record<string, unknown>) => m.tmdb_id as string))
+      const ownedTmdbSet = new Set(allOwnedMovies.filter(m => m.tmdb_id).map(m => m.tmdb_id as string))
       const ownedTmdbIds = new Set<string>()
       for (const movie of validMovies) {
         if (ownedTmdbSet.has(movie.id.toString())) ownedTmdbIds.add(movie.id.toString())
@@ -746,7 +746,7 @@ export function registerDatabaseHandlers() {
       }
 
       // Export data as CSV
-      const csv = db.exportWorkingCSV(validOptions)
+      const csv = await db.exportWorkingCSV(validOptions)
       await fs.writeFile(result.filePath, csv, 'utf-8')
 
       return { success: true, path: result.filePath }

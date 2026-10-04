@@ -132,23 +132,23 @@ class LoggingService {
   private interceptConsole(): void {
     console.log = (...args: unknown[]) => {
       this.originalConsole.log(...args)
-      this.captureLog('info', args)
+      try { this.captureLog('info', args) } catch { /* never crash caller */ }
     }
     console.warn = (...args: unknown[]) => {
       this.originalConsole.warn(...args)
-      this.captureLog('warn', args)
+      try { this.captureLog('warn', args) } catch { /* never crash caller */ }
     }
     console.error = (...args: unknown[]) => {
       this.originalConsole.error(...args)
-      this.captureLog('error', args)
+      try { this.captureLog('error', args) } catch { /* never crash caller */ }
     }
     console.info = (...args: unknown[]) => {
       this.originalConsole.info(...args)
-      this.captureLog('info', args)
+      try { this.captureLog('info', args) } catch { /* never crash caller */ }
     }
     console.debug = (...args: unknown[]) => {
       this.originalConsole.debug(...args)
-      this.captureLog('debug', args)
+      try { this.captureLog('debug', args) } catch { /* never crash caller */ }
     }
   }
 

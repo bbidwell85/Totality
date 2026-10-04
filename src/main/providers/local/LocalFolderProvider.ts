@@ -204,10 +204,16 @@ export class LocalFolderProvider implements MediaProvider {
       let mediaFileCount = 0
       let directoriesProcessed = 0
 
+      const visitedPaths = new Set<string>()
       const countFiles = async (dir: string, depth = 0): Promise<void> => {
         if (depth > 10) return // Prevent infinite recursion
 
         try {
+          // Resolve real path to detect symlink cycles
+          const realDir = await fs.promises.realpath(dir)
+          if (visitedPaths.has(realDir)) return
+          visitedPaths.add(realDir)
+
           const entries = await fs.promises.readdir(dir, { withFileTypes: true })
           for (const entry of entries) {
             if (entry.isDirectory()) {

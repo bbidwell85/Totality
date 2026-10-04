@@ -1,6 +1,7 @@
 import { getDatabase } from '../database/getDatabase'
 import { getTMDBService } from './TMDBService'
 import { getLoggingService } from './LoggingService'
+import { fetchJSON } from './utils/httpClient'
 import {
   CancellableOperation,
   wasRecentlyAnalyzed,
@@ -144,6 +145,61 @@ export class MovieCollectionService extends CancellableOperation {
     return { updated, failed }
   }
 
+
+  /**
+   * Fetch collection poster URLs from Plex for a given library.
+   * Returns a map of collection name (lowercase) -> full poster URL.
+   */
+  private async fetchPlexCollectionPosters(
+    sourceId: string,
+    libraryId?: string
+  ): Promise<Map<string, string>> {
+    const posterMap = new Map<string, string>()
+    const db = getDatabase()
+
+    try {
+      const source = db.getMediaSourceById(sourceId)
+      if (!source || source.source_type !== 'plex') return posterMap
+
+      const config = JSON.parse(source.connection_config)
+      if (!config.serverUrl || !config.token) return posterMap
+
+      // Fetch all libraries to find movie libraries
+      const libraryIds: string[] = []
+      if (libraryId) {
+        libraryIds.push(libraryId)
+      } else {
+        const sectionsData = await fetchJSON<{ MediaContainer?: { Directory?: Array<{ key: string; type: string }> } }>(
+          `${config.serverUrl}/library/sections`,
+          { headers: { Accept: 'application/json', 'X-Plex-Token': config.token }, timeoutMs: 10_000 }
+        )
+        for (const dir of sectionsData?.MediaContainer?.Directory || []) {
+          if (dir.type === 'movie') libraryIds.push(dir.key)
+        }
+      }
+
+      for (const libId of libraryIds) {
+        const data = await fetchJSON<{ MediaContainer?: { Metadata?: Array<{ title: string; thumb?: string }> } }>(
+          `${config.serverUrl}/library/sections/${libId}/collections`,
+          { headers: { Accept: 'application/json', 'X-Plex-Token': config.token }, timeoutMs: 30_000 }
+        )
+        for (const coll of data?.MediaContainer?.Metadata || []) {
+          if (coll.thumb) {
+            posterMap.set(
+              coll.title.toLowerCase(),
+              `${config.serverUrl}${coll.thumb}?X-Plex-Token=${config.token}`
+            )
+          }
+        }
+      }
+
+      console.log(`[MovieCollectionService] Fetched ${posterMap.size} Plex collection posters`)
+    } catch (error) {
+      console.warn('[MovieCollectionService] Failed to fetch Plex collection posters:', error)
+    }
+
+    return posterMap
+  }
 
   /**
    * Deduplicate movies by TMDB ID across all providers
@@ -315,15 +371,23 @@ export class MovieCollectionService extends CancellableOperation {
     // Apply default options
     // Default to deduplication when scanning all sources (no sourceId)
     const {
-      skipRecentlyAnalyzed = true,
+      skipRecentlyAnalyzed: skipRecentlyAnalyzedOpt = true,
       reanalyzeAfterDays = 7,
       deduplicateByTmdbId = !sourceId, // Default to true when no sourceId
     } = options
+    let skipRecentlyAnalyzed = skipRecentlyAnalyzedOpt
     // Reset cancellation flag at start
     this.resetCancellation()
 
     const db = getDatabase()
     const tmdb = getTMDBService()
+
+    // If previous analysis was cancelled (incomplete), force full re-analysis
+    if (skipRecentlyAnalyzed && db.getSetting('collection_analysis_incomplete') === 'true') {
+      console.log('[MovieCollectionService] Previous analysis was incomplete, forcing full re-analysis')
+      skipRecentlyAnalyzed = false
+      db.deleteSetting('collection_analysis_incomplete')
+    }
 
     // Check if TMDB API key is configured
     const tmdbApiKey = db.getSetting('tmdb_api_key')
@@ -335,15 +399,24 @@ export class MovieCollectionService extends CancellableOperation {
     // Initialize TMDB service
     await tmdb.initialize()
 
-    // Check if source is a local drive (kodi-local or local) - these need TMDB lookups and artwork
+    // Check source type for special handling
     let isLocalSource = false
+    let isPlexSource = false
     if (sourceId) {
       const source = db.getMediaSourceById(sourceId)
       if (source && (source.source_type === 'kodi-local' || source.source_type === 'local')) {
         isLocalSource = true
         console.log('[MovieCollectionService] Local source detected, will lookup missing TMDB IDs and update artwork')
       }
+      if (source && source.source_type === 'plex') {
+        isPlexSource = true
+      }
     }
+
+    // Fetch Plex collection posters (single API call per library, non-blocking on failure)
+    const plexPosterMap = isPlexSource && sourceId
+      ? await this.fetchPlexCollectionPosters(sourceId, libraryId)
+      : new Map<string, string>()
 
     // Get movies - either deduplicated across providers or from specific source
     let movies: MediaItem[]
@@ -584,7 +657,7 @@ export class MovieCollectionService extends CancellableOperation {
           missing_movies: result.missingMovies,
           owned_movie_ids: ownedTmdbIds,
           completeness_percentage: result.completenessPercentage,
-          poster_url: result.posterUrl,
+          poster_url: plexPosterMap.get(result.collectionName.toLowerCase()) || result.posterUrl,
           backdrop_url: result.backdropUrl,
         }
 
@@ -632,6 +705,31 @@ export class MovieCollectionService extends CancellableOperation {
     }
 
     const wasCompleted = !this.isCancelled()
+
+    if (wasCompleted) {
+      // Clean up stale collections that no longer have any owned movies in this source
+      const currentCollectionTmdbIds = new Set(
+        collectionEntries.map(c => c.tmdbCollectionId.toString())
+      )
+      const allExistingCollections = db.getMovieCollections(sourceId)
+      let removedStale = 0
+      for (const existing of allExistingCollections) {
+        // Only clean up collections matching this library scope
+        if (libraryId && existing.library_id !== libraryId) continue
+        if (!currentCollectionTmdbIds.has(existing.tmdb_collection_id) && existing.id) {
+          db.deleteMovieCollection(existing.id)
+          removedStale++
+        }
+      }
+      if (removedStale > 0) {
+        console.log(`[MovieCollectionService] Removed ${removedStale} stale collections`)
+      }
+      // Clear incomplete flag on successful completion
+      db.deleteSetting('collection_analysis_incomplete')
+    } else {
+      // Mark analysis as incomplete so next run forces full re-analysis
+      db.setSetting('collection_analysis_incomplete', 'true')
+    }
 
     onProgress?.({
       current: collectionEntries.length,

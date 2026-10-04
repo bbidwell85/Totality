@@ -96,18 +96,22 @@ export function useLibraryEventListeners({
   )
 
   useEffect(() => {
+    // Shape guard for IPC event payloads
+    const isProgressLike = (v: unknown): v is AnalysisProgress =>
+      v != null && typeof v === 'object' && 'current' in v && 'total' in v
+
     // Listen for completeness analysis progress
     const cleanupSeriesProgress = window.electronAPI.onSeriesProgress((prog: unknown) => {
-      setAnalysisProgress(prog as AnalysisProgress)
+      if (isProgressLike(prog)) setAnalysisProgress(prog)
     })
     const cleanupCollectionsProgress = window.electronAPI.onCollectionsProgress(
       (prog: unknown) => {
-        setAnalysisProgress(prog as AnalysisProgress)
+        if (isProgressLike(prog)) setAnalysisProgress(prog)
       }
     )
     const cleanupMusicAnalysisProgress = window.electronAPI.onMusicAnalysisProgress(
       (prog: unknown) => {
-        setAnalysisProgress(prog as AnalysisProgress)
+        if (isProgressLike(prog)) setAnalysisProgress(prog)
       }
     )
 
@@ -124,7 +128,8 @@ export function useLibraryEventListeners({
 
     // Listen for task queue task completion
     const cleanupTaskComplete = window.electronAPI.onTaskQueueTaskComplete?.((task: unknown) => {
-      const t = task as { type: string; status: string }
+      if (task == null || typeof task !== 'object') return
+      const t = task as { type?: string; status?: string }
       // Refresh completeness data after completeness tasks (not scans — scans don't auto-reload)
       if (t.status === 'completed') {
         if (t.type === 'series-completeness' || t.type === 'collection-completeness') {
@@ -138,6 +143,7 @@ export function useLibraryEventListeners({
 
     // Listen for task queue state updates to sync analyzing state
     const cleanupTaskQueueUpdated = window.electronAPI.onTaskQueueUpdated?.((state: unknown) => {
+      if (state == null || typeof state !== 'object') return
       const s = state as { currentTask: { type: string; progress?: AnalysisProgress } | null }
       if (s.currentTask) {
         const taskType = s.currentTask.type

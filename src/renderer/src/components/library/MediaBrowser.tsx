@@ -32,6 +32,7 @@ import {
   useMoviePagination,
   useTVShowPagination,
 } from './hooks'
+import { usePagination } from './hooks/usePagination'
 import {
   emitDismissUpgrade,
 } from '../../utils/dismissEvents'
@@ -106,32 +107,15 @@ export function MediaBrowser({
   const [stats, setStats] = useState<LibraryStats | null>(null)
   const [view, setView] = useState<'movies' | 'tv' | 'music'>('movies')
 
-  // Music state
-  const [musicArtists, setMusicArtists] = useState<MusicArtist[]>([])
-  const [musicAlbums, setMusicAlbums] = useState<MusicAlbum[]>([])
+  // Music state (artists, albums, tracks pagination provided by usePagination hooks below)
   const [musicStats, setMusicStats] = useState<MusicStats | null>(null)
   const [selectedArtist, setSelectedArtist] = useState<MusicArtist | null>(null)
   const [selectedAlbum, setSelectedAlbum] = useState<MusicAlbum | null>(null)
   const [albumTracks, setAlbumTracks] = useState<MusicTrack[]>([])
-  const [allMusicTracks, setAllMusicTracks] = useState<MusicTrack[]>([])
-  const [totalTrackCount, setTotalTrackCount] = useState(0)
-  const [tracksLoading, setTracksLoading] = useState(false)
-  const tracksOffsetRef = useRef(0)
-  const TRACKS_PAGE_SIZE = 500
   const [selectedAlbumCompleteness, setSelectedAlbumCompleteness] = useState<AlbumCompletenessData | null>(null)
   const [musicViewMode, setMusicViewMode] = useState<'artists' | 'albums' | 'tracks'>('artists')
   const [trackSortColumn, setTrackSortColumn] = useState<'title' | 'artist' | 'album' | 'codec' | 'duration'>('title')
   const [trackSortDirection, setTrackSortDirection] = useState<'asc' | 'desc'>('asc')
-  // Artist pagination state
-  const [totalArtistCount, setTotalArtistCount] = useState(0)
-  const [artistsLoading, setArtistsLoading] = useState(false)
-  const artistsOffsetRef = useRef(0)
-  const ARTISTS_PAGE_SIZE = 10000
-  // Album pagination state
-  const [totalAlbumCount, setTotalAlbumCount] = useState(0)
-  const [albumsLoading, setAlbumsLoading] = useState(false)
-  const albumsOffsetRef = useRef(0)
-  const ALBUMS_PAGE_SIZE = 10000
   const [albumSortColumn, setAlbumSortColumn] = useState<'title' | 'artist'>('title')
   const [albumSortDirection, setAlbumSortDirection] = useState<'asc' | 'desc'>('asc')
   const [searchInput, setSearchInput] = useState('')
@@ -182,6 +166,68 @@ export function MediaBrowser({
     selectedShowEpisodes, setSelectedShowEpisodes, selectedShowEpisodesLoading,
     loadPaginatedShows, loadMoreShows, loadSelectedShowEpisodes,
   } = useTVShowPagination({ activeSourceId, activeLibraryId, searchQuery })
+
+  // Music pagination (artists, tracks, albums via generic hook)
+  const {
+    items: musicArtists, setItems: _setMusicArtists,
+    totalCount: totalArtistCount, loading: artistsLoading,
+    load: loadPaginatedArtists, loadMore: loadMoreArtists,
+  } = usePagination<MusicArtist>({
+    pageSize: 10000,
+    fetchItems: (f) => window.electronAPI.musicGetArtists(f) as Promise<MusicArtist[]>,
+    fetchCount: (f) => window.electronAPI.musicCountArtists(f) as Promise<number>,
+    buildFilters: () => {
+      const f: Record<string, unknown> = { sortBy: 'name', sortOrder: 'asc' }
+      if (activeSourceId) f.sourceId = activeSourceId
+      if (activeLibraryId) f.libraryId = activeLibraryId
+      if (searchQuery.trim()) f.searchQuery = searchQuery.trim()
+      return f
+    },
+    deps: [activeSourceId, activeLibraryId, searchQuery],
+  })
+
+  const {
+    items: allMusicTracks, setItems: _setAllMusicTracks,
+    totalCount: totalTrackCount, loading: tracksLoading,
+    load: loadPaginatedTracks, loadMore: loadMoreTracks,
+  } = usePagination<MusicTrack>({
+    pageSize: 500,
+    fetchItems: (f) => window.electronAPI.musicGetTracks(f) as Promise<MusicTrack[]>,
+    fetchCount: (f) => window.electronAPI.musicCountTracks(f) as Promise<number>,
+    buildFilters: () => {
+      const f: Record<string, unknown> = { sortBy: trackSortColumn, sortOrder: trackSortDirection }
+      if (activeSourceId) f.sourceId = activeSourceId
+      if (activeLibraryId) f.libraryId = activeLibraryId
+      if (searchQuery.trim()) f.searchQuery = searchQuery.trim()
+      return f
+    },
+    deps: [activeSourceId, activeLibraryId, searchQuery, trackSortColumn, trackSortDirection],
+  })
+
+  const {
+    items: musicAlbums, setItems: _setMusicAlbums,
+    totalCount: totalAlbumCount, loading: albumsLoading,
+    load: loadPaginatedAlbums, loadMore: loadMoreAlbums,
+  } = usePagination<MusicAlbum>({
+    pageSize: 10000,
+    fetchItems: (f) => window.electronAPI.musicGetAlbums(f) as Promise<MusicAlbum[]>,
+    fetchCount: (f) => window.electronAPI.musicCountAlbums(f) as Promise<number>,
+    buildFilters: () => {
+      const f: Record<string, unknown> = {
+        sortBy: albumSortColumn === 'artist' ? 'artist' : 'title',
+        sortOrder: albumSortDirection,
+      }
+      if (activeSourceId) f.sourceId = activeSourceId
+      if (activeLibraryId) f.libraryId = activeLibraryId
+      if (searchQuery.trim()) f.searchQuery = searchQuery.trim()
+      if (selectedArtist) {
+        f.artistId = selectedArtist.id
+        f.artistName = selectedArtist.name
+      }
+      return f
+    },
+    deps: [activeSourceId, activeLibraryId, searchQuery, albumSortColumn, albumSortDirection, selectedArtist],
+  })
 
   const [collectionsOnly, setCollectionsOnly] = useState(false)
 
@@ -478,151 +524,13 @@ export function MediaBrowser({
     }
   }
 
-  // Load paginated artists from server with current filters/sorting
-  const loadPaginatedArtists = useCallback(async (reset = true, startOffset?: number) => {
-    if (artistsLoading) return
-    setArtistsLoading(true)
-    try {
-      const offset = reset ? (startOffset ?? 0) : artistsOffsetRef.current
-      const filters: Record<string, unknown> = {
-        limit: ARTISTS_PAGE_SIZE,
-        offset,
-        sortBy: 'name',
-        sortOrder: 'asc',
-      }
-      if (activeSourceId) filters.sourceId = activeSourceId
-      if (activeLibraryId) filters.libraryId = activeLibraryId
-
-      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      // alphabetFilter no longer filters — scroll-to-letter handles navigation
-
-      const [artists, count] = await Promise.all([
-        window.electronAPI.musicGetArtists(filters),
-        window.electronAPI.musicCountArtists(filters),
-      ])
-
-      if (reset) {
-        setMusicArtists(artists as MusicArtist[])
-        artistsOffsetRef.current = ARTISTS_PAGE_SIZE
-      } else {
-        setMusicArtists(prev => [...prev, ...(artists as MusicArtist[])])
-        artistsOffsetRef.current = offset + ARTISTS_PAGE_SIZE
-      }
-      setTotalArtistCount(count)
-    } catch (err) {
-      console.warn('Failed to load paginated artists:', err)
-    } finally {
-      setArtistsLoading(false)
-    }
-  }, [activeSourceId, activeLibraryId, searchQuery, artistsLoading])
-
-  // Load more artists (infinite scroll callback)
-  const loadMoreArtists = useCallback(() => {
-    if (artistsOffsetRef.current < totalArtistCount && !artistsLoading) {
-      loadPaginatedArtists(false)
-    }
-  }, [totalArtistCount, artistsLoading, loadPaginatedArtists])
-
-  // Load paginated tracks from server with current filters/sorting
-  const loadPaginatedTracks = useCallback(async (reset = true) => {
-    if (tracksLoading) return
-    setTracksLoading(true)
-    try {
-      const offset = reset ? 0 : tracksOffsetRef.current
-      const filters: Record<string, unknown> = {
-        limit: TRACKS_PAGE_SIZE,
-        offset,
-        sortBy: trackSortColumn,
-        sortOrder: trackSortDirection,
-      }
-      if (activeSourceId) filters.sourceId = activeSourceId
-      if (activeLibraryId) filters.libraryId = activeLibraryId
-
-      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-
-      const [tracks, count] = await Promise.all([
-        window.electronAPI.musicGetTracks(filters),
-        window.electronAPI.musicCountTracks(filters),
-      ])
-
-      if (reset) {
-        setAllMusicTracks(tracks as MusicTrack[])
-        tracksOffsetRef.current = TRACKS_PAGE_SIZE
-      } else {
-        setAllMusicTracks(prev => [...prev, ...(tracks as MusicTrack[])])
-        tracksOffsetRef.current = offset + TRACKS_PAGE_SIZE
-      }
-      setTotalTrackCount(count)
-    } catch (err) {
-      console.warn('Failed to load paginated tracks:', err)
-    } finally {
-      setTracksLoading(false)
-    }
-  }, [activeSourceId, activeLibraryId,searchQuery, trackSortColumn, trackSortDirection, tracksLoading])
-
-  // Load more tracks (infinite scroll callback)
-  const loadMoreTracks = useCallback(() => {
-    if (tracksOffsetRef.current < totalTrackCount && !tracksLoading) {
-      loadPaginatedTracks(false)
-    }
-  }, [totalTrackCount, tracksLoading, loadPaginatedTracks])
-
   // Trigger server-side track loading when tracks tab is active and filters change
   useEffect(() => {
     if (view === 'music' && musicViewMode === 'tracks') {
       loadPaginatedTracks(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, musicViewMode, activeSourceId, activeLibraryId,searchQuery, trackSortColumn, trackSortDirection])
-
-  // Load paginated albums from server with current filters/sorting
-  const loadPaginatedAlbums = useCallback(async (reset = true, startOffset?: number) => {
-    if (albumsLoading) return
-    setAlbumsLoading(true)
-    try {
-      const offset = reset ? (startOffset ?? 0) : albumsOffsetRef.current
-      const filters: Record<string, unknown> = {
-        limit: ALBUMS_PAGE_SIZE,
-        offset,
-        sortBy: albumSortColumn === 'artist' ? 'artist' : 'title',
-        sortOrder: albumSortDirection,
-      }
-      if (activeSourceId) filters.sourceId = activeSourceId
-      if (activeLibraryId) filters.libraryId = activeLibraryId
-
-      if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      // alphabetFilter no longer filters — scroll-to-letter handles navigation
-      if (selectedArtist) {
-        filters.artistId = selectedArtist.id
-        filters.artistName = selectedArtist.name
-      }
-
-      const [albums, count] = await Promise.all([
-        window.electronAPI.musicGetAlbums(filters),
-        window.electronAPI.musicCountAlbums(filters),
-      ])
-
-      if (reset) {
-        setMusicAlbums(albums as MusicAlbum[])
-        albumsOffsetRef.current = ALBUMS_PAGE_SIZE
-      } else {
-        setMusicAlbums(prev => [...prev, ...(albums as MusicAlbum[])])
-        albumsOffsetRef.current = offset + ALBUMS_PAGE_SIZE
-      }
-      setTotalAlbumCount(count)
-    } catch (err) {
-      console.warn('Failed to load paginated albums:', err)
-    } finally {
-      setAlbumsLoading(false)
-    }
-  }, [activeSourceId, activeLibraryId, searchQuery, albumSortColumn, albumSortDirection, albumsLoading, selectedArtist])
-
-  // Load more albums (infinite scroll callback)
-  const loadMoreAlbums = useCallback(() => {
-    if (albumsOffsetRef.current < totalAlbumCount && !albumsLoading) {
-      loadPaginatedAlbums(false)
-    }
-  }, [totalAlbumCount, albumsLoading, loadPaginatedAlbums])
+  }, [view, musicViewMode, activeSourceId, activeLibraryId, searchQuery, trackSortColumn, trackSortDirection])
 
   // Trigger server-side artist loading when artists tab is active and filters change
   useEffect(() => {

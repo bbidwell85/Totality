@@ -313,13 +313,22 @@ export class GeminiService {
         parts: [],
       }
 
-      // Detect tool-use loops: same tool calls repeated 3+ times in a row
+      // Detect tool-use loops: same tool calls repeated 3+ times (consecutive or alternating)
       const callSignature = functionCalls.map(fc => `${fc.name}:${JSON.stringify(fc.args)}`).join('|')
       recentToolCalls.push(callSignature)
       if (recentToolCalls.length >= 3) {
+        // Check consecutive repeats (A, A, A)
         const last3 = recentToolCalls.slice(-3)
-        if (last3[0] === last3[1] && last3[1] === last3[2]) {
-          console.warn('[GeminiService] Tool-use loop detected — same calls repeated 3 times, breaking')
+        const isConsecutiveLoop = last3[0] === last3[1] && last3[1] === last3[2]
+        // Check alternating repeats (A, B, A, B, A, B) — same pair repeated 3+ times
+        let isAlternatingLoop = false
+        if (recentToolCalls.length >= 6) {
+          const last6 = recentToolCalls.slice(-6)
+          isAlternatingLoop = last6[0] === last6[2] && last6[2] === last6[4]
+            && last6[1] === last6[3] && last6[3] === last6[5]
+        }
+        if (isConsecutiveLoop || isAlternatingLoop) {
+          console.warn('[GeminiService] Tool-use loop detected — repeating pattern, breaking')
           return {
             text: 'I encountered an issue processing your request. Please try rephrasing your question.',
             usage: totalUsage,

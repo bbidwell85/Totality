@@ -158,7 +158,7 @@ export class MoodSyncService {
             sourceName: match.sourceName,
             sourceType: match.sourceType,
             moods: targetTags,
-            trackId: match.track.id!,
+            trackId: match.track.id ?? 0,
             trackProviderId: match.track.provider_id,
             libraryId: match.track.library_id,
             hasMismatch,

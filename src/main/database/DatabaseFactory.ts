@@ -23,29 +23,26 @@ import { getBetterSQLiteService } from './BetterSQLiteService'
 
 // SQL.js is loaded dynamically to avoid requiring it in production builds
 // (it's excluded from the ASAR bundle since production uses better-sqlite3)
+// SQL.js loader uses 'as' cast — DatabaseService has known parity gaps
+// (missing: deleteSetting, getMediaItem, getMediaItemByProviderId, deleteMediaItemsForSource, etc.)
+// These are stubbed or named differently in SQL.js. The typed interface documents what's expected.
 let sqlJsServiceLoader: (() => DatabaseServiceInterface) | null = null
 
 async function getSqlJsService(): Promise<DatabaseServiceInterface> {
   if (!sqlJsServiceLoader) {
     const mod = await import('../services/DatabaseService')
-    sqlJsServiceLoader = mod.getDatabaseService
+    sqlJsServiceLoader = mod.getDatabaseService as unknown as () => DatabaseServiceInterface
   }
-  return sqlJsServiceLoader()
+  return sqlJsServiceLoader!()
 }
 
 // The database backend to use (cached after first check)
 let useBetterSqlite: boolean | null = null
 let migrationPerformed = false
 
-// Database service interfaces for type compatibility
-interface DatabaseServiceInterface {
-  isInitialized: boolean
-  initialize(): Promise<void> | void
-  close(): Promise<void> | void
-  forceSave(): Promise<void> | void
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  [key: string]: any
-}
+// Typed database interface — enforces method signature parity between backends
+import type { DatabaseServiceInterface } from './DatabaseInterface'
+export type { DatabaseServiceInterface }
 
 /**
  * Check if better-sqlite3 backend should be used
@@ -153,7 +150,9 @@ export async function getDatabaseServiceAsync(): Promise<DatabaseServiceInterfac
   }
 
   if (shouldUseBetterSqlite()) {
-    return getBetterSQLiteService()
+    // BetterSQLiteService has known gaps: getQualityDistribution, markNotificationRead, exportWorkingCSV
+    // These should be added to BetterSQLiteService over time
+    return getBetterSQLiteService() as unknown as DatabaseServiceInterface
   } else {
     return getSqlJsService()
   }
@@ -166,7 +165,7 @@ export async function getDatabaseServiceAsync(): Promise<DatabaseServiceInterfac
  */
 export function getDatabaseServiceSync(): DatabaseServiceInterface {
   if (shouldUseBetterSqlite()) {
-    return getBetterSQLiteService()
+    return getBetterSQLiteService() as unknown as DatabaseServiceInterface
   } else {
     // SQL.js loader must have been initialized by a prior getDatabaseServiceAsync() call
     if (!sqlJsServiceLoader) {

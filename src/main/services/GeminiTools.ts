@@ -5,6 +5,7 @@ import { getQualityAnalyzer } from './QualityAnalyzer'
 import { getTMDBService } from './TMDBService'
 import { getMusicBrainzService } from './MusicBrainzService'
 import type { SeriesCompleteness, MovieCollection } from '../types/database'
+import { formatSize } from './utils/formatUtils'
 
 /** Actionable item from tool results — not-owned titles the user can add to wishlist */
 export interface ActionableItem {
@@ -706,7 +707,7 @@ export async function executeTool(
         limit: wlLimit,
         status: 'active',
       })
-      const simplified = items.map((item: Record<string, unknown>) => compact({
+      const simplified = items.map((item) => compact({
         media_type: item.media_type,
         title: item.title,
         year: item.year,
@@ -1177,7 +1178,7 @@ export async function executeTool(
             artist: match.name,
             owned: true,
             album_count: albums.length,
-            albums: albums.slice(0, 5).map((a: Record<string, unknown>) => a.title),
+            albums: albums.slice(0, 5).map(a => a.title),
           })
         }
         return { artist: name, owned: false, album_count: 0 }
@@ -1243,7 +1244,7 @@ export async function executeTool(
       const qualityScore = db.getQualityScoreByMediaId(item.id as number) as Record<string, unknown> | null
 
       // Get versions
-      const versions = db.getMediaItemVersions(item.id as number) as Array<Record<string, unknown>>
+      const versions = db.getMediaItemVersions(item.id as number) as unknown as Array<Record<string, unknown>>
       const versionData = versions.length > 1 ? versions.map((v) => compact({
         edition: v.edition,
         label: v.label,
@@ -1408,8 +1409,8 @@ export async function executeTool(
         })
       }
 
-      const added = db.addWishlistItemsBulk(wishlistItems as never[])
-      const skipped = wishlistItems.length - added
+      const added = await db.addWishlistItemsBulk(wishlistItems as never[])
+      const skipped = wishlistItems.length - (added as number)
 
       // Notify renderer to refresh wishlist immediately
       if (added > 0) {
@@ -1445,7 +1446,7 @@ export async function executeTool(
       if (needsUpgrade) {
         // Use dedicated upgrade method
         const albums = db.getAlbumsNeedingUpgrade(limit)
-        const simplified = albums.map((a: Record<string, unknown>) => compact({
+        const simplified = albums.map((a) => compact({
           id: a.id,
           title: a.title,
           artist_name: a.artist_name,
@@ -1468,9 +1469,9 @@ export async function executeTool(
 
       let albums: Record<string, unknown>[]
       if (artistName) {
-        albums = db.getMusicAlbumsByArtistName(artistName, limit) as Record<string, unknown>[]
+        albums = db.getMusicAlbumsByArtistName(artistName, limit) as unknown as Record<string, unknown>[]
       } else {
-        albums = db.getMusicAlbums(filters) as Record<string, unknown>[]
+        albums = db.getMusicAlbums(filters) as unknown as Record<string, unknown>[]
       }
 
       // Enrich with quality scores
@@ -1501,7 +1502,7 @@ export async function executeTool(
       const upgradeLimit = toolNumber(input, 'upgrade_limit', 1, 50) || 10
 
       // Get all albums and their quality scores
-      const allAlbums = db.getMusicAlbums({ limit: 10000 }) as Record<string, unknown>[]
+      const allAlbums = db.getMusicAlbums({ limit: 10000 }) as unknown as Record<string, unknown>[]
       const tiers: Record<string, number> = {
         HI_RES: 0, LOSSLESS: 0, LOSSY_HIGH: 0, LOSSY_MID: 0, LOSSY_LOW: 0, UNSCORED: 0,
       }
@@ -1527,7 +1528,7 @@ export async function executeTool(
 
       if (includeUpgrades) {
         const upgradeAlbums = db.getAlbumsNeedingUpgrade(upgradeLimit)
-        result.albums_needing_upgrade = upgradeAlbums.map((a: Record<string, unknown>) => compact({
+        result.albums_needing_upgrade = upgradeAlbums.map((a) => compact({
           title: a.title,
           artist_name: a.artist_name,
           best_audio_codec: a.best_audio_codec,
@@ -1546,9 +1547,9 @@ export async function executeTool(
       let artists: Record<string, unknown>[]
       if (artistName) {
         const single = db.getArtistCompleteness(artistName)
-        artists = single ? [single as Record<string, unknown>] : []
+        artists = single ? [single as unknown as Record<string, unknown>] : []
       } else {
-        const all = db.getAllArtistCompleteness() as Record<string, unknown>[]
+        const all = db.getAllArtistCompleteness() as unknown as Record<string, unknown>[]
         artists = incompleteOnly
           ? all.filter(a => (a.completeness_percentage as number) < 100)
           : all
@@ -1605,7 +1606,7 @@ export async function executeTool(
       }
 
       // Get tracks
-      const tracks = db.getMusicTracks({ albumId: album.id as number, limit: 200 }) as Record<string, unknown>[]
+      const tracks = db.getMusicTracks({ albumId: album.id as number, limit: 200 }) as unknown as Record<string, unknown>[]
       const trackData = tracks.map((t: Record<string, unknown>) => compact({
         track_number: t.track_number,
         disc_number: t.disc_number,
@@ -1640,7 +1641,7 @@ export async function executeTool(
         tier_quality: quality ? (quality as Record<string, unknown>).tier_quality : undefined,
         tier_score: quality ? (quality as Record<string, unknown>).tier_score : undefined,
         needs_upgrade: quality ? (quality as Record<string, unknown>).needs_upgrade : undefined,
-        completeness_percentage: completeness ? (completeness as Record<string, unknown>).completeness_percentage : undefined,
+        completeness_percentage: completeness ? (completeness as unknown as Record<string, unknown>).completeness_percentage : undefined,
         tracks: trackData,
       })
 
@@ -1660,16 +1661,15 @@ export async function executeTool(
         limit,
       })
       const filtered = items.filter((i: Record<string, unknown>) => (i.play_count as number) > 0)
-      return JSON.stringify(compact(filtered.map((i: Record<string, unknown>) => ({
+      return JSON.stringify(filtered.map((i: Record<string, unknown>) => compact({
         title: i.title, year: i.year, type: i.type,
         play_count: i.play_count, last_watched_at: i.last_watched_at,
         quality_tier: i.quality_tier, series_title: i.series_title,
-      }))))
+      })))
     }
 
     case 'get_storage_breakdown': {
       const analytics = db.getStorageAnalytics()
-      const formatSize = (b: number) => b >= 1e12 ? `${(b / 1e12).toFixed(1)} TB` : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${(b / 1e6).toFixed(0)} MB`
       return JSON.stringify({
         total_size: formatSize(analytics.totalSize),
         total_items: analytics.totalItems,
@@ -1748,11 +1748,11 @@ export async function executeTool(
       })
       const minRating = toolNumber(input, 'min_rating') || 7.5
       const filtered = items.filter((i: Record<string, unknown>) => ((i.tmdb_rating as number) || 0) >= minRating)
-      return JSON.stringify(compact(filtered.map((i: Record<string, unknown>) => ({
+      return JSON.stringify(filtered.map((i: Record<string, unknown>) => compact({
         title: i.title, year: i.year, type: i.type,
         tmdb_rating: i.tmdb_rating, quality_tier: i.quality_tier,
         series_title: i.series_title,
-      }))))
+      })))
     }
 
     case 'get_recently_added': {
@@ -1778,14 +1778,14 @@ export async function executeTool(
         return JSON.stringify({ error: `No completeness data found for "${artistName}". Run completeness analysis first.` })
       }
 
-      const comp = completeness as Record<string, unknown>
+      const comp = completeness as unknown as Record<string, unknown>
       let missingAlbums: Array<Record<string, unknown>> = []
       try {
         missingAlbums = JSON.parse((comp.missing_albums as string) || '[]')
       } catch { /* empty */ }
 
       // Get owned albums
-      const ownedAlbums = db.getMusicAlbumsByArtistName(artistName, limit) as Record<string, unknown>[]
+      const ownedAlbums = db.getMusicAlbumsByArtistName(artistName, limit) as unknown as Record<string, unknown>[]
 
       return JSON.stringify(compact({
         artist_name: comp.artist_name,

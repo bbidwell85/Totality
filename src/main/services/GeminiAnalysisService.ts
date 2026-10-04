@@ -2,6 +2,7 @@ import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from './QualityAnalyzer'
 import { getGeminiService } from './GeminiService'
 import type { SeriesCompleteness, MovieCollection } from '../types/database'
+import { formatSize } from './utils/formatUtils'
 import {
   QUALITY_REPORT_SYSTEM_PROMPT,
   UPGRADE_PRIORITIES_SYSTEM_PROMPT,
@@ -54,7 +55,7 @@ export class GeminiAnalysisService {
       '',
       '## Sample Low-Quality Items (up to 20)',
       JSON.stringify(
-        lowQualityItems.map((item: Record<string, unknown>) => compact({
+        lowQualityItems.map((item) => compact({
           title: item.title,
           year: item.year,
           type: item.type,
@@ -249,7 +250,7 @@ export class GeminiAnalysisService {
       '',
       `## Wishlist Items (${wishlistItems.length})`,
       JSON.stringify(
-        wishlistItems.map((item: Record<string, unknown>) => compact({
+        wishlistItems.map((item) => compact({
           title: item.title,
           year: item.year,
           media_type: item.media_type,
@@ -290,8 +291,6 @@ export class GeminiAnalysisService {
     const db = getDatabase()
     const stats = db.getLibraryStats()
     const analytics = db.getStorageAnalytics()
-
-    const formatSize = (b: number) => b >= 1e12 ? `${(b / 1e12).toFixed(1)} TB` : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${(b / 1e6).toFixed(0)} MB`
 
     const dataContext = [
       '## Library Stats',
@@ -344,14 +343,14 @@ export class GeminiAnalysisService {
     const musicStats = db.getMusicStats()
 
     // Get quality distribution
-    const allAlbums = db.getMusicAlbums({ limit: 10000 }) as Record<string, unknown>[]
+    const allAlbums = db.getMusicAlbums({ limit: 10000 }) as unknown as Record<string, unknown>[]
     const tiers: Record<string, number> = {
       HI_RES: 0, LOSSLESS: 0, LOSSY_HIGH: 0, LOSSY_MID: 0, LOSSY_LOW: 0, UNSCORED: 0,
     }
     for (const album of allAlbums) {
       const quality = db.getMusicQualityScore(album.id as number)
       if (quality) {
-        const tier = (quality as Record<string, unknown>).quality_tier as string
+        const tier = (quality as unknown as Record<string, unknown>).quality_tier as string
         if (tier in tiers) tiers[tier]++
         else tiers.UNSCORED++
       } else {
@@ -363,7 +362,7 @@ export class GeminiAnalysisService {
     const upgradeAlbums = db.getAlbumsNeedingUpgrade(20)
 
     // Get artist completeness summary
-    const artistCompleteness = db.getAllArtistCompleteness() as Record<string, unknown>[]
+    const artistCompleteness = db.getAllArtistCompleteness() as unknown as Record<string, unknown>[]
     const incompleteArtists = artistCompleteness
       .filter(a => (a.completeness_percentage as number) < 100)
       .slice(0, 15)
@@ -379,7 +378,7 @@ export class GeminiAnalysisService {
       }),
       '',
       '## Albums Needing Upgrade (up to 20)',
-      JSON.stringify(upgradeAlbums.map((a: Record<string, unknown>) => compact({
+      JSON.stringify(upgradeAlbums.map((a) => compact({
         title: a.title,
         artist_name: a.artist_name,
         best_audio_codec: a.best_audio_codec,

@@ -1085,11 +1085,8 @@ export class MusicBrainzService extends CancellableOperation {
     try {
       const artworkUrl = await this.getCoverArtUrl(releaseGroupId)
 
-      if (artworkUrl) {
-        await db.updateMusicAlbumArtwork(album.source_id, album.provider_id, {
-          thumbUrl: artworkUrl,
-          artUrl: this.buildCoverArtUrl(releaseGroupId, '1200'), // Large version for art_url
-        })
+      if (artworkUrl && album.id) {
+        await db.updateMusicAlbumArtwork(album.id, artworkUrl)
         console.log(`[MusicBrainzService] Updated artwork for "${album.artist_name} - ${album.title}"`)
       }
     } catch (error) {

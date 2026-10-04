@@ -181,10 +181,10 @@ export function MoviesView({
       const existingCollectionIds = new Set(
         prevDisplayItemsRef.current
           .filter(item => item.type === 'collection')
-          .map(item => item.collection.id)
+          .map(item => item.collection.tmdb_collection_id)
       )
       const dedupedNewItems = newItems.filter(
-        item => item.type !== 'collection' || !existingCollectionIds.has(item.collection.id)
+        item => item.type !== 'collection' || !existingCollectionIds.has(item.collection.tmdb_collection_id)
       )
 
       result = [...prevDisplayItemsRef.current, ...dedupedNewItems]

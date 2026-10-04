@@ -1440,11 +1440,11 @@ export class BetterSQLiteService {
     const sortOrder = filters?.sortOrder?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
     // For watch history / rating sorts: NULLs last, secondary sort by title
     if (filters?.sortBy === 'last_watched_at' || filters?.sortBy === 'tmdb_rating') {
-      sql += ` ORDER BY ${sortColumn} IS NULL ASC, ${sortColumn} ${sortOrder}, COALESCE(m.sort_title, m.title) ASC`
+      sql += ` ORDER BY ${sortColumn} IS NULL ASC, ${sortColumn} ${sortOrder}, COALESCE(m.sort_title, m.title) ASC, m.id ASC`
     } else if (filters?.sortBy === 'play_count') {
-      sql += ` ORDER BY ${sortColumn} ${sortOrder}, COALESCE(m.sort_title, m.title) ASC`
+      sql += ` ORDER BY ${sortColumn} ${sortOrder}, COALESCE(m.sort_title, m.title) ASC, m.id ASC`
     } else {
-      sql += ` ORDER BY ${sortColumn} ${sortOrder}`
+      sql += ` ORDER BY ${sortColumn} ${sortOrder}, m.id ASC`
     }
 
     // Pagination
@@ -1811,93 +1811,118 @@ export class BetterSQLiteService {
   cleanupOrphanedMediaData(): number {
     if (!this.db) throw new Error('Database not initialized')
 
-    let cleaned = 0
-    cleaned += this.db.prepare(
-      'DELETE FROM quality_scores WHERE media_item_id NOT IN (SELECT id FROM media_items)'
-    ).run().changes
-    cleaned += this.db.prepare(
-      'DELETE FROM media_item_versions WHERE media_item_id NOT IN (SELECT id FROM media_items)'
-    ).run().changes
-    cleaned += this.db.prepare(
-      'DELETE FROM media_item_collections WHERE media_item_id NOT IN (SELECT id FROM media_items)'
-    ).run().changes
+    const db = this.db
+    const txn = db.transaction(() => {
+      let cleaned = 0
+      cleaned += db.prepare(
+        'DELETE FROM quality_scores WHERE media_item_id NOT IN (SELECT id FROM media_items)'
+      ).run().changes
+      cleaned += db.prepare(
+        'DELETE FROM media_item_versions WHERE media_item_id NOT IN (SELECT id FROM media_items)'
+      ).run().changes
+      cleaned += db.prepare(
+        'DELETE FROM media_item_collections WHERE media_item_id NOT IN (SELECT id FROM media_items)'
+      ).run().changes
 
-    // Validate collection ownership — remove TMDB IDs that no longer exist in media_items
-    try {
-      const collections = this.db.prepare(
-        'SELECT id, owned_movie_ids, owned_movies, total_movies, source_id FROM movie_collections'
-      ).all() as Array<{ id: number; owned_movie_ids: string; owned_movies: number; total_movies: number; source_id: string }>
+      // Validate collection ownership — batch-query all owned TMDB IDs at once
+      try {
+        const collections = db.prepare(
+          'SELECT id, owned_movie_ids, owned_movies, total_movies, source_id FROM movie_collections'
+        ).all() as Array<{ id: number; owned_movie_ids: string; owned_movies: number; total_movies: number; source_id: string }>
 
-      for (const coll of collections) {
-        const ownedIds: string[] = JSON.parse(coll.owned_movie_ids || '[]')
-        const validIds = ownedIds.filter(tmdbId => {
-          const exists = this.db!.prepare('SELECT 1 FROM media_items WHERE tmdb_id = ?').get(tmdbId)
-          return !!exists
-        })
-
-        if (validIds.length !== ownedIds.length) {
-          if (validIds.length === 0) {
-            this.db.prepare('DELETE FROM movie_collections WHERE id = ?').run(coll.id)
-            cleaned++
-          } else {
-            const newPct = coll.total_movies > 0 ? Math.round((validIds.length / coll.total_movies) * 100) : 0
-            this.db.prepare(
-              'UPDATE movie_collections SET owned_movies = ?, owned_movie_ids = ?, completeness_percentage = ?, updated_at = datetime(\'now\') WHERE id = ?'
-            ).run(validIds.length, JSON.stringify(validIds), newPct, coll.id)
-          }
-          cleaned++
+        // Collect all TMDB IDs across all collections, batch-check existence
+        const allTmdbIds = new Set<string>()
+        for (const coll of collections) {
+          const ownedIds: string[] = JSON.parse(coll.owned_movie_ids || '[]')
+          for (const id of ownedIds) allTmdbIds.add(id)
         }
-      }
-    } catch (e) { console.warn('[BetterSQLite] Cleanup warning:', e) }
 
-    // Validate series completeness — update owned_episodes from actual media_items count
-    try {
-      this.db.prepare(`
-        UPDATE series_completeness SET
-          owned_episodes = (
-            SELECT COUNT(*) FROM media_items mi
-            WHERE mi.series_title = series_completeness.series_title
-              AND mi.source_id = series_completeness.source_id
-              AND mi.type = 'episode'
-          ),
-          completeness_percentage = CASE WHEN total_episodes > 0
-            THEN ROUND(CAST((
+        const existingTmdbIds = new Set<string>()
+        if (allTmdbIds.size > 0) {
+          const ids = Array.from(allTmdbIds)
+          const placeholders = ids.map(() => '?').join(',')
+          const rows = db.prepare(
+            `SELECT DISTINCT tmdb_id FROM media_items WHERE tmdb_id IN (${placeholders})`
+          ).all(...ids) as Array<{ tmdb_id: string }>
+          for (const row of rows) existingTmdbIds.add(row.tmdb_id)
+        }
+
+        for (const coll of collections) {
+          const ownedIds: string[] = JSON.parse(coll.owned_movie_ids || '[]')
+          const validIds = ownedIds.filter(tmdbId => existingTmdbIds.has(tmdbId))
+
+          if (validIds.length !== ownedIds.length) {
+            if (validIds.length === 0) {
+              db.prepare('DELETE FROM movie_collections WHERE id = ?').run(coll.id)
+              cleaned++
+            } else {
+              const newPct = coll.total_movies > 0 ? Math.round((validIds.length / coll.total_movies) * 100) : 0
+              db.prepare(
+                'UPDATE movie_collections SET owned_movies = ?, owned_movie_ids = ?, completeness_percentage = ?, updated_at = datetime(\'now\') WHERE id = ?'
+              ).run(validIds.length, JSON.stringify(validIds), newPct, coll.id)
+            }
+            cleaned++
+          }
+        }
+      } catch (e) { console.warn('[BetterSQLite] Cleanup warning:', e) }
+
+      // Validate series completeness — update owned_episodes from actual media_items count
+      try {
+        db.prepare(`
+          UPDATE series_completeness SET
+            owned_episodes = (
               SELECT COUNT(*) FROM media_items mi
               WHERE mi.series_title = series_completeness.series_title
                 AND mi.source_id = series_completeness.source_id
                 AND mi.type = 'episode'
-            ) AS REAL) * 100.0 / total_episodes)
-            ELSE 0 END
-      `).run()
-      // Remove series with 0 owned episodes
-      cleaned += this.db.prepare(
-        'DELETE FROM series_completeness WHERE owned_episodes <= 0'
-      ).run().changes
-    } catch (e) { console.warn('[BetterSQLite] Cleanup warning:', e) }
+            ),
+            completeness_percentage = CASE WHEN total_episodes > 0
+              THEN ROUND(CAST((
+                SELECT COUNT(*) FROM media_items mi
+                WHERE mi.series_title = series_completeness.series_title
+                  AND mi.source_id = series_completeness.source_id
+                  AND mi.type = 'episode'
+              ) AS REAL) * 100.0 / total_episodes)
+              ELSE 0 END
+        `).run()
+        // Remove truly orphaned series — no matching episodes in any source
+        cleaned += db.prepare(`
+          DELETE FROM series_completeness WHERE id IN (
+            SELECT sc.id FROM series_completeness sc
+            WHERE NOT EXISTS (
+              SELECT 1 FROM media_items mi
+              WHERE mi.series_title = sc.series_title AND mi.type = 'episode'
+            )
+          )
+        `).run().changes
+      } catch (e) { console.warn('[BetterSQLite] Cleanup warning:', e) }
 
-    // Clean up orphaned music data
-    try {
-      cleaned += this.db.prepare(
-        'DELETE FROM music_albums WHERE id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE album_id IS NOT NULL)'
-      ).run().changes
-      cleaned += this.db.prepare(
-        'DELETE FROM music_artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM music_tracks WHERE artist_id IS NOT NULL)'
-      ).run().changes
-      cleaned += this.db.prepare(
-        'DELETE FROM music_quality_scores WHERE album_id NOT IN (SELECT id FROM music_albums)'
-      ).run().changes
-      cleaned += this.db.prepare(
-        'DELETE FROM album_completeness WHERE album_id NOT IN (SELECT id FROM music_albums)'
-      ).run().changes
-      cleaned += this.db.prepare(
-        'DELETE FROM artist_completeness WHERE artist_name NOT IN (SELECT name FROM music_artists)'
-      ).run().changes
-    } catch (e) { console.warn('[BetterSQLite] Cleanup warning:', e) }
+      // Clean up orphaned music data
+      try {
+        cleaned += db.prepare(
+          'DELETE FROM music_albums WHERE id NOT IN (SELECT DISTINCT album_id FROM music_tracks WHERE album_id IS NOT NULL)'
+        ).run().changes
+        cleaned += db.prepare(
+          'DELETE FROM music_artists WHERE id NOT IN (SELECT DISTINCT artist_id FROM music_tracks WHERE artist_id IS NOT NULL)'
+        ).run().changes
+        cleaned += db.prepare(
+          'DELETE FROM music_quality_scores WHERE album_id NOT IN (SELECT id FROM music_albums)'
+        ).run().changes
+        cleaned += db.prepare(
+          'DELETE FROM album_completeness WHERE album_id NOT IN (SELECT id FROM music_albums)'
+        ).run().changes
+        cleaned += db.prepare(
+          'DELETE FROM artist_completeness WHERE artist_name NOT IN (SELECT name FROM music_artists)'
+        ).run().changes
+      } catch (e) { console.warn('[BetterSQLite] Cleanup warning:', e) }
 
-    if (cleaned > 0) {
-      console.log(`[BetterSQLite] Cleaned up ${cleaned} orphaned rows`)
-    }
-    return cleaned
+      if (cleaned > 0) {
+        console.log(`[BetterSQLite] Cleaned up ${cleaned} orphaned rows`)
+      }
+      return cleaned
+    })
+
+    return txn()
   }
 
   /**
@@ -3185,7 +3210,7 @@ export class BetterSQLiteService {
     const artistSortMap: Record<string, string> = { 'name': 'sort_name', 'title': 'sort_name', 'added_at': 'created_at' }
     const sortCol = artistSortMap[filters?.sortBy || ''] || 'sort_name'
     const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
-    sql += ` ORDER BY ${sortCol} ${sortDir}`
+    sql += ` ORDER BY ${sortCol} ${sortDir}, id ASC`
 
     if (filters?.limit) {
       sql += ' LIMIT ?'
@@ -3279,9 +3304,9 @@ export class BetterSQLiteService {
     const sortCol = albumSortMap[filters?.sortBy || ''] || 'artist_name'
     const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
     if (!filters?.sortBy || filters.sortBy === 'artist') {
-      sql += ` ORDER BY ${sortCol} ${sortDir}, year DESC`
+      sql += ` ORDER BY ${sortCol} ${sortDir}, year DESC, id ASC`
     } else {
-      sql += ` ORDER BY ${sortCol} ${sortDir}`
+      sql += ` ORDER BY ${sortCol} ${sortDir}, id ASC`
     }
 
     if (filters?.limit) {
@@ -3387,11 +3412,11 @@ export class BetterSQLiteService {
     if (filters?.sortBy && trackSortMap[filters.sortBy]) {
       const sortCol = trackSortMap[filters.sortBy]
       const sortDir = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
-      sql += ` ORDER BY ${sortCol} ${sortDir}`
+      sql += ` ORDER BY ${sortCol} ${sortDir}, id ASC`
     } else if (filters?.albumId) {
-      sql += ' ORDER BY disc_number ASC, track_number ASC'
+      sql += ' ORDER BY disc_number ASC, track_number ASC, id ASC'
     } else {
-      sql += ' ORDER BY title ASC'
+      sql += ' ORDER BY title ASC, id ASC'
     }
 
     if (filters?.limit) {
@@ -3713,8 +3738,8 @@ export class BetterSQLiteService {
 
     // Look up by unique key — lastInsertRowid is unreliable after ON CONFLICT DO UPDATE
     const inserted = this.db.prepare(
-      'SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ?'
-    ).get(data.series_title, sourceId) as { id: number } | undefined
+      'SELECT id FROM series_completeness WHERE series_title = ? AND source_id = ? AND library_id = ?'
+    ).get(data.series_title, sourceId, libraryId) as { id: number } | undefined
     return inserted?.id || 0
   }
 
@@ -3913,10 +3938,10 @@ export class BetterSQLiteService {
     const sortOrder = filters?.sortOrder === 'desc' ? 'DESC' : 'ASC'
     switch (filters?.sortBy) {
       case 'episode_count':
-        sql += ` ORDER BY episode_count ${sortOrder}`
+        sql += ` ORDER BY episode_count ${sortOrder}, COALESCE(sort_title, series_title) ASC`
         break
       case 'season_count':
-        sql += ` ORDER BY season_count ${sortOrder}`
+        sql += ` ORDER BY season_count ${sortOrder}, COALESCE(sort_title, series_title) ASC`
         break
       case 'play_count':
         sql += ` ORDER BY total_play_count ${sortOrder}, COALESCE(sort_title, series_title) ASC`

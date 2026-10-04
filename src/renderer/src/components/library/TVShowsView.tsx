@@ -490,7 +490,7 @@ export function TVShowsView({
           <div className="space-y-2 mt-4">
             {shows.map((show) => {
               const completeness = seriesCompleteness.get(show.series_title)
-              return <div key={show.series_title} data-title={show.series_title}><ShowListItem show={show} onClick={() => onSelectShow(show.series_title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={async () => { await onAnalyzeSeries(show.series_title) }} onFixMatch={onFixMatch ? (sourceId, folderPath) => onFixMatch(show.series_title, sourceId, folderPath) : undefined} /></div>
+              return <div key={`${show.source_id || ''}-${show.series_title}`} data-title={show.series_title}><ShowListItem show={show} onClick={() => onSelectShow(show.series_title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={async () => { await onAnalyzeSeries(show.series_title) }} onFixMatch={onFixMatch ? (sourceId, folderPath) => onFixMatch(show.series_title, sourceId, folderPath) : undefined} /></div>
             })}
           </div>
           <div ref={showSentinelRef} className="h-1" />
@@ -516,7 +516,7 @@ export function TVShowsView({
         >
           {shows.map((show) => {
             const completeness = seriesCompleteness.get(show.series_title)
-            return <div key={show.series_title} data-title={show.series_title}><ShowCard show={show} onClick={() => onSelectShow(show.series_title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={() => onAnalyzeSeries(show.series_title)} onFixMatch={onFixMatch ? (sourceId, folderPath) => onFixMatch(show.series_title, sourceId, folderPath) : undefined} /></div>
+            return <div key={`${show.source_id || ''}-${show.series_title}`} data-title={show.series_title}><ShowCard show={show} onClick={() => onSelectShow(show.series_title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={() => onAnalyzeSeries(show.series_title)} onFixMatch={onFixMatch ? (sourceId, folderPath) => onFixMatch(show.series_title, sourceId, folderPath) : undefined} /></div>
           })}
         </div>
         <div ref={showSentinelRef} className="h-1" />

@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
+import { usePagination } from './usePagination'
 import type { MediaItem } from '../types'
-
-const MOVIES_PAGE_SIZE = 10000
 
 export type MovieSortBy = 'title' | 'year' | 'play_count' | 'last_watched_at' | 'tmdb_rating'
 
@@ -34,11 +33,7 @@ export function useMoviePagination({
   qualityFilter,
   searchQuery,
 }: UseMoviePaginationOptions): UseMoviePaginationReturn {
-  const [paginatedMovies, setPaginatedMovies] = useState<MediaItem[]>([])
-  const [totalMovieCount, setTotalMovieCount] = useState(0)
-  const [moviesLoading, setMoviesLoading] = useState(false)
   const [movieSortBy, setMovieSortByState] = useState<MovieSortBy>('title')
-  const moviesOffsetRef = useRef(0)
   const movieSortByRef = useRef<MovieSortBy>('title')
 
   const setMovieSortBy = useCallback((sort: MovieSortBy) => {
@@ -46,17 +41,15 @@ export function useMoviePagination({
     setMovieSortByState(sort)
   }, [])
 
-  const loadPaginatedMovies = useCallback(async (reset = true, startOffset?: number) => {
-    if (moviesLoading) return
-    setMoviesLoading(true)
-    try {
-      const offset = reset ? (startOffset ?? 0) : moviesOffsetRef.current
+  const { items, setItems, totalCount, loading, load, loadMore } = usePagination<MediaItem>({
+    pageSize: 10000,
+    fetchItems: (filters) => window.electronAPI.getMediaItems(filters) as Promise<MediaItem[]>,
+    fetchCount: (filters) => window.electronAPI.countMediaItems(filters) as Promise<number>,
+    buildFilters: () => {
       const sortBy = movieSortByRef.current
       const sortOrder = (sortBy === 'play_count' || sortBy === 'last_watched_at' || sortBy === 'tmdb_rating') ? 'desc' : 'asc'
       const filters: Record<string, unknown> = {
         type: 'movie',
-        limit: MOVIES_PAGE_SIZE,
-        offset,
         sortBy,
         sortOrder,
       }
@@ -65,33 +58,19 @@ export function useMoviePagination({
       if (tierFilter !== 'all') filters.qualityTier = tierFilter
       if (qualityFilter !== 'all') filters.tierQuality = qualityFilter.toUpperCase()
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      // alphabetFilter no longer filters — scroll-to-letter handles navigation
+      return filters
+    },
+    deps: [activeSourceId, activeLibraryId, tierFilter, qualityFilter, searchQuery],
+  })
 
-      const [movieItems, count] = await Promise.all([
-        window.electronAPI.getMediaItems(filters),
-        window.electronAPI.countMediaItems(filters),
-      ])
-
-      if (reset) {
-        setPaginatedMovies(movieItems as MediaItem[])
-        moviesOffsetRef.current = MOVIES_PAGE_SIZE
-      } else {
-        setPaginatedMovies(prev => [...prev, ...(movieItems as MediaItem[])])
-        moviesOffsetRef.current = offset + MOVIES_PAGE_SIZE
-      }
-      setTotalMovieCount(count)
-    } catch (err) {
-      console.warn('Failed to load paginated movies:', err)
-    } finally {
-      setMoviesLoading(false)
-    }
-  }, [activeSourceId, activeLibraryId, tierFilter, qualityFilter, searchQuery, moviesLoading])
-
-  const loadMoreMovies = useCallback(() => {
-    if (moviesOffsetRef.current < totalMovieCount && !moviesLoading) {
-      loadPaginatedMovies(false)
-    }
-  }, [totalMovieCount, moviesLoading, loadPaginatedMovies])
-
-  return { paginatedMovies, setPaginatedMovies, totalMovieCount, moviesLoading, movieSortBy, setMovieSortBy, loadPaginatedMovies, loadMoreMovies }
+  return {
+    paginatedMovies: items,
+    setPaginatedMovies: setItems,
+    totalMovieCount: totalCount,
+    moviesLoading: loading,
+    movieSortBy,
+    setMovieSortBy,
+    loadPaginatedMovies: load,
+    loadMoreMovies: loadMore,
+  }
 }

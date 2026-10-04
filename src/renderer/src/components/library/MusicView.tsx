@@ -4,7 +4,7 @@ import { FixedSizeList as VirtualList } from 'react-window'
 import { Music, Disc3, User, MoreVertical, RefreshCw, X, Pencil, CircleFadingArrowUp, EyeOff, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { useMenuClose } from '../../hooks/useMenuClose'
-import { providerColors } from './mediaUtils'
+import { providerColors, formatDuration } from './mediaUtils'
 import type {
   MusicArtist,
   MusicAlbum,
@@ -2309,13 +2309,6 @@ const TrackListItem = memo(({ track, index, artistName, albumTitle, columnWidths
     'high-lossy': { label: 'High', color: 'bg-foreground text-background' },
     medium: { label: 'Mid', color: 'bg-foreground text-background' },
     low: { label: 'Low', color: 'bg-foreground text-background' }
-  }
-
-  const formatDuration = (ms?: number) => {
-    if (!ms) return '--:--'
-    const minutes = Math.floor(ms / 60000)
-    const seconds = Math.floor((ms % 60000) / 1000)
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
   const widths = columnWidths || { title: 200, artist: 160, album: 180, quality: 60, codec: 70, duration: 60 }

@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
+import { usePagination } from './usePagination'
 import type { MediaItem, TVShowSummary } from '../types'
-
-const SHOWS_PAGE_SIZE = 10000
 
 export type TVShowSortBy = 'title' | 'play_count' | 'last_watched_at'
 
@@ -35,65 +34,40 @@ export function useTVShowPagination({
   activeLibraryId,
   searchQuery,
 }: UseTVShowPaginationOptions): UseTVShowPaginationReturn {
-  const [paginatedShows, setPaginatedShows] = useState<TVShowSummary[]>([])
-  const [totalShowCount, setTotalShowCount] = useState(0)
   const [totalEpisodeCount, setTotalEpisodeCount] = useState(0)
-  const [showsLoading, setShowsLoading] = useState(false)
   const [tvSortBy, setTvSortByState] = useState<TVShowSortBy>('title')
   const tvSortByRef = useRef<TVShowSortBy>('title')
   const setTvSortBy = useCallback((sort: TVShowSortBy) => {
     tvSortByRef.current = sort
     setTvSortByState(sort)
   }, [])
-  const showsOffsetRef = useRef(0)
   const [selectedShowEpisodes, setSelectedShowEpisodes] = useState<MediaItem[]>([])
   const [selectedShowEpisodesLoading, setSelectedShowEpisodesLoading] = useState(false)
 
-  const loadPaginatedShows = useCallback(async (reset = true, startOffset?: number) => {
-    if (showsLoading) return
-    setShowsLoading(true)
-    try {
-      const offset = reset ? (startOffset ?? 0) : showsOffsetRef.current
+  const { items, setItems, totalCount, loading, load, loadMore } = usePagination<TVShowSummary>({
+    pageSize: 10000,
+    fetchItems: async (filters) => {
+      const [shows, , episodeCount] = await Promise.all([
+        window.electronAPI.getTVShows(filters),
+        // Count is handled by usePagination via fetchCount
+        Promise.resolve(0),
+        window.electronAPI.countTVEpisodes(filters),
+      ])
+      setTotalEpisodeCount(episodeCount as number)
+      return shows as TVShowSummary[]
+    },
+    fetchCount: (filters) => window.electronAPI.countTVShows(filters) as Promise<number>,
+    buildFilters: () => {
       const sortBy = tvSortByRef.current
       const sortOrder = (sortBy === 'play_count' || sortBy === 'last_watched_at') ? 'desc' : 'asc'
-      const filters: Record<string, unknown> = {
-        limit: SHOWS_PAGE_SIZE,
-        offset,
-        sortBy,
-        sortOrder,
-      }
+      const filters: Record<string, unknown> = { sortBy, sortOrder }
       if (activeSourceId) filters.sourceId = activeSourceId
       if (activeLibraryId) filters.libraryId = activeLibraryId
       if (searchQuery.trim()) filters.searchQuery = searchQuery.trim()
-      // alphabetFilter no longer filters — scroll-to-letter handles navigation
-
-      const [newShows, count, episodeCount] = await Promise.all([
-        window.electronAPI.getTVShows(filters),
-        window.electronAPI.countTVShows(filters),
-        window.electronAPI.countTVEpisodes(filters),
-      ])
-
-      if (reset) {
-        setPaginatedShows(newShows as TVShowSummary[])
-        showsOffsetRef.current = SHOWS_PAGE_SIZE
-      } else {
-        setPaginatedShows(prev => [...prev, ...(newShows as TVShowSummary[])])
-        showsOffsetRef.current = offset + SHOWS_PAGE_SIZE
-      }
-      setTotalShowCount(count as number)
-      setTotalEpisodeCount(episodeCount as number)
-    } catch (err) {
-      console.error('Error loading TV shows:', err)
-    } finally {
-      setShowsLoading(false)
-    }
-  }, [showsLoading, activeSourceId, activeLibraryId, searchQuery])
-
-  const loadMoreShows = useCallback(() => {
-    if (showsOffsetRef.current < totalShowCount && !showsLoading) {
-      loadPaginatedShows(false)
-    }
-  }, [totalShowCount, showsLoading, loadPaginatedShows])
+      return filters
+    },
+    deps: [activeSourceId, activeLibraryId, searchQuery],
+  })
 
   const loadSelectedShowEpisodes = useCallback(async (showTitle: string) => {
     setSelectedShowEpisodesLoading(true)
@@ -109,10 +83,15 @@ export function useTVShowPagination({
   }, [activeSourceId])
 
   return {
-    paginatedShows, setPaginatedShows,
-    totalShowCount, totalEpisodeCount, showsLoading,
+    paginatedShows: items,
+    setPaginatedShows: setItems,
+    totalShowCount: totalCount,
+    totalEpisodeCount,
+    showsLoading: loading,
     tvSortBy, setTvSortBy,
     selectedShowEpisodes, setSelectedShowEpisodes, selectedShowEpisodesLoading,
-    loadPaginatedShows, loadMoreShows, loadSelectedShowEpisodes,
+    loadPaginatedShows: load,
+    loadMoreShows: loadMore,
+    loadSelectedShowEpisodes,
   }
 }

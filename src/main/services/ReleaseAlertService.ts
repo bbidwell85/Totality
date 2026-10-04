@@ -70,7 +70,7 @@ export class ReleaseAlertService {
 
     // Get active wishlist items with TMDB IDs (movies and TV)
     const wishlistItems = db.getWishlistItems({ status: 'active', limit: 200 })
-    const itemsWithTmdb = wishlistItems.filter((item: Record<string, unknown>) => item.tmdb_id)
+    const itemsWithTmdb = wishlistItems.filter(item => item.tmdb_id)
 
     if (itemsWithTmdb.length === 0) return 0
 

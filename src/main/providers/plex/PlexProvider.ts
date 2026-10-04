@@ -651,7 +651,7 @@ export class PlexProvider implements MediaProvider {
 
           // Check for additions (items in Plex but not in DB)
           const dbItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId }) as Array<{ plex_id?: string }>
-          const dbIds = new Set(dbItems.map((item: typeof dbItems[0]) => item.plex_id))
+          const dbIds = new Set(dbItems.map((item: typeof dbItems[0]) => item.plex_id).filter(Boolean))
           const missingIds: string[] = []
           for (const plexId of currentPlexIds) {
             if (!dbIds.has(plexId)) {
@@ -799,7 +799,7 @@ export class PlexProvider implements MediaProvider {
           mediaItem.library_id = libraryId
 
           // Upsert will handle duplicates via unique constraint
-          const itemId = db.upsertMediaItem(mediaItem)
+          const itemId = await db.upsertMediaItem(mediaItem)
 
           // Sync versions: delete stale, upsert current, update best version
           const scoredVersions = versions.map(version => {
