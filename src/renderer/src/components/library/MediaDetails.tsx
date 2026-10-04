@@ -4,6 +4,7 @@ import { MoreVertical, RefreshCw, Pencil, EyeOff, X, Copy, Check } from 'lucide-
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import { getQualityLevelColors } from '../../utils/qualityColors'
 import { formatBitrate } from './mediaUtils'
+import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import type { WishlistMediaType } from '../../contexts/WishlistContext'
 import { useMenuClose } from '../../hooks/useMenuClose'
@@ -605,35 +606,23 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                     </button>
 
                     {showMenu && !isRescanning && (
-                      <div className="absolute top-8 right-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[140px] z-50">
+                      <DropdownMenu className="min-w-[140px] z-50">
                         {onRescan && media.file_path && (
-                          <button
-                            onClick={handleRescan}
-                            className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                          >
-                            <RefreshCw className="w-3.5 h-3.5" />
+                          <DropdownMenuItem onClick={handleRescan} icon={<RefreshCw className="w-3.5 h-3.5" />}>
                             Rescan File
-                          </button>
+                          </DropdownMenuItem>
                         )}
                         {onFixMatch && media.type === 'movie' && (
-                          <button
-                            onClick={handleFixMatch}
-                            className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
+                          <DropdownMenuItem onClick={handleFixMatch} icon={<Pencil className="w-3.5 h-3.5" />}>
                             Fix Match
-                          </button>
+                          </DropdownMenuItem>
                         )}
                         {onDismissUpgrade && media.tier_quality !== 'HIGH' && (
-                          <button
-                            onClick={handleDismissUpgrade}
-                            className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                          >
-                            <EyeOff className="w-3.5 h-3.5" />
+                          <DropdownMenuItem onClick={handleDismissUpgrade} icon={<EyeOff className="w-3.5 h-3.5" />}>
                             Dismiss Upgrade
-                          </button>
+                          </DropdownMenuItem>
                         )}
-                      </div>
+                      </DropdownMenu>
                     )}
                   </div>
                 )}

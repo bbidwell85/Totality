@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { FixedSizeList as VirtualList } from 'react-window'
 import { Music, Disc3, User, MoreVertical, RefreshCw, X, Pencil, CircleFadingArrowUp, EyeOff, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
+import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu'
 import { useMenuClose } from '../../hooks/useMenuClose'
 import { providerColors, formatDuration } from './mediaUtils'
 import type {
@@ -718,18 +719,11 @@ export function MusicView({
                           )}
                         </button>
                         {trackMenuOpen === track.id && rescanningTrackId !== track.id && (
-                          <div className="absolute top-8 right-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[140px] z-50">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleTrackRescan(track.id, track.originalTrack)
-                              }}
-                              className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5" />
+                          <DropdownMenu className="min-w-[140px] z-50">
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleTrackRescan(track.id, track.originalTrack) }} icon={<RefreshCw className="w-3.5 h-3.5" />}>
                               Rescan File
-                            </button>
-                          </div>
+                            </DropdownMenuItem>
+                          </DropdownMenu>
                         )}
                       </div>
                     )}
@@ -1841,29 +1835,19 @@ const ArtistCard = memo(({ artist, onClick, showSourceBadge, onFixMatch, onAnaly
               <MoreVertical className="w-4 h-4" />
             </button>
 
-            {/* Dropdown menu */}
             {showMenu && (
-              <div className="absolute top-8 left-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[160px]">
+              <DropdownMenu align="left">
                 {onAnalyzeCompleteness && (
-                  <button
-                    onClick={handleAnalyzeCompleteness}
-                    disabled={isAnalyzing}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                  <DropdownMenuItem onClick={handleAnalyzeCompleteness} icon={<RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />}>
                     {isAnalyzing ? 'Analyzing...' : 'Analyze Completeness'}
-                  </button>
+                  </DropdownMenuItem>
                 )}
                 {onFixMatch && (
-                  <button
-                    onClick={handleFixMatch}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
+                  <DropdownMenuItem onClick={handleFixMatch} icon={<Pencil className="w-3.5 h-3.5" />}>
                     Fix Match
-                  </button>
+                  </DropdownMenuItem>
                 )}
-              </div>
+              </DropdownMenu>
             )}
           </div>
         )}
@@ -1960,27 +1944,17 @@ const AlbumCard = memo(({ album, onClick, showArtist = true, showSourceBadge, on
               )}
             </button>
 
-            {/* Dropdown menu */}
             {showMenu && (
-              <div className="absolute top-8 left-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[160px] z-30">
-                <button
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isAnalyzing ? 'animate-spin' : ''}`} />
+              <DropdownMenu align="left" className="z-30">
+                <DropdownMenuItem onClick={handleAnalyze} icon={<RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />}>
                   {isAnalyzing ? 'Analyzing...' : 'Analyze for missing tracks'}
-                </button>
+                </DropdownMenuItem>
                 {onFixMatch && (
-                  <button
-                    onClick={handleFixMatch}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-muted flex items-center gap-2"
-                  >
-                    <Pencil className="w-4 h-4" />
+                  <DropdownMenuItem onClick={handleFixMatch} icon={<Pencil className="w-3.5 h-3.5" />}>
                     Fix Match
-                  </button>
+                  </DropdownMenuItem>
                 )}
-              </div>
+              </DropdownMenu>
             )}
           </div>
         )}
@@ -2145,29 +2119,19 @@ const ArtistListItem = memo(({ artist, completeness, onClick, showSourceBadge, o
             <MoreVertical className="w-4 h-4" />
           </button>
 
-          {/* Dropdown menu */}
           {showMenu && (
-            <div className="absolute top-8 right-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[160px] z-20">
+            <DropdownMenu>
               {onAnalyzeCompleteness && (
-                <button
-                  onClick={handleAnalyzeCompleteness}
-                  disabled={isAnalyzing}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                <DropdownMenuItem onClick={handleAnalyzeCompleteness} icon={<RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />}>
                   {isAnalyzing ? 'Analyzing...' : 'Analyze Completeness'}
-                </button>
+                </DropdownMenuItem>
               )}
               {onFixMatch && (
-                <button
-                  onClick={handleFixMatch}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
+                <DropdownMenuItem onClick={handleFixMatch} icon={<Pencil className="w-3.5 h-3.5" />}>
                   Fix Match
-                </button>
+                </DropdownMenuItem>
               )}
-            </div>
+            </DropdownMenu>
           )}
         </div>
       )}

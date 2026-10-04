@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react'
 import { Layers, RefreshCw, MoreVertical, Pencil, CircleFadingArrowUp, EyeOff, ArrowUpDown } from 'lucide-react'
 import type { MovieSortBy } from './hooks/useMoviePagination'
 import { MoviePlaceholder } from '../ui/MediaPlaceholders'
+import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu'
 import { useMenuClose } from '../../hooks/useMenuClose'
 import { providerColors } from './mediaUtils'
 import type { MediaItem, MovieCollectionData } from './types'
@@ -539,37 +540,24 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
               )}
             </button>
 
-            {/* Dropdown menu */}
             {showMenu && !isRescanning && (
-              <div className="absolute top-8 left-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[160px]">
+              <DropdownMenu align="left">
                 {onRescan && movie.file_path && (
-                  <button
-                    onClick={handleRescan}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
+                  <DropdownMenuItem onClick={handleRescan} icon={<RefreshCw className="w-3.5 h-3.5" />}>
                     Rescan File
-                  </button>
+                  </DropdownMenuItem>
                 )}
                 {onFixMatch && (
-                  <button
-                    onClick={handleFixMatch}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
+                  <DropdownMenuItem onClick={handleFixMatch} icon={<Pencil className="w-3.5 h-3.5" />}>
                     Fix Match
-                  </button>
+                  </DropdownMenuItem>
                 )}
                 {onDismissUpgrade && needsUpgrade && (
-                  <button
-                    onClick={handleDismissUpgrade}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                  >
-                    <EyeOff className="w-3.5 h-3.5" />
+                  <DropdownMenuItem onClick={handleDismissUpgrade} icon={<EyeOff className="w-3.5 h-3.5" />}>
                     Dismiss Upgrade
-                  </button>
+                  </DropdownMenuItem>
                 )}
-              </div>
+              </DropdownMenu>
             )}
           </div>
         )}
@@ -772,37 +760,24 @@ const MovieListItem = memo(({ movie, onClick, showSourceBadge, collectionData, o
             )}
           </button>
 
-          {/* Dropdown menu */}
           {showMenu && !isRescanning && (
-            <div className="absolute top-8 right-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[160px] z-20">
+            <DropdownMenu>
               {onRescan && movie.file_path && (
-                <button
-                  onClick={handleRescan}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
+                <DropdownMenuItem onClick={handleRescan} icon={<RefreshCw className="w-3.5 h-3.5" />}>
                   Rescan File
-                </button>
+                </DropdownMenuItem>
               )}
               {onFixMatch && (
-                <button
-                  onClick={handleFixMatch}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
+                <DropdownMenuItem onClick={handleFixMatch} icon={<Pencil className="w-3.5 h-3.5" />}>
                   Fix Match
-                </button>
+                </DropdownMenuItem>
               )}
               {onDismissUpgrade && needsUpgrade && (
-                <button
-                  onClick={handleDismissUpgrade}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                >
-                  <EyeOff className="w-3.5 h-3.5" />
+                <DropdownMenuItem onClick={handleDismissUpgrade} icon={<EyeOff className="w-3.5 h-3.5" />}>
                   Dismiss Upgrade
-                </button>
+                </DropdownMenuItem>
               )}
-            </div>
+            </DropdownMenu>
           )}
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react'
 import { RefreshCw, MoreVertical, Pencil, Folder, CircleFadingArrowUp, EyeOff, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 import { TvPlaceholder, EpisodePlaceholder } from '../ui/MediaPlaceholders'
+import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu'
 import { MissingItemCard } from './MissingItemCard'
 import { useMenuClose } from '../../hooks/useMenuClose'
 import { providerColors, formatSeasonLabel, getStatusBadge } from './mediaUtils'
@@ -116,26 +117,17 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
           )}
         </button>
 
-        {/* Dropdown menu */}
         {showMenu && (
-          <div className="absolute top-8 right-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[160px] z-20">
-            <button
-              onClick={handleAnalyze}
-              className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
+          <DropdownMenu>
+            <DropdownMenuItem onClick={handleAnalyze} icon={<RefreshCw className="w-3.5 h-3.5" />}>
               Analyze Series
-            </button>
+            </DropdownMenuItem>
             {onFixMatch && (
-              <button
-                onClick={handleFixMatch}
-                className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <Pencil className="w-3.5 h-3.5" />
+              <DropdownMenuItem onClick={handleFixMatch} icon={<Pencil className="w-3.5 h-3.5" />}>
                 Fix Match
-              </button>
+              </DropdownMenuItem>
             )}
-          </div>
+          </DropdownMenu>
         )}
       </div>
     </div>
@@ -245,26 +237,18 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
           </button>
 
           {showMenu && !isRescanning && (
-            <div className="absolute top-8 right-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[160px] z-20">
+            <DropdownMenu>
               {onRescan && episode.file_path && (
-                <button
-                  onClick={handleRescan}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
+                <DropdownMenuItem onClick={handleRescan} icon={<RefreshCw className="w-3.5 h-3.5" />}>
                   Rescan File
-                </button>
+                </DropdownMenuItem>
               )}
               {onDismissUpgrade && needsUpgrade && (
-                <button
-                  onClick={handleDismissUpgrade}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                >
-                  <EyeOff className="w-3.5 h-3.5" />
+                <DropdownMenuItem onClick={handleDismissUpgrade} icon={<EyeOff className="w-3.5 h-3.5" />}>
                   Dismiss Upgrade
-                </button>
+                </DropdownMenuItem>
               )}
-            </div>
+            </DropdownMenu>
           )}
         </div>
       )}
@@ -851,26 +835,17 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
             )}
           </button>
 
-          {/* Dropdown menu */}
           {showMenu && (
-            <div className="absolute top-8 left-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[160px]">
-              <button
-                onClick={handleAnalyze}
-                className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
+            <DropdownMenu align="left">
+              <DropdownMenuItem onClick={handleAnalyze} icon={<RefreshCw className="w-3.5 h-3.5" />}>
                 Analyze Series
-              </button>
+              </DropdownMenuItem>
               {onFixMatch && (
-                <button
-                  onClick={handleFixMatch}
-                  className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
+                <DropdownMenuItem onClick={handleFixMatch} icon={<Pencil className="w-3.5 h-3.5" />}>
                   Fix Match
-                </button>
+                </DropdownMenuItem>
               )}
-            </div>
+            </DropdownMenu>
           )}
         </div>
 
@@ -1080,15 +1055,11 @@ const MissingEpisodeRowWithArtwork = memo(({
           </button>
 
           {showMenu && (
-            <div className="absolute top-8 right-0 bg-card border border-border rounded-md shadow-lg py-1 min-w-[160px] z-20">
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowMenu(false); onDismiss() }}
-                className="w-full px-3 py-1.5 text-left text-sm hover:bg-muted flex items-center gap-2"
-              >
-                <EyeOff className="w-3.5 h-3.5" />
+            <DropdownMenu>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setShowMenu(false); onDismiss() }} icon={<EyeOff className="w-3.5 h-3.5" />}>
                 Dismiss
-              </button>
-            </div>
+              </DropdownMenuItem>
+            </DropdownMenu>
           )}
         </div>
       )}
