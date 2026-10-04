@@ -465,3 +465,190 @@ describe('Schema Constraints', () => {
     }).toThrow()
   })
 })
+
+// =============================================================================
+// MUSIC
+// =============================================================================
+
+describe('Music Operations', () => {
+  beforeEach(() => {
+    db.prepare(`
+      INSERT INTO media_sources (source_id, source_type, display_name, connection_config)
+      VALUES (?, ?, ?, ?)
+    `).run('src1', 'plex', 'Plex', '{}')
+  })
+
+  it('upsert artist and retrieve by name', () => {
+    db.prepare(`
+      INSERT INTO music_artists (source_id, source_type, provider_id, name, sort_name, track_count, album_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('src1', 'plex', 'artist1', 'Radiohead', 'radiohead', 150, 9)
+
+    const artist = db.prepare(
+      'SELECT * FROM music_artists WHERE name = ? AND source_id = ?'
+    ).get('Radiohead', 'src1') as Record<string, unknown>
+
+    expect(artist).toBeDefined()
+    expect(artist.name).toBe('Radiohead')
+    expect(artist.track_count).toBe(150)
+  })
+
+  it('unique constraint on (source_id, provider_id) for artists', () => {
+    db.prepare(`
+      INSERT INTO music_artists (source_id, source_type, provider_id, name, sort_name, track_count, album_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('src1', 'plex', 'a1', 'Artist A', 'artist a', 10, 1)
+
+    expect(() => {
+      db.prepare(`
+        INSERT INTO music_artists (source_id, source_type, provider_id, name, sort_name, track_count, album_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run('src1', 'plex', 'a1', 'Different Name', 'different', 5, 1)
+    }).toThrow()
+  })
+
+  it('upsert album linked to artist', () => {
+    const { lastInsertRowid: artistId } = db.prepare(`
+      INSERT INTO music_artists (source_id, source_type, provider_id, name, sort_name, track_count, album_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('src1', 'plex', 'a1', 'Artist', 'artist', 10, 1)
+
+    db.prepare(`
+      INSERT INTO music_albums (source_id, source_type, provider_id, title, sort_title, artist_id, artist_name, track_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('src1', 'plex', 'al1', 'OK Computer', 'ok computer', artistId, 'Artist', 12)
+
+    const album = db.prepare('SELECT * FROM music_albums WHERE title = ?').get('OK Computer') as Record<string, unknown>
+    expect(album).toBeDefined()
+    expect(album.artist_id).toBe(artistId)
+  })
+
+  it('upsert track linked to album and artist', () => {
+    const { lastInsertRowid: artistId } = db.prepare(`
+      INSERT INTO music_artists (source_id, source_type, provider_id, name, sort_name, track_count, album_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('src1', 'plex', 'a1', 'Artist', 'artist', 10, 1)
+
+    const { lastInsertRowid: albumId } = db.prepare(`
+      INSERT INTO music_albums (source_id, source_type, provider_id, title, sort_title, artist_id, artist_name, track_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('src1', 'plex', 'al1', 'Album', 'album', artistId, 'Artist', 10)
+
+    db.prepare(`
+      INSERT INTO music_tracks (source_id, source_type, provider_id, title, artist_id, artist_name, album_id, album_name,
+        audio_codec, audio_bitrate, duration, file_size, file_path, track_number, disc_number)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('src1', 'plex', 't1', 'Paranoid Android', artistId, 'Artist', albumId, 'Album',
+      'flac', 1411, 387000, 50000000, '/music/track.flac', 2, 1)
+
+    const track = db.prepare('SELECT * FROM music_tracks WHERE title = ?').get('Paranoid Android') as Record<string, unknown>
+    expect(track).toBeDefined()
+    expect(track.album_id).toBe(albumId)
+    expect(track.audio_codec).toBe('flac')
+  })
+})
+
+// =============================================================================
+// WISHLIST
+// =============================================================================
+
+describe('Wishlist Operations', () => {
+  it('add and retrieve wishlist item', () => {
+    db.prepare(`
+      INSERT INTO wishlist_items (title, media_type, priority, reason, tmdb_id)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('Dune: Part Three', 'movie', 5, 'missing', '12345')
+
+    const items = db.prepare('SELECT * FROM wishlist_items').all()
+    expect(items.length).toBe(1)
+    expect((items[0] as Record<string, unknown>).title).toBe('Dune: Part Three')
+  })
+
+  it('status defaults to active', () => {
+    db.prepare(`
+      INSERT INTO wishlist_items (title, media_type, priority, reason)
+      VALUES (?, ?, ?, ?)
+    `).run('Movie', 'movie', 3, 'missing')
+
+    const item = db.prepare('SELECT status FROM wishlist_items').get() as Record<string, unknown>
+    expect(item.status).toBe('active')
+  })
+
+  it('status CHECK constraint allows only active/completed', () => {
+    expect(() => {
+      db.prepare(`
+        INSERT INTO wishlist_items (title, media_type, priority, reason, status)
+        VALUES (?, ?, ?, ?, ?)
+      `).run('Movie', 'movie', 3, 'missing', 'invalid_status')
+    }).toThrow()
+  })
+})
+
+// =============================================================================
+// NOTIFICATIONS
+// =============================================================================
+
+describe('Notification Operations', () => {
+  it('create and retrieve notification', () => {
+    db.prepare(`
+      INSERT INTO notifications (type, title, message)
+      VALUES (?, ?, ?)
+    `).run('info', 'Test Title', 'Test message')
+
+    const notifs = db.prepare('SELECT * FROM notifications').all()
+    expect(notifs.length).toBe(1)
+    expect((notifs[0] as Record<string, unknown>).title).toBe('Test Title')
+    expect((notifs[0] as Record<string, unknown>).is_read).toBe(0)
+  })
+
+  it('defaults is_read to 0', () => {
+    db.prepare(`
+      INSERT INTO notifications (type, title, message)
+      VALUES (?, ?, ?)
+    `).run('scan_complete', 'Scan Done', 'Details')
+
+    const notif = db.prepare('SELECT is_read FROM notifications').get() as Record<string, unknown>
+    expect(notif.is_read).toBe(0)
+  })
+})
+
+// =============================================================================
+// LIBRARY SCANS
+// =============================================================================
+
+describe('Library Scan Operations', () => {
+  beforeEach(() => {
+    db.prepare(`
+      INSERT INTO media_sources (source_id, source_type, display_name, connection_config)
+      VALUES (?, ?, ?, ?)
+    `).run('src1', 'plex', 'Plex', '{}')
+  })
+
+  it('tracks scan time per library', () => {
+    db.prepare(`
+      INSERT INTO library_scans (source_id, library_id, library_name, library_type, last_scan_at, items_scanned)
+      VALUES (?, ?, ?, ?, datetime('now'), ?)
+    `).run('src1', 'lib1', 'Movies', 'movie', 500)
+
+    const scan = db.prepare(
+      'SELECT * FROM library_scans WHERE source_id = ? AND library_id = ?'
+    ).get('src1', 'lib1') as Record<string, unknown>
+
+    expect(scan).toBeDefined()
+    expect(scan.items_scanned).toBe(500)
+  })
+
+  it('unique constraint on (source_id, library_id)', () => {
+    db.prepare(`
+      INSERT INTO library_scans (source_id, library_id, library_name, library_type, last_scan_at, items_scanned)
+      VALUES (?, ?, ?, ?, datetime('now'), ?)
+    `).run('src1', 'lib1', 'Movies', 'movie', 100)
+
+    expect(() => {
+      db.prepare(`
+        INSERT INTO library_scans (source_id, library_id, library_name, library_type, last_scan_at, items_scanned)
+        VALUES (?, ?, ?, ?, datetime('now'), ?)
+      `).run('src1', 'lib1', 'Movies', 'movie', 200)
+    }).toThrow()
+  })
+})
