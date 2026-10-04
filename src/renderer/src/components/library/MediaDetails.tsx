@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { MoreVertical, RefreshCw, Pencil, EyeOff, X, Copy, Check } from 'lucide-react'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import { getQualityLevelColors } from '../../utils/qualityColors'
+import { formatBitrate } from './mediaUtils'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import type { WishlistMediaType } from '../../contexts/WishlistContext'
 import { useMenuClose } from '../../hooks/useMenuClose'
@@ -300,10 +301,6 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   const formatChannels = (channels: number): string => {
     if (channels > 2) return `${channels - 1}.1`
     return `${channels}.0`
-  }
-
-  const formatBitrate = (kbps: number): string => {
-    return kbps >= 1000 ? `${(kbps / 1000).toFixed(1)} Mbps` : `${kbps} kbps`
   }
 
   const formatThresholdRange = (medium: number, high: number): string => {

@@ -916,12 +916,7 @@ function HandbrakeGuide({
   const preset = HANDBRAKE_DETAILED_PRESETS[selectedTier]
   const codecPreset = preset[selectedCodec]
 
-  const formatBitrate = (kbps: number) => {
-    if (kbps >= 1000) {
-      return `${(kbps / 1000).toFixed(1)} Mbps`
-    }
-    return `${kbps} kbps`
-  }
+  const formatBitrate = (kbps: number) => kbps >= 1000 ? `${(kbps / 1000).toFixed(1)} Mbps` : `${kbps} kbps`
 
   return (
     <div className="space-y-4">

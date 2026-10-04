@@ -80,9 +80,8 @@ export const SETTING_KEYS = {
   nfs_mount_mappings: 'nfs_mount_mappings',
   last_scan_time: 'last_scan_time',
 
-  // Sync settings (Trakt / Letterboxd)
+  // Sync settings (Trakt)
   trakt_username: 'trakt_username',
-  trakt_client_id: 'trakt_client_id',
 
   // Release alerts
   release_alerts_enabled: 'release_alerts_enabled',
