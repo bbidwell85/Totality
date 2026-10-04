@@ -38,23 +38,6 @@ vi.mock('electron', () => ({
   },
 }))
 
-// Mock sql.js for database tests
-vi.mock('sql.js', () => {
-  const mockDb = {
-    exec: vi.fn(() => []),
-    run: vi.fn(),
-    close: vi.fn(),
-    export: vi.fn(() => new Uint8Array()),
-    getRowsModified: vi.fn(() => 0),
-  }
-
-  return {
-    default: vi.fn(() => Promise.resolve({
-      Database: vi.fn(() => mockDb),
-    })),
-  }
-})
-
 // Global test utilities
 declare global {
   var __TEST__: boolean

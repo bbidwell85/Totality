@@ -48,7 +48,7 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ])
-import { getDatabaseServiceAsync, getDatabaseServiceSync, getDatabaseBackend } from './database/DatabaseFactory'
+import { getDatabaseServiceAsync, getDatabaseServiceSync } from './database/DatabaseFactory'
 import { getDatabase } from './database/getDatabase'
 import { getSourceManager } from './services/SourceManager'
 import { registerDatabaseHandlers } from './ipc/database'
@@ -83,22 +83,8 @@ process.on('uncaughtException', (error) => {
   try {
     const db = getDatabaseServiceSync()
     if (db.isInitialized) {
-      // End batch mode first to ensure pending writes are flushed
       try { db.endBatch() } catch { /* ignore */ }
-      const backend = getDatabaseBackend()
-      if (backend === 'sql.js') {
-        // Use .then() to ensure exit happens after save completes
-        const saveResult = db.forceSave()
-        if (saveResult && typeof saveResult.then === 'function') {
-          saveResult
-            .then(() => console.log('[CRASH] SQL.js database saved before exit'))
-            .catch((e: unknown) => console.error('[CRASH] Failed to save database:', e))
-            .finally(() => process.exit(1))
-          return // Don't exit yet — wait for save
-        }
-      } else {
-        console.log('[CRASH] better-sqlite3 data already persisted (WAL mode)')
-      }
+      console.log('[CRASH] better-sqlite3 data already persisted (WAL mode)')
     }
   } catch (e) {
     console.error('[CRASH] Failed to checkpoint database:', e)
@@ -111,17 +97,7 @@ process.on('unhandledRejection', (reason, promise) => {
   try {
     const db = getDatabaseServiceSync()
     if (db.isInitialized) {
-      // End batch mode first to ensure pending writes are flushed
       try { db.endBatch() } catch { /* ignore */ }
-      const backend = getDatabaseBackend()
-      if (backend === 'sql.js') {
-        const saveResult = db.forceSave()
-        if (saveResult && typeof saveResult.then === 'function') {
-          saveResult
-            .then(() => console.log('[CRASH] SQL.js database saved after unhandled rejection'))
-            .catch((e: unknown) => console.error('[CRASH] Failed to save database:', e))
-        }
-      }
       // better-sqlite3: no action needed, WAL mode auto-persists
     }
   } catch (e) {
@@ -427,10 +403,10 @@ app.whenReady().then(async () => {
     })
     console.log('Local artwork protocol registered')
 
-    // Initialize database (auto-migrates from SQL.js to better-sqlite3 if needed)
+    // Initialize database
     const db = await getDatabaseServiceAsync()
     await db.initialize()
-    console.log(`Database initialized successfully (backend: ${getDatabaseBackend()})`)
+    console.log('Database initialized successfully (better-sqlite3)')
 
     // Note: BetterSQLiteService runs PRAGMA integrity_check during initialize().
     // If integrity fails, it logs an error but continues (data is still usable).

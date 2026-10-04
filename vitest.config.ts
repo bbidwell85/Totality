@@ -5,10 +5,6 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    env: {
-      // Force SQL.js in tests since better-sqlite3 native module doesn't work in vitest
-      USE_SQLJS: 'true',
-    },
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/dist-electron/**'],
