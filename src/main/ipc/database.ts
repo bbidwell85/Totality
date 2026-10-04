@@ -814,6 +814,16 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  ipcMain.handle('db:resetLibraryData', async () => {
+    try {
+      await db.resetLibraryData()
+      return { success: true }
+    } catch (error: unknown) {
+      console.error('Error resetting library data:', error)
+      throw error
+    }
+  })
+
   // ============================================================================
   // GLOBAL SEARCH
   // ============================================================================

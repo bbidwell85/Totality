@@ -5459,6 +5459,49 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     transaction()
   }
 
+  /**
+   * Reset library data only — preserves settings, exclusions, sources, and wishlist.
+   * Clears all scanned media, quality scores, completeness data, and notifications.
+   */
+  resetLibraryData(): void {
+    if (!this.db) throw new Error('Database not initialized')
+
+    // Order matters: child tables before parent tables (FK constraints)
+    const tables = [
+      'media_item_collections',
+      'media_item_versions',
+      'quality_scores',
+      'media_items',
+      'album_completeness',
+      'artist_completeness',
+      'music_quality_scores',
+      'music_tracks',
+      'music_albums',
+      'music_artists',
+      'movie_collections',
+      'series_completeness',
+      'person_completeness',
+      'notifications',
+      'tmdb_cache',
+      'library_scans',
+      'task_queue',
+      'task_events',
+      'pending_tasks',
+    ]
+
+    const transaction = this.db.transaction(() => {
+      for (const table of tables) {
+        try {
+          this.db!.prepare(`DELETE FROM ${table}`).run()
+        } catch {
+          console.log(`[BetterSQLite] Could not clear table ${table}`)
+        }
+      }
+    })
+    transaction()
+    console.log('[BetterSQLite] Library data reset — settings, exclusions, sources, and wishlist preserved')
+  }
+
   // ============================================================================
   // NOTIFICATIONS
   // ============================================================================

@@ -286,6 +286,7 @@ export interface DatabaseServiceInterface {
 
   // --- Database Management ---
   resetDatabase(): void | Promise<void>
+  resetLibraryData(): void | Promise<void>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   globalSearch(query: string, limitOrSourceId?: number | string): any
 

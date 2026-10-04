@@ -27,6 +27,8 @@ export function DataManagementTab() {
   const [isImporting, setIsImporting] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [isResettingLibrary, setIsResettingLibrary] = useState(false)
+  const [showLibraryResetConfirm, setShowLibraryResetConfirm] = useState(false)
   const [showCSVExportModal, setShowCSVExportModal] = useState(false)
   useEffect(() => {
     if (!showCSVExportModal) return
@@ -151,6 +153,20 @@ export function DataManagementTab() {
       setMessage({ type: 'error', text: (error as Error).message || 'Failed to reset database' })
     } finally {
       setIsResetting(false)
+    }
+  }
+
+  const handleResetLibraryData = async () => {
+    setIsResettingLibrary(true)
+    setMessage(null)
+    try {
+      await window.electronAPI.dbResetLibraryData()
+      setMessage({ type: 'success', text: 'Library data cleared. Settings, exclusions, and wishlist preserved. Please restart the app.' })
+      setShowLibraryResetConfirm(false)
+    } catch (error: unknown) {
+      setMessage({ type: 'error', text: (error as Error).message || 'Failed to reset library data' })
+    } finally {
+      setIsResettingLibrary(false)
     }
   }
 
@@ -431,9 +447,67 @@ export function DataManagementTab() {
         </div>
       </div>
 
-      {/* Reset Database */}
+      {/* Reset Options */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-foreground">Reset</h3>
+
+        {/* Reset Library Data (preserves settings) */}
+        <div className="bg-muted/30 rounded-lg border border-border/40">
+          {showLibraryResetConfirm ? (
+            <div className="p-4 space-y-4">
+              <div className="flex items-start gap-3">
+                <RefreshCw className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    Reset library data?
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This will clear all scanned media, quality scores, and completeness data. Your settings, API keys, sources, exclusions, and wishlist will be preserved.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowLibraryResetConfirm(false)}
+                  disabled={isResettingLibrary}
+                  className="px-3 py-1.5 text-xs hover:bg-muted rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleResetLibraryData}
+                  disabled={isResettingLibrary}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {isResettingLibrary ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                  Yes, Reset Library Data
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex items-center gap-3">
+                <RefreshCw className="w-5 h-5 text-muted-foreground" />
+                <div>
+                  <span className="text-sm text-foreground">Reset Library Data</span>
+                  <p className="text-xs text-muted-foreground">
+                    Clear scanned media and start fresh. Keeps settings, exclusions, and wishlist.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowLibraryResetConfirm(true)}
+                className="shrink-0 px-3 py-1.5 text-xs hover:bg-muted rounded-md transition-colors"
+              >
+                Reset
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="bg-muted/30 rounded-lg border border-border/40">
           {showResetConfirm ? (

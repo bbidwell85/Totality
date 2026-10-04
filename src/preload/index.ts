@@ -350,6 +350,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('db:exportCSV', options),
   dbImport: () => ipcRenderer.invoke('db:import'),
   dbReset: () => ipcRenderer.invoke('db:reset'),
+  dbResetLibraryData: () => ipcRenderer.invoke('db:resetLibraryData'),
 
   // Series Completeness
   seriesAnalyzeAll: (sourceId?: string, libraryId?: string) => ipcRenderer.invoke('series:analyzeAll', sourceId, libraryId),
@@ -1355,6 +1356,7 @@ export interface ElectronAPI {
   }) => Promise<{ success: boolean; path?: string; cancelled?: boolean }>
   dbImport: () => Promise<{ success: boolean; imported?: number; errors?: string[]; cancelled?: boolean }>
   dbReset: () => Promise<{ success: boolean }>
+  dbResetLibraryData: () => Promise<{ success: boolean }>
 
   // Series Completeness
   seriesAnalyzeAll: (sourceId?: string, libraryId?: string) => Promise<{ completed: boolean; analyzed: number }>

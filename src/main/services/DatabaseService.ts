@@ -1447,6 +1447,44 @@ export class DatabaseService {
     await this.save()
   }
 
+  async resetLibraryData(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const tables = [
+      'media_item_collections',
+      'media_item_versions',
+      'quality_scores',
+      'media_items',
+      'album_completeness',
+      'artist_completeness',
+      'music_quality_scores',
+      'music_tracks',
+      'music_albums',
+      'music_artists',
+      'movie_collections',
+      'series_completeness',
+      'person_completeness',
+      'notifications',
+      'tmdb_cache',
+      'library_scans',
+      'task_queue',
+      'task_events',
+      'pending_tasks',
+    ]
+
+    for (const table of tables) {
+      try {
+        this.assertValidTable(table)
+        this.db.run(`DELETE FROM ${table}`)
+      } catch {
+        console.log(`Could not clear table ${table}`)
+      }
+    }
+
+    await this.save()
+    console.log('[DatabaseService] Library data reset — settings, exclusions, sources, and wishlist preserved')
+  }
+
   // ============================================================================
   // MEDIA ITEMS
   // ============================================================================
