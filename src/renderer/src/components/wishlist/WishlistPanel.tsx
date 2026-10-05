@@ -342,9 +342,8 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
     { type: 'upgrade', icon: CircleFadingArrowUp, label: 'Upgrade', count: counts.upgrade }
   ]
 
-  // Media type filter options
+  // Media type filter options (no "All" — category row already has it)
   const filterOptions: { type: FilterType; icon: typeof Film; label: string }[] = [
-    { type: 'all', icon: Filter, label: 'All' },
     { type: 'movie', icon: Film, label: 'Movies' },
     { type: 'episode', icon: Tv, label: 'TV' },
     { type: 'album', icon: Music, label: 'Music' }
@@ -590,7 +589,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
             {categoryOptions.map(({ type, icon: Icon, label, count }) => (
               <button
                 key={type}
-                onClick={() => setActiveCategory(type)}
+                onClick={() => { setActiveCategory(type); if (type === 'all') setActiveFilter('all') }}
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded-full transition-colors ${
                   activeCategory === type
                     ? 'bg-primary/20 text-primary'
@@ -611,7 +610,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
             {filterOptions.map(({ type, icon: Icon, label }) => (
               <button
                 key={type}
-                onClick={() => setActiveFilter(type)}
+                onClick={() => setActiveFilter(activeFilter === type ? 'all' : type)}
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded-full transition-colors ${
                   activeFilter === type
                     ? 'bg-primary/20 text-primary'
