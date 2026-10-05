@@ -251,11 +251,6 @@ export function useLibraryEventListeners({
         markLibraryAsNew(`${data.sourceId}:${data.libraryId}`, data.itemsAdded)
       }
 
-      // Auto-navigate on first scan to help new users
-      if (data.isFirstScan && data.sourceId) {
-        setActiveSource(data.sourceId)
-      }
-
       // Reload library data after scan completes with changes
       if (data.itemsAdded > 0 || data.itemsUpdated > 0 || (data as Record<string, unknown>).itemsRemoved) {
         loadMedia()
