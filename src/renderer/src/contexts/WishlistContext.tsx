@@ -191,10 +191,13 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     loadRegion()
   }, [loadRegion])
 
+  const notifyWishlistChanged = () => window.dispatchEvent(new CustomEvent('wishlist-changed'))
+
   const addItem = useCallback(async (item: Omit<WishlistItem, 'id' | 'added_at' | 'updated_at'>): Promise<number> => {
     try {
       const id = await window.electronAPI.wishlistAdd(item)
       await loadWishlist()
+      notifyWishlistChanged()
       return id
     } catch (err) {
       console.error('Error adding wishlist item:', err)
@@ -206,6 +209,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     try {
       await window.electronAPI.wishlistUpdate(id, updates)
       await loadWishlist()
+      notifyWishlistChanged()
     } catch (err) {
       console.error('Error updating wishlist item:', err)
       throw err
@@ -216,6 +220,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     try {
       await window.electronAPI.wishlistUpdate(id, { status: 'completed' })
       await loadWishlist()
+      notifyWishlistChanged()
     } catch (err) {
       console.error('Error marking wishlist item as completed:', err)
       throw err
@@ -226,6 +231,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     try {
       await window.electronAPI.wishlistUpdate(id, { status: 'active' })
       await loadWishlist()
+      notifyWishlistChanged()
     } catch (err) {
       console.error('Error marking wishlist item as active:', err)
       throw err
@@ -236,6 +242,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     try {
       await window.electronAPI.wishlistRemove(id)
       await loadWishlist()
+      notifyWishlistChanged()
     } catch (err) {
       console.error('Error removing wishlist item:', err)
       throw err
