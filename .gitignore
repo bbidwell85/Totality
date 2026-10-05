@@ -45,3 +45,13 @@ CLAUDE.md
 
 # Test coverage
 coverage/
+
+# After Effects project files
+Adobe After Effects Auto-Save/
+*.aep
+*.aep_AME/
+
+# Personal notes / old release notes
+TODO-audit-fixes.md
+quality-scoring-explained.txt
+release-notes-*.txt
