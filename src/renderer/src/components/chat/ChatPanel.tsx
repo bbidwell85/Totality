@@ -101,8 +101,8 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
       onClick={onClose}
     />
     <aside
-      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-[46] flex flex-col overflow-hidden transition-[transform,opacity] duration-300 ease-out will-change-[transform,opacity] ${
-        isOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'
+      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-[46] flex flex-col overflow-hidden transition-opacity duration-200 ease-out ${
+        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
       role="complementary"
       aria-label="AI Chat"
