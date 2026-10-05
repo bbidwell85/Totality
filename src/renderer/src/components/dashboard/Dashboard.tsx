@@ -425,6 +425,12 @@ export function Dashboard({
     return () => window.removeEventListener('exclusions-changed', handler)
   }, [debouncedReload])
 
+  useEffect(() => {
+    const handler = () => debouncedReload()
+    window.addEventListener('wishlist-changed', handler)
+    return () => window.removeEventListener('wishlist-changed', handler)
+  }, [debouncedReload])
+
   const parseMissingMovies = useCallback((collection: MovieCollectionData): MissingMovie[] =>
     collection.missing_movies || [], [])
 
