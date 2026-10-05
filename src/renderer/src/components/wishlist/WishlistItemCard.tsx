@@ -1,4 +1,4 @@
-import { useState, useEffect, memo } from 'react'
+import { useState, useEffect, useRef, memo } from 'react'
 import { Trash2, Film, Tv, Music, Disc, CircleFadingArrowUp, CheckCircle2, RotateCcw } from 'lucide-react'
 import { StarRating } from './StarRating'
 import { StoreLinksMenu } from './StoreLinksMenu'
@@ -62,13 +62,25 @@ export const WishlistItemCard = memo(function WishlistItemCard({
     }
   }
 
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clean up delete confirmation timer on unmount
+  useEffect(() => {
+    return () => {
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
+    }
+  }, [])
+
   const handleRemove = () => {
     if (showConfirmDelete) {
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current)
       onRemove(item.id)
     } else {
       setShowConfirmDelete(true)
-      // Auto-hide confirm after 3 seconds
-      setTimeout(() => setShowConfirmDelete(false), 3000)
+      deleteTimerRef.current = setTimeout(() => {
+        setShowConfirmDelete(false)
+        deleteTimerRef.current = null
+      }, 3000)
     }
   }
 

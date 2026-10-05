@@ -6,7 +6,7 @@
  * Provides access to wishlist items, count, and CRUD operations.
  */
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react'
 
 // Types for wishlist
 export type WishlistMediaType = 'movie' | 'episode' | 'season' | 'album' | 'track'
@@ -128,10 +128,13 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
   })
   const [region, setRegionState] = useState<StoreRegion>('us')
 
+  const hasLoadedOnce = useRef(false)
+
   // Define loadWishlist before the effect that uses it
   const loadWishlist = useCallback(async () => {
     try {
-      setIsLoading(true)
+      // Only show loading state on first load — subsequent refreshes update in-place
+      if (!hasLoadedOnce.current) setIsLoading(true)
       setError(null)
       const [itemsResult, countResult, countsResult] = await Promise.all([
         window.electronAPI.wishlistGetAll(filters),
@@ -146,6 +149,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       setError('Failed to load wishlist')
     } finally {
       setIsLoading(false)
+      hasLoadedOnce.current = true
     }
   }, [filters])
 

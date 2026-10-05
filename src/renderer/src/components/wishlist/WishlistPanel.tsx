@@ -269,7 +269,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
       media_type: activeFilter === 'all' ? undefined : activeFilter,
       reason: activeCategory === 'all' ? undefined : activeCategory,
       status: activeStatus === 'all' ? undefined : activeStatus,
-      sortBy: activeStatus === 'completed' && sortBy === 'priority' ? 'completed_at' : sortBy,
+      sortBy,
       sortOrder
     })
   }, [activeCategory, activeStatus, activeFilter, sortBy, sortOrder, setFilters])
@@ -561,7 +561,12 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
             {statusOptions.map(({ type, icon: Icon, label, count }) => (
               <button
                 key={type}
-                onClick={() => setActiveStatus(type)}
+                onClick={() => {
+                  setActiveStatus(type)
+                  setActiveCategory('all')
+                  setActiveFilter('all')
+                  setSortBy(type === 'completed' ? 'completed_at' : 'priority')
+                }}
                 className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs rounded-lg transition-colors ${
                   activeStatus === type
                     ? type === 'completed' ? 'bg-green-600 text-white' : 'bg-primary text-primary-foreground'
@@ -633,7 +638,10 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
           <div className="flex items-center gap-2 text-xs">
             <span className="text-muted-foreground">Sort:</span>
             <div className="flex gap-1">
-              {(['priority', 'added_at', 'title'] as SortOption[]).map((field) => (
+              {(activeStatus === 'completed'
+                ? (['completed_at', 'added_at', 'title'] as SortOption[])
+                : (['priority', 'added_at', 'title'] as SortOption[])
+              ).map((field) => (
                 <button
                   key={field}
                   onClick={() => toggleSort(field)}
@@ -643,7 +651,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {field === 'priority' ? 'Priority' : field === 'added_at' ? 'Date' : 'Title'}
+                  {field === 'priority' ? 'Priority' : field === 'completed_at' ? 'Completed' : field === 'added_at' ? 'Added' : 'Title'}
                   {sortBy === field && (
                     <ArrowUpDown className={`w-3 h-3 ${sortOrder === 'desc' ? 'rotate-180' : ''}`} />
                   )}
