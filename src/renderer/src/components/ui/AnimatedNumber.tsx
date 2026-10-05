@@ -24,6 +24,10 @@ function easeOut(t: number): number {
 /**
  * Renders a number that smoothly animates between values (odometer style).
  *
+ * On first mount: shows value immediately (no animation from 0).
+ * On subsequent value changes: animates from previous to new value.
+ * If parent re-renders with same value: no animation (no flicker).
+ *
  * Usage:
  *   <AnimatedNumber value={1234} locale />
  *   <AnimatedNumber value={67} suffix="%" />
@@ -38,26 +42,25 @@ export const AnimatedNumber = memo(function AnimatedNumber({
   prefix = '',
   className,
 }: AnimatedNumberProps) {
+  // display: what's currently shown (may be mid-animation)
+  // prevRef: the last target value we animated TO (or initialized with)
   const [display, setDisplay] = useState(value)
   const prevRef = useRef(value)
   const animRef = useRef<number | null>(null)
-  const isFirstRender = useRef(true)
 
   useEffect(() => {
-    // Skip animation on first render — just show the value
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      prevRef.current = value
-      setDisplay(value)
-      return
-    }
-
     const from = prevRef.current
     const to = value
+
+    // Update ref to new target
     prevRef.current = to
 
     // No animation needed if value unchanged
-    if (from === to) return
+    if (from === to) {
+      // Ensure display matches (covers first render and same-value re-renders)
+      setDisplay(to)
+      return
+    }
 
     // Cancel any in-progress animation
     if (animRef.current !== null) {
