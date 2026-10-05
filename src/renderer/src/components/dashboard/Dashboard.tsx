@@ -18,6 +18,7 @@ import {
   emitDismissCollectionMovie,
 } from '../../utils/dismissEvents'
 import { applyCollectionFilters, applySeriesFilters, applyArtistFilters, parseAutoRules, filterMissingMoviesByRules, filterMissingEpisodesByRules } from '../../utils/completenessFilters'
+import { AnimatedNumber } from '../ui/AnimatedNumber'
 
 // Music album with quality info from the upgrade query
 interface MusicAlbumUpgrade extends MusicAlbum {
@@ -1431,16 +1432,16 @@ export function Dashboard({
                   <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Owned</div>
                   <div className="flex flex-col gap-1 text-[10px] text-muted-foreground">
                     {libraryStats && libraryStats.totalMovies > 0 && (
-                      <span className="flex items-center gap-1.5"><Film className="w-3 h-3" />{libraryStats.totalMovies.toLocaleString()} movies</span>
+                      <span className="flex items-center gap-1.5"><Film className="w-3 h-3" /><AnimatedNumber value={libraryStats.totalMovies} locale /> movies</span>
                     )}
                     {libraryStats && libraryStats.totalShows > 0 && (
-                      <span className="flex items-center gap-1.5"><Tv className="w-3 h-3" />{libraryStats.totalShows.toLocaleString()} shows</span>
+                      <span className="flex items-center gap-1.5"><Tv className="w-3 h-3" /><AnimatedNumber value={libraryStats.totalShows} locale /> shows</span>
                     )}
                     {musicStats && musicStats.totalTracks > 0 && (
-                      <span className="flex items-center gap-1.5"><Music className="w-3 h-3" />{musicStats.totalTracks.toLocaleString()} tracks</span>
+                      <span className="flex items-center gap-1.5"><Music className="w-3 h-3" /><AnimatedNumber value={musicStats.totalTracks} locale /> tracks</span>
                     )}
                     {duplicateCount > 0 && (
-                      <span className="flex items-center gap-1.5"><Library className="w-3 h-3" />{duplicateCount} dupes</span>
+                      <span className="flex items-center gap-1.5"><Library className="w-3 h-3" /><AnimatedNumber value={duplicateCount} /> dupes</span>
                     )}
                     {sources.length > 0 && (
                       <span className="flex items-center gap-1.5"><Users className="w-3 h-3" />{sources.length} source{sources.length !== 1 ? 's' : ''}</span>
@@ -1453,15 +1454,15 @@ export function Dashboard({
                   <div className="flex flex-col gap-1 text-[10px] text-muted-foreground">
                     {wishlistCounts.active > 0 ? (
                       <>
-                        <span className="flex items-center gap-1.5"><Star className="w-3 h-3" />{wishlistCounts.active} active</span>
+                        <span className="flex items-center gap-1.5"><Star className="w-3 h-3" /><AnimatedNumber value={wishlistCounts.active} /> active</span>
                         {wishlistCounts.missing > 0 && (
-                          <span className="flex items-center gap-1.5"><ListChecks className="w-3 h-3" />{wishlistCounts.missing} missing</span>
+                          <span className="flex items-center gap-1.5"><ListChecks className="w-3 h-3" /><AnimatedNumber value={wishlistCounts.missing} /> missing</span>
                         )}
                         {wishlistCounts.upgrade > 0 && (
-                          <span className="flex items-center gap-1.5"><CircleFadingArrowUp className="w-3 h-3" />{wishlistCounts.upgrade} upgrades</span>
+                          <span className="flex items-center gap-1.5"><CircleFadingArrowUp className="w-3 h-3" /><AnimatedNumber value={wishlistCounts.upgrade} /> upgrades</span>
                         )}
                         {wishlistCounts.completed > 0 && (
-                          <span className="flex items-center gap-1.5 text-muted-foreground/50">{wishlistCounts.completed} completed</span>
+                          <span className="flex items-center gap-1.5 text-muted-foreground/50"><AnimatedNumber value={wishlistCounts.completed} /> completed</span>
                         )}
                       </>
                     ) : (
@@ -1486,13 +1487,13 @@ export function Dashboard({
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Film className="w-3 h-3" />Movies</span>
-                          <span className="text-xs font-bold">{Math.round(libraryStats.movieAverageQualityScore || 0)}</span>
+                          <AnimatedNumber value={Math.round(libraryStats.movieAverageQualityScore || 0)} className="text-xs font-bold" />
                         </div>
                         <div className="h-1 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-primary rounded-full" style={{ width: `${libraryStats.movieAverageQualityScore || 0}%` }} />
+                          <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${libraryStats.movieAverageQualityScore || 0}%` }} />
                         </div>
                         {libraryStats.movieNeedsUpgradeCount > 0 && (
-                          <div className="text-[10px] text-muted-foreground mt-0.5">{libraryStats.movieNeedsUpgradeCount} upgrades</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5"><AnimatedNumber value={libraryStats.movieNeedsUpgradeCount} /> upgrades</div>
                         )}
                       </div>
                     )}
@@ -1500,13 +1501,13 @@ export function Dashboard({
                       <div>
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Tv className="w-3 h-3" />TV</span>
-                          <span className="text-xs font-bold">{Math.round(libraryStats.tvAverageQualityScore || 0)}</span>
+                          <AnimatedNumber value={Math.round(libraryStats.tvAverageQualityScore || 0)} className="text-xs font-bold" />
                         </div>
                         <div className="h-1 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-primary rounded-full" style={{ width: `${libraryStats.tvAverageQualityScore || 0}%` }} />
+                          <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${libraryStats.tvAverageQualityScore || 0}%` }} />
                         </div>
                         {libraryStats.tvNeedsUpgradeCount > 0 && (
-                          <div className="text-[10px] text-muted-foreground mt-0.5">{libraryStats.tvNeedsUpgradeCount} upgrades</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5"><AnimatedNumber value={libraryStats.tvNeedsUpgradeCount} /> upgrades</div>
                         )}
                       </div>
                     )}
@@ -1520,12 +1521,12 @@ export function Dashboard({
                         <div>
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Music className="w-3 h-3" />Music</span>
-                            <span className="text-xs font-bold">{pct}%</span>
+                            <AnimatedNumber value={pct} suffix="%" className="text-xs font-bold" />
                           </div>
                           <div className="h-1 bg-muted rounded-full overflow-hidden">
-                            <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                            <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                           </div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5">{lossless} lossless</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5"><AnimatedNumber value={lossless} /> lossless</div>
                         </div>
                       )
                     })()}
