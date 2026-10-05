@@ -585,7 +585,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
       {counts.total > 0 && activeStatus !== 'completed' && (
         <div className="px-3 pt-2 pb-2 border-b border-border/30 space-y-1.5">
           {/* Category pills */}
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             {categoryOptions.map(({ type, icon: Icon, label, count }) => (
               <button
                 key={type}
