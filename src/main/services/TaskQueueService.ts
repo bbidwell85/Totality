@@ -529,11 +529,14 @@ export class TaskQueueService {
   private async processNext(): Promise<void> {
     // Don't start if paused, already processing, or queue is empty
     if (this.isPaused || this.isProcessing || this.queue.length === 0) {
-      // If queue is empty and we paused monitoring, resume it
+      // If queue is empty and we paused monitoring, resume after a brief delay
+      // to allow post-scan operations (auto-completeness, quality analysis) to finish
       if (this.queue.length === 0 && this.monitoringWasPausedByUs) {
-        console.log('[TaskQueue] All tasks complete, resuming live monitoring')
         this.monitoringWasPausedByUs = false
-        getLiveMonitoringService().resume()
+        setTimeout(() => {
+          console.log('[TaskQueue] All tasks complete, resuming live monitoring')
+          getLiveMonitoringService().resume()
+        }, 5000)
       }
       return
     }

@@ -367,7 +367,7 @@ export class MovieCollectionService extends CancellableOperation {
     sourceId?: string,
     libraryId?: string,
     options: CollectionAnalysisOptions = {}
-  ): Promise<{ completed: boolean; analyzed: number; skipped: number }> {
+  ): Promise<{ completed: boolean; analyzed: number; skipped: number; failures: number }> {
     // Apply default options
     // Default to deduplication when scanning all sources (no sourceId)
     const {
@@ -432,7 +432,7 @@ export class MovieCollectionService extends CancellableOperation {
 
       // Check for cancellation after deduplication
       if (this.isCancelled()) {
-        return { completed: false, analyzed: 0, skipped: 0 }
+        return { completed: false, analyzed: 0, skipped: 0, failures: 0 }
       }
     } else {
       // Get movies from specific source/library
@@ -459,7 +459,7 @@ export class MovieCollectionService extends CancellableOperation {
 
         // Check for cancellation after lookup
         if (this.isCancelled()) {
-          return { completed: false, analyzed: 0, skipped: 0 }
+          return { completed: false, analyzed: 0, skipped: 0, failures: 0 }
         }
 
         // Re-fetch movies to get updated TMDB IDs
@@ -478,7 +478,7 @@ export class MovieCollectionService extends CancellableOperation {
         currentItem: '',
         phase: 'complete',
       })
-      return { completed: true, analyzed: 0, skipped: 0 }
+      return { completed: true, analyzed: 0, skipped: 0, failures: 0 }
     }
 
     // Phase 1: Scan movies to find which collections they belong to
@@ -498,7 +498,7 @@ export class MovieCollectionService extends CancellableOperation {
       // Check for cancellation
       if (this.isCancelled()) {
         console.log(`[MovieCollectionService] Analysis cancelled at ${scannedCount}/${moviesWithTmdb.length}`)
-        return { completed: false, analyzed: 0, skipped: 0 }
+        return { completed: false, analyzed: 0, skipped: 0, failures: 0 }
       }
 
       const batch = moviesWithTmdb.slice(i, i + BATCH_SIZE)
@@ -562,7 +562,7 @@ export class MovieCollectionService extends CancellableOperation {
         currentItem: '',
         phase: 'complete',
       })
-      return { completed: true, analyzed: 0, skipped: 0 }
+      return { completed: true, analyzed: 0, skipped: 0, failures: 0 }
     }
 
     // Pre-fetch existing collections to check for recently analyzed
@@ -590,6 +590,7 @@ export class MovieCollectionService extends CancellableOperation {
     const collectionEntries = Array.from(collectionMap.values())
     let processedCount = 0
     let skipped = 0
+    let failures = 0
 
     // Start batch mode for efficient writes with checkpoints
     db.startBatch()
@@ -668,6 +669,7 @@ export class MovieCollectionService extends CancellableOperation {
         console.log(`[MovieCollectionService] ${result.collectionName}: ${result.ownedMovies}/${result.totalMovies} owned, ${result.missingMovies.length} missing (${result.completenessPercentage}%)`)
 
       } catch (error) {
+        failures++
         console.error(`[MovieCollectionService] Failed to fetch collection "${collectionInfo.collectionName}":`, error)
 
         // Store partial info without TMDB details
@@ -740,9 +742,9 @@ export class MovieCollectionService extends CancellableOperation {
     })
 
     getLoggingService().verbose('[MovieCollectionService]',
-      `Analysis ${wasCompleted ? 'complete' : 'cancelled'}: ${processedCount - skipped} collections analyzed, ${skipped} skipped, ${collectionEntries.length} total found`)
-    console.log(`[MovieCollectionService] Analysis ${wasCompleted ? 'complete' : 'cancelled'}: ${processedCount - skipped} analyzed, ${skipped} skipped`)
-    return { completed: wasCompleted, analyzed: processedCount - skipped, skipped }
+      `Analysis ${wasCompleted ? 'complete' : 'cancelled'}: ${processedCount - skipped} collections analyzed, ${skipped} skipped, ${failures} failed, ${collectionEntries.length} total found`)
+    console.log(`[MovieCollectionService] Analysis ${wasCompleted ? 'complete' : 'cancelled'}: ${processedCount - skipped} analyzed, ${skipped} skipped${failures > 0 ? `, ${failures} failed` : ''}`)
+    return { completed: wasCompleted, analyzed: processedCount - skipped, skipped, failures }
   }
 
   /**

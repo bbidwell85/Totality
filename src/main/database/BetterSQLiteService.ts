@@ -154,6 +154,9 @@ export class BetterSQLiteService {
       // Run schema and migrations
       this.runMigrations()
 
+      // Purge stale TMDB cache entries (older than 24h)
+      this.purgeStaleTmdbCache()
+
       this._isInitialized = true
       console.log('[BetterSQLite] Database initialized successfully')
     } catch (error) {
@@ -864,6 +867,20 @@ export class BetterSQLiteService {
       const cutoff = now - 48 * 60 * 60 * 1000 // 48 hours
       this.db.prepare('DELETE FROM tmdb_cache WHERE cached_at < ?').run(cutoff)
     }
+  }
+
+  /**
+   * Purge stale TMDB cache entries on startup (older than 24h)
+   */
+  private purgeStaleTmdbCache(): void {
+    if (!this.db) return
+    try {
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000
+      const purged = this.db.prepare('DELETE FROM tmdb_cache WHERE cached_at < ?').run(cutoff).changes
+      if (purged > 0) {
+        console.log(`[BetterSQLite] Purged ${purged} stale TMDB cache entries`)
+      }
+    } catch { /* non-critical */ }
   }
 
   // ============================================================================
@@ -1791,7 +1808,7 @@ export class BetterSQLiteService {
           return
         }
       }
-    } catch { /* non-critical — proceed with deletion */ }
+    } catch (e) { console.warn(`[BetterSQLite] Error updating completeness on delete (item ${id}):`, e) }
 
     // Delete associated data
     db.prepare('DELETE FROM media_item_versions WHERE media_item_id = ?').run(id)
@@ -1988,7 +2005,7 @@ export class BetterSQLiteService {
           }
           updated++
         }
-      } catch { /* skip malformed collection */ }
+      } catch (e) { console.warn(`[BetterSQLite] Malformed collection data (id ${coll.id}):`, e) }
     }
 
     if (updated > 0) {
