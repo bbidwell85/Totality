@@ -17,6 +17,7 @@ interface CSVExportOptions {
   includeMissingMovies: boolean
   includeMissingEpisodes: boolean
   includeMissingAlbums: boolean
+  includeMusicUpgrades: boolean
 }
 
 export function DataManagementTab() {
@@ -46,6 +47,7 @@ export function DataManagementTab() {
     includeMissingMovies: true,
     includeMissingEpisodes: true,
     includeMissingAlbums: true,
+    includeMusicUpgrades: true,
   })
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [storageData, setStorageData] = useState<{
@@ -97,7 +99,8 @@ export function DataManagementTab() {
   const handleExportCSV = async () => {
     // Check if at least one option is selected
     if (!csvOptions.includeUpgrades && !csvOptions.includeMissingMovies &&
-        !csvOptions.includeMissingEpisodes && !csvOptions.includeMissingAlbums) {
+        !csvOptions.includeMissingEpisodes && !csvOptions.includeMissingAlbums &&
+        !csvOptions.includeMusicUpgrades) {
       setMessage({ type: 'error', text: 'Please select at least one section to export' })
       return
     }
@@ -657,6 +660,20 @@ export function DataManagementTab() {
                   <Toggle
                     checked={csvOptions.includeMissingAlbums}
                     onChange={() => toggleCSVOption('includeMissingAlbums')}
+                  />
+                </div>
+
+                {/* Music Quality Upgrades */}
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <div>
+                    <span className="text-sm text-foreground">Music Quality Upgrades</span>
+                    <p className="text-xs text-muted-foreground">
+                      Albums that could benefit from higher quality versions
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={csvOptions.includeMusicUpgrades}
+                    onChange={() => toggleCSVOption('includeMusicUpgrades')}
                   />
                 </div>
               </div>

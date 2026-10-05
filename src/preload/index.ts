@@ -347,6 +347,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     includeMissingMovies: boolean
     includeMissingEpisodes: boolean
     includeMissingAlbums: boolean
+    includeMusicUpgrades: boolean
   }) => ipcRenderer.invoke('db:exportCSV', options),
   dbImport: () => ipcRenderer.invoke('db:import'),
   dbReset: () => ipcRenderer.invoke('db:reset'),
@@ -1353,6 +1354,7 @@ export interface ElectronAPI {
     includeMissingMovies: boolean
     includeMissingEpisodes: boolean
     includeMissingAlbums: boolean
+    includeMusicUpgrades: boolean
   }) => Promise<{ success: boolean; path?: string; cancelled?: boolean }>
   dbImport: () => Promise<{ success: boolean; imported?: number; errors?: string[]; cancelled?: boolean }>
   dbReset: () => Promise<{ success: boolean }>

@@ -192,6 +192,7 @@ export const ExportCSVOptionsSchema = z.object({
   includeMissingMovies: z.boolean().optional(),
   includeMissingEpisodes: z.boolean().optional(),
   includeMissingAlbums: z.boolean().optional(),
+  includeMusicUpgrades: z.boolean().optional(),
 })
 
 /**

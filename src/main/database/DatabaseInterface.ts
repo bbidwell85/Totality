@@ -281,7 +281,7 @@ export interface DatabaseServiceInterface {
 
   // --- Data Export/Import ---
   exportData(): Record<string, unknown[]>
-  exportWorkingCSV(options: Record<string, boolean>): Promise<Buffer>
+  exportWorkingCSV(options: Record<string, boolean>): string
   importData(data: Record<string, unknown[]>): { imported: number; errors: string[] }
 
   // --- Database Management ---
