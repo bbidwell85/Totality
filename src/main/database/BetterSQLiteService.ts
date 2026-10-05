@@ -2645,12 +2645,15 @@ export class BetterSQLiteService {
         )
       `).run(sourceId)
 
-      // Delete artist completeness data for artists from this source
+      // Delete artist completeness data for artists ONLY in this source
+      // (preserve completeness for artists that exist in other sources too)
       db.prepare(`
         DELETE FROM artist_completeness WHERE artist_name IN (
           SELECT name FROM music_artists WHERE source_id = ?
+        ) AND artist_name NOT IN (
+          SELECT name FROM music_artists WHERE source_id != ?
         )
-      `).run(sourceId)
+      `).run(sourceId, sourceId)
 
       // Delete music tracks, albums, artists
       db.prepare('DELETE FROM music_tracks WHERE source_id = ?').run(sourceId)
@@ -2661,6 +2664,10 @@ export class BetterSQLiteService {
       db.prepare('DELETE FROM series_completeness WHERE source_id = ?').run(sourceId)
       db.prepare('DELETE FROM movie_collections WHERE source_id = ?').run(sourceId)
       db.prepare('DELETE FROM library_scans WHERE source_id = ?').run(sourceId)
+
+      // Clear person completeness (global, re-analyzed on demand)
+      // Owned movie IDs may reference deleted items from this source
+      db.prepare('DELETE FROM person_completeness').run()
 
       // Delete notifications for this source
       db.prepare('DELETE FROM notifications WHERE source_id = ?').run(sourceId)
