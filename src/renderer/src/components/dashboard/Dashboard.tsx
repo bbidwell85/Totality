@@ -120,6 +120,7 @@ export function Dashboard({
   const [personSortBy, setPersonSortBy] = useState<'completeness' | 'name'>('completeness')
   const [completenessTab, setCompletenessTab] = useState<'collections' | 'series' | 'music' | 'filmography'>('collections')
   const [isLoading, setIsLoading] = useState(true)
+  const hasLoadedOnce = useRef(false)
   const [error, setError] = useState<string | null>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [libraryStats, setLibraryStats] = useState<Record<string, any> | null>(null)
@@ -186,7 +187,8 @@ export function Dashboard({
 
 
   const loadDashboardData = useCallback(async () => {
-    setIsLoading(true)
+    // Only show loading skeleton on initial load — subsequent refreshes update in-place
+    if (!hasLoadedOnce.current) setIsLoading(true)
     setError(null)
     try {
       // Filter by active source if one is selected
@@ -387,6 +389,7 @@ export function Dashboard({
       setError('Failed to load dashboard data. Please try again.')
     } finally {
       setIsLoading(false)
+      hasLoadedOnce.current = true
     }
   }, [activeSourceId])
 
