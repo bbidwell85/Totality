@@ -5367,6 +5367,132 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   }
 
   /**
+   * Export working document CSV for tracking upgrades and completions
+   */
+  exportWorkingCSV(options: {
+    includeUpgrades: boolean
+    includeMissingMovies: boolean
+    includeMissingEpisodes: boolean
+    includeMissingAlbums: boolean
+  }): string {
+    if (!this.db) throw new Error('Database not initialized')
+
+    const escapeCSV = (str: string): string => {
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }
+
+    const sections: string[] = []
+
+    if (options.includeUpgrades) {
+      const rows = this.db.prepare(`
+        SELECT mi.title, mi.year, mi.type, mi.series_title, mi.season_number, mi.episode_number,
+          qs.quality_tier, mi.resolution, mi.video_bitrate, mi.audio_channels, mi.video_codec,
+          mi.tmdb_id, mi.imdb_id, mi.file_path
+        FROM media_items mi
+        JOIN quality_scores qs ON qs.media_item_id = mi.id
+        WHERE qs.needs_upgrade = 1
+        ORDER BY qs.quality_tier, mi.type, mi.title
+      `).all() as Array<Record<string, unknown>>
+
+      if (rows.length > 0) {
+        const tierOrder = ['SD', '720p', '1080p', '4K']
+        const header = '=== UPGRADE CANDIDATES ==='
+        const cols = 'Title,Year,Type,Series,Season,Episode,Current Tier,Target Tier,Resolution,Video Bitrate,Audio Channels,Codec,TMDB ID,IMDB ID,File Path'
+        const csvRows = rows.map(r => {
+          const currentIdx = tierOrder.indexOf(r.quality_tier as string)
+          const targetTier = currentIdx < tierOrder.length - 1 ? tierOrder[currentIdx + 1] : r.quality_tier
+          return [
+            escapeCSV(String(r.title || '')), r.year || '', r.type || '',
+            escapeCSV(String(r.series_title || '')), r.season_number || '', r.episode_number || '',
+            r.quality_tier || '', targetTier, r.resolution || '', r.video_bitrate || '',
+            r.audio_channels || '', r.video_codec || '', r.tmdb_id || '', r.imdb_id || '',
+            escapeCSV(String(r.file_path || '')),
+          ].join(',')
+        })
+        sections.push([header, cols, ...csvRows].join('\n'))
+      }
+    }
+
+    if (options.includeMissingMovies) {
+      const collections = this.db.prepare(`
+        SELECT collection_name, missing_movies FROM movie_collections
+        WHERE missing_movies IS NOT NULL AND missing_movies != '[]'
+      `).all() as Array<{ collection_name: string; missing_movies: string }>
+
+      if (collections.length > 0) {
+        const header = '=== MISSING MOVIES (Collections) ==='
+        const cols = 'Collection Name,Movie Title,Year,TMDB ID'
+        const csvRows: string[] = []
+        for (const coll of collections) {
+          try {
+            const movies = JSON.parse(coll.missing_movies || '[]') as Array<{ title: string; year?: number; tmdb_id: string }>
+            for (const m of movies) {
+              csvRows.push([escapeCSV(coll.collection_name), escapeCSV(m.title || ''), m.year || '', m.tmdb_id || ''].join(','))
+            }
+          } catch { /* skip malformed JSON */ }
+        }
+        if (csvRows.length > 0) sections.push([header, cols, ...csvRows].join('\n'))
+      }
+    }
+
+    if (options.includeMissingEpisodes) {
+      const series = this.db.prepare(`
+        SELECT series_title, missing_episodes, tmdb_id FROM series_completeness
+        WHERE missing_episodes IS NOT NULL AND missing_episodes != '[]'
+      `).all() as Array<{ series_title: string; missing_episodes: string; tmdb_id: string }>
+
+      if (series.length > 0) {
+        const header = '=== MISSING TV EPISODES ==='
+        const cols = 'Series Title,Season,Episode,Episode Title,Air Date,TMDB ID'
+        const csvRows: string[] = []
+        for (const s of series) {
+          try {
+            const episodes = JSON.parse(s.missing_episodes || '[]') as Array<{ season_number: number; episode_number: number; title?: string; air_date?: string }>
+            for (const ep of episodes) {
+              csvRows.push([escapeCSV(s.series_title), ep.season_number, ep.episode_number, escapeCSV(ep.title || ''), ep.air_date || '', s.tmdb_id || ''].join(','))
+            }
+          } catch { /* skip malformed JSON */ }
+        }
+        if (csvRows.length > 0) sections.push([header, cols, ...csvRows].join('\n'))
+      }
+    }
+
+    if (options.includeMissingAlbums) {
+      const artists = this.db.prepare(`
+        SELECT artist_name, missing_albums, missing_singles, missing_eps FROM artist_completeness
+        WHERE (missing_albums IS NOT NULL AND missing_albums != '[]')
+           OR (missing_singles IS NOT NULL AND missing_singles != '[]')
+           OR (missing_eps IS NOT NULL AND missing_eps != '[]')
+      `).all() as Array<{ artist_name: string; missing_albums: string; missing_singles: string; missing_eps: string }>
+
+      if (artists.length > 0) {
+        const header = '=== MISSING ALBUMS ==='
+        const cols = 'Artist Name,Album Title,Year,Album Type,MusicBrainz ID'
+        const csvRows: string[] = []
+        for (const a of artists) {
+          const parseAlbums = (json: string, type: string) => {
+            try {
+              const items = JSON.parse(json || '[]') as Array<{ title: string; year?: number; musicbrainz_id?: string }>
+              for (const item of items) {
+                csvRows.push([escapeCSV(a.artist_name), escapeCSV(item.title || ''), item.year || '', type, item.musicbrainz_id || ''].join(','))
+              }
+            } catch { /* skip */ }
+          }
+          parseAlbums(a.missing_albums, 'Album')
+          parseAlbums(a.missing_singles, 'Single')
+          parseAlbums(a.missing_eps, 'EP')
+        }
+        if (csvRows.length > 0) sections.push([header, cols, ...csvRows].join('\n'))
+      }
+    }
+
+    return sections.join('\n\n')
+  }
+
+  /**
    * Import data from exported JSON
    */
   importData(data: Record<string, unknown[]>): { imported: number; errors: string[] } {

@@ -67,7 +67,7 @@ feat!: redesign settings API          → major bump (breaking)
 
 ### Development Database
 
-Location: `%APPDATA%\totality\totality.db` (SQLite via better-sqlite3 in production, SQL.js as fallback)
+Location: `%APPDATA%\totality\totality-v2.db` (SQLite via better-sqlite3)
 
 Reset database: `del "%APPDATA%\totality\totality.db"`
 
@@ -77,7 +77,7 @@ Reset database: `del "%APPDATA%\totality\totality.db"`
 
 **1. Main Process** (`src/main/`)
 - Node.js environment with full system access
-- Window management, database operations (better-sqlite3/SQL.js), external API communication
+- Window management, database operations (better-sqlite3), external API communication
 - Entry: `src/main/index.ts` → builds to `dist-electron/main/index.cjs`
 
 **2. Preload Script** (`src/preload/`)
@@ -97,7 +97,7 @@ Reset database: `del "%APPDATA%\totality\totality.db"`
 
 Services use singleton pattern via `getXxxService()` getter functions (see Singleton Services pattern below). Key services with non-obvious behavior:
 
-- **DatabaseService** (`getDatabaseService()`): Dual SQLite backend — better-sqlite3 (production) or SQL.js (fallback/tests). See Database Backend Selection.
+- **DatabaseService** (`getDatabaseService()`): SQLite via better-sqlite3 with typed `DatabaseServiceInterface`.
 - **SourceManager** (`getSourceManager()`): Orchestrates all provider lifecycles, scanning, connection testing
 - **QualityAnalyzer** (`getQualityAnalyzer()`): Tier-based scoring with codec efficiency multipliers
 - **GeminiService** (`getGeminiService()`): Sync constructor (async init causes race condition). See AI Chat & Analysis.
@@ -220,17 +220,18 @@ Events: `sources:scanProgress`, `quality:analysisProgress`, `series:progress`, `
 - `series_completeness`: TV series ownership and missing episodes (JSON)
 - `movie_collections`: Movie franchise collections and ownership
 - `music_artists`, `music_albums`, `music_tracks`: Music library data
-- `music_quality_scores`: Audio quality analysis
+- `music_quality_scores`: Audio quality analysis with `previous_quality_tier` and `upgraded_at` for upgrade tracking
 - `artist_completeness`, `album_completeness`: MusicBrainz completeness tracking
 - `library_scans`: Per-library scan timestamps and item counts
 - `notifications`: Event log with read/unread status
 - `wishlist`: Shopping list items with priority and notes
 - `media_item_versions`: Multi-version tracking per media item (edition, file path, per-version quality scores)
 - `media_item_collections`: Movie groupings in collections
-- `exclusions`: Dismissed/hidden items (completeness results the user doesn't want to see)
+- `exclusions`: Dismissed/hidden items (completeness results the user doesn't want to see). Types: `media_upgrade`, `collection_movie`, `series_episode`, `artist_album`, `person_movie`
+- `person_completeness`: Filmography tracking for directors, actors, writers, composers, cinematographers, editors. `person_type` CHECK constraint includes all 6 roles. `missing_movies` JSON, `upgraded_at` tracking.
 - `task_queue`, `task_events`, `monitoring_events`: Persistent task queue and monitoring history
 
-**Important**: Database uses triggers for `updated_at` timestamps. Schema migrations in `DatabaseService.runMigrations()`.
+**Important**: Database uses triggers for `updated_at` timestamps. Schema migrations in `BetterSQLiteService.runMigrations()`.
 
 **Exclusions and Completeness Stats**: The `exclusions` table stores items dismissed by the user from completeness results. Completeness panel stats (Missing, Complete, Incomplete counts) are computed **client-side** from filtered data in `MediaBrowser.tsx:loadCompletenessData()` — the raw server stats don't account for exclusions, so stats are recalculated after filtering out excluded items. Dashboard also recalculates `completeness_percentage` for collections, series, and artists after exclusion filtering — artists with all missing items excluded reach 100% and are hidden from the panel.
 
@@ -286,8 +287,10 @@ Two additional client-side completeness filters applied in `loadCompletenessData
 
 - **TaskQueueService** (`src/main/services/TaskQueueService.ts`): Task types: `library-scan`, `source-scan`, `series-completeness`, `collection-completeness`, `music-completeness`, `music-scan`. Supports pause/resume/cancel/reorder. Emits notifications on completion/failure. `TaskDefinition` supports optional `artistId` for single-artist music completeness analysis (routes through task queue instead of direct IPC call). Deduplicates tasks by `type + sourceId + libraryId` — adding a duplicate returns the existing task ID. `hasActiveTask(type, sourceId?, libraryId?)` allows IPC handlers to check for running/queued tasks before starting direct scans. Queue depth guarded by `MAX_QUEUE_DEPTH = 50` — rejects new tasks beyond limit. `sendLibraryUpdated(type)` accepts `'media'` or `'music'` for correct renderer refresh routing.
 - **LiveMonitoringService** (`src/main/services/LiveMonitoringService.ts`): Polls sources on intervals, pauses during manual scans, creates `source_change` notifications. Emits `library:updated` to renderer after detecting changes. Default polling intervals defined in `DEFAULT_MONITORING_CONFIG` (`src/main/types/monitoring.ts`) — must include all `ProviderType` values. `pollingIntervals` type is `Partial<Record<ProviderType, number>>` since not all providers may have intervals configured.
-- **Notifications** (`notifications` table): Types: `source_change`, `scan_complete`, `error`, `info`. Emitted from TaskQueueService, LiveMonitoringService, SourceManager, AutoUpdateService. UI in `ActivityPanel.tsx`. Push-based delivery via `notifications:new` IPC event (`src/main/ipc/utils/notificationEmitter.ts`) — ActivityPanel subscribes for real-time updates instead of relying solely on polling.
-- **Wishlist**: Auto-fetches TMDB poster on add when `tmdb_id` present but `poster_url` missing (both direct and bulk add paths).
+- **Notifications** (`notifications` table): Types: `source_change`, `scan_complete`, `error`, `info`. Emitted from TaskQueueService, LiveMonitoringService, SourceManager, AutoUpdateService. UI split into `NotificationBell.tsx` (dropdown from TopBar) and `TaskQueuePanel.tsx` (slide-out panel). Push-based delivery via `notifications:new` IPC event (`src/main/ipc/utils/notificationEmitter.ts`).
+- **Wishlist**: Auto-fetches TMDB poster on add when `tmdb_id` present but `poster_url` missing (both direct and bulk add paths). Plex/Trakt sync uses a two-step flow: `fetchPlexWatchlist()`/`fetchTraktWatchlist()` returns items for preview, then user selects which to add via `addBulk()`.
+- **ReleaseAlertService** (`src/main/services/ReleaseAlertService.ts`): Checks TMDB `/movie/{id}/release_dates` for Digital (type 4) and Physical (type 5) releases per wishlist item. Uses `store_region` setting for country-specific dates. TV shows check `next_episode_to_air`. Polls every 6 hours when enabled.
+- **Upgrade Notifications**: After scan completion, TaskQueueService queries `getRecentlyUpgraded()` and `getRecentlyUpgradedMusic()` for items upgraded since scan start, creating a batched notification (e.g., "3 quality upgrades detected: Title: 720p → 1080p").
 
 ### Tag Sync (Mood/Genre)
 
@@ -334,12 +337,12 @@ After any scan (manual rescan or live monitoring) that adds, updates, or removes
 
 ### Dashboard & Library Live Refresh
 
-- **Dashboard** reloads via `loadDashboardData()` which makes 6 parallel `Promise.allSettled` IPC calls (movie upgrades, TV upgrades, music upgrades, collections, series, artist completeness). Debounced (300ms). Triggers: `scan:completed`, `library:updated` (all types), `exclusions-changed`, `settings:changed`, `activeSourceId` change.
+- **Dashboard** reloads via `loadDashboardData()` which makes ~29 parallel `Promise.allSettled` IPC calls (settings, upgrades, completeness, exclusions, bento card stats, quality distribution, wishlist counts). Debounced (300ms). Triggers: `scan:completed`, `library:updated` (all types), `exclusions-changed`, `settings:changed`, `activeSourceId` change. Bento cards (Library, Quality, Storage) rendered above the upgrade/completeness lists.
 - **Library view** (`useLibraryEventListeners`) reloads on `library:updated` events: `type: 'media'` → `loadMedia()` + `loadCompletenessData()`; `type: 'music'` → `loadMusicData()` + `loadMusicCompletenessData()`. Also reloads on `scan:completed` when items changed. Debounced (500ms).
 - **`loadMusicData()`** reloads stats, paginated artists, paginated albums, and refreshes `selectedArtist` to update track/album counts in subtitle.
 - **`sendLibraryUpdated(type)`** in TaskQueueService accepts `'media'` or `'music'` type to route refresh correctly. Music completeness tasks emit `'music'` type.
 - Disabled libraries filtered at DB level via `library_scans.is_enabled` JOIN on all completeness/upgrade queries (including `getSeriesCompleteness`, `getMovieCollections`, `getLibraryStats`, `getSeriesCompletenessStats`, `getMovieCollectionStats`).
-- **Sort persistence**: `loadDashboardData` applies the persisted sort preference when setting data (not just via useEffect). This prevents stale sort order when the preference hasn't changed between reloads (React skips no-op `setState`, so the sort useEffect wouldn't re-fire).
+- **Sort persistence**: `loadDashboardData` applies the persisted sort preference when setting data (not just via useEffect). Upgrade sorts are per-tab (movieSortBy, tvSortBy, musicUpgradeSortBy) with a shared ascending/descending direction toggle. Completeness sorts also have a shared direction toggle.
 - **Expanded row heights**: `VariableSizeList` row heights for expandable artists/collections/series use constants (`EXPANDED_ITEM_HEIGHT = 44`, `EXPANDED_BOTTOM_PAD = 8`) that must match actual CSS rendering. Mismatch causes content cutoff.
 
 ### Preference Persistence
@@ -370,8 +373,8 @@ All setting keys are defined in `src/shared/settingKeys.ts` as `SETTING_KEYS` �
 
 **Architecture:**
 - **GeminiService** (`src/main/services/GeminiService.ts`): Sync constructor reads API key from DB (async causes race condition). `sendMessageWithTools()` runs agentic tool-use loop (max 10 rounds).
-- **GeminiTools** (`src/main/services/GeminiTools.ts`): 21 tool definitions + `executeTool()` dispatcher for library queries, TMDB search, wishlist management.
-- **GeminiAnalysisService** (`src/main/services/GeminiAnalysisService.ts`): 4 streaming report generators. Gathers data upfront (not agentic).
+- **GeminiTools** (`src/main/services/GeminiTools.ts`): 33 tool definitions + `executeTool()` dispatcher for library queries, TMDB search, wishlist management, mood tags, notifications.
+- **GeminiAnalysisService** (`src/main/services/GeminiAnalysisService.ts`): 6 streaming report generators (quality, upgrades, completeness, wishlist, storage optimization, music quality). Gathers data upfront (not agentic).
 - **System Prompts** (`src/main/services/ai-system-prompts.ts`): Chat prompt has film/TV/music enthusiast personality.
 
 **Critical Gotchas:**
@@ -398,7 +401,7 @@ All setting keys are defined in `src/shared/settingKeys.ts` as `SETTING_KEYS` �
 Initialization order in `src/main/index.ts` on `app.whenReady()`:
 1. Logging (to capture startup logs)
 2. Custom protocol registration (`local-artwork://`)
-3. Database initialization (via `DatabaseFactory` — selects backend, runs migrations)
+3. Database initialization (BetterSQLiteService — creates/opens DB, runs migrations)
 4. Load providers from DB (`SourceManager`)
 5. Register all IPC handlers
 6. Background services (live monitoring)
@@ -410,14 +413,14 @@ Initialization order in `src/main/index.ts` on `app.whenReady()`:
 ```typescript
 app.on('before-quit', async (event) => {
   event.preventDefault()
-  await getDatabaseService().close()  // Persist DB
+  await getDatabaseService().close()  // Close DB connection
   app.exit()
 })
 ```
 
 ### Crash Handlers
 
-The app registers `uncaughtException` and `unhandledRejection` handlers that call `getDatabaseService().forceSave()` to persist the in-memory database before crashing. Uncaught exceptions exit the process; unhandled rejections continue running.
+The app registers `uncaughtException` and `unhandledRejection` handlers that flush batch mode before crashing. better-sqlite3 uses WAL mode so data is already persisted. Uncaught exceptions exit the process; unhandled rejections continue running.
 
 ### Database Batch Mode
 
@@ -473,31 +476,21 @@ export function getService(): ServiceClass {
 
 **Import Rule**: Always use static `import` for singleton getters, never dynamic `require()`. In the Vite/Rollup CJS bundle, a dynamic `require()` may resolve to a different module instance than a static `import`, creating two separate singletons. This caused a bug where `refreshApiKey()` updated one singleton but `isConfigured()` checked another.
 
-### Database Backend Selection
+### Database Backend
 
-**Location:** `src/main/database/DatabaseFactory.ts`
+**Location:** `src/main/database/BetterSQLiteService.ts` (sole backend), `src/main/database/DatabaseFactory.ts` (getter)
 
-The app supports two SQLite backends with automatic migration:
-- **better-sqlite3** (`BetterSQLiteService`): Native SQLite with WAL mode, used in production for performance. Writes are synchronous and durable by default.
-- **SQL.js** (`DatabaseService`): WASM-based in-memory SQLite. Used as fallback and in tests (`USE_SQLJS=true` env var forces this).
+Uses **better-sqlite3** with WAL mode — native SQLite, synchronous writes, durable by default. `DatabaseFactory` is a thin wrapper that returns `BetterSQLiteService` cast to `DatabaseServiceInterface`.
 
-`DatabaseFactory` handles backend selection and auto-migration from SQL.js → better-sqlite3 on first run. If migration fails, it falls back to SQL.js. Override with env vars: `USE_SQLJS=true` or `USE_BETTER_SQLITE3=true`.
+**Typed Interface**: `DatabaseServiceInterface` (`src/main/database/DatabaseInterface.ts`) defines explicit method signatures. TypeScript catches missing or mismatched methods at compile time. The interface still has a `[key: string]: any` catch-all for methods not yet fully typed — this should be gradually removed.
 
-**Dual-Backend Gotcha**: `DatabaseServiceInterface` uses `[key: string]: any`, so TypeScript does NOT enforce method signature parity between `BetterSQLiteService` and `DatabaseService`. When adding or modifying database methods, manually verify both implementations have identical signatures. A mismatch will silently fail at runtime (e.g., wrong parameters passed positionally). Both backends now enforce `PRAGMA foreign_keys = ON` and protect `user_fixed_match` records in upsert ON CONFLICT clauses.
+**sql.js** is still used by `KodiLocalProvider` and `MediaMonkeyProvider` to read external database files (Kodi and MediaMonkey SQLite DBs), but NOT for the app's own database.
 
 **NOT NULL DEFAULT '' Columns**: Several tables use `source_id TEXT NOT NULL DEFAULT ''` and `library_id TEXT NOT NULL DEFAULT ''`. When writing upsert methods, use `data.source_id || ''` (empty string), NOT `data.source_id || null`. Passing `null` to a NOT NULL column causes a `SqliteError: NOT NULL constraint failed` at runtime.
 
 **Upsert Return IDs**: Music upsert methods (`upsertMusicAlbum`, `upsertMusicArtist`, `upsertMusicTrack`, `upsertMediaItem`) always look up the ID by unique key after INSERT/UPDATE. Do NOT use `lastInsertRowid` — it returns stale values after `ON CONFLICT DO UPDATE`, causing child records to link to wrong parents.
 
 **Music Album Queries**: `getMusicAlbums` supports both `artistId` (FK) and `artistName` (string) filters. When both are provided, it uses `OR` logic (`artist_id = ? OR artist_name = ?`) to catch albums with mismatched FKs — matching how the completeness handler in `music.ts` finds owned albums. Always pass both when querying albums for a specific artist.
-
-### Database Persistence (SQL.js only)
-
-When using SQL.js backend, the database is in-memory. `DatabaseService.save()` writes to disk:
-- After each write operation (unless in batch mode)
-- On `app.before-quit`
-
-better-sqlite3 writes directly to disk (no explicit save needed).
 
 ## Common Development Tasks
 
@@ -519,9 +512,9 @@ better-sqlite3 writes directly to disk (no explicit save needed).
 ### Adding a Database Table
 
 1. Update schema in `src/main/database/schema.ts`
-2. Add migration in `DatabaseService.runMigrations()` if altering existing schema
+2. Add migration in `BetterSQLiteService.runMigrations()` if altering existing schema
 3. Add TypeScript types to `src/main/types/database.ts`
-4. Add service methods to `DatabaseService` class
+4. Add service methods to `BetterSQLiteService` class and update `DatabaseInterface.ts`
 5. Register IPC handlers in `src/main/ipc/database.ts`
 
 ### Adding a New Provider
@@ -537,7 +530,9 @@ better-sqlite3 writes directly to disk (no explicit save needed).
 
 ### Adding a React Component
 
-Components in `src/renderer/src/components/` organized by domain: `dashboard/`, `library/`, `sources/`, `settings/`, `ui/`, `onboarding/`, `wishlist/`.
+Components in `src/renderer/src/components/` organized by domain: `dashboard/`, `library/`, `sources/`, `settings/`, `ui/`, `onboarding/`, `wishlist/`, `chat/`, `mood/`.
+
+**Side Panel Pattern**: All 5 slide-out panels (WishlistPanel, ChatPanel, CompletenessPanel, MoodSyncPanel, TaskQueuePanel) use backdrop scrims (`bg-black/40 z-[45]`) with panels at `z-[46]`. Click scrim to close. Sidebar (`z-40`) is covered by scrim. TopBar (`z-100`) stays above. Panels share consistent header style: `px-4 py-3`, `text-sm font-semibold` title, `w-4 h-4 text-muted-foreground` icon, `hover:bg-muted/50` close button with `focus:ring-2`.
 
 **Library view structure** (`src/renderer/src/components/library/`):
 - `MediaBrowser.tsx`: Main container — manages state, data loading, tab switching, and the completeness panel
@@ -546,7 +541,7 @@ Components in `src/renderer/src/components/` organized by domain: `dashboard/`, 
 - `MusicView.tsx`: Artist/album/track views (extracted view component). Album list `itemSize={104}`, track list `itemSize={40}`
 - `hooks/`: Custom hooks for library state (`useLibraryState`, `useLibraryDataLoading`, `useLibraryEventListeners`, etc.)
 
-**Alphabet Navigation**: The A-Z sidebar in library views uses `alphabetFilter` passed to backend queries (server-side filtering via `WHERE UPPER(SUBSTR(title, 1, 1)) = ?`). For collections-only view (all items in DOM), it uses DOM-based `scrollIntoView()` jump-to instead. The `getLetterOffset` IPC is no longer used by `scrollToLetter`.
+**Alphabet Navigation**: The A-Z sidebar smooth-scrolls to the first item starting with the selected letter using `smoothScrollTo()` (eased `requestAnimationFrame`, 400ms). All items remain visible — no server-side filtering. Page sizes set to 10000 to load full datasets. `alphabetFilter` state is UI-only (highlights active letter in sidebar). Letters without matching items are dimmed (`text-muted-foreground/20`) and non-clickable. `availableLetters` computed via `useMemo` from loaded data arrays.
 
 **Collections Display**: `MoviesView.tsx` uses append-aware `displayItems` logic to prevent scroll mixing during infinite scroll pagination. When `collectionsOnly` is true, all collections render at once (no pagination). When false, new pages are appended without re-sorting existing items.
 
@@ -577,7 +572,7 @@ Sensitive credentials are encrypted at rest using Electron's `safeStorage` API, 
 
 **How it works:**
 1. On database initialization, existing plain-text credentials are automatically migrated to encrypted format
-2. `DatabaseService` transparently encrypts credentials when saving and decrypts when reading
+2. `BetterSQLiteService` transparently encrypts credentials when saving and decrypts when reading
 3. Encrypted values are prefixed with `ENC:` followed by base64-encoded ciphertext
 4. If encryption is unavailable (rare edge cases), credentials fall back to plain text with a warning
 
@@ -597,7 +592,7 @@ The application follows Electron security best practices:
 - Missing types: Ensure `@types/*` installed, check `tsconfig.json` paths
 
 ### Database Issues
-- Schema errors: Check `runMigrations()` in `DatabaseService.ts`
+- Schema errors: Check `runMigrations()` in `BetterSQLiteService.ts`
 - Data not persisting: Verify `save()` called after writes
 - Corruption: Delete database file and restart
 - **NOT NULL constraint failed**: Check if upsert code uses `|| null` for columns defined as `NOT NULL DEFAULT ''` — use `|| ''` instead
@@ -621,6 +616,6 @@ When a source is deleted via `SourceManager.removeSource()` → `db.deleteMediaS
 Tests are in `tests/unit/`, configured via `vitest.config.ts`. Coverage targets `src/main/**/*.ts` excluding entry point and IPC handlers.
 
 - **Globals enabled**: `describe`, `it`, `expect`, `vi` are available without importing
-- **Setup file** (`tests/setup.ts`): Mocks `electron` (app, ipcMain, safeStorage) and `sql.js` globally
-- **Environment**: `USE_SQLJS=true` is forced in test env since better-sqlite3 native module doesn't work in Vitest
+- **Setup file** (`tests/setup.ts`): Mocks `electron` (app, ipcMain, safeStorage) globally
+- **Database tests**: Use sql.js via `tests/helpers/testDatabase.ts` adapter that mimics better-sqlite3 API. better-sqlite3 native module can't run in Vitest (compiled for Electron's Node ABI).
 - **Timeout**: 10 seconds per test
