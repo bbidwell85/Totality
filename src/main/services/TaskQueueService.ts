@@ -698,6 +698,7 @@ export class TaskQueueService {
 
       case 'music-scan':
         await this.executeMusicScan(task, progressCallback)
+        this.sendLibraryUpdated('music')
         break
 
       default:
