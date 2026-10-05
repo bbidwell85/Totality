@@ -501,8 +501,9 @@ export function DataManagementTab() {
               </div>
               <button
                 onClick={() => setShowLibraryResetConfirm(true)}
-                className="shrink-0 px-3 py-1.5 text-xs hover:bg-muted rounded-md transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
               >
+                <RefreshCw className="w-3.5 h-3.5" />
                 Reset
               </button>
             </div>
