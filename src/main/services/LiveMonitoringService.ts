@@ -874,7 +874,13 @@ export class LiveMonitoringService {
 
     const events: SourceChangeEvent[] = []
 
+    let sourceUnreachable = false
+
     for (const library of enabledLibraries) {
+      // If a previous library failed with a connection error, skip remaining libraries
+      // (they'll all fail the same way since the server is down)
+      if (sourceUnreachable) continue
+
       try {
         let result: ScanResult
 
@@ -972,7 +978,14 @@ export class LiveMonitoringService {
           console.log(`[LiveMonitoring] Detected ${result.itemsRemoved} removed items in ${library.libraryName}`)
         }
       } catch (error) {
-        console.error(`[LiveMonitoring] Error checking library ${library.libraryId}:`, error)
+        const msg = error instanceof Error ? error.message : String(error)
+        // Detect connection-level failures (server down, network error)
+        if (msg.includes('fetch failed') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('ENOTFOUND')) {
+          console.warn(`[LiveMonitoring] ${source.display_name} unreachable, skipping remaining libraries (${msg})`)
+          sourceUnreachable = true
+        } else {
+          console.error(`[LiveMonitoring] Error checking library ${library.libraryId}:`, error)
+        }
       }
     }
 
