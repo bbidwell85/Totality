@@ -69,7 +69,7 @@ feat!: redesign settings API          → major bump (breaking)
 
 Location: `%APPDATA%\totality\totality-v2.db` (SQLite via better-sqlite3)
 
-Reset database: `del "%APPDATA%\totality\totality.db"`
+Reset database: `del "%APPDATA%\totality\totality-v2.db"`
 
 ## Architecture Overview
 
@@ -97,7 +97,7 @@ Reset database: `del "%APPDATA%\totality\totality.db"`
 
 Services use singleton pattern via `getXxxService()` getter functions (see Singleton Services pattern below). Key services with non-obvious behavior:
 
-- **DatabaseService** (`getDatabaseService()`): SQLite via better-sqlite3 with typed `DatabaseServiceInterface`.
+- **BetterSQLiteService** (`getDatabase()`): SQLite via better-sqlite3 with typed `DatabaseServiceInterface`. Sole database backend — sql.js was removed.
 - **SourceManager** (`getSourceManager()`): Orchestrates all provider lifecycles, scanning, connection testing
 - **QualityAnalyzer** (`getQualityAnalyzer()`): Tier-based scoring with codec efficiency multipliers
 - **GeminiService** (`getGeminiService()`): Sync constructor (async init causes race condition). See AI Chat & Analysis.
@@ -452,6 +452,26 @@ All providers use this wrapper instead of axios.
 - **`getArtistAlbumsCombined`** (`src/main/services/utils/musicUtils.ts`): Combines albums by FK (`artistId`) and name (`artistName`) with deduplication. Extracted from 3 duplicate locations.
 - **Quality colors** (`src/renderer/src/utils/qualityColors.ts`): `getQualityLevelColors()`, `getResolutionColors()`, `getMusicTierLabel()` — shared across MediaDetails, WishlistItemCard.
 - **Settings constants** (`src/shared/settingKeys.ts`): `SETTING_KEYS` const object with all known setting keys. Used across renderer files to avoid bare string literals.
+- **Format utilities** (`src/main/services/utils/formatUtils.ts`): `formatSize()` for main process. Renderer uses `formatDuration`, `formatBitrate`, `formatFileSize` from `src/renderer/src/components/library/mediaUtils.ts`.
+- **Generic pagination** (`src/renderer/src/components/library/hooks/usePagination.ts`): `usePagination<T>()` hook with loading guard, request staleness detection, offset tracking, and reset/append logic. Used by `useMoviePagination`, `useTVShowPagination`, and inline for artists/albums/tracks in MediaBrowser.
+- **DropdownMenu** (`src/renderer/src/components/ui/DropdownMenu.tsx`): Shared `DropdownMenu` and `DropdownMenuItem` components for context menus (3-dot menus). Used across MoviesView, TVShowsView, MusicView, MediaDetails.
+
+### Database Reset
+
+Two reset options in Settings > Data:
+- **Reset Database**: Clears ALL data including settings, sources, and exclusions. Full clean slate.
+- **Reset Library Data** (`resetLibraryData()`): Clears scanned media, quality scores, completeness, and notifications. **Preserves** settings, API keys, sources, exclusions, and wishlist. Useful for starting fresh without losing configuration.
+
+### CSV Export
+
+`exportWorkingCSV()` generates a working document CSV with configurable sections:
+- **Upgrade Candidates**: Title, year, type, current/target tier, quality score, codecs, file size, source
+- **Missing Movies**: Collection name, movie title, year, release date, TMDB ID, collection completeness %
+- **Missing Episodes**: Series title, season/episode, title, air date, TMDB ID, completeness %
+- **Missing Albums**: Artist, album title, year, type (Album/Single/EP), MusicBrainz ID
+- **Music Quality Upgrades**: Artist, album, year, current tier, codec, bitrate, sample rate, bit depth, source
+
+Output includes UTF-8 BOM (`\uFEFF`) for Excel compatibility.
 
 ### Scan Concurrency Guards
 
@@ -593,7 +613,7 @@ The application follows Electron security best practices:
 
 ### Database Issues
 - Schema errors: Check `runMigrations()` in `BetterSQLiteService.ts`
-- Data not persisting: Verify `save()` called after writes
+- Data not persisting: better-sqlite3 writes are durable by default (WAL mode). Check if `endBatch()` was called after `startBatch()`
 - Corruption: Delete database file and restart
 - **NOT NULL constraint failed**: Check if upsert code uses `|| null` for columns defined as `NOT NULL DEFAULT ''` — use `|| ''` instead
 
