@@ -4,6 +4,7 @@ import { FixedSizeList as VirtualList } from 'react-window'
 import { Music, Disc3, User, MoreVertical, RefreshCw, X, Pencil, CircleFadingArrowUp, EyeOff, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 import { AddToWishlistButton } from '../wishlist/AddToWishlistButton'
 import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu'
+import { AnimatedNumber } from '../ui/AnimatedNumber'
 import { useMenuClose } from '../../hooks/useMenuClose'
 import { providerColors, formatDuration } from './mediaUtils'
 import type {
@@ -1284,7 +1285,7 @@ export function MusicView({
           )}
           {artists.length < totalArtistCount && !artistsLoading && (
             <div className="text-center py-2 text-xs text-muted-foreground">
-              {artists.length.toLocaleString()} of {totalArtistCount.toLocaleString()} artists
+              <AnimatedNumber value={artists.length} locale /> of <AnimatedNumber value={totalArtistCount} locale /> artists
             </div>
           )}
         </div>

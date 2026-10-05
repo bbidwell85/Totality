@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import { X, RefreshCw, Tv, Film, Music, Square, Settings, Clock, Loader2, ListChecks } from 'lucide-react'
+import { AnimatedNumber } from '../ui/AnimatedNumber'
 
 type CompletenessTaskType = 'series-completeness' | 'collection-completeness' | 'music-completeness'
 
@@ -404,19 +405,19 @@ export function CompletenessPanel({
               <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total</span>
-                  <span className="font-medium">{seriesStats.totalSeries}</span>
+                  <AnimatedNumber value={seriesStats.totalSeries} className="font-medium" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Complete</span>
-                  <span className="font-medium text-foreground">{seriesStats.completeSeries}</span>
+                  <AnimatedNumber value={seriesStats.completeSeries} className="font-medium text-foreground" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Incomplete</span>
-                  <span className="font-medium text-foreground">{seriesStats.incompleteSeries}</span>
+                  <AnimatedNumber value={seriesStats.incompleteSeries} className="font-medium text-foreground" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Missing</span>
-                  <span className="font-medium text-foreground">{seriesStats.totalMissingEpisodes}</span>
+                  <AnimatedNumber value={seriesStats.totalMissingEpisodes} className="font-medium text-foreground" />
                 </div>
               </div>
             ) : (
@@ -501,19 +502,19 @@ export function CompletenessPanel({
               <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total</span>
-                  <span className="font-medium">{collectionStats.total}</span>
+                  <AnimatedNumber value={collectionStats.total} className="font-medium" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Complete</span>
-                  <span className="font-medium text-foreground">{collectionStats.complete}</span>
+                  <AnimatedNumber value={collectionStats.complete} className="font-medium text-foreground" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Incomplete</span>
-                  <span className="font-medium text-foreground">{collectionStats.incomplete}</span>
+                  <AnimatedNumber value={collectionStats.incomplete} className="font-medium text-foreground" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Missing</span>
-                  <span className="font-medium text-foreground">{collectionStats.totalMissing}</span>
+                  <AnimatedNumber value={collectionStats.totalMissing} className="font-medium text-foreground" />
                 </div>
               </div>
             ) : (
@@ -598,19 +599,19 @@ export function CompletenessPanel({
               <div className="bg-muted/30 rounded-lg p-3 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Total</span>
-                  <span className="font-medium">{musicStats.totalArtists}</span>
+                  <AnimatedNumber value={musicStats.totalArtists} className="font-medium" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Complete</span>
-                  <span className="font-medium text-foreground">{musicStats.completeArtists}</span>
+                  <AnimatedNumber value={musicStats.completeArtists} className="font-medium text-foreground" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Incomplete</span>
-                  <span className="font-medium text-foreground">{musicStats.incompleteArtists}</span>
+                  <AnimatedNumber value={musicStats.incompleteArtists} className="font-medium text-foreground" />
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Missing</span>
-                  <span className="font-medium text-foreground">{musicStats.totalMissingAlbums}</span>
+                  <AnimatedNumber value={musicStats.totalMissingAlbums} className="font-medium text-foreground" />
                 </div>
               </div>
             ) : (

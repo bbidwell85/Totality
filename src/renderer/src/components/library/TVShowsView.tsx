@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react'
 import { RefreshCw, MoreVertical, Pencil, Folder, CircleFadingArrowUp, EyeOff, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react'
 import { TvPlaceholder, EpisodePlaceholder } from '../ui/MediaPlaceholders'
 import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu'
+import { AnimatedNumber } from '../ui/AnimatedNumber'
 import { MissingItemCard } from './MissingItemCard'
 import { useMenuClose } from '../../hooks/useMenuClose'
 import { providerColors, formatSeasonLabel, getStatusBadge } from './mediaUtils'
@@ -447,7 +448,7 @@ export function TVShowsView({
 
     const statsBar = (
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-        <span>{totalShowCount.toLocaleString()} Shows</span>
+        <span><AnimatedNumber value={totalShowCount} locale /> Shows</span>
         <span className="text-muted-foreground/50">•</span>
         <span>{totalEpisodeCount.toLocaleString()} Episodes</span>
         {onTvSortChange && (

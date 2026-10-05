@@ -982,10 +982,10 @@ export function Dashboard({
           <div className="flex-1 min-w-0">
             <div className="font-medium text-sm truncate">{collection.collection_name}</div>
             <div className="text-xs text-muted-foreground">
-              {collection.owned_movies}/{collection.total_movies} · {Math.round(collection.completeness_percentage)}%
+              <AnimatedNumber value={collection.owned_movies} />/<AnimatedNumber value={collection.total_movies} /> · <AnimatedNumber value={Math.round(collection.completeness_percentage)} suffix="%" />
             </div>
             <div className="w-full h-1 bg-muted rounded-full mt-1 overflow-hidden">
-              <div className="h-full bg-primary rounded-full" style={{ width: `${collection.completeness_percentage}%` }} />
+              <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${collection.completeness_percentage}%` }} />
             </div>
           </div>
           {missingCount > 0 && (
@@ -1077,10 +1077,10 @@ export function Dashboard({
           <div className="flex-1 min-w-0">
             <div className="font-medium text-sm truncate">{s.series_title}</div>
             <div className="text-xs text-muted-foreground">
-              {s.owned_seasons}/{s.total_seasons} seasons · {s.owned_episodes}/{s.total_episodes} eps · {Math.round(s.completeness_percentage)}%
+              <AnimatedNumber value={s.owned_seasons} />/<AnimatedNumber value={s.total_seasons} /> seasons · <AnimatedNumber value={s.owned_episodes} />/<AnimatedNumber value={s.total_episodes} /> eps · <AnimatedNumber value={Math.round(s.completeness_percentage)} suffix="%" />
             </div>
             <div className="w-full h-1 bg-muted rounded-full mt-1 overflow-hidden">
-              <div className="h-full bg-primary rounded-full" style={{ width: `${s.completeness_percentage}%` }} />
+              <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${s.completeness_percentage}%` }} />
             </div>
           </div>
           {missingCount > 0 && (
@@ -1198,10 +1198,10 @@ export function Dashboard({
           <div className="flex-1 min-w-0">
             <div className="font-medium text-sm truncate">{artist.artist_name}</div>
             <div className="text-xs text-muted-foreground">
-              {ownedReleases}/{totalReleases} releases · {Math.round(artist.completeness_percentage)}%
+              <AnimatedNumber value={ownedReleases} />/<AnimatedNumber value={totalReleases} /> releases · <AnimatedNumber value={Math.round(artist.completeness_percentage)} suffix="%" />
             </div>
             <div className="w-full h-1 bg-muted rounded-full mt-1 overflow-hidden">
-              <div className="h-full bg-primary rounded-full" style={{ width: `${artist.completeness_percentage}%` }} />
+              <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${artist.completeness_percentage}%` }} />
             </div>
           </div>
           {totalMissing > 0 && (

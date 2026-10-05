@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react'
 import { Layers, RefreshCw, MoreVertical, Pencil, CircleFadingArrowUp, EyeOff, ArrowUpDown } from 'lucide-react'
+import { AnimatedNumber } from '../ui/AnimatedNumber'
 import type { MovieSortBy } from './hooks/useMoviePagination'
 import { MoviePlaceholder } from '../ui/MediaPlaceholders'
 import { DropdownMenu, DropdownMenuItem } from '../ui/DropdownMenu'
@@ -238,7 +239,7 @@ export function MoviesView({
 
   const statsBar = (
     <div className="flex items-center gap-4 text-sm text-muted-foreground">
-      <span>{totalMovieCount.toLocaleString()} Movies</span>
+      <span><AnimatedNumber value={totalMovieCount} locale /> Movies</span>
       {onMovieSortChange && (
         <div className="flex items-center gap-1.5 ml-auto">
           <ArrowUpDown className="w-3.5 h-3.5 shrink-0" />
