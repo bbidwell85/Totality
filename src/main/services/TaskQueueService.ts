@@ -111,6 +111,7 @@ export class TaskQueueService {
   private monitoringHistory: ActivityLogEntry[] = []
   private cancelRequested = false
   private monitoringWasPausedByUs = false // Track if we paused monitoring
+  private monitoringResumeTimer: ReturnType<typeof setTimeout> | null = null
   private progressThrottleTimer: NodeJS.Timeout | null = null
   private progressUpdatePending = false
 
@@ -532,13 +533,20 @@ export class TaskQueueService {
       // If queue is empty and we paused monitoring, resume after a brief delay
       // to allow post-scan operations (auto-completeness, quality analysis) to finish
       if (this.queue.length === 0 && this.monitoringWasPausedByUs) {
-        this.monitoringWasPausedByUs = false
-        setTimeout(() => {
+        this.monitoringResumeTimer = setTimeout(() => {
+          this.monitoringResumeTimer = null
+          this.monitoringWasPausedByUs = false
           console.log('[TaskQueue] All tasks complete, resuming live monitoring')
           getLiveMonitoringService().resume()
         }, 5000)
       }
       return
+    }
+
+    // Cancel any pending monitoring resume (new task arrived during delay)
+    if (this.monitoringResumeTimer) {
+      clearTimeout(this.monitoringResumeTimer)
+      this.monitoringResumeTimer = null
     }
 
     // Pause monitoring when we start processing (first task)
