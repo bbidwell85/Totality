@@ -126,7 +126,7 @@ export function MediaBrowser({
     alphabetFilter, setAlphabetFilter,
     debouncedTierFilter, debouncedQualityFilter,
   } = useLibraryFilters(searchInput)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const [searchQuery, _setSearchQuery] = useState('')
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [searchResultIndex, setSearchResultIndex] = useState(-1)
@@ -169,7 +169,7 @@ export function MediaBrowser({
 
   // Music pagination (artists, tracks, albums via generic hook)
   const {
-    items: musicArtists, setItems: _setMusicArtists,
+    items: musicArtists,
     totalCount: totalArtistCount, loading: artistsLoading,
     load: loadPaginatedArtists, loadMore: loadMoreArtists,
   } = usePagination<MusicArtist>({
@@ -187,7 +187,7 @@ export function MediaBrowser({
   })
 
   const {
-    items: allMusicTracks, setItems: _setAllMusicTracks,
+    items: allMusicTracks,
     totalCount: totalTrackCount, loading: tracksLoading,
     load: loadPaginatedTracks, loadMore: loadMoreTracks,
   } = usePagination<MusicTrack>({
@@ -205,7 +205,7 @@ export function MediaBrowser({
   })
 
   const {
-    items: musicAlbums, setItems: _setMusicAlbums,
+    items: musicAlbums,
     totalCount: totalAlbumCount, loading: albumsLoading,
     load: loadPaginatedAlbums, loadMore: loadMoreAlbums,
   } = usePagination<MusicAlbum>({
@@ -260,7 +260,7 @@ export function MediaBrowser({
 
   // Active source libraries (to determine which library types exist)
   const [activeSourceLibraries, setActiveSourceLibraries] = useState<Array<{ id: string; name: string; type: string }>>([])
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const [_librariesLoading, setLibrariesLoading] = useState(false)
 
   // Libraries of the current view type (for library filter dropdown)

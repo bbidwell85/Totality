@@ -91,7 +91,7 @@ export function Dashboard({
   const [artists, setArtists] = useState<ArtistCompletenessData[]>([])
   const [duplicateCount, setDuplicateCount] = useState(0)
   const [wishlistCounts, setWishlistCounts] = useState<{ missing: number; upgrade: number; active: number; completed: number; total: number }>({ missing: 0, upgrade: 0, active: 0, completed: 0, total: 0 })
-  const [recentlyUpgraded, setRecentlyUpgraded] = useState<Array<{
+  const [_recentlyUpgraded, setRecentlyUpgraded] = useState<Array<{
     id: number; title: string; year: number | null; type: string
     poster_url: string | null; quality_tier: string
     previous_quality_tier: string; upgraded_at: string
@@ -127,8 +127,8 @@ export function Dashboard({
     byTier: { [tier: string]: { low: number; medium: number; high: number } }
     byQuality: { low: number; medium: number; high: number }
   } | null>(null)
-  const [collectionStatsData, setCollectionStatsData] = useState<{ total: number; complete: number; incomplete: number; avgCompleteness: number } | null>(null)
-  const [seriesStatsData, setSeriesStatsData] = useState<{ totalSeries: number; completeSeries: number; incompleteSeries: number; averageCompleteness: number } | null>(null)
+  const [_collectionStatsData, setCollectionStatsData] = useState<{ total: number; complete: number; incomplete: number; avgCompleteness: number } | null>(null)
+  const [_seriesStatsData, setSeriesStatsData] = useState<{ totalSeries: number; completeSeries: number; incompleteSeries: number; averageCompleteness: number } | null>(null)
   const [includeEps, setIncludeEps] = useState(true)
   const [includeSingles, setIncludeSingles] = useState(true)
   // Default to first available library type
@@ -283,7 +283,7 @@ export function Dashboard({
       const excludedPersonMovies = new Set(personMovieExclusions.map(e => `${e.parent_key}:${e.reference_key}`))
 
       const dupData = val(allResults[17], []) as Array<{ copies: unknown[] }>
-      const upgradeData = val(allResults[18], []) as typeof recentlyUpgraded
+      const upgradeData = val(allResults[18], []) as typeof _recentlyUpgraded
       const storData = val(allResults[19], null) as typeof storageAnalytics
       const personData = val(allResults[20], []) as typeof personCompleteness
       const autoRulesJson = val(allResults[21], null) as string | null
@@ -293,8 +293,8 @@ export function Dashboard({
       setPersonSortBy(effectivePersonSort)
       const statsData = val(allResults[23], null)
       const mStats = val(allResults[24], null) as typeof musicStats
-      const cStatsData = val(allResults[25], null) as typeof collectionStatsData
-      const sStatsData = val(allResults[26], null) as typeof seriesStatsData
+      const cStatsData = val(allResults[25], null) as typeof _collectionStatsData
+      const sStatsData = val(allResults[26], null) as typeof _seriesStatsData
       const qDistribution = val(allResults[27], null) as typeof qualityDistribution
       const wCounts = val(allResults[28], { missing: 0, upgrade: 0, active: 0, completed: 0, total: 0 }) as typeof wishlistCounts
 

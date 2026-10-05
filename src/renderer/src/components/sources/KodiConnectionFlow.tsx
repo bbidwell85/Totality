@@ -52,9 +52,9 @@ export function KodiConnectionFlow({ onSuccess, onBack }: KodiConnectionFlowProp
   const [isSuccess, setIsSuccess] = useState(false)
 
   // Library selection state (setters kept for future library selection flow)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const [sourceId, _setSourceId] = useState<string | null>(null)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const [libraries, _setLibraries] = useState<MediaLibrary[]>([])
   const [selectedLibraries, setSelectedLibraries] = useState<Set<string>>(new Set())
 
