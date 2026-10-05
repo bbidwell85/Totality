@@ -649,6 +649,10 @@ export class TaskQueueService {
    * Execute a task based on its type
    */
   private async executeTask(task: QueuedTask): Promise<void> {
+    // Throttled library:updated emission — lets the UI show items as they're scanned/analyzed
+    let lastLibraryUpdateTime = 0
+    const LIBRARY_UPDATE_INTERVAL = 3000
+
     const progressCallback = (progress: { current?: number; total?: number; percentage?: number; phase?: string; currentItem?: string }) => {
       if (this.cancelRequested) {
         throw new Error('Task cancelled')
@@ -667,6 +671,14 @@ export class TaskQueueService {
         currentItem: progress.currentItem,
       }
       this.emitProgressUpdate()
+
+      // Periodically tell the renderer to reload data so items appear during scans
+      const now = Date.now()
+      if (now - lastLibraryUpdateTime >= LIBRARY_UPDATE_INTERVAL) {
+        lastLibraryUpdateTime = now
+        const updateType = (task.type === 'music-scan' || task.type === 'music-completeness') ? 'music' : 'media'
+        this.sendLibraryUpdated(updateType)
+      }
     }
 
     switch (task.type) {
