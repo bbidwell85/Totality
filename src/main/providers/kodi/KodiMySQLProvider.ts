@@ -64,7 +64,7 @@ import {
   normalizeAudioChannels,
   hasObjectAudio,
 } from '../../services/MediaNormalizer'
-import { estimateAudioBitrate } from '../utils/ProviderUtils'
+import { estimateAudioBitrate, scoreVersion } from '../utils/ProviderUtils'
 import { getFileNameParser } from '../../services/FileNameParser'
 import type { Pool } from 'mysql2/promise'
 
@@ -617,7 +617,7 @@ export class KodiMySQLProvider implements MediaProvider {
               extractVersionNames(versions)
             }
 
-            const bestIdx = versions.reduce((bi, v, i) => this.scoreVersion(v) > this.scoreVersion(versions[bi]) ? i : bi, 0)
+            const bestIdx = versions.reduce((bi, v, i) => scoreVersion(v) > scoreVersion(versions[bi]) ? i : bi, 0)
             const bestMetadata = group[bestIdx]
 
             const mediaItem = this.convertMetadataToMediaItem(bestMetadata)
@@ -950,13 +950,7 @@ export class KodiMySQLProvider implements MediaProvider {
     }
   }
 
-  private scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
-    const tierRank = v.resolution.includes('2160') ? 4
-      : v.resolution.includes('1080') ? 3
-      : v.resolution.includes('720') ? 2 : 1
-    const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
-    return tierRank * 100000 + hdrBonus + v.video_bitrate
-  }
+  // scoreVersion extracted to ProviderUtils.scoreVersion
 
   private normalizeGroupTitle(title: string): string {
     return title

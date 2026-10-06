@@ -1,4 +1,3 @@
-export { SourceList } from './SourceList'
 export { SourceCard } from './SourceCard'
 export { AddSourceModal } from './AddSourceModal'
 export { PlexAuthFlow } from './PlexAuthFlow'

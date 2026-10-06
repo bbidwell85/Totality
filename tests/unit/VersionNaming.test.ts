@@ -7,6 +7,7 @@ function makeVersion(file_path: string, resolution = '1080p', overrides: Record<
     hdr_format: 'None',
     edition: undefined as string | undefined,
     label: undefined as string | undefined,
+    video_bitrate: undefined as number | undefined,
     ...overrides,
   }
 }
@@ -17,6 +18,12 @@ describe('extractVersionNames', () => {
       const versions = [makeVersion('/movies/The Matrix (1999).mkv')]
       extractVersionNames(versions)
       expect(versions[0].edition).toBeUndefined()
+    })
+
+    it('extracts {edition-X} tag from single version', () => {
+      const versions = [makeVersion('/movies/Apocalypse Now (1979) {edition-Final Cut}.mkv')]
+      extractVersionNames(versions)
+      expect(versions[0].edition).toBe('Final Cut')
     })
   })
 
@@ -169,6 +176,22 @@ describe('extractVersionNames', () => {
       extractVersionNames(versions)
       expect(versions[0].edition).toBe('Colorized')
       expect(versions[1].edition).toBeUndefined()
+    })
+
+    it('deduplicates 3+ versions with same label by codec then bitrate', () => {
+      const versions = [
+        makeVersion('/movies/Movie (2020) [1080p-1].mkv', '1080p', { video_codec: 'HEVC', video_bitrate: 12000 }),
+        makeVersion('/movies/Movie (2020) [1080p-2].mkv', '1080p', { video_codec: 'HEVC', video_bitrate: 8000 }),
+        makeVersion('/movies/Movie (2020) [1080p-3].mkv', '1080p', { video_codec: 'H.264', video_bitrate: 15000 }),
+      ]
+      extractVersionNames(versions)
+
+      // All start with label "1080p", then:
+      // Round 1: H.264 one gets "(H.264)", two HEVC ones get "(HEVC)" — still collide
+      // Round 2: the two HEVC ones get bitrate appended
+      const labels = versions.map(v => v.label)
+      // All labels should be unique
+      expect(new Set(labels).size).toBe(labels.length)
     })
 
     it('strips HDR tokens from edition', () => {

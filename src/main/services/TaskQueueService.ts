@@ -339,7 +339,7 @@ export class TaskQueueService {
   clearTaskHistory(): void {
     this.taskHistory = []
     this.completedTasks = []
-    try { getDatabase().clearTaskHistory() } catch { /* silent */ }
+    try { getDatabase().clearTaskHistory() } catch (err) { console.error('[TaskQueue] Failed to clear task history:', err) }
     this.emitHistoryUpdate()
     this.emitQueueUpdate()
   }
@@ -349,7 +349,7 @@ export class TaskQueueService {
    */
   clearMonitoringHistory(): void {
     this.monitoringHistory = []
-    try { getDatabase().clearActivityLog('monitoring') } catch { /* silent */ }
+    try { getDatabase().clearActivityLog('monitoring') } catch (err) { console.error('[TaskQueue] Failed to clear monitoring history:', err) }
     this.emitHistoryUpdate()
   }
 
@@ -602,7 +602,7 @@ export class TaskQueueService {
             sourceName: task.label,
           })
           emitNotificationCreated()
-        } catch { /* ignore */ }
+        } catch (err) { console.error('[TaskQueue] Failed to create notification:', err) }
       }
     }
 
@@ -693,19 +693,19 @@ export class TaskQueueService {
       case 'series-completeness':
         await this.executeSeriesCompleteness(task, progressCallback)
         this.sendLibraryUpdated()
-        try { getDatabase().createNotification({ type: 'info', title: 'Series completeness analyzed', message: task.label || 'TV series completeness analysis complete' }); emitNotificationCreated() } catch { /* ignore */ }
+        try { getDatabase().createNotification({ type: 'info', title: 'Series completeness analyzed', message: task.label || 'TV series completeness analysis complete' }); emitNotificationCreated() } catch (err) { console.error('[TaskQueue] Failed to create notification:', err) }
         break
 
       case 'collection-completeness':
         await this.executeCollectionCompleteness(task, progressCallback)
         this.sendLibraryUpdated()
-        try { getDatabase().createNotification({ type: 'info', title: 'Collection completeness analyzed', message: task.label || 'Movie collection completeness analysis complete' }); emitNotificationCreated() } catch { /* ignore */ }
+        try { getDatabase().createNotification({ type: 'info', title: 'Collection completeness analyzed', message: task.label || 'Movie collection completeness analysis complete' }); emitNotificationCreated() } catch (err) { console.error('[TaskQueue] Failed to create notification:', err) }
         break
 
       case 'music-completeness':
         await this.executeMusicCompleteness(task, progressCallback)
         this.sendLibraryUpdated('music')
-        try { getDatabase().createNotification({ type: 'info', title: 'Music completeness analyzed', message: task.label || 'Artist completeness analysis complete' }); emitNotificationCreated() } catch { /* ignore */ }
+        try { getDatabase().createNotification({ type: 'info', title: 'Music completeness analyzed', message: task.label || 'Artist completeness analysis complete' }); emitNotificationCreated() } catch (err) { console.error('[TaskQueue] Failed to create notification:', err) }
         break
 
       case 'music-scan':
@@ -1061,7 +1061,7 @@ export class TaskQueueService {
           itemCount: scanned,
         })
         emitNotificationCreated()
-      } catch { /* ignore notification errors */ }
+      } catch (err) { console.error('[TaskQueue] Failed to create notification:', err) }
 
       // Check for quality upgrades detected during this scan (video + music)
       try {
@@ -1092,7 +1092,7 @@ export class TaskQueueService {
             emitNotificationCreated()
           }
         }
-      } catch { /* ignore upgrade notification errors */ }
+      } catch (err) { console.error('[TaskQueue] Failed to create upgrade notification:', err) }
 
       // Check wishlist for auto-completion after items were added or updated
       if ((task.result?.itemsAdded || 0) > 0 || (task.result?.itemsUpdated || 0) > 0) {

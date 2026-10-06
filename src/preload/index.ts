@@ -1541,6 +1541,10 @@ export interface ElectronAPI {
     byCodec: Array<{ codec: string; count: number; size: number }>
     byTier: Array<{ tier: string; count: number; size: number }>
     codecMigration: { h264Count: number; modernCount: number; totalCount: number }
+    versionStats: {
+      itemsWithVersions: number; totalVersions: number
+      redundantSize: number; redundantCount: number
+    }
   }>
   getDuplicateMedia: () => Promise<Array<{
     tmdb_id: string

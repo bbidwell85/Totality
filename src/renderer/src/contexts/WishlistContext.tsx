@@ -199,7 +199,10 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
 
   const addItem = useCallback(async (item: Omit<WishlistItem, 'id' | 'added_at' | 'updated_at'>): Promise<number> => {
     try {
-      const id = await window.electronAPI.wishlistAdd(item)
+      const result = await window.electronAPI.wishlistAdd(item)
+      // Backend returns { id: -1, duplicate: true } for duplicates, or a number ID
+      const id = typeof result === 'object' && result !== null ? (result as { id: number }).id : result as number
+      if (id === -1) return -1 // Already in wishlist
       await loadWishlist()
       notifyWishlistChanged()
       return id

@@ -43,6 +43,7 @@ import {
   estimateAudioBitrate,
   calculateAudioBitrateFromFile,
   isEstimatedBitrate,
+  scoreVersion,
 } from '../utils/ProviderUtils'
 import { getFileNameParser } from '../../services/FileNameParser'
 
@@ -624,7 +625,7 @@ export class KodiProvider implements MediaProvider {
               extractVersionNames(versions)
             }
 
-            const bestIdx = versions.reduce((bi, v, i) => this.scoreVersion(v) > this.scoreVersion(versions[bi]) ? i : bi, 0)
+            const bestIdx = versions.reduce((bi, v, i) => scoreVersion(v) > scoreVersion(versions[bi]) ? i : bi, 0)
             const bestMetadata = group[bestIdx]
 
             const mediaItem = this.convertMetadataToMediaItem(bestMetadata)
@@ -672,15 +673,20 @@ export class KodiProvider implements MediaProvider {
       }
 
       // Remove stale items (only for full scans, not incremental)
-      if (!isIncremental && scannedProviderIds.size > 0) {
+      if (!isIncremental) {
         const itemType = libraryId === 'movies' ? 'movie' : 'episode'
         const existingItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId })
 
-        for (const item of existingItems) {
-          if (!scannedProviderIds.has(item.plex_id)) {
-            if (item.id) {
-              await db.deleteMediaItem(item.id)
-              result.itemsRemoved++
+        // Safety guard: refuse deletion when API returned 0 IDs but DB has items
+        if (scannedProviderIds.size === 0 && existingItems.length > 0) {
+          console.warn(`[KodiProvider ${this.sourceId}] API returned 0 IDs but DB has ${existingItems.length} — skipping deletion (possible API failure)`)
+        } else if (scannedProviderIds.size > 0) {
+          for (const item of existingItems) {
+            if (!scannedProviderIds.has(item.plex_id)) {
+              if (item.id) {
+                await db.deleteMediaItem(item.id)
+                result.itemsRemoved++
+              }
             }
           }
         }
@@ -1019,13 +1025,7 @@ export class KodiProvider implements MediaProvider {
     }
   }
 
-  private scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
-    const tierRank = v.resolution.includes('2160') ? 4
-      : v.resolution.includes('1080') ? 3
-      : v.resolution.includes('720') ? 2 : 1
-    const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
-    return tierRank * 100000 + hdrBonus + v.video_bitrate
-  }
+  // scoreVersion extracted to ProviderUtils.scoreVersion
 
   private normalizeGroupTitle(title: string): string {
     return title

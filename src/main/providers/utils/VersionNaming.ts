@@ -15,6 +15,7 @@ interface VersionInput {
   hdr_format?: string
   source_type?: string
   video_codec?: string
+  video_bitrate?: number
 }
 
 // Plex {edition-X} tag format
@@ -166,9 +167,7 @@ function cleanEdges(text: string): string {
  * Only sets edition when a meaningful non-technical difference is found.
  */
 export function extractVersionNames<T extends VersionInput>(versions: T[]): T[] {
-  if (versions.length <= 1) return versions
-
-  // Phase 1: Extract {edition-X} Plex tags from filenames
+  // Phase 1: Extract {edition-X} Plex tags from filenames (works for any count)
   for (const v of versions) {
     if (v.edition) continue // Already has edition from FileNameParser or API
 
@@ -178,6 +177,8 @@ export function extractVersionNames<T extends VersionInput>(versions: T[]): T[] 
       v.edition = tagMatch[1].trim()
     }
   }
+
+  if (versions.length <= 1) return versions
 
   // Phase 2: For versions still missing edition, diff the filenames
   const needsDiff = versions.filter(v => !v.edition)
@@ -229,14 +230,26 @@ export function extractVersionNames<T extends VersionInput>(versions: T[]): T[] 
     v.label = parts.join(' ')
   }
 
-  // Phase 4: Deduplicate labels by appending video codec when collisions exist
-  const labelCounts = new Map<string, number>()
-  for (const v of versions) {
-    labelCounts.set(v.label || '', (labelCounts.get(v.label || '') || 0) + 1)
+  // Phase 4: Deduplicate labels — append codec, then bitrate if still colliding
+  const countLabels = (vs: T[]) => {
+    const counts = new Map<string, number>()
+    for (const v of vs) counts.set(v.label || '', (counts.get(v.label || '') || 0) + 1)
+    return counts
   }
+
+  // Round 1: append codec
+  const labelCounts = countLabels(versions)
   for (const v of versions) {
     if ((labelCounts.get(v.label || '') || 0) > 1 && v.video_codec) {
-      v.label = `${v.label} ${v.video_codec}`
+      v.label = `${v.label} (${v.video_codec})`
+    }
+  }
+
+  // Round 2: if still colliding, append bitrate
+  const labelCounts2 = countLabels(versions)
+  for (const v of versions) {
+    if ((labelCounts2.get(v.label || '') || 0) > 1 && v.video_bitrate) {
+      v.label = `${v.label} ${Math.round(v.video_bitrate / 1000)}Mbps`
     }
   }
 

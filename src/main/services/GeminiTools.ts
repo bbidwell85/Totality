@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import { safeSend } from '../ipc/utils/safeSend'
 import type { GeminiToolDefinition } from './GeminiService'
 import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from './QualityAnalyzer'
@@ -1415,7 +1416,7 @@ export async function executeTool(
       // Notify renderer to refresh wishlist immediately
       if (added > 0) {
         for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send('wishlist:changed')
+          safeSend(win, 'wishlist:changed')
         }
       }
 

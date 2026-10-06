@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
+import { safeSend } from './utils/safeSend'
 import { z } from 'zod'
 import { getGeminiService, RateLimitError } from '../services/GeminiService'
 import { LIBRARY_TOOLS, executeTool, type ActionableItem } from '../services/GeminiTools'
@@ -85,14 +86,14 @@ export function registerGeminiHandlers() {
           maxTokens: validated.maxTokens,
         },
         (delta) => {
-          win?.webContents.send('ai:streamDelta', {
+          safeSend(win,'ai:streamDelta', {
             requestId: validated.requestId,
             delta,
           })
         },
       )
 
-      win?.webContents.send('ai:streamComplete', {
+      safeSend(win,'ai:streamComplete', {
         requestId: validated.requestId,
         usage: result.usage,
       })
@@ -138,7 +139,7 @@ export function registerGeminiHandlers() {
         tools: LIBRARY_TOOLS,
         maxTokens: 4096,
         executeTool: async (name, input) => {
-          win?.webContents.send('ai:toolUse', {
+          safeSend(win, 'ai:toolUse', {
             requestId: validated.requestId,
             toolName: name,
             input,
@@ -153,16 +154,16 @@ export function registerGeminiHandlers() {
         const chunkSize = 3 // Send ~3 tokens at a time
         for (let i = 0; i < words.length; i += chunkSize) {
           const chunk = words.slice(i, i + chunkSize).join('')
-          win.webContents.send('ai:chatStreamDelta', {
+          if (!safeSend(win, 'ai:chatStreamDelta', {
             requestId: validated.requestId,
             delta: chunk,
-          })
+          })) break // Window was closed, stop streaming
           // Small delay between chunks for streaming effect
           if (i + chunkSize < words.length) {
             await new Promise((r) => setTimeout(r, 15))
           }
         }
-        win.webContents.send('ai:chatStreamComplete', {
+        safeSend(win, 'ai:chatStreamComplete', {
           requestId: validated.requestId,
         })
       }
@@ -200,11 +201,11 @@ export function registerGeminiHandlers() {
       console.log('[IPC ai:qualityReport] Generating quality report')
       const result = await getGeminiAnalysisService().generateQualityReport(
         (delta) => {
-          win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
+          safeSend(win,'ai:analysisStreamDelta', { requestId, delta })
         },
       )
 
-      win?.webContents.send('ai:analysisStreamComplete', { requestId })
+      safeSend(win,'ai:analysisStreamComplete', { requestId })
       return { text: result.text, requestId }
     } catch (error) {
       console.error('Error in ai:qualityReport:', error)
@@ -226,11 +227,11 @@ export function registerGeminiHandlers() {
       console.log('[IPC ai:upgradePriorities] Generating upgrade priorities report')
       const result = await getGeminiAnalysisService().generateUpgradePriorities(
         (delta) => {
-          win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
+          safeSend(win,'ai:analysisStreamDelta', { requestId, delta })
         },
       )
 
-      win?.webContents.send('ai:analysisStreamComplete', { requestId })
+      safeSend(win,'ai:analysisStreamComplete', { requestId })
       return { text: result.text, requestId }
     } catch (error) {
       console.error('Error in ai:upgradePriorities:', error)
@@ -252,11 +253,11 @@ export function registerGeminiHandlers() {
       console.log('[IPC ai:completenessInsights] Generating completeness report')
       const result = await getGeminiAnalysisService().generateCompletenessInsights(
         (delta) => {
-          win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
+          safeSend(win,'ai:analysisStreamDelta', { requestId, delta })
         },
       )
 
-      win?.webContents.send('ai:analysisStreamComplete', { requestId })
+      safeSend(win,'ai:analysisStreamComplete', { requestId })
       return { text: result.text, requestId }
     } catch (error) {
       console.error('Error in ai:completenessInsights:', error)
@@ -278,11 +279,11 @@ export function registerGeminiHandlers() {
       console.log('[IPC ai:wishlistAdvice] Generating wishlist advice report')
       const result = await getGeminiAnalysisService().generateWishlistAdvice(
         (delta) => {
-          win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
+          safeSend(win,'ai:analysisStreamDelta', { requestId, delta })
         },
       )
 
-      win?.webContents.send('ai:analysisStreamComplete', { requestId })
+      safeSend(win,'ai:analysisStreamComplete', { requestId })
       return { text: result.text, requestId }
     } catch (error) {
       console.error('Error in ai:wishlistAdvice:', error)
@@ -304,11 +305,11 @@ export function registerGeminiHandlers() {
       console.log('[IPC ai:storageOptimization] Generating storage optimization report')
       const result = await getGeminiAnalysisService().generateStorageOptimization(
         (delta) => {
-          win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
+          safeSend(win,'ai:analysisStreamDelta', { requestId, delta })
         },
       )
 
-      win?.webContents.send('ai:analysisStreamComplete', { requestId })
+      safeSend(win,'ai:analysisStreamComplete', { requestId })
       return { text: result.text, requestId }
     } catch (error) {
       console.error('Error in ai:storageOptimization:', error)
@@ -330,11 +331,11 @@ export function registerGeminiHandlers() {
       console.log('[IPC ai:musicQualityReport] Generating music quality report')
       const result = await getGeminiAnalysisService().generateMusicQualityReport(
         (delta) => {
-          win?.webContents.send('ai:analysisStreamDelta', { requestId, delta })
+          safeSend(win,'ai:analysisStreamDelta', { requestId, delta })
         },
       )
 
-      win?.webContents.send('ai:analysisStreamComplete', { requestId })
+      safeSend(win,'ai:analysisStreamComplete', { requestId })
       return { text: result.text, requestId }
     } catch (error) {
       console.error('Error in ai:musicQualityReport:', error)

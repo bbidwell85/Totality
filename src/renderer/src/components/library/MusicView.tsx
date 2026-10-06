@@ -826,8 +826,10 @@ export function MusicView({
                           </p>
                         )}
                         {(() => {
-                          const genres = selectedTrackForQuality.genres ? JSON.parse(selectedTrackForQuality.genres) as string[] : []
-                          const moods = selectedTrackForQuality.mood ? JSON.parse(selectedTrackForQuality.mood) as string[] : []
+                          let genres: string[] = []
+                          let moods: string[] = []
+                          try { genres = selectedTrackForQuality.genres ? JSON.parse(selectedTrackForQuality.genres) : [] } catch { /* malformed */ }
+                          try { moods = selectedTrackForQuality.mood ? JSON.parse(selectedTrackForQuality.mood) : [] } catch { /* malformed */ }
                           if (genres.length === 0 && moods.length === 0) return null
                           return (
                             <div className="mt-1.5 space-y-0.5">

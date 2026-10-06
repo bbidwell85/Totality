@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
 import { getDatabase } from '../database/getDatabase'
 import { validateInput, PositiveIntSchema } from '../validation/schemas'
+import { safeSend } from './utils/safeSend'
 
 /**
  * Register all quality analysis IPC handlers
@@ -24,18 +25,18 @@ export function registerQualityHandlers() {
 
       const count = await analyzer.analyzeAllMediaItems((current, total) => {
         // Send progress updates to renderer
-        win?.webContents.send('quality:analysisProgress', { current, total })
+        safeSend(win,'quality:analysisProgress', { current, total })
 
         // Send periodic library:updated events for live refresh
         const now = Date.now()
         if (now - lastUpdateTime >= UPDATE_INTERVAL) {
-          win?.webContents.send('library:updated', { type: 'media' })
+          safeSend(win,'library:updated', { type: 'media' })
           lastUpdateTime = now
         }
       })
 
       // Send final update when analysis completes
-      win?.webContents.send('library:updated', { type: 'media' })
+      safeSend(win,'library:updated', { type: 'media' })
 
       return count
     } catch (error) {

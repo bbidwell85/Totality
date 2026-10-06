@@ -156,6 +156,22 @@ export function calculateAudioBitrateFromFile(
  * @param bitrate Bitrate in kbps to check
  * @returns true if the bitrate looks like an estimated value
  */
+/**
+ * Score a media version for best-version selection across multi-version items.
+ * Higher score = better quality. Ranks by resolution tier, then HDR, then bitrate.
+ *
+ * Used by all providers to pick the "primary" version when an item has multiple files.
+ */
+export function scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
+  const res = v.resolution.toLowerCase()
+  const tierRank = res === '4k' || res.includes('2160') ? 4
+    : res.includes('1080') ? 3
+    : res.includes('720') ? 2
+    : 1
+  const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
+  return tierRank * 100000 + hdrBonus + v.video_bitrate
+}
+
 export function isEstimatedBitrate(bitrate: number): boolean {
   const estimatedValues = [
     128, 192, 256, 320, 384, 640, 768, 1024, 1500, 1509,

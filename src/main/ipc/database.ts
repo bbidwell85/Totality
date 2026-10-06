@@ -7,6 +7,7 @@ import { getGeminiService } from '../services/GeminiService'
 import { getTMDBService } from '../services/TMDBService'
 import { invalidateNfsMappingsCache } from '../providers/kodi/KodiDatabaseSchema'
 import { getErrorMessage, isNodeError } from './utils'
+import { safeSend } from './utils/safeSend'
 import fs from 'fs/promises'
 import type { MediaItem } from '../types/database'
 import { validateInput, PositiveIntSchema, NonEmptyStringSchema, SettingKeySchema, SettingValueSchema, MediaItemFiltersSchema, TVShowFiltersSchema, MediaItemSchema, QualityScoreSchema, NfsMappingsSchema, ExportCSVOptionsSchema, AddExclusionSchema, OptionalSourceIdSchema, FilePathSchema, LetterOffsetSchema } from '../validation/schemas'
@@ -209,9 +210,7 @@ export function registerDatabaseHandlers() {
 
       // Broadcast settings change event to all windows
       const win = BrowserWindow.fromWebContents(event.sender)
-      if (win) {
-        win.webContents.send('settings:changed', { key: validKey, hasValue: !!validValue })
-      }
+      safeSend(win, 'settings:changed', { key: validKey, hasValue: !!validValue })
 
       return true
     } catch (error) {
@@ -646,7 +645,7 @@ export function registerDatabaseHandlers() {
       await db.updateMovieMatch(validMediaItemId, validTmdbId.toString(), posterUrl, title, year)
 
       // Send library update for live refresh
-      win?.webContents.send('library:updated', { type: 'media' })
+      safeSend(win, 'library:updated', { type: 'media' })
 
       return {
         success: true,

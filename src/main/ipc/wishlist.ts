@@ -41,7 +41,11 @@ export function registerWishlistHandlers() {
         } catch { /* continue without poster */ }
       }
 
-      return await db.addWishlistItem(validItem)
+      const id = await db.addWishlistItem(validItem)
+      if (id === -1) {
+        return { id: -1, duplicate: true }
+      }
+      return id
     } catch (error) {
       console.error('Error adding wishlist item:', error)
       throw error

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { MoreVertical, RefreshCw, Pencil, EyeOff, X, Copy, Check } from 'lucide-react'
+import { MoreVertical, RefreshCw, Pencil, EyeOff, X, Copy, Check, ChevronDown, Star } from 'lucide-react'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import { getQualityLevelColors } from '../../utils/qualityColors'
 import { formatBitrate } from './mediaUtils'
@@ -145,6 +145,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
   const [media, setMedia] = useState<MediaWithQuality | null>(null)
   const [versions, setVersions] = useState<MediaVersion[]>([])
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null)
+  const [showVersionTable, setShowVersionTable] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [thresholds, setThresholds] = useState<Record<string, QualityThresholds>>(DEFAULT_THRESHOLDS)
@@ -659,25 +660,94 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
 
             {/* Version Selector Pills */}
             {versions.length > 1 && (
-              <div className="flex gap-1.5 mt-2 overflow-x-auto">
-                {versions.map((v) => {
-                  const isSelected = selectedVersionId === v.id
-                  const qualityColor = getQualityLevelColors(v.tier_quality || '')
-                  return (
-                    <button
-                      key={v.id}
-                      onClick={() => setSelectedVersionId(v.id)}
-                      className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                        isSelected
-                          ? 'bg-primary text-primary-foreground'
-                          : `${qualityColor || 'bg-muted/50'} text-muted-foreground hover:text-foreground hover:bg-muted`
-                      }`}
-                    >
-                      {v.edition || v.label || `${v.resolution} ${v.video_codec}`}
-                      {v.tier_score != null && <span className={`ml-1.5 ${isSelected ? 'text-primary-foreground/70' : 'opacity-70'}`}>· {v.tier_score}</span>}
-                    </button>
-                  )
-                })}
+              <div className="mt-2 space-y-2">
+                <div className="flex gap-1.5 overflow-x-auto">
+                  {versions.map((v) => {
+                    const isSelected = selectedVersionId === v.id
+                    const qualityColor = getQualityLevelColors(v.tier_quality || '')
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setSelectedVersionId(v.id)}
+                        className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground'
+                            : `${qualityColor || 'bg-muted/50'} text-muted-foreground hover:text-foreground hover:bg-muted`
+                        }`}
+                      >
+                        {v.is_best && <Star className="w-3 h-3 inline-block mr-1 -mt-0.5" />}
+                        {v.edition || v.label || `${v.resolution} ${v.video_codec}`}
+                        {v.tier_score != null && <span className={`ml-1.5 ${isSelected ? 'text-primary-foreground/70' : 'opacity-70'}`}>· {v.tier_score}</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Version Comparison Table */}
+                <button
+                  onClick={() => setShowVersionTable(prev => !prev)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showVersionTable ? '' : '-rotate-90'}`} />
+                  Compare Versions ({versions.length})
+                </button>
+                {showVersionTable && (
+                  <div className="rounded-md border border-border/50 overflow-hidden text-xs">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-muted/40 text-muted-foreground">
+                          <th className="px-2 py-1.5 text-left font-medium">Version</th>
+                          <th className="px-2 py-1.5 text-left font-medium">Quality</th>
+                          <th className="px-2 py-1.5 text-left font-medium">Video</th>
+                          <th className="px-2 py-1.5 text-left font-medium">Audio</th>
+                          <th className="px-2 py-1.5 text-right font-medium">Size</th>
+                          <th className="px-2 py-1.5 text-right font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {versions.map((v) => {
+                          const insight = getVersionInsight(v)
+                          const isSelected = selectedVersionId === v.id
+                          return (
+                            <tr
+                              key={v.id}
+                              onClick={() => setSelectedVersionId(v.id)}
+                              className={`cursor-pointer border-t border-border/30 transition-colors hover:bg-muted/30 ${
+                                isSelected ? 'bg-primary/10' : ''
+                              }`}
+                            >
+                              <td className="px-2 py-1.5">
+                                <div className="flex items-center gap-1">
+                                  {v.is_best && <Star className="w-3 h-3 text-primary shrink-0" />}
+                                  <span className="font-medium truncate max-w-[120px]">{v.edition || v.label || v.resolution}</span>
+                                </div>
+                              </td>
+                              <td className="px-2 py-1.5 text-muted-foreground">
+                                {v.quality_tier || '--'} {v.tier_score != null && <span className="opacity-70">{v.tier_score}</span>}
+                              </td>
+                              <td className="px-2 py-1.5 text-muted-foreground">
+                                <span className="font-mono">{v.video_codec}</span> {formatBitrate(v.video_bitrate)}
+                              </td>
+                              <td className="px-2 py-1.5 text-muted-foreground">
+                                <span className="font-mono">{v.audio_codec}</span> {v.audio_channels > 0 ? `${v.audio_channels}ch` : ''}
+                              </td>
+                              <td className="px-2 py-1.5 text-right text-muted-foreground">{formatFileSize(v.file_size)}</td>
+                              <td className="px-2 py-1.5 text-right">
+                                {v.is_best ? (
+                                  <span className="text-primary font-medium">Best</span>
+                                ) : insight ? (
+                                  <span className={insight.type === 'redundant' ? 'text-amber-500' : 'text-yellow-500'}>
+                                    {insight.label}
+                                  </span>
+                                ) : null}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>

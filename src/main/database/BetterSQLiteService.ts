@@ -1047,6 +1047,12 @@ export class BetterSQLiteService {
       byCodec: Array<{ codec: string; count: number; size: number }>
       byTier: Array<{ tier: string; count: number; size: number }>
     }
+    versionStats: {
+      itemsWithVersions: number
+      totalVersions: number
+      redundantSize: number
+      redundantCount: number
+    }
   } {
     if (!this.db) throw new Error('Database not initialized')
 
@@ -1137,6 +1143,21 @@ export class BetterSQLiteService {
       ORDER BY size DESC
     `).all() as Array<{ tier: string; count: number; size: number }>
 
+    // Version storage stats — redundant versions that could be removed
+    const versionStats = this.db.prepare(`
+      SELECT
+        COUNT(DISTINCT v.media_item_id) as items_with_versions,
+        COUNT(*) as total_versions,
+        COALESCE(SUM(CASE WHEN v.is_best = 0 THEN v.file_size ELSE 0 END), 0) as redundant_size,
+        COUNT(CASE WHEN v.is_best = 0 THEN 1 END) as redundant_count
+      FROM media_item_versions v
+      JOIN media_items m ON v.media_item_id = m.id
+      LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND v.file_size > 0
+        AND (SELECT COUNT(*) FROM media_item_versions v2 WHERE v2.media_item_id = v.media_item_id) > 1
+    `).get() as { items_with_versions: number; total_versions: number; redundant_size: number; redundant_count: number } | undefined
+
     return {
       totalSize: (totalRow?.size || 0) + (musicTotal?.size || 0),
       totalItems: (totalRow?.count || 0) + (musicTotal?.count || 0),
@@ -1152,6 +1173,12 @@ export class BetterSQLiteService {
         totalTracks: musicTotal?.count || 0,
         byCodec: musicByCodec,
         byTier: musicByTier,
+      },
+      versionStats: {
+        itemsWithVersions: versionStats?.items_with_versions || 0,
+        totalVersions: versionStats?.total_versions || 0,
+        redundantSize: versionStats?.redundant_size || 0,
+        redundantCount: versionStats?.redundant_count || 0,
       },
     }
   }
@@ -4855,6 +4882,11 @@ WHERE m.type = 'episode' AND m.series_title = ?`
    */
   addWishlistItem(item: Partial<WishlistItem>): number {
     if (!this.db) throw new Error('Database not initialized')
+
+    // Skip if already exists (same logic as addWishlistItemsBulk)
+    if (item.tmdb_id && this.wishlistItemExists(item.tmdb_id)) return -1
+    if (item.musicbrainz_id && this.wishlistItemExists(undefined, item.musicbrainz_id)) return -1
+    if (item.media_item_id && this.wishlistItemExists(undefined, undefined, item.media_item_id)) return -1
 
     const stmt = this.db.prepare(`
       INSERT INTO wishlist_items (
