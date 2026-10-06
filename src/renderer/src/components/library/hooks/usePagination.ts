@@ -33,11 +33,13 @@ export function usePagination<T>({
   const [items, setItems] = useState<T[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
+  const loadingRef = useRef(false)
   const offsetRef = useRef(0)
   const requestIdRef = useRef(0)
 
   const load = useCallback(async (reset = true, startOffset?: number) => {
-    if (loading) return
+    if (loadingRef.current) return
+    loadingRef.current = true
     setLoading(true)
     const thisRequestId = ++requestIdRef.current
     try {
@@ -50,7 +52,10 @@ export function usePagination<T>({
       ])
 
       // Discard stale response if a newer request was started
-      if (requestIdRef.current !== thisRequestId) return
+      if (requestIdRef.current !== thisRequestId) {
+        // Don't reset loadingRef — the newer request owns it
+        return
+      }
 
       if (reset) {
         setItems(fetchedItems)
@@ -63,10 +68,13 @@ export function usePagination<T>({
     } catch (err) {
       console.warn('Failed to load paginated items:', err)
     } finally {
-      if (requestIdRef.current === thisRequestId) setLoading(false)
+      if (requestIdRef.current === thisRequestId) {
+        loadingRef.current = false
+        setLoading(false)
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, ...deps])
+  }, [...deps])
 
   const loadMore = useCallback(() => {
     if (offsetRef.current < totalCount && !loading) {

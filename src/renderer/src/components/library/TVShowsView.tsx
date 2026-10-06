@@ -266,7 +266,7 @@ export function TVShowsView({
   onSelectShow,
   onSelectSeason,
   onSelectEpisode,
-  filterItem,
+  filterItem: _filterItem,
   gridScale,
   viewType,
   seriesCompleteness,
@@ -345,6 +345,11 @@ export function TVShowsView({
     return () => window.removeEventListener('keydown', handleKeyDown)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedShow, selectedSeason])
+
+  // Episode-level filters (local to this view, reset on season/show change)
+  const [episodeTierFilter, setEpisodeTierFilter] = useState<'all' | 'SD' | '720p' | '1080p' | '4K'>('all')
+  const [episodeQualityFilter, setEpisodeQualityFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all')
+  useEffect(() => { setEpisodeTierFilter('all'); setEpisodeQualityFilter('all') }, [selectedSeason, selectedShow])
 
   // Show detail view menu
   const [showDetailMenu, setShowDetailMenu] = useState(false)
@@ -700,9 +705,14 @@ export function TVShowsView({
     const season = selectedShowData.seasons.get(selectedSeason)
     const completenessData = seriesCompleteness.get(selectedShow)
 
-    // Get owned episodes for this season
-    const ownedEpisodes = season ? season.episodes.filter(filterItem) : []
-    const ownedEpisodeNumbers = new Set(ownedEpisodes.map(e => e.episode_number))
+    // Get owned episodes for this season, filtered by resolution/quality
+    const allOwnedEpisodes = season ? season.episodes : []
+    const ownedEpisodes = allOwnedEpisodes.filter(ep => {
+      if (episodeTierFilter !== 'all' && ep.quality_tier !== episodeTierFilter) return false
+      if (episodeQualityFilter !== 'all' && (ep.tier_quality || 'MEDIUM').toLowerCase() !== episodeQualityFilter) return false
+      return true
+    })
+    const ownedEpisodeNumbers = new Set(allOwnedEpisodes.map(e => e.episode_number))
 
     const missingEpisodesForSeason = (completenessData?.missing_episodes || []).filter(
       ep => ep.season_number === selectedSeason && !ownedEpisodeNumbers.has(ep.episode_number)
@@ -738,6 +748,52 @@ export function TVShowsView({
         <h3 className="text-xl font-bold">
           {selectedShowData.title} - {formatSeasonLabel(selectedSeason!)}
         </h3>
+
+        {/* Episode filters */}
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Resolution</span>
+            <div className="flex gap-1">
+              {(['all', '4K', '1080p', '720p', 'SD'] as const).map((tier) => (
+                <button
+                  key={tier}
+                  onClick={() => setEpisodeTierFilter(tier)}
+                  className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
+                    episodeTierFilter === tier
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {tier === 'all' ? 'All' : tier}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="h-6 w-px bg-border/50" />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Quality</span>
+            <div className="flex gap-1">
+              {(['all', 'high', 'medium', 'low'] as const).map((quality) => (
+                <button
+                  key={quality}
+                  onClick={() => setEpisodeQualityFilter(quality)}
+                  className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
+                    episodeQualityFilter === quality
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-card text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {quality.charAt(0).toUpperCase() + quality.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+          {(episodeTierFilter !== 'all' || episodeQualityFilter !== 'all') && (
+            <span className="text-xs text-muted-foreground">
+              {ownedEpisodes.length} of {allOwnedEpisodes.length} episodes
+            </span>
+          )}
+        </div>
 
         <div className="divide-y divide-border/50">
           {allEpisodeItems.map((item) => (

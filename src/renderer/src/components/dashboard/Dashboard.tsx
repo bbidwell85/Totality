@@ -66,7 +66,7 @@ const COLLAPSED_HEIGHT_ARTIST = 64  // Smaller for artists
 
 // Connected indent design constants
 const EXPANDED_MARGIN = 8           // mt-2 margin above expanded content
-const EXPANDED_ITEM_HEIGHT = 44     // w-8 h-8 icon (32px) + py-1.5 (12px) = 44px
+const EXPANDED_ITEM_HEIGHT = 48     // poster thumbnail (40px) + py-1 (8px) = 48px
 const EXPANDED_BOTTOM_PAD = 8       // Bottom padding after expanded content
 const ITEM_GAP = 4                  // space-y-1 gap between items
 
@@ -807,7 +807,7 @@ export function Dashboard({
         <div className="flex-1 min-w-0">
           <div className="font-medium text-sm truncate">{item.title}</div>
           <div className="text-xs text-muted-foreground truncate">{item.year}</div>
-          <div className="text-[10px] text-muted-foreground mt-1">
+          <div className="text-xs text-muted-foreground mt-1">
             {item.quality_tier} · {item.tier_quality}
           </div>
         </div>
@@ -861,7 +861,7 @@ export function Dashboard({
           <div className="text-xs text-muted-foreground truncate">
             S{item.season_number}E{item.episode_number} · {item.title}
           </div>
-          <div className="text-[10px] text-muted-foreground mt-1">
+          <div className="text-xs text-muted-foreground mt-1">
             {item.quality_tier} · {item.tier_quality}
           </div>
         </div>
@@ -916,7 +916,7 @@ export function Dashboard({
           <div className="flex-1 min-w-0">
             <div className="font-medium text-sm truncate">{album.title}</div>
             <div className="text-xs text-muted-foreground truncate">{album.artist_name}</div>
-            <div className="text-[10px] text-muted-foreground mt-1">
+            <div className="text-xs text-muted-foreground mt-1">
               {formatMusicTier(album.quality_tier)}{album.best_bitrate ? ` · ${Math.round(album.best_bitrate)} kbps` : ''}
             </div>
           </div>
@@ -999,8 +999,23 @@ export function Dashboard({
             {missingMovies.map((movie, idx) => (
               <div
                 key={idx}
-                className="flex items-center gap-3 py-1.5 rounded-md hover:bg-muted/30 transition-colors group/item"
+                className="flex items-center gap-2.5 py-1 rounded-md hover:bg-muted/30 transition-colors group/item"
               >
+                {/* Poster thumbnail */}
+                <div className="w-7 h-10 rounded overflow-hidden shrink-0 bg-muted/30">
+                  {movie.poster_path ? (
+                    <img
+                      src={movie.poster_path.startsWith('http') ? movie.poster_path : `https://image.tmdb.org/t/p/w92${movie.poster_path}`}
+                      alt=""
+                      className="w-full h-full object-cover grayscale opacity-60"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Film className="w-3.5 h-3.5 text-muted-foreground/30" />
+                    </div>
+                  )}
+                </div>
                 {movie.tmdb_id ? (
                   <button
                     onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(`https://www.themoviedb.org/movie/${movie.tmdb_id}`) }}
@@ -1432,8 +1447,8 @@ export function Dashboard({
               <div className="grid grid-cols-2 gap-4">
                 {/* Owned */}
                 <div>
-                  <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Owned</div>
-                  <div className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                  <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Owned</div>
+                  <div className="flex flex-col gap-1 text-xs text-muted-foreground">
                     {libraryStats && libraryStats.totalMovies > 0 && (
                       <span className="flex items-center gap-1.5"><Film className="w-3 h-3" /><AnimatedNumber value={libraryStats.totalMovies} locale /> movies</span>
                     )}
@@ -1453,8 +1468,8 @@ export function Dashboard({
                 </div>
                 {/* Wishlist */}
                 <div>
-                  <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Wishlist</div>
-                  <div className="flex flex-col gap-1 text-[10px] text-muted-foreground">
+                  <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Wishlist</div>
+                  <div className="flex flex-col gap-1 text-xs text-muted-foreground">
                     {wishlistCounts.active > 0 ? (
                       <>
                         <span className="flex items-center gap-1.5"><Star className="w-3 h-3" /><AnimatedNumber value={wishlistCounts.active} /> active</span>
@@ -1489,28 +1504,28 @@ export function Dashboard({
                     {libraryStats.totalMovies > 0 && (
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Film className="w-3 h-3" />Movies</span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1"><Film className="w-3 h-3" />Movies</span>
                           <AnimatedNumber value={Math.round(libraryStats.movieAverageQualityScore || 0)} className="text-xs font-bold" />
                         </div>
                         <div className="h-1 bg-muted rounded-full overflow-hidden">
                           <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${libraryStats.movieAverageQualityScore || 0}%` }} />
                         </div>
                         {libraryStats.movieNeedsUpgradeCount > 0 && (
-                          <div className="text-[10px] text-muted-foreground mt-0.5"><AnimatedNumber value={libraryStats.movieNeedsUpgradeCount} /> upgrades</div>
+                          <div className="text-xs text-muted-foreground mt-0.5"><AnimatedNumber value={libraryStats.movieNeedsUpgradeCount} /> upgrades</div>
                         )}
                       </div>
                     )}
                     {libraryStats.totalEpisodes > 0 && (
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Tv className="w-3 h-3" />TV</span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1"><Tv className="w-3 h-3" />TV</span>
                           <AnimatedNumber value={Math.round(libraryStats.tvAverageQualityScore || 0)} className="text-xs font-bold" />
                         </div>
                         <div className="h-1 bg-muted rounded-full overflow-hidden">
                           <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${libraryStats.tvAverageQualityScore || 0}%` }} />
                         </div>
                         {libraryStats.tvNeedsUpgradeCount > 0 && (
-                          <div className="text-[10px] text-muted-foreground mt-0.5"><AnimatedNumber value={libraryStats.tvNeedsUpgradeCount} /> upgrades</div>
+                          <div className="text-xs text-muted-foreground mt-0.5"><AnimatedNumber value={libraryStats.tvNeedsUpgradeCount} /> upgrades</div>
                         )}
                       </div>
                     )}
@@ -1523,13 +1538,13 @@ export function Dashboard({
                       return (
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Music className="w-3 h-3" />Music</span>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1"><Music className="w-3 h-3" />Music</span>
                             <AnimatedNumber value={pct} suffix="%" className="text-xs font-bold" />
                           </div>
                           <div className="h-1 bg-muted rounded-full overflow-hidden">
                             <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                           </div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5"><AnimatedNumber value={lossless} /> lossless</div>
+                          <div className="text-xs text-muted-foreground mt-0.5"><AnimatedNumber value={lossless} /> lossless</div>
                         </div>
                       )
                     })()}
@@ -1539,12 +1554,12 @@ export function Dashboard({
                   <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/20">
                     {/* Resolution breakdown */}
                     <div>
-                      <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-1">Resolution</div>
+                      <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Resolution</div>
                       {storageAnalytics?.byTier.map(t => {
                         const total = libraryStats.totalItems || 1
                         const pct = Math.round(t.count / total * 100)
                         return (
-                          <div key={t.tier} className="flex items-center gap-1.5 text-[10px] mb-0.5">
+                          <div key={t.tier} className="flex items-center gap-1.5 text-xs mb-0.5">
                             <span className="w-8 text-muted-foreground">{t.tier}</span>
                             <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
                               <div className="h-full bg-primary/60 rounded-full" style={{ width: `${pct}%` }} />
@@ -1556,7 +1571,7 @@ export function Dashboard({
                     </div>
                     {/* Quality level breakdown */}
                     <div>
-                      <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-1">Level</div>
+                      <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Level</div>
                       {qualityDistribution ? (() => {
                         const q = qualityDistribution.byQuality
                         const total = q.high + q.medium + q.low || 1
@@ -1564,7 +1579,7 @@ export function Dashboard({
                           const count = q[level as keyof typeof q]
                           const pct = Math.round(count / total * 100)
                           return (
-                            <div key={level} className="flex items-center gap-1.5 text-[10px] mb-0.5">
+                            <div key={level} className="flex items-center gap-1.5 text-xs mb-0.5">
                               <span className="w-8 text-muted-foreground uppercase">{level.slice(0, 3)}</span>
                               <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
                                 <div className="h-full bg-primary/60 rounded-full" style={{ width: `${pct}%` }} />
@@ -1598,10 +1613,10 @@ export function Dashboard({
                 <div className="grid grid-cols-2 gap-4">
                   {/* Video Codecs */}
                   <div>
-                    <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Video</div>
+                    <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Video</div>
                     <div className="flex flex-col gap-1">
                       {storageAnalytics.byCodec.slice(0, 4).map(c => (
-                        <div key={c.codec} className="flex items-center justify-between text-[10px]">
+                        <div key={c.codec} className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground font-mono">{c.codec}</span>
                           <span className="text-muted-foreground">{c.count.toLocaleString()}</span>
                         </div>
@@ -1610,16 +1625,16 @@ export function Dashboard({
                   </div>
                   {/* Audio Codecs */}
                   <div>
-                    <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Audio</div>
+                    <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Audio</div>
                     <div className="flex flex-col gap-1">
                       {(storageAnalytics.music?.byCodec || []).slice(0, 4).map(c => (
-                        <div key={c.codec} className="flex items-center justify-between text-[10px]">
+                        <div key={c.codec} className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground font-mono">{c.codec}</span>
                           <span className="text-muted-foreground">{c.count.toLocaleString()}</span>
                         </div>
                       ))}
                       {(!storageAnalytics.music || storageAnalytics.music.totalTracks === 0) && (
-                        <span className="text-[10px] text-muted-foreground/40">No music</span>
+                        <span className="text-xs text-muted-foreground/40">No music</span>
                       )}
                     </div>
                   </div>
@@ -1644,7 +1659,7 @@ export function Dashboard({
                   <CircleFadingArrowUp className="w-4 h-4 text-muted-foreground" />
                   <h2 className="text-sm font-semibold text-foreground">Upgrades</h2>
                   {duplicateCount > 0 && (
-                    <span className="text-[10px] bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded-full font-medium"
+                    <span className="text-xs bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded-full font-medium"
                       title={`${duplicateCount} duplicate ${duplicateCount === 1 ? 'movie' : 'movies'} across sources`}>
                       {duplicateCount} dupe{duplicateCount !== 1 ? 's' : ''}
                     </span>
@@ -1935,7 +1950,7 @@ export function Dashboard({
                                     )}
                                     <div className="flex-1 min-w-0">
                                       <div className="text-xs font-medium truncate">{person.name}</div>
-                                      <div className="text-[10px] text-muted-foreground">{roles.map(r => roleLabels[r] || r).join(' · ')}</div>
+                                      <div className="text-xs text-muted-foreground">{roles.map(r => roleLabels[r] || r).join(' · ')}</div>
                                     </div>
                                     {isAdding ? (
                                       <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />
@@ -1943,10 +1958,10 @@ export function Dashboard({
                                       <div className="flex gap-1 shrink-0 flex-wrap justify-end">
                                         {roles.map(role => (
                                           trackedRoles.includes(role) ? (
-                                            <span key={role} className="px-1.5 py-0.5 text-[10px] text-muted-foreground/40">{roleLabels[role] || role} ✓</span>
+                                            <span key={role} className="px-1.5 py-0.5 text-xs text-muted-foreground/40">{roleLabels[role] || role} ✓</span>
                                           ) : (
                                             <button key={role} onClick={() => handleAddPerson(person.name, role as 'director' | 'actor')}
-                                              className="px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-colors"
+                                              className="px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded transition-colors"
                                               title={`Track as ${role}`}>{roleLabels[role] || role}</button>
                                           )
                                         ))}
@@ -2007,7 +2022,7 @@ export function Dashboard({
                                       </div>
                                       <div className="flex-1 min-w-0">
                                         <p className="text-xs font-medium truncate">{movie.title}</p>
-                                        {movie.year && <p className="text-[10px] text-muted-foreground">{movie.year}</p>}
+                                        {movie.year && <p className="text-xs text-muted-foreground">{movie.year}</p>}
                                       </div>
                                       <AddToWishlistButton mediaType="movie" title={movie.title} year={movie.year || undefined} tmdbId={movie.tmdb_id} compact />
                                       <button

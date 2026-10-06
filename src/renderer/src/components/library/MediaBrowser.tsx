@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import { MediaDetails } from './MediaDetails'
 import { CompletenessPanel } from './CompletenessPanel'
@@ -127,12 +128,36 @@ export function MediaBrowser({
     debouncedTierFilter, debouncedQualityFilter,
   } = useLibraryFilters(searchInput)
    
+  // Centralized view switcher — resets filters to prevent cross-tab contamination
+  const switchView = useCallback((newView: 'movies' | 'tv' | 'music') => {
+    setView(newView)
+    setTierFilter('all')
+    setQualityFilter('all')
+    setAlphabetFilter(null)
+  }, [setTierFilter, setQualityFilter, setAlphabetFilter])
+
+  // Compute search dropdown position from the search container ref
+  const getSearchDropdownStyle = useCallback((): React.CSSProperties => {
+    const rect = searchContainerRef.current?.getBoundingClientRect()
+    if (!rect) return { position: 'fixed', top: 0, left: 0 }
+    return {
+      position: 'fixed',
+      top: rect.bottom + 8,
+      left: rect.left,
+      width: '24rem',
+      minWidth: '24rem',
+      zIndex: 9999,
+    }
+  }, [])
+
   const [searchQuery, _setSearchQuery] = useState('')
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [searchResultIndex, setSearchResultIndex] = useState(-1)
   const [searchTrackResults, setSearchTrackResults] = useState<Array<{ id: number; title: string; album_id: number; album_title?: string; artist_name?: string; thumb_url?: string; needs_upgrade: boolean; type: 'track' }>>([])
   const searchTrackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
+  const searchDropdownRef = useRef<HTMLDivElement>(null)
+  const searchPortalRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const moviesTabRef = useRef<HTMLButtonElement>(null)
   const tvTabRef = useRef<HTMLButtonElement>(null)
@@ -338,15 +363,15 @@ export function MediaBrowser({
   // Handle initialTab prop from dashboard navigation
   useEffect(() => {
     if (initialTab) {
-      setView(initialTab)
+      switchView(initialTab)
     }
-  }, [initialTab])
+  }, [initialTab, switchView])
 
   // Sync view with external libraryTab prop (one-way: prop → state)
   // Only update when prop changes, not on every render
   useEffect(() => {
     if (libraryTab && libraryTab !== view) {
-      setView(libraryTab)
+      switchView(libraryTab)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libraryTab])
@@ -406,21 +431,21 @@ export function MediaBrowser({
     // Only auto-switch once to prevent loops
     if (!loading && !hasAutoSwitchedRef.current) {
       if (view === 'movies' && !hasMovies) {
-        if (hasTV) setView('tv')
-        else if (hasMusic) setView('music')
+        if (hasTV) switchView('tv')
+        else if (hasMusic) switchView('music')
       } else if (view === 'tv' && !hasTV) {
-        if (hasMovies) setView('movies')
-        else if (hasMusic) setView('music')
+        if (hasMovies) switchView('movies')
+        else if (hasMusic) switchView('music')
       } else if (view === 'music' && !hasMusic) {
-        if (hasMovies) setView('movies')
-        else if (hasTV) setView('tv')
+        if (hasMovies) switchView('movies')
+        else if (hasTV) switchView('tv')
       }
       // Mark as done after checking (even if no switch needed)
       if (hasMovies || hasTV || hasMusic) {
         hasAutoSwitchedRef.current = true
       }
     }
-  }, [hasMovies, hasTV, hasMusic, view, loading])
+  }, [hasMovies, hasTV, hasMusic, view, loading, switchView])
 
   const loadStats = async (sourceId?: string) => {
     try {
@@ -1128,7 +1153,10 @@ export function MediaBrowser({
   // Handle clicking outside search results to close
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node
+      const inSearchBox = searchContainerRef.current?.contains(target)
+      const inDropdown = searchDropdownRef.current?.contains(target)
+      if (!inSearchBox && !inDropdown) {
         setShowSearchResults(false)
       }
     }
@@ -1142,25 +1170,25 @@ export function MediaBrowser({
     setSearchInput('')
 
     if (type === 'movie') {
-      setView('movies')
+      switchView('movies')
       setSelectedMediaId(id as number)
     } else if (type === 'tv') {
-      setView('tv')
+      switchView('tv')
       setSelectedShow(id as string)
       setSelectedSeason(null)
     } else if (type === 'episode') {
-      setView('tv')
+      switchView('tv')
       if (extra?.series_title) {
         setSelectedShow(extra.series_title)
       }
       setSelectedMediaId(id as number)
     } else if (type === 'artist') {
-      setView('music')
+      switchView('music')
       setMusicViewMode('artists')
       const artist = musicArtists.find(a => a.id === id)
       if (artist) setSelectedArtist(artist)
     } else if (type === 'album') {
-      setView('music')
+      switchView('music')
       setMusicViewMode('albums')
       const album = musicAlbums.find(a => a.id === id)
       if (album) {
@@ -1168,7 +1196,7 @@ export function MediaBrowser({
         loadAlbumTracks(album.id)
       }
     } else if (type === 'track') {
-      setView('music')
+      switchView('music')
       setMusicViewMode('tracks')
       // If we have the album_id, select that album to show track in context
       if (extra?.album_id) {
@@ -1190,14 +1218,14 @@ export function MediaBrowser({
     console.log('[MediaBrowser] Handling navigation:', pendingNavigation)
 
     if (type === 'movie') {
-      setView('movies')
+      switchView('movies')
       setSelectedMediaId(typeof id === 'string' ? parseInt(id, 10) : id)
     } else if (type === 'tv') {
-      setView('tv')
+      switchView('tv')
       setSelectedShow(typeof id === 'string' ? id : String(id))
       setSelectedSeason(null)
     } else if (type === 'episode') {
-      setView('tv')
+      switchView('tv')
       if (pendingNavigation.seriesTitle) {
         setSelectedShow(pendingNavigation.seriesTitle)
       }
@@ -1206,7 +1234,7 @@ export function MediaBrowser({
       }
       setSelectedMediaId(typeof id === 'string' ? parseInt(id, 10) : id)
     } else if (type === 'artist') {
-      setView('music')
+      switchView('music')
       setMusicViewMode('artists')
       // Find artist by ID first, then fall back to name search
       const numId = typeof id === 'string' ? parseInt(id, 10) : id
@@ -1221,7 +1249,7 @@ export function MediaBrowser({
         }).catch(err => console.error('Failed to find artist for navigation:', err))
       }
     } else if (type === 'album') {
-      setView('music')
+      switchView('music')
       setMusicViewMode('albums')
       const numId = typeof id === 'string' ? parseInt(id, 10) : id
       const album = musicAlbums.find(a => a.id === numId)
@@ -1230,7 +1258,7 @@ export function MediaBrowser({
         loadAlbumTracks(album.id)
       }
     } else if (type === 'track') {
-      setView('music')
+      switchView('music')
       setMusicViewMode('albums')
       // For tracks, we need to find the track first to get its album
       const numId = typeof id === 'string' ? parseInt(id, 10) : id
@@ -1249,7 +1277,7 @@ export function MediaBrowser({
     }
 
     clearNavigation()
-  }, [pendingNavigation, musicArtists, musicAlbums, clearNavigation])
+  }, [pendingNavigation, musicArtists, musicAlbums, clearNavigation, switchView])
 
   if (loading && !hasInitialLoadRef.current) {
     return (
@@ -1276,6 +1304,9 @@ export function MediaBrowser({
 
   return (
     <div className="h-screen flex flex-col">
+      {/* Portal target for search dropdown — outside the dark header, inherits app theme */}
+      <div ref={searchPortalRef} className="fixed z-9999" />
+
       {/* Fixed Control Bar - floating header with logo (hidden when global TopBar is used) */}
       {!hideHeader && (
       <header
@@ -1286,12 +1317,12 @@ export function MediaBrowser({
       >
         <div className="flex items-center gap-4">
           {/* Left Section: Logo + Search */}
-          <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="flex items-center gap-4 flex-1 min-w-0 overflow-visible">
             {/* Logo - Left */}
             <img src={logoImage} alt="Totality" className="h-8 shrink-0" />
 
           {/* Search - Flexible width with min/max constraints */}
-          <div ref={searchContainerRef} className="relative shrink min-w-24 max-w-80 w-64" role="combobox" aria-expanded={showSearchResults && hasSearchResults} aria-haspopup="listbox" aria-owns="search-results-listbox">
+          <div ref={searchContainerRef} className="relative shrink min-w-24 max-w-80 w-64 overflow-visible" role="combobox" aria-expanded={showSearchResults && hasSearchResults} aria-haspopup="listbox" aria-owns="search-results-listbox">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" aria-hidden="true" />
             <input
               ref={searchInputRef}
@@ -1324,13 +1355,15 @@ export function MediaBrowser({
               </button>
             )}
 
-            {/* Search Results Dropdown */}
-            {showSearchResults && searchInput.length >= 2 && hasSearchResults && (
+            {/* Search Results Dropdown (portal to theme-aware container outside dark top bar) */}
+            {showSearchResults && searchInput.length >= 2 && hasSearchResults && searchPortalRef.current && createPortal(
               <div
+                ref={searchDropdownRef}
                 id="search-results-listbox"
                 role="listbox"
                 aria-label="Search results"
-                className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-2xl overflow-hidden z-9999 max-h-[400px] overflow-y-auto"
+                className="bg-card border border-border rounded-lg shadow-2xl overflow-hidden max-h-[400px] overflow-y-auto"
+                style={getSearchDropdownStyle()}
               >
                 {/* Movies */}
                 {globalSearchResults.movies.length > 0 && (
@@ -1342,13 +1375,13 @@ export function MediaBrowser({
                     {globalSearchResults.movies.map((movie, idx) => {
                       const flatIndex = idx
                       return (
-                        <button
+                        <div
                           key={`movie-${movie.id}`}
                           id={`search-result-${flatIndex}`}
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('movie', movie.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left cursor-pointer focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1362,13 +1395,13 @@ export function MediaBrowser({
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{movie.title}</div>
+                            <div className="text-sm font-medium truncate" style={{ color: 'hsl(var(--foreground))' }}>{movie.title}</div>
                             {movie.year && <div className="text-xs text-muted-foreground">{movie.year}</div>}
                           </div>
                           {movie.needs_upgrade && (
                             <CircleFadingArrowUp className="w-5 h-5 text-red-500 shrink-0" aria-label="Upgrade recommended" />
                           )}
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -1384,13 +1417,13 @@ export function MediaBrowser({
                     {globalSearchResults.tvShows.map((show, idx) => {
                       const flatIndex = globalSearchResults.movies.length + idx
                       return (
-                        <button
+                        <div
                           key={`tv-${show.id}`}
                           id={`search-result-${flatIndex}`}
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('tv', show.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left cursor-pointer focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1404,9 +1437,9 @@ export function MediaBrowser({
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{show.title}</div>
+                            <div className="text-sm font-medium truncate" style={{ color: 'hsl(var(--foreground))' }}>{show.title}</div>
                           </div>
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -1422,13 +1455,13 @@ export function MediaBrowser({
                     {globalSearchResults.episodes.map((episode, idx) => {
                       const flatIndex = globalSearchResults.movies.length + globalSearchResults.tvShows.length + idx
                       return (
-                        <button
+                        <div
                           key={`episode-${episode.id}`}
                           id={`search-result-${flatIndex}`}
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('episode', episode.id, { series_title: episode.series_title })}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left cursor-pointer focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1442,7 +1475,7 @@ export function MediaBrowser({
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{episode.title}</div>
+                            <div className="text-sm font-medium truncate" style={{ color: 'hsl(var(--foreground))' }}>{episode.title}</div>
                             <div className="text-xs text-muted-foreground truncate">
                               {episode.series_title} • S{episode.season_number}E{episode.episode_number}
                             </div>
@@ -1450,7 +1483,7 @@ export function MediaBrowser({
                           {episode.needs_upgrade && (
                             <CircleFadingArrowUp className="w-4 h-4 text-red-500 shrink-0" aria-label="Upgrade recommended" />
                           )}
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -1466,13 +1499,13 @@ export function MediaBrowser({
                     {globalSearchResults.artists.map((artist, idx) => {
                       const flatIndex = globalSearchResults.movies.length + globalSearchResults.tvShows.length + globalSearchResults.episodes.length + idx
                       return (
-                        <button
+                        <div
                           key={`artist-${artist.id}`}
                           id={`search-result-${flatIndex}`}
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('artist', artist.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left cursor-pointer focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1486,9 +1519,9 @@ export function MediaBrowser({
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{artist.title}</div>
+                            <div className="text-sm font-medium truncate" style={{ color: 'hsl(var(--foreground))' }}>{artist.title}</div>
                           </div>
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -1504,13 +1537,13 @@ export function MediaBrowser({
                     {globalSearchResults.albums.map((album, idx) => {
                       const flatIndex = globalSearchResults.movies.length + globalSearchResults.tvShows.length + globalSearchResults.episodes.length + globalSearchResults.artists.length + idx
                       return (
-                        <button
+                        <div
                           key={`album-${album.id}`}
                           id={`search-result-${flatIndex}`}
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('album', album.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left cursor-pointer focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1524,7 +1557,7 @@ export function MediaBrowser({
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{album.title}</div>
+                            <div className="text-sm font-medium truncate" style={{ color: 'hsl(var(--foreground))' }}>{album.title}</div>
                             <div className="text-xs text-muted-foreground truncate">
                               {album.subtitle}{album.year ? ` • ${album.year}` : ''}
                             </div>
@@ -1532,7 +1565,7 @@ export function MediaBrowser({
                           {album.needs_upgrade && (
                             <CircleFadingArrowUp className="w-5 h-5 text-red-500 shrink-0" aria-label="Upgrade recommended" />
                           )}
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
@@ -1548,13 +1581,13 @@ export function MediaBrowser({
                     {globalSearchResults.tracks.map((track, idx) => {
                       const flatIndex = globalSearchResults.movies.length + globalSearchResults.tvShows.length + globalSearchResults.episodes.length + globalSearchResults.artists.length + globalSearchResults.albums.length + idx
                       return (
-                        <button
+                        <div
                           key={`track-${track.id}`}
                           id={`search-result-${flatIndex}`}
                           role="option"
                           aria-selected={searchResultIndex === flatIndex}
                           onClick={() => handleSearchResultClick('track', track.id, { album_id: track.album_id })}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus:outline-hidden ${
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left cursor-pointer focus:outline-hidden ${
                             searchResultIndex === flatIndex
                               ? 'bg-primary/20 ring-2 ring-inset ring-primary'
                               : 'hover:bg-muted/50'
@@ -1568,7 +1601,7 @@ export function MediaBrowser({
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{track.title}</div>
+                            <div className="text-sm font-medium truncate" style={{ color: 'hsl(var(--foreground))' }}>{track.title}</div>
                             <div className="text-xs text-muted-foreground truncate">
                               {track.album_title}{track.artist_name ? ` • ${track.artist_name}` : ''}
                             </div>
@@ -1576,19 +1609,21 @@ export function MediaBrowser({
                           {track.needs_upgrade && (
                             <CircleFadingArrowUp className="w-5 h-5 text-red-500 shrink-0" aria-label="Upgrade recommended" />
                           )}
-                        </button>
+                        </div>
                       )
                     })}
                   </div>
                 )}
-              </div>
+              </div>,
+              searchPortalRef.current
             )}
 
-            {/* No results message */}
-            {showSearchResults && searchInput.length >= 2 && !hasSearchResults && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-2xl p-4 z-9999">
+            {/* No results message (portal to theme-aware container) */}
+            {showSearchResults && searchInput.length >= 2 && !hasSearchResults && searchPortalRef.current && createPortal(
+              <div className="bg-card border border-border rounded-lg shadow-2xl p-4 text-foreground" style={getSearchDropdownStyle()}>
                 <div className="text-sm text-muted-foreground text-center">No results found</div>
-              </div>
+              </div>,
+              searchPortalRef.current
             )}
           </div>
           </div>
@@ -1619,7 +1654,7 @@ export function MediaBrowser({
                   ref={moviesTabRef}
                   onClick={() => {
                     if (!hasMovies) return
-                    setView('movies')
+                    switchView('movies')
                     onLibraryTabChange?.('movies')
                     setSelectedShow(null)
                     setSelectedSeason(null)
@@ -1646,7 +1681,7 @@ export function MediaBrowser({
                   ref={tvTabRef}
                   onClick={() => {
                     if (!hasTV) return
-                    setView('tv')
+                    switchView('tv')
                     onLibraryTabChange?.('tv')
                     setSelectedShow(null)
                     setSelectedSeason(null)
@@ -1673,7 +1708,7 @@ export function MediaBrowser({
                   ref={musicTabRef}
                   onClick={() => {
                     if (!hasMusic) return
-                    setView('music')
+                    switchView('music')
                     onLibraryTabChange?.('music')
                     setSelectedShow(null)
                     setSelectedSeason(null)
@@ -1829,8 +1864,8 @@ export function MediaBrowser({
                   </div>
                 )}
 
-                {/* Resolution Tier Filter (only for video, not music artists/albums) */}
-                {(view === 'movies' || view === 'tv' || (view === 'music' && musicViewMode === 'tracks')) && (
+                {/* Resolution Tier Filter (movies only) */}
+                {view === 'movies' && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Resolution</span>
                     <div className="flex gap-1">
@@ -1856,13 +1891,12 @@ export function MediaBrowser({
                 )}
 
                 {/* Divider between Resolution and Quality */}
-                {(view === 'movies' || view === 'tv' || (view === 'music' && musicViewMode === 'tracks')) &&
-                 (view !== 'music' || musicViewMode === 'tracks') && (
+                {view === 'movies' && (
                   <div className="h-6 w-px bg-border/50" />
                 )}
 
-                {/* Quality Filter */}
-                {(view !== 'music' || musicViewMode === 'tracks') && (
+                {/* Quality Filter (movies + music tracks) */}
+                {(view === 'movies' || (view === 'music' && musicViewMode === 'tracks')) && (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Quality</span>
                     <div className="flex gap-1">

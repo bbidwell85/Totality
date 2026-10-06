@@ -327,7 +327,7 @@ export function TopBar({
 
             {/* Search Results Dropdown */}
             {showSearchResults && searchInput.length >= 2 && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-popover border border-border rounded-lg shadow-2xl z-9999 max-h-[400px] overflow-y-auto overflow-x-hidden">
+              <div className="absolute top-full left-0 mt-2 w-96 bg-popover text-popover-foreground border border-border rounded-lg shadow-2xl z-9999 max-h-[400px] overflow-y-auto overflow-x-hidden">
                 {isSearching && (
                   <div className="px-3 py-4 text-sm text-muted-foreground text-center">Searching...</div>
                 )}

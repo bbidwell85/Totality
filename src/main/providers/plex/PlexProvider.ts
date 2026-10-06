@@ -21,7 +21,7 @@ import {
   normalizeContainer,
   hasObjectAudio,
 } from '../../services/MediaNormalizer'
-import { selectBestAudioTrack } from '../utils/ProviderUtils'
+import { selectBestAudioTrack, scoreVersion } from '../utils/ProviderUtils'
 import { getFileNameParser } from '../../services/FileNameParser'
 import { extractVersionNames } from '../utils/VersionNaming'
 import type {
@@ -1175,7 +1175,7 @@ export class PlexProvider implements MediaProvider {
     }
 
     // Pick the best version for parent MediaItem (highest resolution tier, then HDR, then bitrate)
-    const best = versions.reduce((a, b) => this.scoreVersion(b) > this.scoreVersion(a) ? b : a)
+    const best = versions.reduce((a, b) => scoreVersion(b) > scoreVersion(a) ? b : a)
 
     // Extract external IDs
     let imdbId: string | undefined
@@ -1271,14 +1271,7 @@ export class PlexProvider implements MediaProvider {
     }
   }
 
-  private scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
-    const tierRank = v.resolution.includes('2160') ? 4
-      : v.resolution.includes('1080') ? 3
-      : v.resolution.includes('720') ? 2
-      : 1
-    const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
-    return tierRank * 100000 + hdrBonus + v.video_bitrate
-  }
+  // scoreVersion extracted to ProviderUtils.scoreVersion
 
   // ============================================================================
   // MUSIC LIBRARY METHODS
@@ -1445,7 +1438,7 @@ export class PlexProvider implements MediaProvider {
     try {
       const responseData = await fetchJSON<{ MediaContainer?: { Metadata?: PlexMusicArtist[] } }>(
         `${this.selectedServer.uri}/library/metadata/${artistKey}`,
-        { headers: { 'X-Plex-Token': this.selectedServer.accessToken } }
+        { headers: { Accept: 'application/json', 'X-Plex-Token': this.selectedServer.accessToken } }
       )
       return responseData?.MediaContainer?.Metadata?.[0] || null
     } catch (error) {
@@ -1465,7 +1458,7 @@ export class PlexProvider implements MediaProvider {
     try {
       const responseData = await fetchJSON<{ MediaContainer?: { Metadata?: PlexMusicAlbum[] } }>(
         `${this.selectedServer.uri}/library/metadata/${albumKey}`,
-        { headers: { 'X-Plex-Token': this.selectedServer.accessToken } }
+        { headers: { Accept: 'application/json', 'X-Plex-Token': this.selectedServer.accessToken } }
       )
       return responseData?.MediaContainer?.Metadata?.[0] || null
     } catch (error) {
