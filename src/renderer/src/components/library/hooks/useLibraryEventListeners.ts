@@ -195,6 +195,9 @@ export function useLibraryEventListeners({
         loadMusicData()
         loadMusicCompletenessData(freshEps, freshSingles)
       }
+      if (data.key === SETTING_KEYS.exclude_empty_seasons || data.key === SETTING_KEYS.collection_theatrical_lag_days) {
+        loadCompletenessData()
+      }
     })
 
     // Listen for exclusion changes (from Settings > Library tab)
@@ -252,7 +255,7 @@ export function useLibraryEventListeners({
       }
 
       // Reload library data after scan completes with changes
-      if (data.itemsAdded > 0 || data.itemsUpdated > 0 || (data as Record<string, unknown>).itemsRemoved) {
+      if (data.itemsAdded > 0 || data.itemsUpdated > 0 || (data as { itemsRemoved?: number } | undefined)?.itemsRemoved) {
         loadMedia()
         loadCompletenessData()
         loadMusicData()

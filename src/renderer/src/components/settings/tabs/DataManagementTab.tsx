@@ -56,6 +56,7 @@ export function DataManagementTab() {
     byTier: Array<{ tier: string; count: number; size: number }>
     codecMigration: { h264Count: number; modernCount: number; totalCount: number }
     music?: { totalSize: number; totalTracks: number; byCodec: Array<{ codec: string; count: number; size: number }>; byTier: Array<{ tier: string; count: number; size: number }> }
+    versionStats?: { itemsWithVersions: number; totalVersions: number; redundantSize: number; redundantCount: number }
   } | null>(null)
   const [duplicates, setDuplicates] = useState<Array<{
     tmdb_id: string; title: string; year: number | null
@@ -288,6 +289,25 @@ export function DataManagementTab() {
                           <span className="text-muted-foreground">{t.count} items · {formatSize(t.size)}</span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Multi-Version Storage */}
+                {storageData.versionStats && storageData.versionStats.itemsWithVersions > 0 && (
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Multi-Version Items</h4>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span>Items with multiple versions</span>
+                        <span className="text-muted-foreground">{storageData.versionStats.itemsWithVersions} items · {storageData.versionStats.totalVersions} versions</span>
+                      </div>
+                      {storageData.versionStats.redundantCount > 0 && (
+                        <div className="flex items-center justify-between">
+                          <span>Non-best versions</span>
+                          <span className="text-muted-foreground">{storageData.versionStats.redundantCount} versions · {formatSize(storageData.versionStats.redundantSize)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

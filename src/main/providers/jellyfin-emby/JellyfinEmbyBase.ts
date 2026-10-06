@@ -25,7 +25,7 @@ import {
   normalizeContainer,
   hasObjectAudio,
 } from '../../services/MediaNormalizer'
-import { selectBestAudioTrack } from '../utils/ProviderUtils'
+import { selectBestAudioTrack, scoreVersion } from '../utils/ProviderUtils'
 import { getFileNameParser } from '../../services/FileNameParser'
 import { extractVersionNames } from '../utils/VersionNaming'
 import type {
@@ -225,6 +225,11 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
   // Cancellation support
   protected scanCancelled = false
   protected musicScanCancelled = false
+
+  cancelScan(): void { this.scanCancelled = true }
+  cancelMusicScan(): void { this.musicScanCancelled = true }
+  isScanCancelled(): boolean { return this.scanCancelled }
+  isMusicScanCancelled(): boolean { return this.musicScanCancelled }
 
   // Subclasses must define their auth header name
   protected abstract authHeaderName: string
@@ -731,6 +736,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
   // ============================================================================
 
   async scanLibrary(libraryId: string, options?: ScanOptions): Promise<ScanResult> {
+    this.scanCancelled = false
     const { onProgress, sinceTimestamp, forceFullScan } = options || {}
     const isIncremental = !!sinceTimestamp && !forceFullScan
 
@@ -743,6 +749,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       itemsRemoved: 0,
       errors: [],
       durationMs: 0,
+      cancelled: false,
     }
 
     try {
@@ -1021,6 +1028,11 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         let itemIndex = 0
 
         for (const group of groups) {
+          if (this.scanCancelled) {
+            result.cancelled = true
+            break
+          }
+
           try {
             // Convert each item in the group, collecting all versions
             const allVersions: VersionData[] = []
@@ -1047,7 +1059,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
                 extractVersionNames(allVersions)
 
                 // Pick best version for parent item fields
-                const best = allVersions.reduce((a, b) => this.scoreVersion(b) > this.scoreVersion(a) ? b : a)
+                const best = allVersions.reduce((a, b) => scoreVersion(b) > scoreVersion(a) ? b : a)
                 canonicalItem.file_path = best.file_path
                 canonicalItem.file_size = best.file_size
                 canonicalItem.duration = best.duration
@@ -1124,15 +1136,20 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       }
 
       // Remove stale items (only for full scans, not incremental)
-      if (!isIncremental && scannedProviderIds.size > 0) {
+      if (!isIncremental) {
         const itemType = libraryType === 'show' ? 'episode' : 'movie'
         const items = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId })
 
-        for (const item of items) {
-          if (!scannedProviderIds.has(item.plex_id)) {
-            if (item.id) {
-              await db.deleteMediaItem(item.id)
-              result.itemsRemoved++
+        // Safety guard: refuse deletion when API returned 0 IDs but DB has items
+        if (scannedProviderIds.size === 0 && items.length > 0) {
+          console.warn(`[${this.providerType}Provider ${this.sourceId}] API returned 0 IDs but DB has ${items.length} — skipping deletion (possible API failure)`)
+        } else if (scannedProviderIds.size > 0) {
+          for (const item of items) {
+            if (!scannedProviderIds.has(item.plex_id)) {
+              if (item.id) {
+                await db.deleteMediaItem(item.id)
+                result.itemsRemoved++
+              }
             }
           }
         }
@@ -1475,7 +1492,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
     }
 
     // Pick the best version for parent MediaItem (highest resolution tier, then HDR, then bitrate)
-    const best = versions.reduce((a, b) => this.scoreVersion(b) > this.scoreVersion(a) ? b : a)
+    const best = versions.reduce((a, b) => scoreVersion(b) > scoreVersion(a) ? b : a)
 
     const isEpisode = item.Type === 'Episode'
 
@@ -1577,14 +1594,7 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
     }
   }
 
-  private scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
-    const tierRank = v.resolution.includes('2160') ? 4
-      : v.resolution.includes('1080') ? 3
-      : v.resolution.includes('720') ? 2
-      : 1
-    const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
-    return tierRank * 100000 + hdrBonus + v.video_bitrate
-  }
+  // scoreVersion extracted to ProviderUtils.scoreVersion
 
   private normalizeGroupTitle(title: string): string {
     return title
@@ -2109,13 +2119,5 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       result.durationMs = Date.now() - startTime
       return result
     }
-  }
-
-  /**
-   * Cancel an in-progress music scan
-   */
-  cancelMusicScan(): void {
-    this.musicScanCancelled = true
-    console.log(`[${this.providerType}Provider ${this.sourceId}] Music scan cancellation requested`)
   }
 }
