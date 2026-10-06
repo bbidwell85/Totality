@@ -79,7 +79,7 @@ async function detectWindowsNetworkDrivesAsync(): Promise<void> {
  * Detect if a path is likely a network/NAS path where native watchers are unreliable.
  * On Windows, uses wmic to detect actual mapped network drives instead of guessing by letter.
  */
-function isNetworkPath(filePath: string): boolean {
+export function isNetworkPath(filePath: string): boolean {
   // Windows UNC paths: \\server\share
   if (filePath.startsWith('\\\\')) return true
 

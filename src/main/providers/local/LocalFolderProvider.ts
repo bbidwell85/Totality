@@ -35,6 +35,7 @@ import type {
 } from '../base/MediaProvider'
 import type { MediaItem, MediaItemVersion, AudioTrack } from '../../types/database'
 import { extractVersionNames } from '../utils/VersionNaming'
+import { scoreVersion } from '../utils/ProviderUtils'
 
 export interface LocalFolderConfig {
   folderPath: string
@@ -83,7 +84,7 @@ const EXTRAS_FILENAME_PATTERNS = [
 /**
  * Check if a filename indicates extras/bonus content rather than main feature
  */
-function isExtrasContent(filename: string): boolean {
+export function isExtrasContent(filename: string): boolean {
   const lowerFilename = filename.toLowerCase()
 
   // Check for sample files
@@ -680,7 +681,7 @@ export class LocalFolderProvider implements MediaProvider {
 
             // Pick best version for parent item
             const bestIdx = versions.reduce((bi, v, i) =>
-              this.scoreVersion(v) > this.scoreVersion(versions[bi]) ? i : bi, 0)
+              scoreVersion(v) > scoreVersion(versions[bi]) ? i : bi, 0)
             const bestItem = group[bestIdx]
 
             const mediaItem = this.convertMetadataToMediaItem(bestItem.metadata)
@@ -733,11 +734,17 @@ export class LocalFolderProvider implements MediaProvider {
         })
 
         const existingItems = db.getMediaItems({ type: scanType, sourceId: this.sourceId, libraryId })
-        for (const item of existingItems) {
-          if (!scannedFilePaths.has(item.file_path)) {
-            if (item.id) {
-              await db.deleteMediaItem(item.id)
-              result.itemsRemoved++
+
+        // Safety guard: refuse deletion when scan found 0 files but DB has items
+        if (scannedFilePaths.size === 0 && existingItems.length > 0) {
+          console.warn(`[LocalFolderProvider ${this.sourceId}] Scan returned 0 files but DB has ${existingItems.length} — skipping deletion (possible access issue)`)
+        } else {
+          for (const item of existingItems) {
+            if (!scannedFilePaths.has(item.file_path)) {
+              if (item.id) {
+                await db.deleteMediaItem(item.id)
+                result.itemsRemoved++
+              }
             }
           }
         }
@@ -1938,13 +1945,7 @@ export class LocalFolderProvider implements MediaProvider {
     return Math.abs(hash).toString(36)
   }
 
-  private scoreVersion(v: { resolution: string; video_bitrate: number; hdr_format?: string }): number {
-    const tierRank = v.resolution.includes('2160') ? 4
-      : v.resolution.includes('1080') ? 3
-      : v.resolution.includes('720') ? 2 : 1
-    const hdrBonus = v.hdr_format && v.hdr_format !== 'None' ? 1000 : 0
-    return tierRank * 100000 + hdrBonus + v.video_bitrate
-  }
+  // scoreVersion extracted to ProviderUtils.scoreVersion
 
   private normalizeGroupTitle(title: string): string {
     return title

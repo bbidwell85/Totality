@@ -129,3 +129,27 @@ export async function createTestDatabase(): Promise<TestDatabase> {
 
   return createAdapter(db)
 }
+
+/**
+ * Create a mock for the better-sqlite3 module that returns sql.js-backed adapters.
+ * Usage in tests: vi.mock('better-sqlite3', () => ({ default: mockConstructor }))
+ *
+ * The returned constructor ignores the file path and returns an in-memory database.
+ * Must be called before importing BetterSQLiteService.
+ */
+export async function createBetterSqliteMock(): Promise<{
+  testDb: TestDatabase
+  mockConstructor: new (...args: unknown[]) => TestDatabase
+}> {
+  const testDb = await createTestDatabase()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mockConstructor = function(this: any) {
+    Object.assign(this, testDb)
+    return this
+  } as unknown as new (...args: unknown[]) => TestDatabase
+
+  // Copy prototype methods so instanceof-like checks work
+  Object.setPrototypeOf(mockConstructor.prototype, Object.getPrototypeOf(testDb))
+
+  return { testDb, mockConstructor }
+}
