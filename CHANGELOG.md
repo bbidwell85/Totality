@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.1](https://github.com/bbidwell85/Totality/compare/v0.4.0...v0.4.1) (2026-10-06)
+
+
+### Features
+
+* add "Reset Library Data" option that preserves settings and exclusions ([4a4c8cf](https://github.com/bbidwell85/Totality/commit/4a4c8cf8f27975aadb6cac836273574c9b171e2a))
+* adopt AnimatedNumber across all views ([5cbb1da](https://github.com/bbidwell85/Totality/commit/5cbb1da3920b8197930c7e0417ed13e8fee3bc2d))
+* animated numbers (odometer style) for Dashboard bento cards ([c9d7497](https://github.com/bbidwell85/Totality/commit/c9d7497e71ffe0be454ec1eb50ea8a00bde2b4d4))
+* improve CSV export — enriched columns, music upgrades, Excel BOM ([22b874d](https://github.com/bbidwell85/Totality/commit/22b874dd4d0342d7bb4371d3cfb585a35af2f915))
+* live data population during scans and completeness analysis ([373ab79](https://github.com/bbidwell85/Totality/commit/373ab79aed6e952d3ac448c46f5acf72f0d78965))
+
+
+### Bug Fixes
+
+* address audit findings — cache purge, error logging, monitoring timing ([51cad3d](https://github.com/bbidwell85/Totality/commit/51cad3db32c62061353278e69c099077e5e0de94))
+* AnimatedNumber now animates on Dashboard data refreshes ([df13f15](https://github.com/bbidwell85/Totality/commit/df13f15fdd85f0ca604fff2eb8ff97e0c51e40b5))
+* clean up WishlistSearch debounce timer on unmount ([51e11fd](https://github.com/bbidwell85/Totality/commit/51e11fde69c6960993833e8e2b191a4293c8e6ca))
+* comprehensive stability audit — 20+ bug fixes, typed DB interface, generic pagination ([19391b3](https://github.com/bbidwell85/Totality/commit/19391b3dcd28087a372bc7dbeea649c413fb5346))
+* Dashboard wishlist counts now update reactively on add/remove ([1c5faac](https://github.com/bbidwell85/Totality/commit/1c5faacf25bc205f13da06cc35e1f7660605103f))
+* Dashboard wishlist counts update when items added/removed ([b2e684f](https://github.com/bbidwell85/Totality/commit/b2e684f0bbccbd191e534c6fb890bbdf4cbc9974))
+* eliminate Dashboard flash on data refresh ([8bae8f4](https://github.com/bbidwell85/Totality/commit/8bae8f4411a1fe6d60923382c5ef081a01dbd12b))
+* emit library:updated after music-scan to refresh UI ([2f9aa44](https://github.com/bbidwell85/Totality/commit/2f9aa4446c904cf484108904dfc38eeaed080d52))
+* Mark as Completed button now works on wishlist items ([55dbefd](https://github.com/bbidwell85/Totality/commit/55dbefdc261e75448a715fffb7ef5f4b2321839f))
+* monitoring resume race condition — cancel pending timer on new task ([2c2abbf](https://github.com/bbidwell85/Totality/commit/2c2abbf99408f5731de91ed70b4399df6c54e8ed))
+* multiple UI/UX improvements across library and dashboard ([63aec74](https://github.com/bbidwell85/Totality/commit/63aec744a1dfcf283fb1456bb851296fe8af692d))
+* multiple wishlist panel bugs ([11d42c7](https://github.com/bbidwell85/Totality/commit/11d42c7c6fb2da80e7e517d4c04945412b368a9e))
+* port exportWorkingCSV to BetterSQLiteService + update CLAUDE.md ([6b45865](https://github.com/bbidwell85/Totality/commit/6b458659db90242fcf61e924789cf84199aa7d0f))
+* reduce log noise when Plex server is unreachable during monitoring ([142aabc](https://github.com/bbidwell85/Totality/commit/142aabc7f942935953e0ee342855b96a6461e2e1))
+* remove auto-navigate to library on scan completion ([e1bd28b](https://github.com/bbidwell85/Totality/commit/e1bd28bdffc1160c7954836d9412b8bbad874ad7))
+* remove duplicate All filter button in wishlist panel ([6a4af42](https://github.com/bbidwell85/Totality/commit/6a4af42a32d02d05c88c5dd0d4eb3c6c8c008739))
+* resolve 3 TypeScript compilation errors blocking build ([2fb81e2](https://github.com/bbidwell85/Totality/commit/2fb81e2a50ce9b02d4fdc3073db5578533fca7ef))
+* two stale data bugs in source deletion cleanup ([57cfcdd](https://github.com/bbidwell85/Totality/commit/57cfcdd6e54eb7ba3b6b12eddaf5a19f99176866))
+* wishlist filter pills now wrap when panel is narrow ([0150a79](https://github.com/bbidwell85/Totality/commit/0150a79a864af3fc2d3a12a946f119488808d9b8))
+
 ## [0.4.0](https://github.com/bbidwell85/totality/compare/v0.3.2...v0.4.0) (2026-10-02)
 
 
