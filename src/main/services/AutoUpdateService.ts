@@ -67,9 +67,7 @@ export class AutoUpdateService {
       this.setState({
         status: 'available',
         version: info.version,
-        releaseNotes: typeof info.releaseNotes === 'string'
-          ? info.releaseNotes
-          : undefined,
+        releaseNotes: this.extractReleaseNotes(info.releaseNotes),
       })
       try {
         getDatabaseServiceSync().createNotification({ type: 'info', title: 'Update available', message: `Version ${info.version} is ready to download` })
@@ -208,6 +206,38 @@ export class AutoUpdateService {
     }
 
     await this.checkForUpdates()
+  }
+
+  /**
+   * Extract plain-text release notes from electron-updater's UpdateInfo.
+   * GitHub returns HTML; electron-updater may also return an array of ReleaseNoteInfo.
+   */
+  private extractReleaseNotes(notes: UpdateInfo['releaseNotes']): string | undefined {
+    if (!notes) return undefined
+
+    let html: string
+    if (typeof notes === 'string') {
+      html = notes
+    } else if (Array.isArray(notes)) {
+      html = notes.map(n => typeof n === 'string' ? n : n.note || '').join('\n')
+    } else {
+      return undefined
+    }
+
+    // Strip HTML tags to plain text, decode common entities
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/?(p|div|li|h[1-6])[^>]*>/gi, '\n')
+      .replace(/<ul[^>]*>/gi, '').replace(/<\/ul>/gi, '\n')
+      .replace(/<ol[^>]*>/gi, '').replace(/<\/ol>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, '\n\n')
+      .trim() || undefined
   }
 
   private setState(partial: Partial<UpdateState>): void {
