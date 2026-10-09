@@ -395,7 +395,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
       id="tag-sync-panel"
       role="complementary"
       aria-label="Tag Sync"
-      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-[46] flex flex-col overflow-hidden transition-opacity duration-200 ease-out ${
+      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-[46] slide-panel flex flex-col overflow-hidden transition-opacity duration-200 ease-out ${
         isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
       }`}
       onKeyDown={handleKeyDown}

@@ -848,7 +848,9 @@ export function registerDatabaseHandlers() {
     try {
       const validArgs = validateInput(AddExclusionSchema, { exclusionType, referenceId, referenceKey, parentKey, title }, 'db:addExclusion')
       console.log('[IPC db:addExclusion]', validArgs.exclusionType, validArgs.title || validArgs.referenceKey || '')
-      return db.addExclusion(validArgs.exclusionType, validArgs.referenceId, validArgs.referenceKey, validArgs.parentKey, validArgs.title)
+      const result = db.addExclusion(validArgs.exclusionType, validArgs.referenceId, validArgs.referenceKey, validArgs.parentKey, validArgs.title)
+      safeSend(BrowserWindow.getAllWindows()[0] || null, 'library:updated', { type: 'media' })
+      return result
     } catch (error) {
       console.error('Error adding exclusion:', error)
       throw error
@@ -860,6 +862,7 @@ export function registerDatabaseHandlers() {
       const validId = validateInput(PositiveIntSchema, id, 'db:removeExclusion')
       console.log('[IPC db:removeExclusion] id:', validId)
       db.removeExclusion(validId)
+      safeSend(BrowserWindow.getAllWindows()[0] || null, 'library:updated', { type: 'media' })
     } catch (error) {
       console.error('Error removing exclusion:', error)
       throw error

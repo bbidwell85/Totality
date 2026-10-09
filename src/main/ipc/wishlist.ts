@@ -1,6 +1,7 @@
 import { ipcMain, shell, dialog, BrowserWindow } from 'electron'
 import { promises as fs } from 'fs'
 import { getDatabase } from '../database/getDatabase'
+import { safeSend } from './utils/safeSend'
 import { getStoreSearchService } from '../services/StoreSearchService'
 import { getTMDBService } from '../services/TMDBService'
 import type { WishlistItem } from '../types/database'
@@ -45,6 +46,7 @@ export function registerWishlistHandlers() {
       if (id === -1) {
         return { id: -1, duplicate: true }
       }
+      safeSend(BrowserWindow.getAllWindows()[0] || null, 'wishlist:changed')
       return id
     } catch (error) {
       console.error('Error adding wishlist item:', error)
@@ -61,6 +63,7 @@ export function registerWishlistHandlers() {
       const validUpdates = validateInput(WishlistItemSchema.partial(), updates, 'wishlist:update')
       console.log('[IPC wishlist:update] id:', validId)
       await db.updateWishlistItem(validId, validUpdates)
+      safeSend(BrowserWindow.getAllWindows()[0] || null, 'wishlist:changed')
       return { success: true }
     } catch (error) {
       console.error('Error updating wishlist item:', error)
@@ -76,6 +79,7 @@ export function registerWishlistHandlers() {
       const validId = validateInput(PositiveIntSchema, id, 'wishlist:remove')
       console.log('[IPC wishlist:remove] id:', validId)
       await db.removeWishlistItem(validId)
+      safeSend(BrowserWindow.getAllWindows()[0] || null, 'wishlist:changed')
       return { success: true }
     } catch (error) {
       console.error('Error removing wishlist item:', error)
@@ -173,6 +177,7 @@ export function registerWishlistHandlers() {
       }
 
       const added = await db.addWishlistItemsBulk(validItems)
+      if (added > 0) safeSend(BrowserWindow.getAllWindows()[0] || null, 'wishlist:changed')
       return { success: true, added }
     } catch (error) {
       console.error('Error bulk adding wishlist items:', error)

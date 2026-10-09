@@ -809,6 +809,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('logs:new', handler)
   },
 
+  // ============================================================================
+  // WEB ACCESS
+  // ============================================================================
+  webAccessGetStatus: () => ipcRenderer.invoke('webAccess:getStatus'),
+  webAccessStart: () => ipcRenderer.invoke('webAccess:start'),
+  webAccessStop: () => ipcRenderer.invoke('webAccess:stop'),
+
 })
 
 // Type definitions for multi-source support
@@ -2104,6 +2111,17 @@ export interface ElectronAPI {
   setFileLoggingSettings: (settings: { enabled?: boolean; minLevel?: string; retentionDays?: number }) => Promise<{ success: boolean }>
   openLogFolder: () => Promise<{ success: boolean }>
   onNewLog?: (callback: (entry: { id: string; timestamp: string; level: 'verbose' | 'debug' | 'info' | 'warn' | 'error'; source: string; message: string; details?: string }) => void) => () => void
+
+  // Web Access
+  webAccessGetStatus: () => Promise<{
+    enabled: boolean
+    port: number
+    running: boolean
+    connectedClients: number
+    localUrl: string | null
+  }>
+  webAccessStart: () => Promise<{ success: boolean; message?: string }>
+  webAccessStop: () => Promise<{ success: boolean }>
 }
 
 declare global {

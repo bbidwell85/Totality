@@ -165,6 +165,7 @@ export function registerSeriesHandlers() {
       const details = await tmdb.getTVShowDetails(validTmdbId)
       return {
         overview: details.overview || null,
+        backdropPath: details.backdrop_path || null,
       }
     } catch (error) {
       console.error(`Error fetching TV show details for ${validTmdbId}:`, error)
@@ -184,6 +185,7 @@ export function registerSeriesHandlers() {
         overview: details.overview || null,
         releaseDate: details.release_date || null,
         runtime: details.runtime || null,
+        backdropPath: details.backdrop_path || null,
       }
     } catch (error) {
       console.error(`Error fetching movie details for ${validTmdbId}:`, error)

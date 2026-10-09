@@ -92,6 +92,13 @@ export const SETTING_KEYS = {
   file_logging_enabled: 'file_logging_enabled',
   file_logging_min_level: 'file_logging_min_level',
   log_retention_days: 'log_retention_days',
+
+  // Web access
+  web_access_enabled: 'web_access_enabled',
+  web_access_port: 'web_access_port',
+  web_access_pin: 'web_access_pin',
+  web_access_session_timeout: 'web_access_session_timeout',
+  web_access_https: 'web_access_https',
 } as const
 
 export type SettingKey = typeof SETTING_KEYS[keyof typeof SETTING_KEYS]

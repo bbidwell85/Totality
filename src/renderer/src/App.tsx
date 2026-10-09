@@ -23,10 +23,16 @@ import { ToastContainer } from './components/ui/Toast'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionErrorBoundary } from './components/ui/SectionErrorBoundary'
 import type { MediaViewType, SeriesStats, CollectionStats, MusicCompletenessStats, AnalysisProgress } from './components/library/types'
+import { isWebMode, isAuthenticated, authenticate } from './services/webTransport'
+import { useMobileLayout } from './hooks/useMobileLayout'
+import { MobileTabBar, type MobileTab } from './components/mobile/MobileTabBar'
+import { MobileSearchOverlay } from './components/mobile/MobileSearchOverlay'
+import logoImage from './assets/logo.png'
+import { WebLoginScreen } from './components/auth/WebLoginScreen'
 
 type AppView = 'dashboard' | 'library'
 
-function AppContent() {
+function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean; isTablet?: boolean }) {
   const { isLoading, sources, activeSourceId, hasMovies, hasTV, hasMusic } = useSources()
   const [showAddSourceModal, setShowAddSourceModal] = useState(false)
   const [showAboutModal, setShowAboutModal] = useState(false)
@@ -38,7 +44,7 @@ function AppContent() {
   const [libraryTab, setLibraryTab] = useState<MediaViewType>('movies')
 
   // Navigation history
-  const { pushNavState, goBack, goForward, canGoBack, canGoForward } = useNavigation()
+  const { pushNavState, goBack, goForward, canGoBack, canGoForward, navigateTo } = useNavigation()
   const isRestoringRef = useRef(false)
 
   // Panel states - managed at app level for TopBar to control
@@ -47,6 +53,7 @@ function AppContent() {
   const [showChatPanel, setShowChatPanel] = useState(false)
   const [showMoodSyncPanel, setShowMoodSyncPanel] = useState(false)
   const [showTaskQueuePanel, setShowTaskQueuePanel] = useState(false)
+  const [showMobileSearch, setShowMobileSearch] = useState(false)
   // Auto-refresh state (passed up from MediaBrowser)
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false)
 
@@ -367,20 +374,22 @@ function AppContent() {
     )
   }
 
-  const showSplash = !splashComplete
+  const showSplash = !splashComplete && !isWebMode()
 
   return (
     <>
       {/* Render main app - it loads behind the splash screen */}
       <div className="relative h-screen overflow-hidden bg-main-gradient text-foreground">
-        <Sidebar
-          onOpenAbout={() => setShowAboutModal(true)}
-          isCollapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
+        {!isMobile && (
+          <Sidebar
+            onOpenAbout={() => setShowAboutModal(true)}
+            isCollapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
+        )}
 
-        {/* Global Top Bar */}
-        <TopBar
+        {/* Global Top Bar — hidden on mobile (bottom tab bar provides navigation) */}
+        {!isMobile && <TopBar
           currentView={currentView}
           libraryTab={libraryTab}
           onNavigateHome={handleNavigateToDashboard}
@@ -404,9 +413,10 @@ function AppContent() {
           canGoBack={canGoBack}
           onForward={handleForward}
           canGoForward={canGoForward}
-        />
+          isMobile={isMobile}
+        />}
 
-        {currentView === 'dashboard' ? (
+        {currentView === 'dashboard' && !isMobile ? (
           <SectionErrorBoundary section="Dashboard">
             <Dashboard
               onNavigateToLibrary={handleNavigateToLibrary}
@@ -415,14 +425,36 @@ function AppContent() {
               hasMovies={hasMovies}
               hasTV={hasTV}
               hasMusic={hasMusic}
+              isMobile={isMobile}
             />
           </SectionErrorBoundary>
+        ) : isMobile && showWishlistPanel ? (
+          <main
+            className="fixed bottom-0 transition-[left,right,top] duration-300 ease-out"
+            style={{
+              top: 'max(env(safe-area-inset-top, 0px), 8px)',
+              left: '8px',
+              right: '8px',
+              bottom: '0px',
+            }}
+          >
+            <div className="absolute inset-0 flex flex-col overflow-hidden">
+              <WishlistPanel
+                isOpen={true}
+                onClose={() => setShowWishlistPanel(false)}
+                isMobile={isMobile}
+                inline={true}
+              />
+            </div>
+          </main>
         ) : (
           <main
-            className="fixed top-[76px] bottom-0 transition-[left,right] duration-300 ease-out"
+            className="fixed bottom-0 transition-[left,right,top] duration-300 ease-out"
             style={{
-              left: sidebarCollapsed ? '96px' : '288px',
-              right: '16px'
+              top: isMobile ? 'max(env(safe-area-inset-top, 0px), 8px)' : '76px',
+              left: isMobile ? '8px' : (sidebarCollapsed ? '96px' : '288px'),
+              right: isMobile ? '8px' : '16px',
+              bottom: '0px',
             }}
           >
             <SectionErrorBoundary section="Media Library">
@@ -440,6 +472,8 @@ function AppContent() {
                 libraryTab={libraryTab}
                 onLibraryTabChange={setLibraryTab}
                 onAutoRefreshChange={setIsAutoRefreshing}
+                isMobile={isMobile}
+                isTablet={isTablet}
               />
             </SectionErrorBoundary>
           </main>
@@ -484,12 +518,14 @@ function AppContent() {
                 libraries={[]}
               />
             </SectionErrorBoundary>
-            <SectionErrorBoundary section="Wishlist Panel" compact>
-              <WishlistPanel
-                isOpen={showWishlistPanel}
-                onClose={() => setShowWishlistPanel(false)}
-              />
-            </SectionErrorBoundary>
+            {!isMobile && (
+              <SectionErrorBoundary section="Wishlist Panel" compact>
+                <WishlistPanel
+                  isOpen={showWishlistPanel}
+                  onClose={() => setShowWishlistPanel(false)}
+                />
+              </SectionErrorBoundary>
+            )}
           </>
         )}
         {/* Mood Sync Panel - rendered at App level, available in all views */}
@@ -509,6 +545,55 @@ function AppContent() {
           onOpenSettings={() => handleOpenSettings('services')}
           viewContext={chatViewContext}
         />
+        {/* Mobile search overlay */}
+        {isMobile && showMobileSearch && (
+          <MobileSearchOverlay
+            onClose={() => setShowMobileSearch(false)}
+            onSelectMovie={(id) => {
+              handleNavigateToLibrary('movies')
+              // Navigate to the movie detail via the NavigationContext
+              navigateTo({ type: 'movie', id })
+            }}
+            onSelectShow={(title) => {
+              handleNavigateToLibrary('tv')
+              navigateTo({ type: 'tv', id: title })
+            }}
+            onSelectEpisode={(id) => {
+              handleNavigateToLibrary('tv')
+              navigateTo({ type: 'episode', id })
+            }}
+            onSelectArtist={(_id, name) => {
+              handleNavigateToLibrary('music')
+              navigateTo({ type: 'artist', id: name })
+            }}
+            onSelectAlbum={(id) => {
+              handleNavigateToLibrary('music')
+              navigateTo({ type: 'album', id })
+            }}
+          />
+        )}
+
+        {/* Mobile bottom tab bar */}
+        {isMobile && (
+          <MobileTabBar
+            activeTab={
+              showWishlistPanel ? 'wishlist' :
+              currentView === 'dashboard' ? 'movies' :
+              libraryTab === 'movies' ? 'movies' :
+              libraryTab === 'tv' ? 'tv' :
+              libraryTab === 'music' ? 'music' : 'movies'
+            }
+            onTabChange={(tab: MobileTab) => {
+              if (tab === 'wishlist') {
+                setShowWishlistPanel(true)
+              } else {
+                setShowWishlistPanel(false)
+                handleNavigateToLibrary(tab === 'tv' ? 'tv' : tab)
+              }
+            }}
+            onSearchOpen={() => setShowMobileSearch(true)}
+          />
+        )}
       </div>
       {/* Splash screen overlays the app and fades out to reveal it */}
       {showSplash && <SplashScreen onComplete={markSplashShown} />}
@@ -519,6 +604,24 @@ function AppContent() {
 }
 
 function App() {
+  const [webAuthed, setWebAuthed] = useState(() => !isWebMode() || isAuthenticated())
+  const { isMobile, isTablet } = useMobileLayout()
+
+  // In web mode without auth, show login screen
+  if (isWebMode() && !webAuthed) {
+    return (
+      <ErrorBoundary>
+        <ThemeProvider>
+          <WebLoginScreen
+            onAuthenticated={() => setWebAuthed(true)}
+            authenticate={authenticate}
+            logoSrc={logoImage}
+          />
+        </ThemeProvider>
+      </ErrorBoundary>
+    )
+  }
+
   return (
     <ErrorBoundary>
       <ToastProvider>
@@ -526,7 +629,7 @@ function App() {
           <SourceProvider>
             <WishlistProvider>
               <NavigationProvider>
-                <AppContent />
+                <AppContent isMobile={isMobile} isTablet={isTablet} />
               </NavigationProvider>
             </WishlistProvider>
           </SourceProvider>

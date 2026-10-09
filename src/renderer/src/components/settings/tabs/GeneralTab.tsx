@@ -7,9 +7,10 @@
  * - Auto-update settings
  */
 
-import { useState, useEffect } from 'react'
-import { Loader2, Monitor, ArrowUpCircle, RefreshCw, Download } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Loader2, Monitor, ArrowUpCircle, RefreshCw, Download, Globe, Copy, Check, Eye, EyeOff } from 'lucide-react'
 import { Toggle } from '../../ui/Toggle'
+import { SETTING_KEYS } from '../../../../../shared/settingKeys'
 
 interface UpdateState {
   status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
@@ -36,21 +37,50 @@ export function GeneralTab() {
   const [updateState, setUpdateState] = useState<UpdateState>({ status: 'idle' })
   const [isChecking, setIsChecking] = useState(false)
 
+  // Web access state
+  const [webEnabled, setWebEnabled] = useState(false)
+  const [webPort, setWebPort] = useState('9470')
+  const [webPin, setWebPin] = useState('')
+  const [showPin, setShowPin] = useState(false)
+  const [webRunning, setWebRunning] = useState(false)
+  const [webUrl, setWebUrl] = useState<string | null>(null)
+  const [webClients, setWebClients] = useState(0)
+  const [urlCopied, setUrlCopied] = useState(false)
+  const [webSessionTimeout, setWebSessionTimeout] = useState('86400000')
+
+  const loadWebStatus = useCallback(async () => {
+    try {
+      const status = await window.electronAPI.webAccessGetStatus()
+      setWebRunning(status.running)
+      setWebUrl(status.localUrl)
+      setWebClients(status.connectedClients)
+    } catch { /* web access not available */ }
+  }, [])
+
   useEffect(() => {
     const load = async () => {
       try {
-        const [trayVal, startVal, version, uState, uSetting] = await Promise.all([
+        const [trayVal, startVal, version, uState, uSetting, weVal, wpVal, wpinVal, wtVal] = await Promise.all([
           window.electronAPI.getSetting('minimize_to_tray'),
           window.electronAPI.getSetting('start_minimized_to_tray'),
           window.electronAPI.getAppVersion(),
           window.electronAPI.autoUpdateGetState(),
           window.electronAPI.getSetting('auto_update_enabled'),
+          window.electronAPI.getSetting(SETTING_KEYS.web_access_enabled),
+          window.electronAPI.getSetting(SETTING_KEYS.web_access_port),
+          window.electronAPI.getSetting(SETTING_KEYS.web_access_pin),
+          window.electronAPI.getSetting(SETTING_KEYS.web_access_session_timeout),
         ])
         setMinimizeToTray(trayVal === 'true')
         setStartMinimized(startVal === 'true')
         setAppVersion(version)
         setUpdateState(uState)
         setAutoUpdateEnabled(uSetting !== 'false')
+        setWebEnabled(weVal === 'true')
+        if (wpVal) setWebPort(wpVal)
+        if (wpinVal) setWebPin(wpinVal)
+        if (wtVal) setWebSessionTimeout(wtVal)
+        await loadWebStatus()
       } catch (error) {
         console.error('Failed to load general settings:', error)
       } finally {
@@ -58,7 +88,7 @@ export function GeneralTab() {
       }
     }
     load()
-  }, [])
+  }, [loadWebStatus])
 
   // Listen for update state changes
   useEffect(() => {
@@ -211,6 +241,143 @@ export function GeneralTab() {
           </div>
         </div>
       </div>
+
+      {/* Web Access */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 mb-1">
+          <Globe className="w-4 h-4 text-muted-foreground" />
+          <h3 className="text-sm font-medium text-foreground">Web Access</h3>
+        </div>
+        <div className="bg-muted/30 rounded-lg border border-border/40 divide-y divide-border/30">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div>
+              <p className="text-sm text-foreground">Enable web access</p>
+              <p className="text-xs text-muted-foreground">Access Totality from a browser on your network</p>
+            </div>
+            <Toggle
+              checked={webEnabled}
+              onChange={async (checked) => {
+                setWebEnabled(checked)
+                await window.electronAPI.setSetting(SETTING_KEYS.web_access_enabled, String(checked))
+                if (checked) {
+                  try {
+                    await window.electronAPI.webAccessStart()
+                  } catch (err) {
+                    console.error('Failed to start web server:', err)
+                  }
+                } else {
+                  await window.electronAPI.webAccessStop()
+                }
+                await loadWebStatus()
+              }}
+            />
+          </div>
+
+          {webEnabled && (
+            <>
+              {/* Status */}
+              {webRunning && webUrl && (
+                <div className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    <span className="text-xs text-muted-foreground">
+                      Available at{' '}
+                      <span className="font-mono text-foreground">{webUrl}</span>
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(webUrl)
+                        setUrlCopied(true)
+                        setTimeout(() => setUrlCopied(false), 2000)
+                      }}
+                      className="ml-1 p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Copy URL"
+                    >
+                      {urlCopied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                    {webClients > 0 && (
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {webClients} client{webClients !== 1 ? 's' : ''} connected
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Port */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-sm text-foreground">Port</p>
+                  <p className="text-xs text-muted-foreground">Restart required after changing</p>
+                </div>
+                <input
+                  type="number"
+                  value={webPort}
+                  onChange={(e) => setWebPort(e.target.value)}
+                  onBlur={async () => {
+                    const port = parseInt(webPort, 10)
+                    if (port > 0 && port < 65536) {
+                      await window.electronAPI.setSetting(SETTING_KEYS.web_access_port, String(port))
+                    }
+                  }}
+                  className="w-24 px-2 py-1 text-sm text-right bg-muted/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                  min={1}
+                  max={65535}
+                />
+              </div>
+
+              {/* PIN */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-sm text-foreground">PIN</p>
+                  <p className="text-xs text-muted-foreground">Required to access from browser (leave empty for no PIN)</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type={showPin ? 'text' : 'password'}
+                    value={webPin}
+                    onChange={(e) => setWebPin(e.target.value)}
+                    onBlur={async () => {
+                      await window.electronAPI.setSetting(SETTING_KEYS.web_access_pin, webPin)
+                    }}
+                    placeholder="No PIN"
+                    className="w-28 px-2 py-1 text-sm bg-muted/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                    autoComplete="off"
+                  />
+                  <button
+                    onClick={() => setShowPin(!showPin)}
+                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Session timeout */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-sm text-foreground">Session timeout</p>
+                  <p className="text-xs text-muted-foreground">How long before requiring PIN again</p>
+                </div>
+                <select
+                  value={webSessionTimeout}
+                  onChange={async (e) => {
+                    setWebSessionTimeout(e.target.value)
+                    await window.electronAPI.setSetting(SETTING_KEYS.web_access_session_timeout, e.target.value)
+                  }}
+                  className="px-2 py-1 text-sm bg-muted/50 border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  <option value="3600000">1 hour</option>
+                  <option value="28800000">8 hours</option>
+                  <option value="86400000">24 hours</option>
+                  <option value="604800000">7 days</option>
+                </select>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
     </div>
   )
 }

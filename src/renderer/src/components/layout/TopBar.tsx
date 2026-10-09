@@ -48,6 +48,7 @@ interface TopBarProps {
   canGoBack?: boolean
   onForward?: () => void
   canGoForward?: boolean
+  isMobile?: boolean
 }
 
 // Small delayed tooltip for icon-only buttons
@@ -94,6 +95,7 @@ export function TopBar({
   canGoBack = false,
   onForward,
   canGoForward = false,
+  isMobile = false,
 }: TopBarProps) {
   const { sources } = useSources()
   const { count: wishlistCount } = useWishlist()
@@ -559,33 +561,35 @@ export function TopBar({
             )}
           </div>
 
-          {/* Back Button */}
-          <button
-            onClick={canGoBack && onBack ? onBack : undefined}
-            disabled={!canGoBack}
-            className={`p-1.5 rounded-md transition-colors shrink-0 ${
-              canGoBack
-                ? 'text-white hover:bg-white/10 cursor-pointer'
-                : 'text-neutral-600 cursor-default'
-            }`}
-            title="Go back (Alt+Left)"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-
-          {/* Forward Button */}
-          <button
-            onClick={canGoForward && onForward ? onForward : undefined}
-            disabled={!canGoForward}
-            className={`p-1.5 rounded-md transition-colors shrink-0 ${
-              canGoForward
-                ? 'text-white hover:bg-white/10 cursor-pointer'
-                : 'text-neutral-600 cursor-default'
-            }`}
-            title="Go forward (Alt+Right)"
-          >
-            <ArrowRight className="w-5 h-5" />
-          </button>
+          {/* Back/Forward — hidden on mobile */}
+          {!isMobile && (
+            <>
+              <button
+                onClick={canGoBack && onBack ? onBack : undefined}
+                disabled={!canGoBack}
+                className={`p-1.5 rounded-md transition-colors shrink-0 ${
+                  canGoBack
+                    ? 'text-white hover:bg-white/10 cursor-pointer'
+                    : 'text-neutral-600 cursor-default'
+                }`}
+                title="Go back (Alt+Left)"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <button
+                onClick={canGoForward && onForward ? onForward : undefined}
+                disabled={!canGoForward}
+                className={`p-1.5 rounded-md transition-colors shrink-0 ${
+                  canGoForward
+                    ? 'text-white hover:bg-white/10 cursor-pointer'
+                    : 'text-neutral-600 cursor-default'
+                }`}
+                title="Go forward (Alt+Right)"
+              >
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            </>
+          )}
 
         </div>
 
@@ -626,7 +630,7 @@ export function TopBar({
                   aria-selected={!isDashboard && libraryTab === 'movies'}
                 >
                   <Film className="w-4 h-4" />
-                  <span>Movies</span>
+                  {!isMobile && <span>Movies</span>}
                 </button>
               )}
 
@@ -643,7 +647,7 @@ export function TopBar({
                   aria-selected={!isDashboard && libraryTab === 'tv'}
                 >
                   <Tv className="w-4 h-4" />
-                  <span>TV Shows</span>
+                  {!isMobile && <span>TV Shows</span>}
                 </button>
               )}
 
@@ -660,7 +664,7 @@ export function TopBar({
                   aria-selected={!isDashboard && libraryTab === 'music'}
                 >
                   <Music className="w-4 h-4" />
-                  <span>Music</span>
+                  {!isMobile && <span>Music</span>}
                 </button>
               )}
 
@@ -675,8 +679,8 @@ export function TopBar({
           </div>
         )}
 
-        {/* Right Section: Panel Toggles & Settings */}
-        <div className="flex items-center justify-end flex-1 gap-2">
+        {/* Right Section: Panel Toggles & Settings — hidden on mobile (accessible from bottom tab) */}
+        <div className={`flex items-center justify-end flex-1 gap-2 ${isMobile ? 'hidden' : ''}`}>
           {/* AI Chat Toggle */}
           <Tooltip label="AI Chat">
             <button

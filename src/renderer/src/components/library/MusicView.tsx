@@ -66,6 +66,8 @@ export function MusicView({
   includeEps,
   includeSingles,
   onDismissMissingAlbum,
+  isMobile = false,
+  isTablet = false,
 }: {
   artists: MusicArtist[]
   totalArtistCount: number
@@ -110,6 +112,8 @@ export function MusicView({
   includeEps: boolean
   includeSingles: boolean
   onDismissMissingAlbum?: (album: MissingAlbum, artistName: string, artistMusicbrainzId?: string) => Promise<void>
+  isMobile?: boolean
+  isTablet?: boolean
 }) {
   const [isAnalyzingAlbum, setIsAnalyzingAlbum] = useState(false)
   const [isAnalyzingArtist, setIsAnalyzingArtist] = useState(false)
@@ -309,13 +313,22 @@ export function MusicView({
     }
   }
 
-  // Map scale to minimum poster width
   const posterMinWidth = useMemo(() => {
     const widthMap: Record<number, number> = {
       1: 120, 2: 140, 3: 160, 4: 180, 5: 200, 6: 240, 7: 300
     }
     return widthMap[gridScale] || widthMap[5]
   }, [gridScale])
+
+  const gridClassName = isMobile
+    ? 'grid grid-cols-3 gap-3'
+    : isTablet
+      ? 'grid grid-cols-4 gap-4'
+      : 'grid gap-8'
+
+  const gridStyle = (!isMobile && !isTablet)
+    ? { gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }
+    : undefined
 
   // Create lookup maps for artist and album names
   const artistNameMap = useMemo(() => {
@@ -1111,8 +1124,8 @@ export function MusicView({
             </div>
           ) : (
             <div
-              className="grid gap-6"
-              style={{ gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }}
+              className={gridClassName}
+              style={gridStyle}
             >
               {filteredAlbums.map(album => (
                 <AlbumCard
@@ -1168,7 +1181,7 @@ export function MusicView({
               ) : (
                 <div
                   className="grid gap-6"
-                  style={{ gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }}
+                  style={gridStyle}
                 >
                   {allMissing.map((album, idx) => (
                     <MissingAlbumCard
@@ -1262,8 +1275,8 @@ export function MusicView({
             </div>
           ) : (
             <div
-              className="grid gap-6"
-              style={{ gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }}
+              className={gridClassName}
+              style={gridStyle}
             >
               {artists.map(artist => (
                 <div key={artist.id} data-title={artist.name}>
@@ -1378,8 +1391,8 @@ export function MusicView({
             </div>
           ) : (
             <div
-              className="grid gap-6"
-              style={{ gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }}
+              className={gridClassName}
+              style={gridStyle}
             >
               {allFilteredAlbums.map(album => (
                 <div key={album.id} data-title={album.title}>

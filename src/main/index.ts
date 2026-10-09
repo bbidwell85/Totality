@@ -71,6 +71,9 @@ import { getTaskQueueService } from './services/TaskQueueService'
 import { getLoggingService } from './services/LoggingService'
 import { getAutoUpdateService } from './services/AutoUpdateService'
 import { getWishlistCompletionService } from './services/WishlistCompletionService'
+import { initWebServerService } from './services/WebServerService'
+import { registerWebAccessHandlers } from './ipc/webAccess'
+import { SETTING_KEYS } from '../shared/settingKeys'
 
 // __dirname is provided by CommonJS/Node
 declare const __dirname: string
@@ -282,6 +285,10 @@ app.on('before-quit', async (event) => {
   event.preventDefault()
   isClosing = true
 
+  // Stop web server
+  const { getWebServerService } = await import('./services/WebServerService')
+  getWebServerService()?.stop()
+
   // Stop live monitoring (close file watchers and polling timers)
   getLiveMonitoringService().stop()
 
@@ -422,6 +429,14 @@ app.whenReady().then(async () => {
     await sourceManager.initialize()
     console.log('Source manager initialized successfully')
 
+    // Intercept ipcMain.handle to build handler map for web server RPC bridge
+    const webHandlerMap = new Map<string, Function>()
+    const origHandle = ipcMain.handle.bind(ipcMain)
+    ipcMain.handle = ((channel: string, handler: (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown) => {
+      webHandlerMap.set(channel, handler)
+      return origHandle(channel, handler)
+    }) as typeof ipcMain.handle
+
     // Register IPC handlers
     registerDatabaseHandlers()
     registerQualityHandlers()
@@ -438,6 +453,19 @@ app.whenReady().then(async () => {
     registerAutoUpdateHandlers()
     registerGeminiHandlers()
     registerMoodHandlers()
+    registerWebAccessHandlers()
+
+    // Restore ipcMain.handle to original (interception complete)
+    ipcMain.handle = origHandle
+
+    // Initialize web server (uses captured handler map)
+    const webServer = initWebServerService(webHandlerMap, VITE_DEV_SERVER_URL)
+    const webAccessEnabled = db.getSetting(SETTING_KEYS.web_access_enabled)
+    if (webAccessEnabled === 'true') {
+      webServer.start().catch(err =>
+        console.error('[WebServer] Failed to auto-start:', err)
+      )
+    }
 
     // Initialize live monitoring service
     const liveMonitoringService = getLiveMonitoringService()

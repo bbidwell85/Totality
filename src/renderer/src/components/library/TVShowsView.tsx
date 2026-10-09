@@ -136,11 +136,12 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
 })
 
 // Episode row component with keyboard navigation
-const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
+const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade, isMobile = false }: {
   episode: MediaItem
   onClick: () => void
   onRescan?: (episode: MediaItem) => Promise<void>
   onDismissUpgrade?: (episode: MediaItem) => void
+  isMobile?: boolean
 }) => {
   const cardRef = useRef<HTMLDivElement>(null)
   const [showMenu, setShowMenu] = useState(false)
@@ -175,7 +176,7 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
     <div
       ref={cardRef}
       tabIndex={0}
-      className="group flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-hidden"
+      className={`group flex ${isMobile ? 'gap-2.5 p-2.5' : 'gap-4 p-4'} items-center hover:bg-muted/30 transition-colors cursor-pointer outline-hidden`}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -185,7 +186,7 @@ const EpisodeRow = memo(({ episode, onClick, onRescan, onDismissUpgrade }: {
       }}
     >
       {/* Episode Thumbnail - 16:9 aspect ratio with shadow */}
-      <div className="w-44 aspect-video bg-muted overflow-hidden rounded-md shadow-md shadow-black/20 shrink-0">
+      <div className={`${isMobile ? 'w-24' : 'w-44'} aspect-video bg-muted overflow-hidden rounded-md shadow-md shadow-black/20 shrink-0`}>
         {episode.episode_thumb_url ? (
           <img
             src={episode.episode_thumb_url}
@@ -284,6 +285,8 @@ export function TVShowsView({
   onLoadMoreShows,
   tvSortBy = 'title',
   onTvSortChange,
+  isMobile = false,
+  isTablet = false,
 }: {
   shows: TVShowSummary[]
   selectedShow: string | null
@@ -322,6 +325,8 @@ export function TVShowsView({
   onLoadMoreShows: () => void
   tvSortBy?: string
   onTvSortChange?: (sort: string) => void
+  isMobile?: boolean
+  isTablet?: boolean
 }) {
   // Breadcrumb navigation
   const handleBack = () => {
@@ -394,19 +399,22 @@ export function TVShowsView({
     return () => observer.disconnect()
   }, [onLoadMoreShows, selectedShow])
 
-  // Map scale to minimum poster width (same as movies)
   const posterMinWidth = useMemo(() => {
     const widthMap: Record<number, number> = {
-      1: 120,  // Smallest posters
-      2: 140,
-      3: 160,
-      4: 180,
-      5: 200,  // Default
-      6: 240,
-      7: 300   // Largest posters
+      1: 120, 2: 140, 3: 160, 4: 180, 5: 200, 6: 240, 7: 300
     }
     return widthMap[gridScale] || widthMap[5]
   }, [gridScale])
+
+  const gridClassName = isMobile
+    ? 'grid grid-cols-3 gap-3'
+    : isTablet
+      ? 'grid grid-cols-4 gap-4'
+      : 'grid gap-8'
+
+  const gridStyle = (!isMobile && !isTablet)
+    ? { gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }
+    : undefined
 
   // Show list view (top level - all shows)
   if (!selectedShow) {
@@ -427,7 +435,7 @@ export function TVShowsView({
         )
       }
       return (
-        <div className="grid gap-8 mt-4" style={{ gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }}>
+        <div className={`${gridClassName} mt-4`} style={gridStyle}>
           {Array.from({ length: 18 }).map((_, i) => (
             <div key={i}>
               <div className="aspect-2/3 bg-muted/50 rounded-md animate-pulse" />
@@ -499,10 +507,8 @@ export function TVShowsView({
       <>
         {statsBar}
         <div
-          className="grid gap-8 mt-4"
-          style={{
-            gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
-          }}
+          className={`${gridClassName} mt-4`}
+          style={gridStyle}
         >
           {shows.map((show) => {
             const completeness = seriesCompleteness.get(show.series_title)
@@ -573,10 +579,10 @@ export function TVShowsView({
         </button>
 
         {/* Show Header */}
-        <div className="flex gap-6 mb-6">
+        <div className={`flex ${isMobile ? 'gap-3 mb-4' : 'gap-6 mb-6'}`}>
           {/* Poster */}
           {selectedShowData.poster_url && (
-            <div className="w-44 aspect-2/3 bg-muted rounded-lg overflow-hidden shrink-0 shadow-lg shadow-black/30">
+            <div className={`${isMobile ? 'w-24' : 'w-44'} aspect-2/3 bg-muted rounded-lg overflow-hidden shrink-0 shadow-lg shadow-black/30`}>
               <img
                 src={selectedShowData.poster_url}
                 alt={selectedShowData.title}
@@ -593,7 +599,7 @@ export function TVShowsView({
           <div className="flex-1 min-w-0">
             {/* Title */}
             <div className="flex items-center gap-1.5">
-              <h3 className="text-3xl font-bold">{selectedShowData.title}</h3>
+              <h3 className={`${isMobile ? 'text-lg' : 'text-3xl'} font-bold`}>{selectedShowData.title}</h3>
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -662,10 +668,8 @@ export function TVShowsView({
         </div>
 
         <div
-          className="grid gap-8"
-          style={{
-            gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
-          }}
+          className={gridClassName}
+          style={gridStyle}
         >
           {allSeasonItems.map((item) => (
             item.type === 'owned' && item.season ? (
@@ -804,6 +808,7 @@ export function TVShowsView({
                 onClick={() => onSelectEpisode(item.episode.id)}
                 onRescan={onRescanEpisode}
                 onDismissUpgrade={onDismissUpgrade}
+                isMobile={isMobile}
                              />
             ) : (
               <MissingEpisodeRowWithArtwork
@@ -822,6 +827,7 @@ export function TVShowsView({
                   seriesTitle: selectedShowData.title
                 })}
                 onDismiss={onDismissMissingEpisode ? () => onDismissMissingEpisode(item.missing, selectedShowData.title, completenessData?.tmdb_id) : undefined}
+                isMobile={isMobile}
                              />
             )
           ))}
@@ -1024,13 +1030,15 @@ const MissingEpisodeRowWithArtwork = memo(({
   tmdbId,
   fallbackPosterUrl,
   onClick,
-  onDismiss
+  onDismiss,
+  isMobile = false,
 }: {
   episode: MissingEpisode
   tmdbId?: string
   fallbackPosterUrl?: string
   onClick: () => void
   onDismiss?: () => void
+  isMobile?: boolean
 }) => {
   const [stillUrl, setStillUrl] = useState<string | undefined>(fallbackPosterUrl)
   const [showMenu, setShowMenu] = useState(false)
@@ -1053,7 +1061,7 @@ const MissingEpisodeRowWithArtwork = memo(({
     <div
       ref={cardRef}
       tabIndex={0}
-      className="group flex gap-4 p-4 items-center hover:bg-muted/30 transition-colors cursor-pointer outline-hidden"
+      className={`group flex ${isMobile ? 'gap-2.5 p-2.5' : 'gap-4 p-4'} items-center hover:bg-muted/30 transition-colors cursor-pointer outline-hidden`}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -1063,7 +1071,7 @@ const MissingEpisodeRowWithArtwork = memo(({
       }}
     >
       {/* Missing Episode Thumbnail - 16:9 aspect ratio with shadow */}
-      <div className="w-44 aspect-video bg-muted shrink-0 overflow-hidden rounded-md shadow-md shadow-black/20">
+      <div className={`${isMobile ? 'w-24' : 'w-44'} aspect-video bg-muted shrink-0 overflow-hidden rounded-md shadow-md shadow-black/20`}>
         {stillUrl ? (
           <img
             src={stillUrl}

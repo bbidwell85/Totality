@@ -343,6 +343,9 @@ export interface MediaBrowserProps {
   onLibraryTabChange?: (tab: MediaViewType) => void
   // Notify parent of auto-refresh state
   onAutoRefreshChange?: (isRefreshing: boolean) => void
+  // Responsive layout
+  isMobile?: boolean
+  isTablet?: boolean
 }
 
 export interface MissingItemPopupData {

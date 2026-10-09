@@ -1,19 +1,26 @@
 <!doctype html>
-<html lang="en" style="background-color: #14151a;">
+<html lang="en" style="background-color: #1c1d26;">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Totality</title>
     <style>
       html, body, #root {
-        background-color: #14151a;
+        background-color: #1c1d26;
         margin: 0;
         padding: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+      html, body {
+        position: fixed;
+        width: 100%;
+        height: 100%;
       }
     </style>
   </head>
-  <body style="background-color: #14151a;">
+  <body style="background-color: #1c1d26;">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

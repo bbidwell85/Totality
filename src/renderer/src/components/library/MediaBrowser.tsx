@@ -74,7 +74,9 @@ export function MediaBrowser({
   onToggleChat: externalToggleChat,
   libraryTab,
   onLibraryTabChange,
-  onAutoRefreshChange
+  onAutoRefreshChange,
+  isMobile = false,
+  isTablet = false,
 }: MediaBrowserProps) {
   const { sources, activeSourceId, scanProgress, setActiveSource, markLibraryAsNew } = useSources()
   const { addToast } = useToast()
@@ -1805,8 +1807,8 @@ export function MediaBrowser({
       {/* Library Content Container - self-contained element */}
       <main
         id="library-content"
-        className={`fixed top-[76px] bottom-4 transition-[left,right,opacity] duration-300 ease-out flex flex-col ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}
-        style={{
+        className={`${hideHeader ? 'absolute inset-0' : 'fixed top-[76px] bottom-4'} transition-[left,right,opacity] duration-300 ease-out flex flex-col ${isRefreshing ? 'opacity-60' : 'opacity-100'}`}
+        style={hideHeader ? undefined : {
           left: sidebarCollapsed ? '96px' : '288px',
           right: '16px'
         }}
@@ -1814,12 +1816,12 @@ export function MediaBrowser({
         aria-label={`${view === 'movies' ? 'Movies' : view === 'tv' ? 'TV Shows' : 'Music'} library`}
       >
         {/* Controls Bar - sticky within container */}
-        <div className="shrink-0 py-3 px-4">
+        <div className={`shrink-0 py-3 ${isMobile ? 'px-2' : 'px-4'}`}>
           <div className="flex flex-col gap-2">
             {/* Row 1: Filters (left) | Separator | View Controls (right) */}
-            <div className="flex items-center justify-between">
+            <div className={`flex items-center justify-between ${isMobile ? 'flex-wrap gap-2' : ''}`}>
               {/* Left side: Filters */}
-              <div className="flex items-center gap-4">
+              <div className={`flex items-center ${isMobile ? 'gap-2 flex-wrap' : 'gap-4'}`}>
                 {/* Music View Mode Toggle */}
                 {view === 'music' && (
                   <div className="flex items-center gap-2">
@@ -1941,8 +1943,8 @@ export function MediaBrowser({
                 )}
               </div>
 
-              {/* Right side: Scale and View Toggle */}
-              <div className="flex items-center gap-3 ml-auto">
+              {/* Right side: Scale and View Toggle — hidden on mobile */}
+              <div className={`flex items-center gap-3 ml-auto ${isMobile ? 'hidden' : ''}`}>
                 {/* Grid Scale Slider */}
                 {!(view === 'tv' && selectedShow) &&
                  !(view === 'music' && musicViewMode === 'tracks') &&
@@ -1996,7 +1998,7 @@ export function MediaBrowser({
         {/* Scrollable Content Area with Alphabet Filter */}
         <div className="flex-1 relative min-h-0">
           {/* Main scrollable content */}
-          <div ref={scrollContainerRef} className="absolute inset-0 overflow-y-auto scrollbar-visible px-4 pb-4 pr-10">
+          <div ref={scrollContainerRef} className={`absolute inset-0 overflow-y-auto scrollbar-visible ${isMobile ? 'px-2 pb-24' : 'px-4 pb-4'} ${isMobile ? '' : 'pr-10'}`}>
 
         {/* Content Display */}
         {showEmptyState ? (
@@ -2031,6 +2033,8 @@ export function MediaBrowser({
               }}
               onLoadMoreMovies={loadMoreMovies}
               collectionsOnly={collectionsOnly}
+              isMobile={isMobile}
+              isTablet={isTablet}
             />
           ) : view === 'tv' ? (
           <TVShowsView
@@ -2073,6 +2077,8 @@ export function MediaBrowser({
               setTvSortBy(sort as 'title' | 'play_count' | 'last_watched_at')
               setTimeout(() => loadPaginatedShows(true), 0)
             }}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         ) : (
           <MusicView
@@ -2148,12 +2154,14 @@ export function MediaBrowser({
             includeEps={includeEps}
             includeSingles={includeSingles}
             onDismissMissingAlbum={handleDismissMissingAlbum}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         ))}
           </div>
 
-          {/* Vertical Alphabet Filter - positioned left of scrollbar */}
-          <div className="absolute right-3 top-0 bottom-0 flex flex-col items-center justify-between py-2" role="group" aria-label="Filter by letter">
+          {/* Vertical Alphabet Filter - positioned left of scrollbar (hidden on mobile) */}
+          <div className={`absolute right-3 top-0 bottom-0 flex flex-col items-center justify-between py-2 ${isMobile ? 'hidden' : ''}`} role="group" aria-label="Filter by letter">
             <button
               ref={(el) => {
                 if (el) alphabetFilterRefs.current.set('all', el)
@@ -2225,6 +2233,7 @@ export function MediaBrowser({
           key={`${selectedMediaId}-${detailRefreshKey}`}
           mediaId={selectedMediaId}
           onClose={() => setSelectedMediaId(null)}
+          isMobile={isMobile}
           onRescan={handleRescanItem}
           onFixMatch={(mediaItemId, title, year, filePath) => setMatchFixModal({ isOpen: true, type: 'movie', title, year, filePath, mediaItemId })}
           onDismissUpgrade={(mediaId, title) => {

@@ -51,6 +51,7 @@ interface DashboardProps {
   hasMovies?: boolean
   hasTV?: boolean
   hasMusic?: boolean
+  isMobile?: boolean
 }
 
 type UpgradeTab = 'movies' | 'tv' | 'music'
@@ -80,7 +81,8 @@ export function Dashboard({
   sidebarCollapsed = false,
   hasMovies = false,
   hasTV = false,
-  hasMusic = false
+  hasMusic = false,
+  isMobile = false,
 }: DashboardProps) {
   const { sources, activeSourceId } = useSources()
   const { addToast } = useToast()
@@ -1342,10 +1344,12 @@ export function Dashboard({
     return (
       <div
         ref={containerRef}
-        className="fixed top-[76px] bottom-4 flex flex-col overflow-hidden transition-[left,right] duration-300 ease-out"
+        className="fixed flex flex-col overflow-hidden transition-[left,right] duration-300 ease-out"
         style={{
-          left: sidebarCollapsed ? '96px' : '288px',
-          right: '16px'
+          top: isMobile ? 'max(env(safe-area-inset-top, 0px), 8px)' : '76px',
+          left: isMobile ? '8px' : (sidebarCollapsed ? '96px' : '288px'),
+          right: isMobile ? '8px' : '16px',
+          bottom: isMobile ? '80px' : '16px'
         }}
       >
         <div className="flex-1 flex gap-4 px-4 pb-4 overflow-x-auto overflow-y-hidden">
@@ -1376,10 +1380,12 @@ export function Dashboard({
     return (
       <div
         ref={containerRef}
-        className="fixed top-[76px] bottom-4 flex flex-col items-center justify-center transition-[left,right] duration-300 ease-out"
+        className="fixed flex flex-col items-center justify-center transition-[left,right] duration-300 ease-out"
         style={{
-          left: sidebarCollapsed ? '96px' : '288px',
-          right: '16px'
+          top: isMobile ? 'max(env(safe-area-inset-top, 0px), 8px)' : '76px',
+          left: isMobile ? '8px' : (sidebarCollapsed ? '96px' : '288px'),
+          right: isMobile ? '8px' : '16px',
+          bottom: isMobile ? '80px' : '16px'
         }}
       >
         <div className="text-destructive mb-4">{error}</div>
@@ -1396,10 +1402,11 @@ export function Dashboard({
   return (
     <div
       ref={containerRef}
-      className="fixed top-[76px] bottom-0 flex flex-col overflow-visible transition-[left,right] duration-300 ease-out pb-4"
+      className="fixed bottom-0 flex flex-col overflow-visible transition-[left,right] duration-300 ease-out pb-4"
       style={{
-        left: sidebarCollapsed ? '96px' : '288px',
-        right: '16px'
+        top: isMobile ? 'max(env(safe-area-inset-top, 0px), 8px)' : '76px',
+        left: isMobile ? '8px' : (sidebarCollapsed ? '96px' : '288px'),
+        right: isMobile ? '8px' : '16px'
       }}
     >
       {/* Empty states */}

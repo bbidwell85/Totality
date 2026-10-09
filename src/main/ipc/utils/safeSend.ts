@@ -29,6 +29,15 @@ export function safeSend(win: BrowserWindow | null, channel: string, ...args: un
   } catch (error) {
     // Silently ignore - window was likely closed during operation
   }
+  // Also broadcast to web clients
+  try {
+    const { getWebServerService } = require('../../services/WebServerService')
+    const webServer = getWebServerService()
+    if (webServer?.isRunning()) {
+      webServer.broadcastEvent(channel, ...args)
+    }
+  } catch { /* web server not initialized yet */ }
+
   return false
 }
 

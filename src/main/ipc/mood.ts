@@ -271,6 +271,7 @@ export function registerMoodHandlers() {
         return { ...result, errors: [`Mood sync not yet supported for ${provider.providerType}`] }
       }
 
+      safeSend(mainWindow, 'library:updated', { type: 'music' })
       return result
     } catch (error) {
       return { ...result, errors: [getErrorMessage(error)] }

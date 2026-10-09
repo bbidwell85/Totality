@@ -12,6 +12,7 @@ interface WishlistItemCardProps {
   onUpdatePriority: (id: number, priority: WishlistPriority) => void
   onMarkCompleted: (id: number) => void
   onMarkActive: (id: number) => void
+  isMobile?: boolean
 }
 
 // Media type icons
@@ -37,7 +38,8 @@ export const WishlistItemCard = memo(function WishlistItemCard({
   onRemove,
   onUpdatePriority,
   onMarkCompleted,
-  onMarkActive
+  onMarkActive,
+  isMobile = false
 }: WishlistItemCardProps) {
   const { getStoreLinks, openStoreLink } = useWishlist()
   const [storeLinks, setStoreLinks] = useState<StoreLink[]>([])
@@ -180,8 +182,8 @@ export const WishlistItemCard = memo(function WishlistItemCard({
           </div>
         </div>
 
-        {/* Current quality info for upgrade items */}
-        {isUpgrade && item.current_quality_tier && (
+        {/* Current quality info for upgrade items — hidden on mobile */}
+        {!isMobile && isUpgrade && item.current_quality_tier && (
           <div className="flex items-center gap-1.5 mt-1">
             <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${tierColorClass}`}>
               {item.current_quality_tier}
@@ -199,28 +201,28 @@ export const WishlistItemCard = memo(function WishlistItemCard({
         {isCompleted && (
           <div className="flex items-center justify-between mt-1">
             {item.completed_at && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 Completed {getCompletedDate()}
               </span>
             )}
-            <div className="flex items-center gap-1 ml-auto">
+            <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-1'} ml-auto`}>
               <button
                 onClick={() => onMarkActive(item.id)}
-                className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                className={isMobile
+                  ? 'min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-white/10 text-muted-foreground hover:bg-white/20 hover:text-foreground transition-colors'
+                  : 'p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground'}
                 title="Move back to active"
               >
-                <RotateCcw className="w-4 h-4" />
+                <RotateCcw className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
               </button>
               <button
                 onClick={handleRemove}
-                className={`p-1.5 rounded-md transition-colors ${
-                  showConfirmDelete
-                    ? 'text-destructive'
-                    : 'text-muted-foreground hover:text-destructive'
-                }`}
+                className={isMobile
+                  ? `min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full transition-colors ${showConfirmDelete ? 'bg-destructive/20 text-destructive' : 'bg-white/10 text-muted-foreground hover:bg-white/20 hover:text-foreground'}`
+                  : `p-1.5 rounded-md transition-colors ${showConfirmDelete ? 'text-destructive' : 'text-muted-foreground hover:text-destructive'}`}
                 title={showConfirmDelete ? 'Click again to confirm' : 'Remove from wishlist'}
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} />
               </button>
             </div>
           </div>
@@ -234,29 +236,31 @@ export const WishlistItemCard = memo(function WishlistItemCard({
               onChange={(rating) => onUpdatePriority(item.id, rating)}
               size="sm"
             />
-            <div className="flex items-center gap-1">
-              <StoreLinksMenu
-                storeLinks={storeLinks}
-                onOpenLink={openStoreLink}
-                isLoading={isLoadingLinks}
-              />
+            <div className={`flex items-center ${isMobile ? 'gap-2' : 'gap-1'}`}>
+              {!isMobile && (
+                <StoreLinksMenu
+                  storeLinks={storeLinks}
+                  onOpenLink={openStoreLink}
+                  isLoading={isLoadingLinks}
+                />
+              )}
               <button
                 onClick={() => onMarkCompleted(item.id)}
-                className="p-1.5 rounded-md transition-colors text-muted-foreground hover:text-green-500"
+                className={isMobile
+                  ? 'min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-white/10 text-muted-foreground hover:bg-white/20 hover:text-green-400 transition-colors'
+                  : 'p-1.5 rounded-md transition-colors text-muted-foreground hover:text-green-500'}
                 title="Mark as completed"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
+                <CheckCircle2 className={isMobile ? 'w-5 h-5' : 'w-3.5 h-3.5'} />
               </button>
               <button
                 onClick={handleRemove}
-                className={`p-1.5 rounded-md transition-colors ${
-                  showConfirmDelete
-                    ? 'text-destructive'
-                    : 'text-muted-foreground hover:text-destructive'
-                }`}
+                className={isMobile
+                  ? `min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full transition-colors ${showConfirmDelete ? 'bg-destructive/20 text-destructive' : 'bg-white/10 text-muted-foreground hover:bg-white/20 hover:text-foreground'}`
+                  : `p-1.5 rounded-md transition-colors ${showConfirmDelete ? 'text-destructive' : 'text-muted-foreground hover:text-destructive'}`}
                 title={showConfirmDelete ? 'Click again to confirm' : 'Remove from wishlist'}
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className={isMobile ? 'w-5 h-5' : 'w-3.5 h-3.5'} />
               </button>
             </div>
           </div>

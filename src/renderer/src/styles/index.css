@@ -999,3 +999,30 @@ textarea:focus-visible,
   scrollbar-color: hsl(var(--border)) transparent;
 }
 
+/* Prevent mobile viewport bounce/scroll on touch */
+@media (max-width: 767px) {
+  .overflow-y-auto {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Mobile safe area for notched devices */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Responsive slide-out panels: full-width on small screens */
+@media (max-width: 767px) {
+  .slide-panel {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    top: max(env(safe-area-inset-top, 0px), 8px) !important;
+    bottom: 80px !important;
+  }
+}
+

@@ -30,7 +30,9 @@ export function MoviesView({
   movieSortBy = 'title',
   onMovieSortChange,
   onLoadMoreMovies,
-  collectionsOnly = false
+  collectionsOnly = false,
+  isMobile = false,
+  isTablet = false,
 }: {
   movies: MediaItem[]
   onSelectMovie: (id: number, movie: MediaItem) => void
@@ -49,20 +51,26 @@ export function MoviesView({
   onMovieSortChange?: (sort: MovieSortBy) => void
   onLoadMoreMovies: () => void
   collectionsOnly?: boolean
+  isMobile?: boolean
+  isTablet?: boolean
 }) {
-  // Map scale to minimum poster width (1=smallest, 7=largest)
+  // On mobile: fixed 3 columns. On tablet: fixed 4 columns. Desktop: auto-fill with scale.
   const posterMinWidth = useMemo(() => {
     const widthMap: Record<number, number> = {
-      1: 120,  // Smallest posters
-      2: 140,
-      3: 160,
-      4: 180,
-      5: 200,  // Default
-      6: 240,
-      7: 300   // Largest posters
+      1: 120, 2: 140, 3: 160, 4: 180, 5: 200, 6: 240, 7: 300
     }
     return widthMap[gridScale] || widthMap[5]
   }, [gridScale])
+
+  const gridClassName = isMobile
+    ? 'grid grid-cols-3 gap-3 mt-4'
+    : isTablet
+      ? 'grid grid-cols-4 gap-4 mt-4'
+      : `grid gap-8 mt-4`
+
+  const gridStyle = (!isMobile && !isTablet)
+    ? { gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }
+    : undefined
 
   const movieSentinelRef = useRef<HTMLDivElement>(null)
 
@@ -205,8 +213,8 @@ export function MoviesView({
     if (moviesLoading) {
       return (
         <div
-          className="grid gap-8 mt-4"
-          style={{ gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)` }}
+          className={`grid mt-4 ${isMobile ? 'gap-3' : 'gap-8'}`}
+          style={gridStyle}
         >
           {Array.from({ length: 18 }).map((_, i) => (
             <div key={i}>
@@ -308,10 +316,8 @@ export function MoviesView({
     <div>
       {statsBar}
       <div
-        className="grid gap-8 mt-4"
-        style={{
-          gridTemplateColumns: `repeat(auto-fill, ${posterMinWidth}px)`
-        }}
+        className={gridClassName}
+        style={gridStyle}
       >
         {displayItems.map((item) => {
           if (item.type === 'collection') {

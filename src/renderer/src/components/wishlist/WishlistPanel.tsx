@@ -162,18 +162,18 @@ function WishlistSearch() {
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-medium truncate">{result.title}</div>
-                  <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
                     {typeIcon(result.type)}
                     <span>{result.type === 'tv' ? 'TV' : 'Movie'}</span>
                     {result.release_date && <span>· {new Date(result.release_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
                     {!result.release_date && result.year && <span>· {result.year}</span>}
                   </div>
                   {result.physical_release_date && (
-                    <div className="text-[10px] text-primary/70">Blu-ray/Digital: {new Date(result.physical_release_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                    <div className="text-xs text-primary/70">Blu-ray/Digital: {new Date(result.physical_release_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
                   )}
                 </div>
                 {result.owned ? (
-                  <span className="shrink-0 text-[10px] text-muted-foreground/60 px-1.5">Owned</span>
+                  <span className="shrink-0 text-xs text-muted-foreground/60 px-1.5">Owned</span>
                 ) : (
                   <button
                     onClick={() => handleAdd(result)}
@@ -200,6 +200,8 @@ function WishlistSearch() {
 export interface WishlistPanelProps {
   isOpen: boolean
   onClose: () => void
+  isMobile?: boolean
+  inline?: boolean
 }
 
 type SortOption = 'priority' | 'added_at' | 'title' | 'year' | 'completed_at'
@@ -207,7 +209,7 @@ type FilterType = WishlistMediaType | 'all'
 type CategoryType = WishlistReason | 'all'
 type StatusType = WishlistStatus | 'all'
 
-export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
+export function WishlistPanel({ isOpen, onClose, isMobile = false, inline = false }: WishlistPanelProps) {
   const {
     items,
     counts,
@@ -360,18 +362,24 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
 
   return (
     <>
-    <div
-      className={`fixed inset-0 bg-black/40 z-[45] transition-opacity duration-300 ${
-        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-      }`}
-      onClick={onClose}
-    />
+    {/* Backdrop scrim — hidden in inline mode */}
+    {!inline && (
+      <div
+        className={`fixed inset-0 bg-black/40 z-[45] transition-opacity duration-300 ${
+          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={onClose}
+      />
+    )}
     <aside
       ref={panelRef}
       id="wishlist-panel"
-      className={`fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-[46] flex flex-col overflow-hidden transition-opacity duration-200 ease-out ${
-        isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
-      }`}
+      className={inline
+        ? 'flex flex-col h-full overflow-hidden'
+        : `fixed top-[76px] bottom-4 right-4 w-80 bg-sidebar-gradient rounded-2xl shadow-xl z-[46] slide-panel flex flex-col overflow-hidden transition-opacity duration-200 ease-out ${
+            isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`
+      }
       onKeyDown={handleKeyDown}
       role="complementary"
       aria-label="Shopping wishlist"
@@ -389,41 +397,43 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
-          {counts.total > 0 && (
+        {!inline && (
+          <div className="flex items-center gap-1">
+            {counts.total > 0 && (
+              <button
+                ref={exportButtonRef}
+                onClick={handleExport}
+                disabled={isExporting}
+                className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-hidden disabled:opacity-50"
+                aria-label="Export wishlist to CSV"
+                title="Export to CSV"
+              >
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <Download className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            )}
             <button
-              ref={exportButtonRef}
-              onClick={handleExport}
-              disabled={isExporting}
-              className="p-1.5 rounded-md hover:bg-muted transition-colors focus:outline-hidden disabled:opacity-50"
-              aria-label="Export wishlist to CSV"
-              title="Export to CSV"
+              ref={closeButtonRef}
+              onClick={onClose}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary"
+              aria-label="Close wishlist panel"
             >
-              {isExporting ? (
-                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-              ) : (
-                <Download className="w-4 h-4 text-muted-foreground" />
-              )}
+              <X className="w-4 h-4" />
             </button>
-          )}
-          <button
-            ref={closeButtonRef}
-            onClick={onClose}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus:outline-hidden focus:ring-2 focus:ring-primary"
-            aria-label="Close wishlist panel"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Sync sections */}
-      <div className="px-3 pt-2 pb-1 border-b border-border/30 space-y-1.5">
+      {/* Sync sections — hidden in inline/mobile mode */}
+      {!inline && <div className="px-3 pt-2 pb-1 border-b border-border/30 space-y-1.5">
         {/* Plex watchlist sync */}
         {hasPlexSource && (
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-muted-foreground w-14 shrink-0">Plex</span>
-            <span className="flex-1 text-[11px] text-muted-foreground/60">Plex Watchlist</span>
+            <span className="text-xs text-muted-foreground w-14 shrink-0">Plex</span>
+            <span className="flex-1 text-xs text-muted-foreground/60">Plex Watchlist</span>
             <button onClick={async () => {
               if (syncingPlex) return
               setSyncingPlex(true); setPlexResult(null)
@@ -438,12 +448,12 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
               className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-50 shrink-0" title="Sync Plex watchlist">
               {syncingPlex ? <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" /> : <RefreshCw className="w-3 h-3 text-muted-foreground" />}
             </button>
-            {plexResult && <span className={`text-[10px] shrink-0 ${plexResult === 'Error' ? 'text-destructive' : 'text-primary'}`}>{plexResult}</span>}
+            {plexResult && <span className={`text-xs shrink-0 ${plexResult === 'Error' ? 'text-destructive' : 'text-primary'}`}>{plexResult}</span>}
           </div>
         )}
         {/* Trakt sync */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-muted-foreground w-14 shrink-0">Trakt</span>
+          <span className="text-xs text-muted-foreground w-14 shrink-0">Trakt</span>
           <input type="text" value={traktUser} onChange={e => setTraktUser(e.target.value)}
             onKeyDown={async e => {
               if (e.key === 'Enter' && traktUser.trim() && !syncingTrakt) {
@@ -459,7 +469,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
               }
             }}
             placeholder="username"
-            className="flex-1 px-2 py-1 bg-background border border-border/30 rounded text-[11px] focus:outline-hidden focus:ring-1 focus:ring-primary min-w-0" />
+            className="flex-1 px-2 py-1 bg-background border border-border/30 rounded text-xs focus:outline-hidden focus:ring-1 focus:ring-primary min-w-0" />
           <button onClick={async () => {
             if (!traktUser.trim() || syncingTrakt) return
             await window.electronAPI.setSetting(SETTING_KEYS.trakt_username, traktUser.trim())
@@ -475,20 +485,20 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
             className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-50 shrink-0" title="Sync Trakt watchlist">
             {syncingTrakt ? <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" /> : <RefreshCw className="w-3 h-3 text-muted-foreground" />}
           </button>
-          {traktResult && <span className={`text-[10px] shrink-0 ${traktResult === 'Error' ? 'text-destructive' : 'text-primary'}`}>{traktResult}</span>}
+          {traktResult && <span className={`text-xs shrink-0 ${traktResult === 'Error' ? 'text-destructive' : 'text-primary'}`}>{traktResult}</span>}
         </div>
-      </div>
+      </div>}
 
-      {/* Sync Preview */}
-      {syncPreview && (
+      {/* Sync Preview — hidden in inline mode */}
+      {!inline && syncPreview && (
         <div className="flex-1 flex flex-col min-h-0 border-b border-border/30">
           <div className="flex items-center justify-between px-3 py-2 bg-muted/20 shrink-0">
             <span className="text-xs font-medium">{syncPreview.length} from {syncPreviewSource === 'plex' ? 'Plex' : 'Trakt'}</span>
             <div className="flex items-center gap-2">
               <button onClick={() => setSyncPreviewSelected(new Set(syncPreview.map((_, i) => i)))}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">All</button>
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors">All</button>
               <button onClick={() => setSyncPreviewSelected(new Set())}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">None</button>
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors">None</button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto min-h-0">
@@ -510,7 +520,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium truncate">{item.title}</div>
-                    <div className="text-[10px] text-muted-foreground">{item.media_type === 'season' ? 'TV' : 'Movie'}{item.year ? ` · ${item.year}` : ''}</div>
+                    <div className="text-xs text-muted-foreground">{item.media_type === 'season' ? 'TV' : 'Movie'}{item.year ? ` · ${item.year}` : ''}</div>
                   </div>
                 </button>
               )
@@ -572,7 +582,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
                   setActiveFilter('all')
                   setSortBy(type === 'completed' ? 'completed_at' : 'priority')
                 }}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-2 text-xs rounded-lg transition-colors ${
+                className={`flex-1 flex items-center justify-center gap-1.5 ${isMobile ? 'px-3 py-3 min-h-[44px] text-sm' : 'px-2 py-2 text-xs'} rounded-lg transition-colors ${
                   activeStatus === type
                     ? type === 'completed' ? 'bg-green-600 text-white' : 'bg-primary text-primary-foreground'
                     : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
@@ -600,7 +610,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
               <button
                 key={type}
                 onClick={() => { setActiveCategory(type); if (type === 'all') setActiveFilter('all') }}
-                className={`flex items-center gap-1 px-2 py-1 text-xs rounded-full transition-colors ${
+                className={`flex items-center gap-1 ${isMobile ? 'px-3 py-2 min-h-[44px] text-sm' : 'px-2 py-1 text-xs'} rounded-full transition-colors ${
                   activeCategory === type
                     ? 'bg-primary/20 text-primary'
                     : 'bg-muted/20 text-muted-foreground hover:bg-muted/30'
@@ -621,7 +631,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
               <button
                 key={type}
                 onClick={() => setActiveFilter(activeFilter === type ? 'all' : type)}
-                className={`flex items-center gap-1 px-2 py-1 text-xs rounded-full transition-colors ${
+                className={`flex items-center gap-1 ${isMobile ? 'px-3 py-2 min-h-[44px] text-sm' : 'px-2 py-1 text-xs'} rounded-full transition-colors ${
                   activeFilter === type
                     ? 'bg-primary/20 text-primary'
                     : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
@@ -640,9 +650,9 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
         <div className="p-3 border-b border-border/30">
 
           {/* Sort options */}
-          <div className="flex items-center gap-2 text-xs">
+          <div className={`flex items-center gap-2 ${isMobile ? 'text-sm' : 'text-xs'}`}>
             <span className="text-muted-foreground">Sort:</span>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {(activeStatus === 'completed'
                 ? (['completed_at', 'added_at', 'title'] as SortOption[])
                 : (['priority', 'added_at', 'title'] as SortOption[])
@@ -650,7 +660,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
                 <button
                   key={field}
                   onClick={() => toggleSort(field)}
-                  className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  className={`${isMobile ? 'px-3 py-2 min-h-[44px]' : 'px-2 py-0.5'} rounded transition-colors flex items-center gap-1 ${
                     sortBy === field
                       ? 'bg-muted text-foreground'
                       : 'text-muted-foreground hover:text-foreground'
@@ -689,7 +699,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
                 </div>
                 <div className="space-y-2">
                   {missingItems.map((item) => (
-                    <WishlistItemCard
+                    <WishlistItemCard isMobile={isMobile}
                       key={item.id}
                       item={item}
                       onRemove={handleRemove}
@@ -713,7 +723,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
                 </div>
                 <div className="space-y-2">
                   {upgradeItems.map((item) => (
-                    <WishlistItemCard
+                    <WishlistItemCard isMobile={isMobile}
                       key={item.id}
                       item={item}
                       onRemove={handleRemove}
@@ -730,7 +740,7 @@ export function WishlistPanel({ isOpen, onClose }: WishlistPanelProps) {
           // Show flat list when filtered by category
           <div className="space-y-2">
             {items.map((item) => (
-              <WishlistItemCard
+              <WishlistItemCard isMobile={isMobile}
                 key={item.id}
                 item={item}
                 onRemove={handleRemove}
