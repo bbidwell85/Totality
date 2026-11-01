@@ -262,6 +262,7 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
       pushNavState({ view: 'dashboard' })
     }
     setCurrentView('dashboard')
+    setBackdropUrl(null)
   }
 
   const handleBack = useCallback(() => {

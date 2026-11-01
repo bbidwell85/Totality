@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Search, Check, Star, Calendar, Loader2 } from 'lucide-react'
+import { X, Search, Check, Star, Calendar, User } from 'lucide-react'
+import { Button } from '../ui/Button'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 
 interface TMDBSearchResult {
@@ -237,21 +238,21 @@ export function MatchFixModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-200 flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
     >
       <div
         ref={modalRef}
-        className="bg-card rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"
+        className="bg-card rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden border border-border"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border/30 bg-card rounded-t-xl">
+        <div className="flex items-center justify-between p-4 border-b border-border/30">
           <div className="min-w-0 flex-1 mr-4">
-            <h2 className="text-lg font-semibold">Fix {getTypeLabel()} Match</h2>
+            <h2 className="text-title font-semibold">Fix {getTypeLabel()} match</h2>
             <p className="text-label text-muted-foreground">
               Current: <span className="text-foreground">{currentTitle}</span>
             </p>
@@ -283,18 +284,15 @@ export function MatchFixModal({
                 autoFocus
               />
             </div>
-            <button
+            <Button
               onClick={handleSearch}
               disabled={isSearching || !searchQuery.trim()}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-label font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              loading={isSearching}
+              size="sm"
+              icon={!isSearching ? <Search className="w-4 h-4" /> : undefined}
             >
-              {isSearching ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Search className="w-4 h-4" />
-              )}
               Search
-            </button>
+            </Button>
           </div>
 
           {error && (
@@ -319,18 +317,20 @@ export function MatchFixModal({
               const poster = getResultPoster(result)
               const subtitle = getResultSubtitle(result)
 
+              const isArtistType = type === 'artist'
+
               return (
                 <button
                   key={index}
                   onClick={() => setSelectedResult(result)}
-                  className={`w-full flex items-start gap-3 p-3 rounded-lg text-left transition-colors ${
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
                     isSelected
-                      ? 'bg-primary/20 border-2 border-primary'
-                      : 'bg-muted/30 hover:bg-muted/50 border-2 border-transparent'
+                      ? 'bg-foreground text-background'
+                      : 'hover:bg-muted/50'
                   }`}
                 >
-                  {/* Poster/Thumbnail */}
-                  <div className="w-12 h-16 shrink-0 bg-muted rounded overflow-hidden">
+                  {/* Poster/Thumbnail — circle for artists, portrait for movies/shows */}
+                  <div className={`shrink-0 bg-muted overflow-hidden ${isArtistType ? 'w-12 h-12 rounded-full' : 'w-12 h-16 rounded'}`}>
                     {poster ? (
                       <img
                         src={poster}
@@ -338,8 +338,8 @@ export function MatchFixModal({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground text-caption">
-                        No Image
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <User className="w-6 h-6" />
                       </div>
                     )}
                   </div>
@@ -349,11 +349,11 @@ export function MatchFixModal({
                     <div className="flex items-start justify-between gap-2">
                       <div className="font-medium truncate">{title}</div>
                       {isSelected && (
-                        <Check className="w-5 h-5 text-foreground shrink-0" />
+                        <Check className="w-5 h-5 shrink-0" />
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3 mt-1 text-label text-muted-foreground">
+                    <div className={`flex items-center gap-3 mt-1 text-label ${isSelected ? 'opacity-70' : 'text-muted-foreground'}`}>
                       {year && (
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
@@ -362,7 +362,7 @@ export function MatchFixModal({
                       )}
                       {score > 0 && (
                         <span className="flex items-center gap-1">
-                          <Star className="w-3 h-3 text-yellow-500" />
+                          <Star className="w-3 h-3" />
                           {score.toFixed(1)}
                         </span>
                       )}
@@ -372,7 +372,7 @@ export function MatchFixModal({
                     </div>
 
                     {'overview' in result && result.overview && (
-                      <p className="mt-1 text-caption text-muted-foreground line-clamp-2">
+                      <p className={`mt-1 text-caption line-clamp-2 ${isSelected ? 'opacity-70' : 'text-muted-foreground'}`}>
                         {result.overview}
                       </p>
                     )}
@@ -385,24 +385,18 @@ export function MatchFixModal({
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 p-4 border-t border-border/30">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-label font-medium hover:bg-muted transition-colors"
-          >
+          <Button variant="tertiary" size="sm" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            size="sm"
             onClick={handleFixMatch}
             disabled={!selectedResult || isFixing}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-label font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            loading={isFixing}
+            icon={!isFixing ? <Check className="w-4 h-4" /> : undefined}
           >
-            {isFixing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Check className="w-4 h-4" />
-            )}
-            Apply Match
-          </button>
+            Apply match
+          </Button>
         </div>
       </div>
     </div>,

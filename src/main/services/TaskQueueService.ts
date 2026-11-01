@@ -592,7 +592,7 @@ export class TaskQueueService {
         task.status = 'failed'
         task.error = errorMsg
         this.addTaskHistoryEntry(task, 'task-failed', `Failed: ${task.label} - ${task.error}`)
-        console.error(`[TaskQueue] Task failed: ${task.label}`, error)
+        console.error(`[TaskQueue] Task failed: ${task.label} (type=${task.type}, sourceId=${task.sourceId || 'all'}, libraryId=${task.libraryId || 'all'})`, error)
         try {
           getDatabase().createNotification({
             type: 'error',

@@ -160,8 +160,8 @@ export class WebServerService {
         }
       }
       getLoggingService().verbose('WebServer', `Restored ${this.sessions.size} persisted sessions`)
-    } catch {
-      // Ignore parse errors
+    } catch (err) {
+      console.warn('[WebServer] Failed to restore sessions:', (err as Error).message)
     }
   }
 
@@ -171,8 +171,8 @@ export class WebServerService {
       const db = getDatabase()
       const entries = Array.from(this.sessions.entries())
       db.setSetting('web_sessions', JSON.stringify(entries))
-    } catch {
-      // Non-critical
+    } catch (err) {
+      console.warn('[WebServer] Failed to persist sessions:', (err as Error).message)
     }
   }
 

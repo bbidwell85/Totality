@@ -6098,9 +6098,9 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   /**
    * Global search across all media types
    */
-  globalSearch(query: string, maxResults = 5): {
-    movies: Array<{ id: number; title: string; year?: number; poster_url?: string }>
-    tvShows: Array<{ id: number; title: string; poster_url?: string }>
+  globalSearch(query: string, maxResults = 15): {
+    movies: Array<{ id: number; title: string; year?: number; poster_url?: string; tmdb_id?: string }>
+    tvShows: Array<{ id: number; title: string; poster_url?: string; tmdb_id?: string }>
     episodes: Array<{ id: number; title: string; series_title: string; season_number: number; episode_number: number; poster_url?: string }>
     artists: Array<{ id: number; name: string; thumb_url?: string }>
     albums: Array<{ id: number; title: string; artist_name: string; year?: number; thumb_url?: string }>
@@ -6117,19 +6117,19 @@ WHERE m.type = 'episode' AND m.series_title = ?`
 
     // Search movies
     const moviesStmt = this.db.prepare(`
-      SELECT id, title, year, poster_url
+      SELECT id, title, year, poster_url, tmdb_id
       FROM media_items
       WHERE type = 'movie' AND LOWER(title) ${likeOp} ?
       ORDER BY title
       LIMIT ?
     `)
     const movies = moviesStmt.all(searchQuery, maxResults) as Array<{
-      id: number; title: string; year?: number; poster_url?: string
+      id: number; title: string; year?: number; poster_url?: string; tmdb_id?: string
     }>
 
     // Search TV shows (unique series titles)
     const tvShowsStmt = this.db.prepare(`
-      SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url
+      SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url, MIN(tmdb_id) as tmdb_id
       FROM media_items
       WHERE type = 'episode' AND series_title IS NOT NULL AND LOWER(series_title) ${likeOp} ?
       GROUP BY series_title
@@ -6137,7 +6137,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       LIMIT ?
     `)
     const tvShows = tvShowsStmt.all(searchQuery, maxResults) as Array<{
-      id: number; title: string; poster_url?: string
+      id: number; title: string; poster_url?: string; tmdb_id?: string
     }>
 
     // Search episodes

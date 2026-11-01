@@ -160,7 +160,7 @@ export function AddToWishlistButton({
       <button
         onClick={(e) => { e.stopPropagation(); handleToggle() }}
         disabled={isLoading}
-        className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-50 ${
+        className={`min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors disabled:opacity-50 ${
           isInWishlist
             ? 'text-amber-400'
             : 'text-muted-foreground hover:text-foreground'

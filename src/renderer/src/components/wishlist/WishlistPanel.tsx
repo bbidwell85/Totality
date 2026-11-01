@@ -43,9 +43,13 @@ function WishlistSearch({ isMobile = false }: { isMobile?: boolean }) {
         window.electronAPI.mediaSearch(q).catch(() => ({ movies: [], tvShows: [], episodes: [], artists: [], albums: [], tracks: [] })),
       ])
 
-      // Build sets of owned titles for ownership tagging
-      const ownedMovieTitles = new Set(local.movies.map(m => m.title.toLowerCase()))
-      const ownedTVTitles = new Set(local.tvShows.map(s => s.title.toLowerCase()))
+      // Build sets of owned TMDB IDs + titles for ownership tagging
+      const localMovies = local.movies as Array<{ id: number; title: string; tmdb_id?: string }>
+      const localShows = local.tvShows as Array<{ id: number; title: string; tmdb_id?: string }>
+      const ownedMovieTmdbIds = new Set(localMovies.filter(m => m.tmdb_id).map(m => m.tmdb_id))
+      const ownedMovieTitles = new Set(localMovies.map(m => m.title.toLowerCase()))
+      const ownedTVTmdbIds = new Set(localShows.filter(s => s.tmdb_id).map(s => s.tmdb_id))
+      const ownedTVTitles = new Set(localShows.map(s => s.title.toLowerCase()))
 
       const combined: SearchResult[] = []
 
@@ -57,7 +61,7 @@ function WishlistSearch({ isMobile = false }: { isMobile?: boolean }) {
           type: 'movie',
           poster_url: m.poster_url || undefined,
           tmdb_id: m.id,
-          owned: ownedMovieTitles.has(m.title.toLowerCase()),
+          owned: ownedMovieTmdbIds.has(String(m.id)) || ownedMovieTitles.has(m.title.toLowerCase()),
           release_date: m.release_date || undefined,
           physical_release_date: m.physical_release_date || undefined,
         })
@@ -71,7 +75,7 @@ function WishlistSearch({ isMobile = false }: { isMobile?: boolean }) {
           type: 'tv',
           poster_url: s.poster_url || undefined,
           tmdb_id: s.id,
-          owned: ownedTVTitles.has(s.name.toLowerCase()),
+          owned: ownedTVTmdbIds.has(String(s.id)) || ownedTVTitles.has(s.name.toLowerCase()),
           release_date: s.first_air_date || undefined,
         })
       }

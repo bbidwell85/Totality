@@ -811,6 +811,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                 {/* Action buttons — below title, scroll as unit */}
                 <div className="flex items-center gap-3 mt-2">
                   {media.tier_quality && media.tier_quality !== 'HIGH' && (
+                    <div className="rounded-full bg-white/10 hover:bg-white/20 transition-colors">
                     <AddToWishlistButton
                       compact
                       mediaType={media.type as WishlistMediaType}
@@ -830,6 +831,7 @@ export function MediaDetails({ mediaId, onClose, onRescan, onFixMatch, onDismiss
                       currentVideoCodec={media.video_codec}
                       currentAudioCodec={media.audio_codec}
                     />
+                    </div>
                   )}
                   {onRescan && media.file_path && (
                     <button onClick={handleRescan} disabled={isRescanning} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-white/10 text-muted-foreground hover:bg-white/20 hover:text-foreground transition-colors" title="Rescan File">

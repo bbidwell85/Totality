@@ -368,6 +368,7 @@ export function MusicView({
     return filtered.sort((a, b) => (a.year || 0) - (b.year || 0))
   }, [albums, selectedArtist, searchQuery])
 
+
   // Albums are now filtered/sorted server-side via loadPaginatedAlbums
   const allFilteredAlbums = albums
 
@@ -946,20 +947,20 @@ export function MusicView({
                   className={`flex-1 overflow-y-auto relative ${isMobile ? 'px-4' : 'px-5 pt-5 pb-4'} space-y-6`}
                   style={isMobile ? { paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' } : undefined}
                 >
-                  {/* Mobile: backdrop art in header */}
+                  {/* Mobile: backdrop art header */}
                   {isMobile && (selectedAlbum?.art_url || selectedAlbum?.thumb_url) && (
-                    <>
+                    <div className="relative -mx-4 overflow-hidden rounded-t-[2rem]" style={{ minHeight: '180px', marginTop: 'calc(-1 * env(safe-area-inset-top, 0px) - 16px)' }}>
                       <img
                         data-hero-img
                         src={selectedAlbum.art_url || selectedAlbum.thumb_url!}
                         alt=""
-                        className="absolute top-0 right-0 w-3/4 h-full object-cover object-center will-change-transform opacity-0 transition-opacity duration-300"
+                        className="absolute inset-0 w-full h-full object-cover object-center will-change-transform opacity-0 transition-opacity duration-300"
                         onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
                         onError={(e) => { e.currentTarget.style.display = 'none' }}
                       />
-                      <div className="absolute top-0 right-0 w-3/4 h-full bg-gradient-to-r from-card to-transparent" />
-                      <div className="absolute top-0 right-0 w-3/4 h-full bg-gradient-to-t from-card via-card/60 to-transparent" />
-                    </>
+                      <div className="absolute inset-0 bg-gradient-to-r from-card to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-card via-card/60 to-transparent" />
+                    </div>
                   )}
 
                   {/* Header: album art + track title + stats */}
@@ -1287,10 +1288,7 @@ export function MusicView({
               ))}
             </div>
           ) : (
-            <div
-              className={gridClassName}
-              style={gridStyle}
-            >
+            <div className={gridClassName} style={gridStyle}>
               {filteredAlbums.map(album => (
                 <AlbumCard
                   key={album.id}
@@ -2549,15 +2547,18 @@ const TrackListItem = memo(({ track, index, artistName, albumTitle, columnWidths
   )
 })
 
+// Cache MusicBrainz IDs whose cover art returned 404 — persists across remounts
+const failedCoverArtIds = new Set<string>()
+
 const MissingAlbumCard = memo(({ album, artistName, onDismiss }: {
   album: MissingAlbum
   artistName: string
   onDismiss?: () => void
 }) => {
-  const [imageError, setImageError] = useState(false)
+  const [imageError, setImageError] = useState(() => album.musicbrainz_id ? failedCoverArtIds.has(album.musicbrainz_id) : false)
 
-  // Cover Art Archive URL for release group
-  const coverUrl = album.musicbrainz_id
+  // Cover Art Archive URL for release group — skip if previously 404'd
+  const coverUrl = album.musicbrainz_id && !imageError
     ? `https://coverartarchive.org/release-group/${album.musicbrainz_id}/front-250`
     : null
 
@@ -2573,14 +2574,14 @@ const MissingAlbumCard = memo(({ album, artistName, onDismiss }: {
           </div>
         )}
 
-        {coverUrl && !imageError ? (
+        {coverUrl ? (
           <img
             src={coverUrl}
             alt={album.title}
             loading="lazy"
             decoding="async"
             className="w-full h-full object-cover"
-            onError={() => setImageError(true)}
+            onError={() => { if (album.musicbrainz_id) failedCoverArtIds.add(album.musicbrainz_id); setImageError(true) }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-muted/80">
@@ -2627,10 +2628,10 @@ const MissingAlbumListItem = memo(({ album, artistName, onDismiss }: {
   artistName: string
   onDismiss?: () => void
 }) => {
-  const [imageError, setImageError] = useState(false)
+  const [imageError, setImageError] = useState(() => album.musicbrainz_id ? failedCoverArtIds.has(album.musicbrainz_id) : false)
 
-  // Cover Art Archive URL for release group
-  const coverUrl = album.musicbrainz_id
+  // Cover Art Archive URL for release group — skip if previously 404'd
+  const coverUrl = album.musicbrainz_id && !imageError
     ? `https://coverartarchive.org/release-group/${album.musicbrainz_id}/front-250`
     : null
 
@@ -2638,14 +2639,14 @@ const MissingAlbumListItem = memo(({ album, artistName, onDismiss }: {
     <div className="rounded-lg overflow-hidden bg-muted/20 p-4 flex gap-4 items-center opacity-60 hover:opacity-80 transition-opacity">
       {/* Album Thumbnail */}
       <div className="w-16 h-16 bg-muted rounded-lg overflow-hidden shrink-0 relative grayscale shadow-md shadow-black/20">
-        {coverUrl && !imageError ? (
+        {coverUrl ? (
           <img
             src={coverUrl}
             alt={album.title}
             loading="lazy"
             decoding="async"
             className="w-full h-full object-cover"
-            onError={() => setImageError(true)}
+            onError={() => { if (album.musicbrainz_id) failedCoverArtIds.add(album.musicbrainz_id); setImageError(true) }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">

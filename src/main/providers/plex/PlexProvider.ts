@@ -943,6 +943,7 @@ export class PlexProvider implements MediaProvider {
       )
       return seasonResult?.MediaContainer?.Metadata?.[0] || null
     } catch (error) {
+      console.warn(`[PlexProvider] Failed to fetch season metadata for key ${seasonKey}:`, (error as Error).message)
       return null
     }
   }
