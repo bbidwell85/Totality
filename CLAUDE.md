@@ -323,7 +323,7 @@ When items are deleted from a source and a rescan runs, cleanup is centralized i
 - **`deleteMediaItem()`**: Wrapped in SQLite transaction. For episodes: recounts `owned_episodes`/`owned_seasons`, updates `missing_episodes`/`missing_seasons` JSON (adds deleted episode to missing list), backdates `updated_at` to force re-analysis. For movies: updates `movie_collections` (removes TMDB ID from `owned_movie_ids`, adds to `missing_movies` JSON). Deletes associated versions, quality_scores, collections.
 - **`deleteMusicTrack()`**: Wrapped in transaction. Removes orphaned albums (0 tracks) and artists (0 tracks). Updates album `track_count` and artist `track_count`/`album_count`. When tracks are deleted: updates `album_completeness.missing_tracks` JSON. When albums become empty: adds album to `artist_completeness.missing_albums` JSON, updates owned counts.
 - **`cleanupOrphanedMediaData()`**: Belt-and-suspenders sweep after every scan. Validates collection ownership against actual media_items, updates series_completeness counts, removes orphaned music data. Uses LEFT JOIN pattern (not NOT IN) for performance.
-- **Safety guard**: `removeStaleItems()` refuses bulk deletion when Plex returns 0 IDs but DB has items (prevents API failure from wiping library). All 6 providers have this guard.
+- **Safety guard**: `removeStaleItems()` refuses bulk deletion when API/DB returns 0 IDs but DB has items (prevents API failure from wiping library). All providers have this guard: Plex, Jellyfin/Emby, Kodi (JSON-RPC), KodiLocal, KodiMySQL, and LocalFolder.
 - **Pre-migration backup**: Database file is copied before schema migrations run; backup deleted after success. Protects against mid-migration failures.
 - **Integrity check**: `PRAGMA integrity_check` runs on startup for existing databases.
 
@@ -598,9 +598,13 @@ Components in `src/renderer/src/components/` organized by domain: `dashboard/`, 
 
 **Mobile Parallax Backdrop**: TV show, season, artist, and album detail views on mobile use a parallax scroll effect. The backdrop image (3/4 width, right-justified) translates at 0.4× scroll rate via CSS custom property `--parallax-y` set by `onScroll` handler in MediaBrowser's scroll container. Backdrop height is 130% to prevent gaps during movement. No `overflow-hidden` on backdrop containers — content sections use `relative z-[1]` to paint above the backdrop.
 
-**Mobile MediaDetails Sheet**: On mobile, the detail bottom sheet uses a unified scroll container — hero image, title, stats, actions, summary, and detail content all scroll together. Hero image parallaxes at 0.3× scroll rate (`data-hero-img` + `will-change-transform`). Stats/actions/summary fade out over 150px scroll (`data-fade-content` + opacity). Title stays visible (overlaid at bottom of hero). Desktop keeps the fixed-header layout.
+**Mobile MediaDetails Sheet**: On mobile, the detail bottom sheet uses a unified scroll container — hero image, title, stats, actions, summary, and detail content all scroll together. Hero image parallaxes at 0.3× scroll rate (`data-hero-img` + `will-change-transform`). Sticky collapsing header: title + action buttons as a single sticky unit at `top-[12px]`. Scroll-driven title scaling (movies: font-size 24px→17px) or dissolve crossfade (episodes: full→compact format). Blur scrim (`data-sticky-scrim`) with gradient mask fades in behind sticky header. Stats/summary fade out over 150px scroll (`data-fade-content`).
 
-**iOS Status Bar**: `index.html` uses `viewport-fit=cover` + `apple-mobile-web-app-status-bar-style: black-translucent`. The `html`/`body` use `height: 100%` (not `100dvh` or `100vh`) with `overflow: hidden`. The app shell uses `position: fixed` on `<main>`, which prevents DOM content from rendering behind the iOS status bar — this is a platform constraint. Background color extends behind the status bar via the `<html>` element's inline `background-color`.
+**Desktop MediaDetails Modal**: Unified scroll layout — no header/body split. Full-modal blur wash backdrop (`blur(80px) brightness(0.3)`, extended `inset: -100px` to fill edges). Poster/thumbnail visible in header area alongside title/stats. Blur wash dissolves in via `fade-in` CSS animation. Light/dark adaptive: dark `brightness(0.3)` at 50% opacity, light `saturate(0.6)` at 35% opacity.
+
+**Desktop Detail View Backdrops**: TV show and artist detail views have a full-viewport Plex-style blur wash rendered in `App.tsx` (driven by `onBackdropChange` callback from MediaBrowser). 2s silk-smooth dissolve transition. Sidebar is translucent (`bg-card/80 backdrop-blur-xl`) so wash shows through. Backdrop clears on tab switch (`switchView` clears all selections) and Dashboard navigation. Only active on show/artist detail — not on grid/list browsing views, season detail, or album detail.
+
+**iOS Status Bar**: `index.html` uses `viewport-fit=cover` + `apple-mobile-web-app-status-bar-style: black-translucent`. HTML height set via `--app-height` CSS variable from `window.screen.height` (CSS viewport units exclude status bar safe area on iOS standalone apps). Background color `#000` (black) as fallback for any viewport gap.
 
 ## External APIs & Rate Limits
 
@@ -645,7 +649,7 @@ The web server's image proxy (`WebServerService.ts`) only allows requests to whi
 - `coverartarchive.org`
 - URLs with `X-Plex-Token` parameter
 
-On the renderer side (`webTransport.ts`), `needsProxy()` exempts `*.tmdb.org` and `coverartarchive.org` from proxy rewriting — these load directly from the browser. All other image URLs are rewritten to `/api/proxy-image?url=...`.
+On the renderer side (`webTransport.ts`), `needsProxy()` exempts `*.tmdb.org` and `coverartarchive.org` from proxy rewriting in Electron mode — these load directly from the browser. In web mode (mobile), ALL images are proxied through the server's 7-day disk cache for faster loading over WAN. All other image URLs are always rewritten to `/api/proxy-image?url=...`.
 
 ### Custom TLS Certificates
 
