@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { X, Filter, ArrowUpDown, Film, Tv, Music, Loader2, ListTodo, CircleFadingArrowUp, Download, CheckCircle2, Circle, RefreshCw, Search, Plus, Check, Star } from 'lucide-react'
+import { X, Filter, ArrowUpDown, Film, Tv, Music, Loader2, ListTodo, CircleFadingArrowUp, Download, CheckCircle2, Circle, RefreshCw, Search, Plus, Check, Star, ScanBarcode } from 'lucide-react'
+import { BarcodeScanner } from '../barcode/BarcodeScanner'
 import { useWishlist, WishlistMediaType, WishlistPriority, WishlistReason, WishlistStatus } from '../../contexts/WishlistContext'
 import { WishlistItemCard } from './WishlistItemCard'
 import { WishlistEmptyState } from './WishlistEmptyState'
@@ -306,6 +307,7 @@ export function WishlistPanel({ isOpen, onClose, isMobile = false, inline = fals
     updateItem,
     markCompleted,
     markActive,
+    addItem,
     addBulk,
     exportToCsv
   } = useWishlist()
@@ -314,6 +316,7 @@ export function WishlistPanel({ isOpen, onClose, isMobile = false, inline = fals
   const [activeStatus, setActiveStatus] = useState<StatusType>('active')
   const [isExporting, setIsExporting] = useState(false)
   const [showSyncSection, setShowSyncSection] = useState(false)
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
 
   // Sync state
   const [syncingPlex, setSyncingPlex] = useState(false)
@@ -670,7 +673,18 @@ export function WishlistPanel({ isOpen, onClose, isMobile = false, inline = fals
       {isMobileInline ? (
         // Mobile page layout: search + wrapped filter rows
         <div className="shrink-0 px-4 py-3" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)' }}>
-          <WishlistSearch isMobile={isMobile} />
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <WishlistSearch isMobile={isMobile} />
+            </div>
+            <button
+              onClick={() => setShowBarcodeScanner(true)}
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Scan barcode"
+            >
+              <ScanBarcode className="w-5 h-5" />
+            </button>
+          </div>
           {counts.total > 0 && (
             <div className="mt-3 space-y-2">
               {/* Row 1: Status + Sort */}
@@ -917,6 +931,30 @@ export function WishlistPanel({ isOpen, onClose, isMobile = false, inline = fals
         )}
       </div>
     </aside>
+
+    {/* Barcode Scanner overlay */}
+    <BarcodeScanner
+      isOpen={showBarcodeScanner}
+      onClose={() => setShowBarcodeScanner(false)}
+      onAddToWishlist={async (result) => {
+        try {
+          await addItem({
+            media_type: result.type === 'tv' ? 'season' : result.type === 'album' ? 'album' : 'movie',
+            title: result.title,
+            year: result.year,
+            tmdb_id: result.tmdb_id ? String(result.tmdb_id) : undefined,
+            musicbrainz_id: result.musicbrainz_id,
+            artist_name: result.artist_name,
+            poster_url: result.poster_url,
+            priority: 3,
+            reason: 'missing' as WishlistReason,
+            status: 'active' as WishlistStatus,
+          })
+        } catch (err) {
+          console.error('Failed to add barcode item to wishlist:', err)
+        }
+      }}
+    />
     </>
   )
 }

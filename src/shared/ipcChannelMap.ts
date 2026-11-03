@@ -317,6 +317,12 @@ export const RPC_CHANNEL_MAP: Record<string, string> = {
   webAccessGetStatus: 'webAccess:getStatus',
   webAccessStart: 'webAccess:start',
   webAccessStop: 'webAccess:stop',
+
+  // Barcode
+  barcodeLookup: 'barcode:lookup',
+
+  // Client logging
+  clientLog: 'logs:clientLog',
 }
 
 /** Event channels (ipcRenderer.on) — maps listener method name to channel */

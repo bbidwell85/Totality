@@ -476,6 +476,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Music - Cancellation
   musicCancelScan: (sourceId: string) => ipcRenderer.invoke('music:cancelScan', sourceId),
 
+  // Barcode scanning
+  barcodeLookup: (barcode: string) => ipcRenderer.invoke('barcode:lookup', barcode),
+
   // Database - Statistics
   getLibraryStats: (sourceId?: string) => ipcRenderer.invoke('db:getLibraryStats', sourceId),
   getStorageAnalytics: () => ipcRenderer.invoke('db:getStorageAnalytics'),
@@ -803,6 +806,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportLogs: () => ipcRenderer.invoke('logs:export'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('logs:setVerbose', enabled),
   isVerboseLogging: () => ipcRenderer.invoke('logs:isVerbose'),
+  clientLog: (level: 'info' | 'warn' | 'error', source: string, message: string) =>
+    ipcRenderer.invoke('logs:clientLog', { level, source, message }),
   getFileLoggingSettings: () => ipcRenderer.invoke('logs:getFileLoggingSettings'),
   setFileLoggingSettings: (settings: { enabled?: boolean; minLevel?: string; retentionDays?: number }) =>
     ipcRenderer.invoke('logs:setFileLoggingSettings', settings),
@@ -1517,6 +1522,18 @@ export interface ElectronAPI {
   // Music - Cancellation
   musicCancelScan: (sourceId: string) => Promise<{ success: boolean }>
 
+  // Barcode scanning
+  barcodeLookup: (barcode: string) => Promise<Array<{
+    type: 'movie' | 'tv' | 'album'
+    title: string
+    year?: number
+    poster_url?: string
+    tmdb_id?: number
+    musicbrainz_id?: string
+    artist_name?: string
+    barcode: string
+  }>>
+
   // Database - Statistics
   getLibraryStats: (sourceId?: string) => Promise<{
     totalItems: number
@@ -2115,6 +2132,7 @@ export interface ElectronAPI {
   }>
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>
   isVerboseLogging: () => Promise<boolean>
+  clientLog: (level: 'info' | 'warn' | 'error', source: string, message: string) => Promise<void>
   getFileLoggingSettings: () => Promise<{ enabled: boolean; minLevel: string; retentionDays: number }>
   setFileLoggingSettings: (settings: { enabled?: boolean; minLevel?: string; retentionDays?: number }) => Promise<{ success: boolean }>
   openLogFolder: () => Promise<{ success: boolean }>
