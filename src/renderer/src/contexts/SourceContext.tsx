@@ -224,7 +224,7 @@ export function SourceProvider({ children }: SourceProviderProps) {
       checkAllConnections()
 
       // Check every 30 seconds
-      const interval = setInterval(checkAllConnections, 30000)
+      const interval = setInterval(checkAllConnections, 300000) // 5 minutes
       return () => clearInterval(interval)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

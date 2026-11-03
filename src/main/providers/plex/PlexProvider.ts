@@ -1,4 +1,5 @@
 import { getErrorMessage } from '../../services/utils/errorUtils'
+import { getLoggingService } from '../../services/LoggingService'
 /**
  * PlexProvider
  *
@@ -571,6 +572,21 @@ export class PlexProvider implements MediaProvider {
                 mediaItem.source_type = 'plex'
                 mediaItem.library_id = libraryId
 
+                // Log quality changes when verbose is enabled
+                if (getLoggingService().isVerboseEnabled() && existingPlexIds.has(mediaItem.plex_id)) {
+                  const existing = db.getMediaItemByProviderId(mediaItem.plex_id, this.sourceId)
+                  if (existing) {
+                    const changes: string[] = []
+                    if (existing.resolution !== mediaItem.resolution) changes.push(`resolution ${existing.resolution}→${mediaItem.resolution}`)
+                    if (existing.video_codec !== mediaItem.video_codec) changes.push(`codec ${existing.video_codec}→${mediaItem.video_codec}`)
+                    if (existing.video_bitrate !== mediaItem.video_bitrate) changes.push(`bitrate ${existing.video_bitrate}→${mediaItem.video_bitrate}`)
+                    if (existing.file_size !== mediaItem.file_size) changes.push(`size ${existing.file_size}→${mediaItem.file_size}`)
+                    if (changes.length > 0) {
+                      getLoggingService().verbose('[PlexProvider]', `Updated "${mediaItem.title}": ${changes.join(', ')}`)
+                    }
+                  }
+                }
+
                 const id = await db.upsertMediaItem(mediaItem)
                 scannedProviderIds.add(mediaItem.plex_id)
 
@@ -677,7 +693,7 @@ export class PlexProvider implements MediaProvider {
 
       result.success = true
       result.durationMs = Date.now() - startTime
-      console.log(`[PlexProvider ${this.sourceId}] Scan complete: ${result.itemsScanned} scanned, ${result.itemsAdded} added, ${result.itemsRemoved} removed, ${result.errors.length} errors (${(result.durationMs / 1000).toFixed(1)}s)`)
+      console.log(`[PlexProvider ${this.sourceId}] Scan complete: ${result.itemsScanned} scanned, ${result.itemsAdded} added, ${result.itemsUpdated} updated, ${result.itemsRemoved} removed, ${result.errors.length} errors (${(result.durationMs / 1000).toFixed(1)}s)`)
 
       return result
     } catch (error: unknown) {
@@ -886,18 +902,19 @@ export class PlexProvider implements MediaProvider {
     }
 
     const url = `${this.selectedServer.uri}/library/sections/${libraryKey}/all`
-    const params: Record<string, unknown> = {}
+
     if (sinceTimestamp) {
       const unixSeconds = Math.floor(sinceTimestamp.getTime() / 1000)
-      params['addedAt>'] = unixSeconds
       console.log(`[PlexProvider ${this.sourceId}] Incremental scan: fetching items added after ${sinceTimestamp.toISOString()}`)
+
+      // Fetch newly added items (by timestamp filter)
+      const addedItems = await this.paginatedPlexFetch<PlexMediaItem>(url, { 'addedAt>': unixSeconds })
+
+      console.log(`[PlexProvider ${this.sourceId}] Incremental scan found ${addedItems.length} new items`)
+      return addedItems
     }
 
-    const items = await this.paginatedPlexFetch<PlexMediaItem>(url, Object.keys(params).length > 0 ? params : undefined)
-    if (sinceTimestamp) {
-      console.log(`[PlexProvider ${this.sourceId}] Incremental scan found ${items.length} new/updated items`)
-    }
-    return items
+    return await this.paginatedPlexFetch<PlexMediaItem>(url)
   }
 
   private async getPlexItemMetadata(ratingKey: string): Promise<PlexMediaItem | null> {
@@ -996,6 +1013,12 @@ export class PlexProvider implements MediaProvider {
     const width = media?.width || 0
     const height = media?.height || 0
 
+    // Use Plex's own videoResolution classification (more reliable than recalculating from width/height)
+    const plexRes = media?.videoResolution
+    const resolution = plexRes
+      ? (plexRes === '4k' ? '4K' : plexRes === 'sd' ? 'SD' : `${plexRes}p`)
+      : normalizeResolution(width, height)
+
     return {
       providerId: this.sourceId,
       providerType: 'plex',
@@ -1013,7 +1036,7 @@ export class PlexProvider implements MediaProvider {
       fileSize: part?.size,
       duration: item.duration,
       container: normalizeContainer(part?.container || media?.container),
-      resolution: normalizeResolution(width, height),
+      resolution,
       width,
       height,
       videoCodec: normalizeVideoCodec(media?.videoCodec),

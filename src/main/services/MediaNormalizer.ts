@@ -312,10 +312,11 @@ export function normalizeResolution(
   const h = height || 0
 
   // Use height as primary indicator, width as secondary
-  if (h >= 2160 || w >= 3840) return '4K'
-  if (h >= 1080 || w >= 1920) return '1080p'
-  if (h >= 720 || w >= 1280) return '720p'
-  if (h >= 480 || w >= 720) return '480p'
+  // Width thresholds slightly relaxed to handle common cropping (1918, 3820, etc.)
+  if (h >= 2160 || w >= 3800) return '4K'
+  if (h >= 1080 || w >= 1900) return '1080p'
+  if (h >= 720 || w >= 1260) return '720p'
+  if (h >= 480 || w >= 700) return '480p'
   if (h > 0 || w > 0) return 'SD'
   return ''
 }

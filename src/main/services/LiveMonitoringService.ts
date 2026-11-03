@@ -927,6 +927,9 @@ export class LiveMonitoringService {
 
     const events: SourceChangeEvent[] = []
 
+    getLoggingService().verbose('[LiveMonitoring]',
+      `checkSource ${source.display_name}: ${libraries.length} libraries, ${enabledLibraries.length} enabled (${enabledLibraries.map(l => `${l.libraryName}:${l.libraryType}`).join(', ')})`)
+
     let sourceUnreachable = false
 
     for (const library of enabledLibraries) {
@@ -940,15 +943,18 @@ export class LiveMonitoringService {
         if (library.libraryType === 'music') {
           // Music libraries: check if track count changed before doing expensive full scan
           const needsScan = await this.musicLibraryHasChanges(sourceId, library.libraryId, source.source_type as ProviderType)
+          getLoggingService().verbose('[LiveMonitoring]', `Music library "${library.libraryName}" needsScan: ${needsScan}`)
           if (!needsScan) continue
           result = await this.scanMusicLibrary(sourceId, library.libraryId, source.source_type as ProviderType)
         } else {
+          getLoggingService().verbose('[LiveMonitoring]', `Running incremental scan for "${library.libraryName}" (${library.libraryType})`)
           // Run incremental scan for video libraries
           result = await sourceManager.scanLibraryIncremental(
             sourceId,
             library.libraryId,
             () => {} // Silent progress
           )
+
         }
 
         // Check for both added AND updated items
