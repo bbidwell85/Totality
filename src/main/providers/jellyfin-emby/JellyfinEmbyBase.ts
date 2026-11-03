@@ -1135,8 +1135,9 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
         await db.endBatch()
       }
 
-      // Remove stale items (only for full scans, not incremental)
+      // Remove stale items
       if (!isIncremental) {
+        // Full scan: reconcile against all scanned IDs
         const itemType = libraryType === 'show' ? 'episode' : 'movie'
         const items = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId })
 
@@ -1152,6 +1153,38 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
               }
             }
           }
+        }
+      } else {
+        // Incremental scan: lightweight count check to detect deletions
+        // Only do full reconciliation if server count < DB count
+        try {
+          const itemType = libraryType === 'show' ? 'episode' : 'movie'
+          const serverCount = await this.getLibraryItemCount(libraryId, libraryType)
+          const dbCount = db.countMediaItems({ type: itemType, sourceId: this.sourceId, libraryId, includeDisabledLibraries: true })
+
+          if (serverCount > 0 && serverCount < dbCount) {
+            console.log(`[${this.providerType}Provider ${this.sourceId}] Server has ${serverCount} items but DB has ${dbCount} — reconciling deletions`)
+
+            // Fetch all current server IDs to find deletions
+            const serverIds = await this.getAllLibraryItemIds(libraryId, libraryType)
+            const items = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId })
+
+            if (serverIds.size > 0) {
+              for (const item of items) {
+                if (!serverIds.has(item.plex_id)) {
+                  if (item.id) {
+                    await db.deleteMediaItem(item.id)
+                    result.itemsRemoved++
+                  }
+                }
+              }
+              if (result.itemsRemoved > 0) {
+                console.log(`[${this.providerType}Provider ${this.sourceId}] Removed ${result.itemsRemoved} deleted items during incremental scan`)
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`[${this.providerType}Provider ${this.sourceId}] Incremental deletion check failed:`, err)
         }
       }
 
@@ -1170,6 +1203,64 @@ export abstract class JellyfinEmbyBase implements MediaProvider {
       console.error(`[${this.providerType}Provider ${this.sourceId}] Scan failed after ${(result.durationMs / 1000).toFixed(1)}s: ${getErrorMessage(error)}`)
       return result
     }
+  }
+
+  // ============================================================================
+  // RECONCILIATION HELPERS
+  // ============================================================================
+
+  /**
+   * Get total item count from server for a library (lightweight, no item data).
+   */
+  private async getLibraryItemCount(libraryId: string, libraryType: string): Promise<number> {
+    const response = await fetchJSON<{ Items: unknown[]; TotalRecordCount: number }>(
+      buildUrl(`${this.serverUrl}/Items`, {
+        ParentId: libraryId,
+        Recursive: true,
+        IncludeItemTypes: libraryType === 'show' ? 'Episode' : 'Movie',
+        EnableTotalRecordCount: true,
+        Limit: 0,
+      }),
+      { headers: this.getAuthHeaders() }
+    )
+    return response.TotalRecordCount || 0
+  }
+
+  /**
+   * Fetch all item IDs from server for a library (for deletion reconciliation).
+   */
+  private async getAllLibraryItemIds(libraryId: string, libraryType: string): Promise<Set<string>> {
+    const ids = new Set<string>()
+    const batchSize = 100
+    let offset = 0
+    let hasMore = true
+
+    while (hasMore) {
+      const response = await fetchJSON<{ Items: Array<{ Id: string }>; TotalRecordCount: number }>(
+        buildUrl(`${this.serverUrl}/Items`, {
+          ParentId: libraryId,
+          Recursive: true,
+          IncludeItemTypes: libraryType === 'show' ? 'Episode' : 'Movie',
+          Fields: '',
+          EnableTotalRecordCount: true,
+          StartIndex: offset,
+          Limit: batchSize,
+        }),
+        { headers: this.getAuthHeaders() }
+      )
+
+      for (const item of response.Items) {
+        ids.add(item.Id)
+      }
+
+      if (ids.size >= response.TotalRecordCount || response.Items.length === 0) {
+        hasMore = false
+      } else {
+        offset += response.Items.length
+      }
+    }
+
+    return ids
   }
 
   // ============================================================================

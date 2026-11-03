@@ -2508,10 +2508,10 @@ export class BetterSQLiteService {
   upsertQualityScore(score: QualityScore): void {
     if (!this.db) throw new Error('Database not initialized')
 
-    // Check existing tier to detect upgrades
+    // Check existing tier to detect upgrades (tier changes and within-tier level improvements)
     const existing = this.db.prepare(
-      'SELECT quality_tier, previous_quality_tier, upgraded_at FROM quality_scores WHERE media_item_id = ?'
-    ).get(score.media_item_id) as { quality_tier: string; previous_quality_tier: string | null; upgraded_at: string | null } | undefined
+      'SELECT quality_tier, tier_quality, previous_quality_tier, upgraded_at FROM quality_scores WHERE media_item_id = ?'
+    ).get(score.media_item_id) as { quality_tier: string; tier_quality: string | null; previous_quality_tier: string | null; upgraded_at: string | null } | undefined
 
     let prevTier: string | null = null
     let upgradedAt: string | null = null
@@ -2520,9 +2520,21 @@ export class BetterSQLiteService {
       const oldRank = BetterSQLiteService.TIER_RANK[existing.quality_tier] ?? 0
       const newRank = BetterSQLiteService.TIER_RANK[score.quality_tier] ?? 0
       if (newRank > oldRank) {
-        // Tier improved — record the upgrade
+        // Tier improved (e.g., 720p → 1080p) — record the upgrade
         prevTier = existing.quality_tier
         upgradedAt = new Date().toISOString()
+      } else if (newRank === oldRank && existing.tier_quality && score.tier_quality) {
+        // Same tier — check for within-tier level improvement (e.g., LOW → HIGH)
+        const levelRank: Record<string, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 }
+        const oldLevel = levelRank[existing.tier_quality] ?? 0
+        const newLevel = levelRank[score.tier_quality] ?? 0
+        if (newLevel > oldLevel) {
+          prevTier = `${existing.quality_tier} ${existing.tier_quality}`
+          upgradedAt = new Date().toISOString()
+        } else {
+          prevTier = existing.previous_quality_tier
+          upgradedAt = existing.upgraded_at
+        }
       } else {
         // No improvement — preserve existing upgrade history
         prevTier = existing.previous_quality_tier

@@ -651,36 +651,43 @@ export class PlexProvider implements MediaProvider {
         const removedCount = await this.removeStaleItems(currentPlexIds, itemType, libraryId)
         result.itemsRemoved = removedCount
       } else if (isIncremental) {
-        // Incremental scan: fetch all current IDs from Plex to detect changes
+        // Incremental scan: use lightweight count check before expensive full ID reconciliation
         const libType = libraryType || await this.getPlexLibraryType(libraryId)
         if (libType) {
-          console.log(`[PlexProvider ${this.sourceId}] Checking for changes in ${libType} library...`)
-          const currentPlexIds = await this.getPlexLibraryItemIds(libraryId, libType)
           const itemType = libType === 'show' ? 'episode' : 'movie'
+          const plexCount = await this.getLibraryItemCount(libraryId, libType)
+          const dbCount = db.countMediaItems({ type: itemType, sourceId: this.sourceId, libraryId, includeDisabledLibraries: true })
 
-          // Check for deletions (items in DB but not in Plex)
-          const removedCount = await this.removeStaleItems(currentPlexIds, itemType, libraryId)
-          if (removedCount > 0) {
-            console.log(`[PlexProvider ${this.sourceId}] Removed ${removedCount} deleted items`)
-          }
-          result.itemsRemoved = removedCount
+          if (plexCount !== dbCount) {
+            // Counts differ — do full ID reconciliation to find additions and deletions
+            console.log(`[PlexProvider ${this.sourceId}] Count mismatch in ${libType} library: Plex=${plexCount}, DB=${dbCount} — running full reconciliation`)
+            const currentPlexIds = await this.getPlexLibraryItemIds(libraryId, libType)
 
-          // Check for additions (items in Plex but not in DB)
-          const dbItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId }) as Array<{ plex_id?: string }>
-          const dbIds = new Set(dbItems.map((item: typeof dbItems[0]) => item.plex_id).filter(Boolean))
-          const missingIds: string[] = []
-          for (const plexId of currentPlexIds) {
-            if (!dbIds.has(plexId)) {
-              missingIds.push(plexId)
+            // Check for deletions (items in DB but not in Plex)
+            const removedCount = await this.removeStaleItems(currentPlexIds, itemType, libraryId)
+            if (removedCount > 0) {
+              console.log(`[PlexProvider ${this.sourceId}] Removed ${removedCount} deleted items`)
             }
-          }
+            result.itemsRemoved = removedCount
 
-          if (missingIds.length > 0) {
-            console.log(`[PlexProvider ${this.sourceId}] Found ${missingIds.length} items in Plex not in DB, fetching...`)
-            // Fetch and process the missing items
-            const addedCount = await this.fetchAndProcessMissingItems(missingIds, libraryId, libType, analyzer, onProgress)
-            result.itemsAdded += addedCount
-            console.log(`[PlexProvider ${this.sourceId}] Added ${addedCount} missing items`)
+            // Check for additions (items in Plex but not in DB)
+            const dbItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId }) as Array<{ plex_id?: string }>
+            const dbIds = new Set(dbItems.map((item: typeof dbItems[0]) => item.plex_id).filter(Boolean))
+            const missingIds: string[] = []
+            for (const plexId of currentPlexIds) {
+              if (!dbIds.has(plexId)) {
+                missingIds.push(plexId)
+              }
+            }
+
+            if (missingIds.length > 0) {
+              console.log(`[PlexProvider ${this.sourceId}] Found ${missingIds.length} items in Plex not in DB, fetching...`)
+              const addedCount = await this.fetchAndProcessMissingItems(missingIds, libraryId, libType, analyzer, onProgress)
+              result.itemsAdded += addedCount
+              console.log(`[PlexProvider ${this.sourceId}] Added ${addedCount} missing items`)
+            }
+          } else {
+            getLoggingService().verbose('[PlexProvider]', `${libType} library counts match (${plexCount}) — skipping reconciliation`)
           }
         }
       }
@@ -1374,8 +1381,31 @@ export class PlexProvider implements MediaProvider {
   }
 
   /**
-   * Get all tracks for an album
+   * Get total item count from Plex library without fetching item data.
+   * Uses X-Plex-Container-Size=0 to only get the totalSize from the container.
+   * For TV show libraries, use type=4 (episodes) to get episode count.
    */
+  private async getLibraryItemCount(libraryId: string, libraryType: 'movie' | 'show'): Promise<number> {
+    if (!this.selectedServer) return 0
+
+    const url = `${this.selectedServer.uri}/library/sections/${libraryId}/all`
+    // type=1 for movies, type=4 for episodes
+    const plexType = libraryType === 'show' ? 4 : 1
+    const responseData = await fetchJSON<{ MediaContainer?: { totalSize?: number } }>(
+      buildUrl(url, { type: plexType }),
+      {
+        headers: {
+          'X-Plex-Token': this.selectedServer.accessToken,
+          'X-Plex-Container-Start': '0',
+          'X-Plex-Container-Size': '0',
+          Accept: 'application/json',
+        },
+      }
+    )
+
+    return responseData?.MediaContainer?.totalSize || 0
+  }
+
   /**
    * Get total music track count from Plex without fetching item data.
    * Uses X-Plex-Container-Size=0 to only get the totalSize from the container.
