@@ -140,7 +140,7 @@ function connect(): Promise<void> {
       reconnectAttempts++
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null
-        connect().catch(() => {})
+        connect().catch((err) => console.warn('[WebSocket] Reconnect failed:', err))
       }, delayMs)
     }
 

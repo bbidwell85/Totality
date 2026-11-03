@@ -573,11 +573,13 @@ export class WebServerService {
       return
     }
 
-    // Allow: private IPs, Plex domains, TMDB, Jellyfin/Emby local servers
+    // Allow: private IPs (IPv4 + IPv6), Plex domains, TMDB, Jellyfin/Emby local servers
     const hostname = parsedUrl.hostname
     const isAllowed = hostname === 'localhost' || hostname === '127.0.0.1' ||
+      hostname === '::1' || hostname === '[::1]' ||
       hostname.startsWith('192.168.') || hostname.startsWith('10.') ||
       hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./) ||
+      hostname.startsWith('fc') || hostname.startsWith('fd') ||
       hostname.endsWith('.plex.direct') ||
       hostname === 'image.tmdb.org' ||
       hostname === 'coverartarchive.org' ||

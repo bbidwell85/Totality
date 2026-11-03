@@ -35,6 +35,21 @@ if (gpuDisabled) {
   app.disableHardwareAcceleration()
 }
 
+// Single instance lock — prevent two copies from corrupting the SQLite database
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    // Focus existing window when a second instance is launched
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      if (!win.isVisible()) win.show()
+      win.focus()
+    }
+  })
+}
+
 // Register custom protocol for serving local artwork files
 // Must be registered before app is ready
 protocol.registerSchemesAsPrivileged([

@@ -793,6 +793,7 @@ CREATE INDEX IF NOT EXISTS idx_wishlist_items_media_type ON wishlist_items(media
 CREATE INDEX IF NOT EXISTS idx_wishlist_items_tmdb ON wishlist_items(tmdb_id);
 CREATE INDEX IF NOT EXISTS idx_wishlist_items_musicbrainz ON wishlist_items(musicbrainz_id);
 CREATE INDEX IF NOT EXISTS idx_wishlist_items_reason ON wishlist_items(reason);
+CREATE INDEX IF NOT EXISTS idx_wishlist_items_status ON wishlist_items(status);
 CREATE INDEX IF NOT EXISTS idx_wishlist_items_media_item ON wishlist_items(media_item_id);
 
 -- ============================================================================

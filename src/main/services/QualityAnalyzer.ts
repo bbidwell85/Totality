@@ -353,6 +353,8 @@ export class QualityAnalyzer {
   private calculateVideoTierScore(effectiveBitrate: number, tier: QualityTier): number {
     if (effectiveBitrate <= 0) return 0
     const { medium, high } = this.videoThresholds[tier]
+    if (medium <= 0) return effectiveBitrate > 0 ? 50 : 0
+    if (high <= medium) return effectiveBitrate >= medium ? 100 : Math.round((effectiveBitrate / medium) * 50)
     if (effectiveBitrate >= high) return 100
     if (effectiveBitrate < medium) {
       return Math.round((effectiveBitrate / medium) * 50)
@@ -376,6 +378,8 @@ export class QualityAnalyzer {
     if (bestAudio.bitrate <= 0) return 0
 
     const { medium, high } = this.audioThresholds[tier]
+    if (medium <= 0) return bestAudio.bitrate > 0 ? 50 : 0
+    if (high <= medium) return bestAudio.bitrate >= medium ? 100 : Math.round((bestAudio.bitrate / medium) * 50)
     if (bestAudio.bitrate >= high) return 100
     if (bestAudio.bitrate < medium) {
       return Math.round((bestAudio.bitrate / medium) * 50)

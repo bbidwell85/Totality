@@ -504,11 +504,12 @@ export class PlexProvider implements MediaProvider {
       console.log(`[PlexProvider ${this.sourceId}] Processing ${totalItems} items...`)
 
       // Collect existing plex IDs to track new vs updated items
-      const existingPlexIds = new Set(
-        (db.getMediaItems({ sourceId: this.sourceId, libraryId }) as Array<{ plex_id?: string }>)
-          .map((item: { plex_id?: string }) => item.plex_id)
-          .filter(Boolean)
-      )
+      // Also build a lookup map for verbose logging (avoids N+1 per-item queries)
+      const existingItems = db.getMediaItems({ sourceId: this.sourceId, libraryId }) as Array<{ plex_id?: string; resolution?: string; video_codec?: string; video_bitrate?: number; file_size?: number }>
+      const existingPlexIds = new Set(existingItems.map((item) => item.plex_id).filter(Boolean))
+      const existingItemMap = getLoggingService().isVerboseEnabled()
+        ? new Map(existingItems.filter((item) => item.plex_id).map((item) => [item.plex_id!, item]))
+        : null
 
       // Start batch mode
       db.startBatch()
@@ -572,9 +573,9 @@ export class PlexProvider implements MediaProvider {
                 mediaItem.source_type = 'plex'
                 mediaItem.library_id = libraryId
 
-                // Log quality changes when verbose is enabled
-                if (getLoggingService().isVerboseEnabled() && existingPlexIds.has(mediaItem.plex_id)) {
-                  const existing = db.getMediaItemByProviderId(mediaItem.plex_id, this.sourceId)
+                // Log quality changes when verbose is enabled (uses pre-fetched map, no per-item DB query)
+                if (existingItemMap && existingPlexIds.has(mediaItem.plex_id)) {
+                  const existing = existingItemMap.get(mediaItem.plex_id)
                   if (existing) {
                     const changes: string[] = []
                     if (existing.resolution !== mediaItem.resolution) changes.push(`resolution ${existing.resolution}→${mediaItem.resolution}`)

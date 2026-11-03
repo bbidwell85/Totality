@@ -346,10 +346,10 @@ export function WishlistPanel({ isOpen, onClose, isMobile = false, inline = fals
       setTimeout(() => closeButtonRef.current?.focus(), 100)
       window.electronAPI.getSetting(SETTING_KEYS.trakt_username)
         .then(val => { if (val) setTraktUser(val) })
-        .catch(() => {})
+        .catch((err) => console.warn('[Wishlist] Failed to load trakt username:', err))
       window.electronAPI.getSetting(SETTING_KEYS.plex_token)
         .then(val => setHasPlexSource(!!val))
-        .catch(() => {})
+        .catch((err) => console.warn('[Wishlist] Failed to load plex token:', err))
     }
   }, [isOpen])
 

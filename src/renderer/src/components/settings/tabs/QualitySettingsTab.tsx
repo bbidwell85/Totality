@@ -132,6 +132,7 @@ export function QualitySettingsTab() {
   const [showReanalyzePrompt, setShowReanalyzePrompt] = useState(false)
   const [isReanalyzing, setIsReanalyzing] = useState(false)
   const [reanalyzeProgress, setReanalyzeProgress] = useState<{ current: number; total: number } | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   // Expanded state for cards
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set())
@@ -162,6 +163,7 @@ export function QualitySettingsTab() {
   useEffect(() => {
     const changed = JSON.stringify(settings) !== JSON.stringify(originalSettings)
     setHasChanges(changed)
+    setValidationError(null)
   }, [settings, originalSettings])
 
   const loadSettings = async () => {
@@ -188,7 +190,29 @@ export function QualitySettingsTab() {
     }
   }
 
+  const validateSettings = (): string | null => {
+    const tiers: ResolutionTier[] = ['sd', '720p', '1080p', '4k']
+    for (const tier of tiers) {
+      const vMed = settings[`quality_video_${tier}_medium` as keyof SettingsState] as number
+      const vHigh = settings[`quality_video_${tier}_high` as keyof SettingsState] as number
+      if (vMed >= vHigh) return `Video ${tier.toUpperCase()}: medium threshold (${vMed}) must be less than high (${vHigh})`
+      const aMed = settings[`quality_audio_${tier}_medium` as keyof SettingsState] as number
+      const aHigh = settings[`quality_audio_${tier}_high` as keyof SettingsState] as number
+      if (aMed >= aHigh) return `Audio ${tier.toUpperCase()}: medium threshold (${aMed}) must be less than high (${aHigh})`
+    }
+    if (settings.quality_music_low_bitrate >= settings.quality_music_high_bitrate) {
+      return `Music: low bitrate (${settings.quality_music_low_bitrate}) must be less than high (${settings.quality_music_high_bitrate})`
+    }
+    return null
+  }
+
   const handleSave = async () => {
+    const error = validateSettings()
+    if (error) {
+      setValidationError(error)
+      return
+    }
+    setValidationError(null)
     setIsSaving(true)
     try {
       for (const [key, value] of Object.entries(settings)) {
@@ -519,6 +543,9 @@ export function QualitySettingsTab() {
           </Button>
         )}
       </div>
+      {validationError && (
+        <p className="text-caption text-destructive mt-1">{validationError}</p>
+      )}
     </div>
   )
 }

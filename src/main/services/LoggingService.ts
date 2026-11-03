@@ -109,6 +109,15 @@ class LoggingService {
     // Redact API key patterns (long alphanumeric strings following key/token/api identifiers)
     result = result.replace(/(api[_-]?key|apikey|api_token|access_token|secret)[=:]\s*['"]?[A-Za-z0-9_-]{20,}/gi, '$1=***')
 
+    // Redact Bearer tokens
+    result = result.replace(/Bearer\s+[A-Za-z0-9._-]{10,}/gi, 'Bearer ***')
+
+    // Redact database connection strings (mysql://user:pass@host)
+    result = result.replace(/(?:mysql|mariadb|postgres|postgresql):\/\/[^:]+:[^@]+@/gi, (match) => {
+      const proto = match.split('://')[0]
+      return `${proto}://***:***@`
+    })
+
     return result
   }
 

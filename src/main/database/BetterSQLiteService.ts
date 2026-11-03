@@ -60,8 +60,9 @@ export class BetterSQLiteService {
   private dbPath: string
   private _isInitialized = false
 
-  // Retention limits for unbounded tables — unread notifications are never pruned
+  // Retention limits for unbounded tables
   private static readonly MAX_READ_NOTIFICATIONS = 500
+  private static readonly MAX_UNREAD_NOTIFICATIONS = 1000
   private static readonly MAX_TASK_HISTORY = 500
   private static readonly MAX_ACTIVITY_LOG = 500
 
@@ -74,6 +75,17 @@ export class BetterSQLiteService {
       WHERE is_read = 1
         AND id NOT IN (SELECT id FROM notifications WHERE is_read = 1 ORDER BY created_at DESC LIMIT ?)
     `).run(BetterSQLiteService.MAX_READ_NOTIFICATIONS)
+  }
+
+  private pruneUnreadNotifications(): void {
+    if (!this.db) return
+    const { c } = this.db.prepare('SELECT COUNT(*) as c FROM notifications WHERE is_read = 0').get() as { c: number }
+    if (c <= BetterSQLiteService.MAX_UNREAD_NOTIFICATIONS) return
+    this.db.prepare(`
+      DELETE FROM notifications
+      WHERE is_read = 0
+        AND id NOT IN (SELECT id FROM notifications WHERE is_read = 0 ORDER BY created_at DESC LIMIT ?)
+    `).run(BetterSQLiteService.MAX_UNREAD_NOTIFICATIONS)
   }
 
   private pruneTaskHistory(): void {
@@ -160,7 +172,22 @@ export class BetterSQLiteService {
           // Remove backup after successful migration
           try { fs.unlinkSync(backupPath) } catch { /* ignore */ }
         } catch (migrationError) {
-          console.error('[BetterSQLite] Migration failed, backup available at:', backupPath)
+          console.error('[BetterSQLite] Migration failed, restoring from backup...')
+          try {
+            // Close the corrupted database before restoring
+            if (this.db) {
+              this.db.close()
+              this.db = null
+            }
+            fs.copyFileSync(backupPath, this.dbPath)
+            console.log('[BetterSQLite] Database restored from pre-migration backup')
+            // Re-open the restored database
+            this.db = new Database(this.dbPath)
+            this.db.pragma('journal_mode = WAL')
+            this.db.pragma('foreign_keys = ON')
+          } catch (restoreError) {
+            console.error('[BetterSQLite] Failed to restore backup:', restoreError)
+          }
           throw migrationError
         }
       } else {
@@ -2524,19 +2551,29 @@ export class BetterSQLiteService {
         prevTier = existing.quality_tier
         upgradedAt = new Date().toISOString()
       } else if (newRank === oldRank && existing.tier_quality && score.tier_quality) {
-        // Same tier — check for within-tier level improvement (e.g., LOW → HIGH)
+        // Same tier — check for within-tier level change
         const levelRank: Record<string, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 }
         const oldLevel = levelRank[existing.tier_quality] ?? 0
         const newLevel = levelRank[score.tier_quality] ?? 0
         if (newLevel > oldLevel) {
+          // Level improved (e.g., LOW → HIGH)
           prevTier = `${existing.quality_tier} ${existing.tier_quality}`
           upgradedAt = new Date().toISOString()
+        } else if (newLevel < oldLevel) {
+          // Level regressed (e.g., HIGH → MEDIUM due to threshold change) — clear stale upgrade
+          prevTier = null
+          upgradedAt = null
         } else {
+          // Same level — preserve existing upgrade history
           prevTier = existing.previous_quality_tier
           upgradedAt = existing.upgraded_at
         }
+      } else if (newRank < oldRank) {
+        // Tier regressed (e.g., 1080p → 720p due to reclassification) — clear stale upgrade
+        prevTier = null
+        upgradedAt = null
       } else {
-        // No improvement — preserve existing upgrade history
+        // No change — preserve existing upgrade history
         prevTier = existing.previous_quality_tier
         upgradedAt = existing.upgraded_at
       }
@@ -5932,6 +5969,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     )
 
     this.pruneReadNotifications()
+    this.pruneUnreadNotifications()
     return Number(result.lastInsertRowid)
   }
 
@@ -5965,6 +6003,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     })
     transaction()
     this.pruneReadNotifications()
+    this.pruneUnreadNotifications()
 
     return ids
   }
