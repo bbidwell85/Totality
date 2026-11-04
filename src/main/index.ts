@@ -446,10 +446,10 @@ app.whenReady().then(async () => {
     console.log('Source manager initialized successfully')
 
     // Intercept ipcMain.handle to build handler map for web server RPC bridge
-    const webHandlerMap = new Map<string, Function>()
+    const webHandlerMap = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
     const origHandle = ipcMain.handle.bind(ipcMain)
     ipcMain.handle = ((channel: string, handler: (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown) => {
-      webHandlerMap.set(channel, handler)
+      webHandlerMap.set(channel, handler as (event: unknown, ...args: unknown[]) => unknown)
       return origHandle(channel, handler)
     }) as typeof ipcMain.handle
 

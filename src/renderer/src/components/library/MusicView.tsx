@@ -352,10 +352,32 @@ export function MusicView({
   // Artists are now filtered and sorted server-side via pagination
 
   // Filter albums for selected artist or all albums
+  // Fetch artist's albums from server when not available in paginated array
+  const [artistAlbums, setArtistAlbums] = useState<MusicAlbum[]>([])
+  useEffect(() => {
+    if (!selectedArtist) { setArtistAlbums([]); return }
+    const localMatch = albums.filter(a => a.artist_id === selectedArtist.id || a.artist_name === selectedArtist.name)
+    if (localMatch.length > 0) { setArtistAlbums([]); return }
+    // Albums not in paginated list — fetch from server
+    window.electronAPI.musicGetAlbums({ artistId: selectedArtist.id, artistName: selectedArtist.name, limit: 500, offset: 0 }).then((result) => {
+      setArtistAlbums(result as MusicAlbum[])
+    }).catch(() => setArtistAlbums([]))
+  }, [selectedArtist, albums])
+
   const filteredAlbums = useMemo(() => {
     let filtered = selectedArtist
-      ? albums.filter(a => a.artist_id === selectedArtist.id || a.artist_name === selectedArtist.name)
+      ? [...albums, ...artistAlbums].filter(a => a.artist_id === selectedArtist.id || a.artist_name === selectedArtist.name)
       : albums
+
+    // Deduplicate by ID (in case some overlap between paginated + fetched)
+    if (selectedArtist && artistAlbums.length > 0) {
+      const seen = new Set<number>()
+      filtered = filtered.filter(a => {
+        if (!a.id || seen.has(a.id)) return false
+        seen.add(a.id)
+        return true
+      })
+    }
 
     // Apply search filter when not viewing a specific artist
     if (!selectedArtist && searchQuery.trim()) {
@@ -366,7 +388,7 @@ export function MusicView({
     }
 
     return filtered.sort((a, b) => (a.year || 0) - (b.year || 0))
-  }, [albums, selectedArtist, searchQuery])
+  }, [albums, artistAlbums, selectedArtist, searchQuery])
 
 
   // Albums are now filtered/sorted server-side via loadPaginatedAlbums

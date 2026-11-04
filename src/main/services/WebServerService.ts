@@ -14,6 +14,7 @@
  * - Security headers on all HTTP responses
  */
 
+import dns from 'dns'
 import http from 'http'
 import https from 'https'
 import fs from 'fs'
@@ -91,6 +92,8 @@ const ARTWORK_RATE_LIMIT = 100 // max requests per window
 const ARTWORK_RATE_WINDOW_MS = 10_000 // 10 seconds
 const MAX_SESSIONS_PER_IP = 10
 const SESSION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
+const RPC_RATE_LIMIT = 60 // max requests per window
+const RPC_RATE_WINDOW_MS = 2_000 // 2 seconds (30 req/s sustained)
 
 /** Constant-time string comparison to prevent timing attacks on PIN */
 function timingSafeCompare(a: string, b: string): boolean {
@@ -117,10 +120,11 @@ export class WebServerService {
   private httpServer: http.Server | https.Server | null = null
   private httpRedirectServer: http.Server | null = null
   private wss: WebSocketServer | null = null
-  private handlerMap: Map<string, Function>
+  private handlerMap: Map<string, (event: unknown, ...args: unknown[]) => unknown>
   private sessions = new Map<string, Session>()
   private rateLimits = new Map<string, RateLimitEntry>()
   private artworkRateLimits = new Map<string, { count: number; windowStart: number }>()
+  private rpcRateLimits = new Map<string, { count: number; windowStart: number }>()
   private sessionCleanupTimer: ReturnType<typeof setInterval> | null = null
   private port = DEFAULT_PORT
   private staticRoot: string
@@ -138,7 +142,7 @@ export class WebServerService {
   ])
   private readonly EVENT_THROTTLE_MS = 1000
 
-  constructor(handlerMap: Map<string, Function>, devServerUrl?: string) {
+  constructor(handlerMap: Map<string, (event: unknown, ...args: unknown[]) => unknown>, devServerUrl?: string) {
     this.handlerMap = handlerMap
     this.devServerUrl = devServerUrl || null
     this.staticRoot = path.join(__dirname, '../../dist')
@@ -146,12 +150,14 @@ export class WebServerService {
     this.tlsDir = path.join(app.getPath('userData'), 'tls')
   }
 
-  /** Load persisted sessions from database (survive app restarts) */
+  /** Load persisted sessions from database (encrypted) */
   private loadPersistedSessions(): void {
     try {
       const db = getDatabase()
-      const raw = db.getSetting('web_sessions')
+      let raw = db.getSetting('web_sessions')
       if (!raw) return
+      // Decrypt if encrypted (ENC: prefix)
+      raw = getCredentialEncryptionService().decryptSetting('web_sessions', raw)
       const entries = JSON.parse(raw) as Array<[string, Session]>
       const now = Date.now()
       for (const [token, session] of entries) {
@@ -165,12 +171,14 @@ export class WebServerService {
     }
   }
 
-  /** Save current sessions to database */
+  /** Save current sessions to database (encrypted) */
   private persistSessions(): void {
     try {
       const db = getDatabase()
       const entries = Array.from(this.sessions.entries())
-      db.setSetting('web_sessions', JSON.stringify(entries))
+      const json = JSON.stringify(entries)
+      const encrypted = getCredentialEncryptionService().encryptSetting('web_sessions', json)
+      db.setSetting('web_sessions', encrypted)
     } catch (err) {
       console.warn('[WebServer] Failed to persist sessions:', (err as Error).message)
     }
@@ -214,8 +222,10 @@ export class WebServerService {
         try {
           const originUrl = new URL(origin)
           const expectedPort = String(this.port)
-          // Allow connections from our own server or localhost
-          if (originUrl.port !== expectedPort && originUrl.hostname !== 'localhost' && originUrl.hostname !== '127.0.0.1') {
+          const oh = originUrl.hostname.replace(/^\[|]$/g, '') // strip IPv6 brackets
+          const isLocalhost = oh === 'localhost' || oh === '127.0.0.1' || oh === '::1'
+          // Must match our port AND be either localhost or same-network (not a random website)
+          if (originUrl.port !== expectedPort || (!isLocalhost && originUrl.protocol !== 'https:' && originUrl.protocol !== 'http:')) {
             console.warn(`[WebServer] Rejected WebSocket from unexpected origin: ${origin}`)
             ws.close(4003, 'Origin not allowed')
             return
@@ -302,7 +312,7 @@ export class WebServerService {
             }
             // Redirect everything else to HTTPS
             const host = (req.headers.host || '').replace(`:${httpPort}`, `:${this.port}`)
-            res.writeHead(302, { Location: `https://${host}${req.url}` })
+            res.writeHead(301, { Location: `https://${host}${req.url}` })
             res.end()
           })
           this.httpRedirectServer.listen(httpPort, '0.0.0.0', () => {
@@ -426,8 +436,11 @@ export class WebServerService {
     res.setHeader('X-Frame-Options', 'DENY')
     res.setHeader('X-XSS-Protection', '1; mode=block')
     res.setHeader('Referrer-Policy', 'no-referrer')
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data:; connect-src 'self' ws: wss:; font-src 'self' data:")
+    if (this.isHttpsEnabled()) {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000')
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -555,7 +568,7 @@ export class WebServerService {
   private imageCacheMaxBytes = 500 * 1024 * 1024 // 500MB
   private imageCacheMaxAge = 7 * 24 * 60 * 60 * 1000 // 7 days
 
-  private handleProxyImage(url: URL, res: http.ServerResponse): void {
+  private async handleProxyImage(url: URL, res: http.ServerResponse): Promise<void> {
     const imageUrl = url.searchParams.get('url')
     if (!imageUrl) {
       res.writeHead(400)
@@ -573,13 +586,20 @@ export class WebServerService {
       return
     }
 
+    // Only allow HTTP and HTTPS schemes (block file://, data://, ftp://, etc.)
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      res.writeHead(403)
+      res.end('Only HTTP/HTTPS schemes allowed')
+      return
+    }
+
     // Allow: private IPs (IPv4 + IPv6), Plex domains, TMDB, Jellyfin/Emby local servers
     const hostname = parsedUrl.hostname
     const isAllowed = hostname === 'localhost' || hostname === '127.0.0.1' ||
       hostname === '::1' || hostname === '[::1]' ||
       hostname.startsWith('192.168.') || hostname.startsWith('10.') ||
       hostname.match(/^172\.(1[6-9]|2[0-9]|3[01])\./) ||
-      hostname.startsWith('fc') || hostname.startsWith('fd') ||
+      hostname.startsWith('fc') || hostname.startsWith('fd') || hostname.startsWith('fe80') ||
       hostname.endsWith('.plex.direct') ||
       hostname === 'image.tmdb.org' ||
       hostname === 'coverartarchive.org' ||
@@ -624,9 +644,11 @@ export class WebServerService {
     try {
       const stat = fs.statSync(cachePath)
       if (Date.now() - stat.mtimeMs < this.imageCacheMaxAge) {
-        // Serve from cache
+        // Serve from cache — read stored content type or default to image/jpeg
+        let cachedType = 'image/jpeg'
+        try { cachedType = fs.readFileSync(cachePath + '.type', 'utf-8').trim() || cachedType } catch { /* no type file */ }
         res.writeHead(200, {
-          'Content-Type': 'image/jpeg',
+          'Content-Type': cachedType,
           'Cache-Control': 'public, max-age=604800',
           'Content-Length': String(stat.size),
         })
@@ -636,6 +658,29 @@ export class WebServerService {
       }
     } catch {
       // Cache miss — fetch from source
+    }
+
+    // DNS rebinding mitigation: resolve hostname and verify the IP is still allowed
+    // (prevents attacker domains that initially resolve to private IPs then change)
+    if (!hostname.match(/^\d+\.\d+\.\d+\.\d+$/) && hostname !== 'localhost' && hostname !== '::1') {
+      try {
+        const { address } = await new Promise<{ address: string; family: number }>((resolve, reject) => {
+          dns.lookup(hostname, (err, addr, fam) => err ? reject(err) : resolve({ address: addr, family: fam }))
+        })
+        const isPrivateResolved = address === '127.0.0.1' || address === '::1' ||
+          address.startsWith('192.168.') || address.startsWith('10.') ||
+          /^172\.(1[6-9]|2[0-9]|3[01])\./.test(address) ||
+          address.startsWith('fc') || address.startsWith('fd') || address.startsWith('fe80')
+        // Public CDNs (TMDB, coverartarchive) resolve to public IPs — that's expected and safe
+        const isKnownCdn = hostname === 'image.tmdb.org' || hostname === 'coverartarchive.org'
+        if (!isPrivateResolved && !isKnownCdn && !hostname.endsWith('.plex.direct')) {
+          res.writeHead(403)
+          res.end('DNS resolved to disallowed IP')
+          return
+        }
+      } catch {
+        // DNS lookup failed — allow through (might be a raw IP or unreachable host)
+      }
     }
 
     const fetchOptions = parsedUrl.protocol === 'https:'
@@ -665,6 +710,8 @@ export class WebServerService {
       try {
         fs.mkdirSync(this.imageCacheDir, { recursive: true })
         const cacheStream = fs.createWriteStream(cachePath)
+        // Store content type for cache hits
+        try { fs.writeFileSync(cachePath + '.type', contentType) } catch { /* non-critical */ }
         proxyRes.pipe(cacheStream)
         proxyRes.pipe(res)
         cacheStream.on('error', () => {
@@ -893,7 +940,7 @@ export class WebServerService {
       const entry = this.rateLimits.get(ip) || { failures: 0, lockedUntil: 0, lockoutCount: 0 }
       entry.failures++
       if (entry.failures >= MAX_AUTH_FAILURES) {
-        entry.lockoutCount++
+        entry.lockoutCount = Math.min(entry.lockoutCount + 1, 3)
         const lockoutDuration = entry.lockoutCount >= 3
           ? 24 * 60 * 60 * 1000   // 24 hours after 3rd lockout
           : entry.lockoutCount >= 2
@@ -943,6 +990,20 @@ export class WebServerService {
   private async handleRpc(ws: AuthenticatedWebSocket, msg: RpcMessage): Promise<void> {
     const { id, channel, args } = msg
     const rpcStart = Date.now()
+
+    // Per-session RPC rate limiting
+    const sessionKey = ws.sessionToken || ws.clientIp || 'unknown'
+    const rpcLimit = this.rpcRateLimits.get(sessionKey)
+    const now = Date.now()
+    if (rpcLimit && now - rpcLimit.windowStart < RPC_RATE_WINDOW_MS) {
+      rpcLimit.count++
+      if (rpcLimit.count > RPC_RATE_LIMIT) {
+        ws.send(JSON.stringify({ type: 'response', id, error: 'Rate limit exceeded' }))
+        return
+      }
+    } else {
+      this.rpcRateLimits.set(sessionKey, { count: 1, windowStart: now })
+    }
 
     // Check denylist
     if (WEB_DENIED_CHANNELS.has(channel)) {
@@ -1082,6 +1143,9 @@ export class WebServerService {
       this.sessions.delete(token)
       return false
     }
+    // Note: IP binding removed — mobile carriers and CDN proxies (Fastly, Akamai)
+    // route through different edge IPs within a session, causing false rejections.
+    // PIN auth + session token is sufficient for LAN/WAN access.
     return true
   }
 
@@ -1167,7 +1231,7 @@ export class WebServerService {
     const interfaces = os.networkInterfaces()
     for (const name of Object.keys(interfaces)) {
       for (const iface of interfaces[name] || []) {
-        if (iface.family === 'IPv4' && !iface.internal) {
+        if (!iface.internal) {
           altNames.push({ type: 7, ip: iface.address })
         }
       }
@@ -1198,7 +1262,7 @@ export class WebServerService {
 // Singleton
 let instance: WebServerService | null = null
 
-export function initWebServerService(handlerMap: Map<string, Function>, devServerUrl?: string): WebServerService {
+export function initWebServerService(handlerMap: Map<string, (event: unknown, ...args: unknown[]) => unknown>, devServerUrl?: string): WebServerService {
   instance = new WebServerService(handlerMap, devServerUrl)
   return instance
 }

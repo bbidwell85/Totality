@@ -35,7 +35,7 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
       const scanner = html5QrCodeRef.current as { stop: () => Promise<void>; getState?: () => number; isScanning?: boolean }
       try {
         const state = scanner.getState?.()
-        if (state === 2 || state === 3 || scanner.isScanning) {
+        if (state !== 0 || scanner.isScanning) {
           scanner.stop().catch(() => {})
         }
       } catch { /* already stopped */ }
@@ -49,6 +49,18 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
     setResults([])
     setAddedIndex(null)
     lastBarcodeRef.current = null
+
+    // Pre-check camera permission before loading scanner library
+    try {
+      if (navigator.permissions) {
+        const status = await navigator.permissions.query({ name: 'camera' as PermissionName })
+        if (status.state === 'denied') {
+          setError('Camera access denied. Allow camera access in your browser settings.')
+          return
+        }
+      }
+    } catch { /* permissions API not available — proceed to scanner */ }
+
     setScanning(true)
 
     await new Promise(r => setTimeout(r, 100))

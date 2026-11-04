@@ -24,6 +24,8 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionErrorBoundary } from './components/ui/SectionErrorBoundary'
 import type { MediaViewType, SeriesStats, CollectionStats, MusicCompletenessStats, AnalysisProgress } from './components/library/types'
 import { isWebMode, isAuthenticated, authenticate } from './services/webTransport'
+import { MobileDevLog } from './components/mobile/MobileDevLog'
+import { stateToHash, parseHash, pushHash, replaceHash } from './services/hashRouting'
 import { useMobileLayout } from './hooks/useMobileLayout'
 import { MobileTabBar, type MobileTab } from './components/mobile/MobileTabBar'
 import { MobileSearchOverlay } from './components/mobile/MobileSearchOverlay'
@@ -55,6 +57,7 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
   const [showMoodSyncPanel, setShowMoodSyncPanel] = useState(false)
   const [showTaskQueuePanel, setShowTaskQueuePanel] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
+  const [wsConnected, setWsConnected] = useState(true)
   // Desktop backdrop state (passed up from MediaBrowser)
   const [backdropUrl, setBackdropUrl] = useState<string | null>(null)
   const [backdropVisible, setBackdropVisible] = useState<string | null>(null) // persists URL during fade-out
@@ -77,6 +80,26 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed))
   }, [sidebarCollapsed])
+
+  // Track WebSocket connection status (web mode only)
+  useEffect(() => {
+    if (!isWebMode()) return
+    const handler = (e: Event) => {
+      setWsConnected((e as CustomEvent).detail?.connected ?? true)
+    }
+    window.addEventListener('ws-status', handler)
+    return () => window.removeEventListener('ws-status', handler)
+  }, [])
+  // Task queue state — lifted here so it survives MediaBrowser unmount (wishlist view swap)
+  const [taskQueueState, setTaskQueueState] = useState<unknown>(null)
+  useEffect(() => {
+    if (!isMobile) return
+    const unsub = window.electronAPI.onTaskQueueUpdated?.((s: unknown) => setTaskQueueState(s))
+    window.electronAPI.taskQueueGetState?.().then((s) => setTaskQueueState(s))
+    return () => { unsub?.() }
+  }, [isMobile])
+  const isScanActive = !!(taskQueueState && ((taskQueueState as { currentTask: unknown }).currentTask || ((taskQueueState as { queue: unknown[] }).queue?.length > 0)))
+
   const hasSignaledReady = useRef(false)
 
   const markSplashShown = () => {
@@ -250,6 +273,7 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
     const newTab = tab || libraryTab
     if (!isRestoringRef.current) {
       pushNavState({ view: 'library', tab: newTab })
+      pushHash(stateToHash({ view: 'library', tab: newTab }))
     }
     if (tab) setLibraryTab(tab)
     setCurrentView('library')
@@ -260,6 +284,7 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
   const handleNavigateToDashboard = () => {
     if (!isRestoringRef.current) {
       pushNavState({ view: 'dashboard' })
+      pushHash(stateToHash({ view: 'dashboard' }))
     }
     setCurrentView('dashboard')
     setBackdropUrl(null)
@@ -315,6 +340,86 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
     window.addEventListener('mouseup', handleMouseUp)
     return () => window.removeEventListener('mouseup', handleMouseUp)
   }, [handleBack, handleForward])
+
+  // --- Hash routing (web mode only) ---
+  const isRestoringHashRef = useRef(false)
+
+  // Sync hash on top-level navigation changes
+  useEffect(() => {
+    if (!isWebMode() || isRestoringHashRef.current) return
+    const hash = stateToHash({
+      view: currentView,
+      tab: libraryTab,
+      wishlist: showWishlistPanel,
+    })
+    if (hash) replaceHash(hash)
+  }, [currentView, libraryTab, showWishlistPanel])
+
+  // Restore from hash on initial mount
+  useEffect(() => {
+    if (!isWebMode()) return
+    const hash = window.location.hash
+    if (!hash || hash === '#/' || hash === '#') return
+    const state = parseHash(hash)
+    isRestoringHashRef.current = true
+    isRestoringRef.current = true
+    if (state.wishlist) {
+      setShowWishlistPanel(true)
+      setCurrentView('library')
+    } else {
+      setCurrentView(state.view)
+      if (state.tab) setLibraryTab(state.tab)
+      // Drill-down targets are handled by MediaBrowser via navigateTo
+      if (state.mediaId) {
+        navigateTo({ type: 'movie', id: state.mediaId })
+      } else if (state.showTitle) {
+        navigateTo({ type: 'tv', id: state.showTitle, ...(state.seasonNumber !== undefined ? { seasonNumber: state.seasonNumber } : {}) })
+      } else if (state.artistId) {
+        navigateTo({ type: 'artist', id: state.artistId })
+      } else if (state.albumId) {
+        navigateTo({ type: 'album', id: state.albumId })
+      }
+    }
+    isRestoringRef.current = false
+    isRestoringHashRef.current = false
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Browser back/forward via popstate
+  useEffect(() => {
+    if (!isWebMode()) return
+    const onPopState = () => {
+      const state = parseHash(window.location.hash)
+      isRestoringHashRef.current = true
+      isRestoringRef.current = true
+      if (state.wishlist) {
+        setShowWishlistPanel(true)
+        setCurrentView('library')
+      } else {
+        setShowWishlistPanel(false)
+        setCurrentView(state.view)
+        if (state.tab) setLibraryTab(state.tab)
+        // Drill-down via navigateTo for detail views
+        if (state.mediaId) {
+          navigateTo({ type: 'movie', id: state.mediaId })
+        } else if (state.showTitle) {
+          navigateTo({ type: 'tv', id: state.showTitle, ...(state.seasonNumber !== undefined ? { seasonNumber: state.seasonNumber } : {}) })
+        } else if (state.artistId) {
+          navigateTo({ type: 'artist', id: state.artistId })
+        } else if (state.albumId) {
+          navigateTo({ type: 'album', id: state.albumId })
+        } else {
+          // No drill-down — clear any current detail view
+          window.dispatchEvent(new CustomEvent('navigate-restore', { detail: { view: state.view, tab: state.tab } }))
+        }
+      }
+      isRestoringRef.current = false
+      isRestoringHashRef.current = false
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleOpenSettings = (initialTab?: string) => {
     setSettingsInitialTab(initialTab)
@@ -470,6 +575,8 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
                 onBackdropChange={setBackdropUrl}
                 isMobile={isMobile}
                 isTablet={isTablet}
+                taskQueueState={taskQueueState}
+                isScanActive={isScanActive}
               />
             </SectionErrorBoundary>
           </main>
@@ -569,6 +676,12 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
           />
         )}
 
+        {/* Mobile offline banner */}
+        {isMobile && isWebMode() && !wsConnected && (
+          <div className="fixed bottom-[68px] left-0 right-0 z-50 bg-destructive text-destructive-foreground text-center text-caption py-1.5" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            Offline — reconnecting...
+          </div>
+        )}
         {/* Mobile bottom tab bar */}
         {isMobile && (
           <MobileTabBar
@@ -582,6 +695,7 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
             onTabChange={(tab: MobileTab) => {
               if (tab === 'wishlist') {
                 setShowWishlistPanel(true)
+                pushHash(stateToHash({ view: 'library', wishlist: true }))
               } else {
                 setShowWishlistPanel(false)
                 handleNavigateToLibrary(tab === 'tv' ? 'tv' : tab)
@@ -595,6 +709,8 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
       {showSplash && <SplashScreen onComplete={markSplashShown} />}
       {/* Toast notifications */}
       <ToastContainer />
+      {/* Mobile dev log overlay (web mode only) */}
+      {isWebMode() && <MobileDevLog />}
     </>
   )
 }

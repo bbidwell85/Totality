@@ -20,7 +20,7 @@ interface SearchResult {
   physical_release_date?: string
 }
 
-function WishlistSearch({ isMobile = false }: { isMobile?: boolean }) {
+function WishlistSearch({ isMobile = false, onBarcodeScan }: { isMobile?: boolean; onBarcodeScan?: () => void }) {
   const { addItem, items } = useWishlist()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
@@ -149,11 +149,15 @@ function WishlistSearch({ isMobile = false }: { isMobile?: boolean }) {
           />
           {isSearching ? (
             <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-muted-foreground" />
-          ) : query && (
+          ) : query ? (
             <button onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors">
               <X className="w-5 h-5" />
             </button>
-          )}
+          ) : onBarcodeScan ? (
+            <button onClick={onBarcodeScan} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors" title="Scan barcode">
+              <ScanBarcode className="w-5 h-5" />
+            </button>
+          ) : null}
         </div>
 
         {results.length > 0 && (
@@ -673,18 +677,7 @@ export function WishlistPanel({ isOpen, onClose, isMobile = false, inline = fals
       {isMobileInline ? (
         // Mobile page layout: search + wrapped filter rows
         <div className="shrink-0 px-4 py-3" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)' }}>
-          <div className="flex items-center gap-2">
-            <div className="flex-1">
-              <WishlistSearch isMobile={isMobile} />
-            </div>
-            <button
-              onClick={() => setShowBarcodeScanner(true)}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Scan barcode"
-            >
-              <ScanBarcode className="w-5 h-5" />
-            </button>
-          </div>
+          <WishlistSearch isMobile={isMobile} onBarcodeScan={() => setShowBarcodeScanner(true)} />
           {counts.total > 0 && (
             <div className="mt-3 space-y-2">
               {/* Row 1: Status + Sort */}

@@ -222,12 +222,21 @@ export function registerLoggingHandlers(): void {
   })
 
   // Client-side log forwarding — renderer/mobile sends errors to main process log
-  ipcMain.handle('logs:clientLog', async (_event, data: unknown) => {
+  // Accepts both: object { level, source, message } (from preload) or positional args (from web proxy)
+  ipcMain.handle('logs:clientLog', async (_event, data: unknown, sourceArg?: unknown, messageArg?: unknown) => {
     try {
-      const entry = data as { level?: string; source?: string; message?: string }
-      const level = entry?.level || 'error'
-      const source = entry?.source || 'WebClient'
-      const message = entry?.message || 'Unknown error'
+      let level: string, source: string, message: string
+      if (typeof data === 'object' && data !== null) {
+        const entry = data as { level?: string; source?: string; message?: string }
+        level = entry?.level || 'error'
+        source = entry?.source || 'WebClient'
+        message = entry?.message || 'Unknown error'
+      } else {
+        // Positional args from web proxy: clientLog(level, source, message)
+        level = String(data || 'error')
+        source = String(sourceArg || 'WebClient')
+        message = String(messageArg || 'Unknown error')
+      }
       const prefix = `[${source}]`
 
       if (level === 'error') console.error(prefix, message)

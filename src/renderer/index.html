@@ -3,9 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#000000" />
     <title>Totality</title>
     <style>
       html, body, #root {
@@ -30,10 +33,17 @@
       }
     </style>
     <script>
-      document.documentElement.style.setProperty('--app-height', window.screen.height + 'px');
-      window.addEventListener('resize', function() {
-        document.documentElement.style.setProperty('--app-height', window.screen.height + 'px');
-      });
+      function updateAppHeight() {
+        var full = window.screen.height;
+        var vv = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        // Use screen.height normally (full-screen coverage), but switch to
+        // visualViewport.height when keyboard is open (significant height reduction)
+        var h = (vv && vv < full * 0.75) ? vv : full;
+        document.documentElement.style.setProperty('--app-height', h + 'px');
+      }
+      updateAppHeight();
+      window.addEventListener('resize', updateAppHeight);
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', updateAppHeight);
     </script>
   </head>
   <body style="background-color: #000;">

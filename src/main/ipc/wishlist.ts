@@ -10,6 +10,20 @@ import { validateInput, PositiveIntSchema, WishlistItemSchema, WishlistFiltersSc
 import { z } from 'zod'
 
 /**
+ * Strip proxy-image prefix from URLs stored by web/mobile clients.
+ * Web mode rewrites image URLs to `/api/proxy-image?url=...` for caching,
+ * but we must store the original URL so desktop (Electron) can load it directly.
+ */
+function unwrapProxyUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined
+  const prefix = '/api/proxy-image?url='
+  if (url.startsWith(prefix)) {
+    return decodeURIComponent(url.slice(prefix.length))
+  }
+  return url
+}
+
+/**
  * Register all wishlist-related IPC handlers
  */
 export function registerWishlistHandlers() {
@@ -26,6 +40,7 @@ export function registerWishlistHandlers() {
   ipcMain.handle('wishlist:add', async (_event, item: unknown) => {
     try {
       const validItem = validateInput(WishlistItemSchema, item, 'wishlist:add')
+      validItem.poster_url = unwrapProxyUrl(validItem.poster_url)
       console.log('[IPC wishlist:add]', validItem.media_type, `"${validItem.title}"`)
 
       // Auto-fetch poster from TMDB if tmdb_id is provided but poster_url is missing
@@ -61,6 +76,9 @@ export function registerWishlistHandlers() {
     try {
       const validId = validateInput(PositiveIntSchema, id, 'wishlist:update')
       const validUpdates = validateInput(WishlistItemSchema.partial(), updates, 'wishlist:update')
+      if (validUpdates.poster_url) {
+        validUpdates.poster_url = unwrapProxyUrl(validUpdates.poster_url)
+      }
       console.log('[IPC wishlist:update] id:', validId)
       await db.updateWishlistItem(validId, validUpdates)
       safeSend(BrowserWindow.getAllWindows()[0] || null, 'wishlist:changed')
@@ -163,6 +181,7 @@ export function registerWishlistHandlers() {
       // Auto-fetch posters from TMDB for items missing poster_url
       const tmdb = getTMDBService()
       for (const item of validItems) {
+        item.poster_url = unwrapProxyUrl(item.poster_url)
         if (item.tmdb_id && !item.poster_url) {
           try {
             if (item.media_type === 'movie') {

@@ -671,6 +671,25 @@ export class BetterSQLiteService {
       console.warn('[BetterSQLite] Orphan cleanup skipped:', err)
     }
 
+    // Fix wishlist poster_url values that were stored as proxy URLs from web/mobile clients
+    try {
+      const proxyRows = this.db.prepare(
+        "SELECT id, poster_url FROM wishlist_items WHERE poster_url LIKE '/api/proxy-image?url=%'"
+      ).all() as Array<{ id: number; poster_url: string }>
+
+      if (proxyRows.length > 0) {
+        const update = this.db.prepare('UPDATE wishlist_items SET poster_url = ? WHERE id = ?')
+        const prefix = '/api/proxy-image?url='
+        for (const row of proxyRows) {
+          const originalUrl = decodeURIComponent(row.poster_url.slice(prefix.length))
+          update.run(originalUrl, row.id)
+        }
+        console.log(`[BetterSQLite] Fixed ${proxyRows.length} wishlist items with proxy poster URLs`)
+      }
+    } catch (err) {
+      console.warn('[BetterSQLite] Wishlist poster URL fixup skipped:', err)
+    }
+
     console.log('[BetterSQLite] Migrations completed')
   }
 

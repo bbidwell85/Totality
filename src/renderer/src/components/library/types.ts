@@ -351,6 +351,9 @@ export interface MediaBrowserProps {
   // Responsive layout
   isMobile?: boolean
   isTablet?: boolean
+  // Task queue state (lifted from App.tsx for mobile scan UI)
+  taskQueueState?: unknown
+  isScanActive?: boolean
 }
 
 export interface MissingItemPopupData {

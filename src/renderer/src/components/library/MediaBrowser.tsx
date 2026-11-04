@@ -1,6 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
+import { isWebMode as isWebModeCheck } from '../../services/webTransport'
+import { stateToHash, replaceHash } from '../../services/hashRouting'
+import { MobileScanBanner } from '../mobile/MobileScanBanner'
+import { MobileScanButton } from '../mobile/MobileScanButton'
 import { MediaDetails } from './MediaDetails'
 import { CompletenessPanel } from './CompletenessPanel'
 import { MissingItemPopup } from './MissingItemPopup'
@@ -79,6 +83,8 @@ export function MediaBrowser({
   onBackdropChange,
   isMobile = false,
   isTablet = false,
+  taskQueueState,
+  isScanActive = false,
 }: MediaBrowserProps) {
   const { sources, activeSourceId, scanProgress, setActiveSource, markLibraryAsNew } = useSources()
   const { addToast } = useToast()
@@ -110,7 +116,9 @@ export function MediaBrowser({
   const hasInitialLoadRef = useRef(false) // Track if initial load is complete
   const hasAutoSwitchedRef = useRef(false) // Track if auto-switch has been done (to prevent loop)
   const mountedRef = useRef(true)
+  const isWebModeFlag = useMemo(() => isWebModeCheck(), [])
   useEffect(() => { return () => { mountedRef.current = false } }, [])
+
   const [stats, setStats] = useState<LibraryStats | null>(null)
   const [view, setView] = useState<'movies' | 'tv' | 'music'>('movies')
 
@@ -287,6 +295,20 @@ export function MediaBrowser({
   const [includeSingles, setIncludeSingles] = useState(true)
   // isAnalyzing, analysisProgress, analysisType, tmdbApiKeySet, analysis handlers: see useAnalysisManager hook below
 
+  // Sync drill-down state to URL hash (web mode only)
+  useEffect(() => {
+    if (!isWebModeFlag) return
+    replaceHash(stateToHash({
+      view: 'library',
+      tab: view,
+      showTitle: selectedShow || undefined,
+      seasonNumber: selectedSeason ?? undefined,
+      artistId: selectedArtist?.id,
+      albumId: selectedAlbum?.id,
+      mediaId: selectedMediaId ?? undefined,
+    }))
+  }, [isWebModeFlag, view, selectedShow, selectedSeason, selectedArtist?.id, selectedAlbum?.id, selectedMediaId])
+
   // Collection modal state + helpers (extracted hook)
   const {
     showCollectionModal, setShowCollectionModal,
@@ -382,10 +404,11 @@ export function MediaBrowser({
   }, [initialTab, switchView])
 
   // Sync view with external libraryTab prop (one-way: prop → state)
-  // Only update when prop changes, not on every render
+  // Only set the view — don't call switchView() which clears selections,
+  // because pendingNavigation may have just set them (race condition).
   useEffect(() => {
     if (libraryTab && libraryTab !== view) {
-      switchView(libraryTab)
+      setView(libraryTab)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libraryTab])
@@ -1190,15 +1213,17 @@ export function MediaBrowser({
 
     console.log('[MediaBrowser] Handling navigation:', pendingNavigation)
 
+    // Use setView() instead of switchView() — switchView clears all selections
+    // (selectedArtist, selectedAlbum, etc.) which races with the async lookups below.
     if (type === 'movie') {
-      switchView('movies')
+      setView('movies')
       setSelectedMediaId(typeof id === 'string' ? parseInt(id, 10) : id)
     } else if (type === 'tv') {
-      switchView('tv')
+      setView('tv')
       setSelectedShow(typeof id === 'string' ? id : String(id))
       setSelectedSeason(null)
     } else if (type === 'episode') {
-      switchView('tv')
+      setView('tv')
       if (pendingNavigation.seriesTitle) {
         setSelectedShow(pendingNavigation.seriesTitle)
       }
@@ -1207,48 +1232,36 @@ export function MediaBrowser({
       }
       setSelectedMediaId(typeof id === 'string' ? parseInt(id, 10) : id)
     } else if (type === 'artist') {
-      switchView('music')
+      setView('music')
       setMusicViewMode('artists')
-      // Find artist by ID first, then fall back to name search
+      // Always fetch from server — paginated array may not contain this artist
       const numId = typeof id === 'string' ? parseInt(id, 10) : id
-      const artist = musicArtists.find(a => a.id === numId)
-      if (artist) {
-        setSelectedArtist(artist)
-      } else if (artistName) {
-        // Artist not in paginated list — search server by name
-        window.electronAPI.musicGetArtists({ searchQuery: artistName, limit: 1, offset: 0 }).then(result => {
-          if (!mountedRef.current) return
-          const artists = result as MusicArtist[]
-          if (artists.length > 0) setSelectedArtist(artists[0])
-        }).catch(err => console.error('Failed to find artist for navigation:', err))
-      }
+      window.electronAPI.musicGetArtistById(numId).then((a: unknown) => {
+        if (a) {
+          setSelectedArtist(a as MusicArtist)
+        } else if (artistName) {
+          return window.electronAPI.musicGetArtists({ searchQuery: artistName, limit: 1, offset: 0 }).then(result => {
+            const artists = result as MusicArtist[]
+            if (artists.length > 0) setSelectedArtist(artists[0])
+          })
+        }
+      }).catch(err => console.error('Failed to find artist for navigation:', err))
     } else if (type === 'album') {
-      switchView('music')
+      setView('music')
       setMusicViewMode('albums')
+      // Always fetch from server — paginated array may not contain this album
       const numId = typeof id === 'string' ? parseInt(id, 10) : id
-      const album = musicAlbums.find(a => a.id === numId)
-      if (album) {
-        setSelectedAlbum(album)
-        loadAlbumTracks(album.id)
-      } else {
-        // Album not in paginated list — fetch by ID from server
-        window.electronAPI.musicGetAlbumById(numId).then((a: unknown) => {
-          if (!mountedRef.current) return
-          if (a) { setSelectedAlbum(a as MusicAlbum); loadAlbumTracks((a as MusicAlbum).id) }
-        }).catch(err => console.error('Failed to find album for navigation:', err))
-      }
+      window.electronAPI.musicGetAlbumById(numId).then((a: unknown) => {
+        if (a) { setSelectedAlbum(a as MusicAlbum); loadAlbumTracks((a as MusicAlbum).id) }
+      }).catch(err => console.error('Failed to find album for navigation:', err))
     } else if (type === 'track') {
-      switchView('music')
+      setView('music')
       setMusicViewMode('albums')
-      // For tracks, we need to find the track first to get its album
       const numId = typeof id === 'string' ? parseInt(id, 10) : id
-      // Look up the track to find its album
       window.electronAPI.musicGetTrackById(numId).then((result: unknown) => {
-        if (!mountedRef.current) return
         const track = result as MusicTrack | null
         if (track?.album_id) {
           window.electronAPI.musicGetAlbumById(track.album_id).then((a: unknown) => {
-            if (!mountedRef.current) return
             if (a) { setSelectedAlbum(a as MusicAlbum); loadAlbumTracks((a as MusicAlbum).id) }
           })
         }
@@ -1256,7 +1269,8 @@ export function MediaBrowser({
     }
 
     clearNavigation()
-  }, [pendingNavigation, musicArtists, musicAlbums, clearNavigation, switchView])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingNavigation])
 
   if (loading && !hasInitialLoadRef.current) {
     return (
@@ -1995,12 +2009,14 @@ export function MediaBrowser({
             } : undefined}
           >
 
-        {/* Mobile controls bar — only show when there are controls for the current view */}
+        {/* Mobile scan banner — shows when tasks are active */}
+        {isMobile && !isMobileDetail && <MobileScanBanner queueState={taskQueueState as Parameters<typeof MobileScanBanner>[0]['queueState']} />}
+
+        {/* Mobile controls bar + scan button */}
         {isMobile && !isMobileDetail && (() => {
           const hasMusicToggle = view === 'music' && !selectedArtist && !selectedAlbum
           const hasLibraryDropdown = activeSourceId && currentTypeLibraries.length >= 2
           const hasFilters = view === 'movies' || (view === 'music' && musicViewMode === 'tracks')
-          if (!hasMusicToggle && !hasLibraryDropdown && !hasFilters) return null
           return (
           <div className="pb-2">
             <div className="flex items-center gap-2">
@@ -2047,7 +2063,7 @@ export function MediaBrowser({
               {hasFilters && (
               <button
                 onClick={() => setShowMobileFilters(!showMobileFilters)}
-                className={`ml-auto min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-colors ${
+                className={`min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg transition-colors ${
                   showMobileFilters || tierFilter !== 'all' || qualityFilter !== 'all' || collectionsOnly
                     ? 'bg-foreground text-background'
                     : 'text-muted-foreground hover:text-foreground'
@@ -2057,6 +2073,18 @@ export function MediaBrowser({
                 <SlidersHorizontal className="w-5 h-5" />
               </button>
               )}
+
+              {/* Scan button — always at right edge */}
+              <div className="ml-auto">
+                <MobileScanButton
+                  sources={sources}
+                  activeSourceId={activeSourceId}
+                  currentLibraries={currentTypeLibraries}
+                  activeLibraryId={activeLibraryId}
+                  viewType={view}
+                  isScanning={isScanActive}
+                />
+              </div>
             </div>
 
             {/* Filter options */}

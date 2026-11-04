@@ -39,8 +39,8 @@ interface MusicBrainzReleaseSearch {
 // e.g., "Star Wars: The Force Awakens [4K UHD Blu-ray + Digital]" → "Star Wars: The Force Awakens"
 function cleanProductTitle(title: string): string {
   return title
-    .replace(/\s*[\[(](?:4K|UHD|Blu-ray|DVD|Digital|HD|Blu Ray|BD|Ultra HD|Steelbook|Limited Edition|Special Edition|Collector'?s? Edition|Widescreen|Fullscreen|Region \w+|NTSC|PAL|Import|Remastered|Deluxe|Box Set|Complete Series|Season \d+)[\w\s+/,·—–-]*[\])]/gi, '')
-    .replace(/\s*[\[(].*?(?:Blu-ray|DVD|UHD|Digital|Disc|Edition|Remastered).*?[\])]/gi, '')
+    .replace(/\s*[[(](?:4K|UHD|Blu-ray|DVD|Digital|HD|Blu Ray|BD|Ultra HD|Steelbook|Limited Edition|Special Edition|Collector'?s? Edition|Widescreen|Fullscreen|Region \w+|NTSC|PAL|Import|Remastered|Deluxe|Box Set|Complete Series|Season \d+)[\w\s+/,·—–-]*[\])]/gi, '')
+    .replace(/\s*[[(].*?(?:Blu-ray|DVD|UHD|Digital|Disc|Edition|Remastered).*?[\])]/gi, '')
     .replace(/\s*-\s*(?:4K|UHD|Blu-ray|DVD|BD)\s*$/i, '')
     .trim()
 }

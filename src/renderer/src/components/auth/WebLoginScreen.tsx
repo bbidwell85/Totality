@@ -43,7 +43,7 @@ export function WebLoginScreen({ onAuthenticated, authenticate, logoSrc }: WebLo
   }, [pin, loading, authenticate, onAuthenticated])
 
   return (
-    <div className="min-h-screen flex flex-col items-center bg-background text-foreground px-4" style={{ paddingTop: '30vh' }}>
+    <div className="fixed inset-0 flex flex-col items-center justify-center overflow-auto bg-background text-foreground px-4">
       {/* Logo */}
       {logoSrc ? (
         <img src={logoSrc} alt="Totality" className="h-28 mb-10" />

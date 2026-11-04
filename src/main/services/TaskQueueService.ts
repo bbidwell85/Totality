@@ -118,7 +118,7 @@ export class TaskQueueService {
   private static readonly MAX_COMPLETED_TASKS = 50
   private static readonly MAX_HISTORY_ENTRIES = 100
   private static readonly MAX_QUEUE_DEPTH = 50
-  private static readonly PROGRESS_THROTTLE_MS = 250 // Max ~4 progress events/second
+  private static readonly PROGRESS_THROTTLE_MS = 100 // Max ~10 progress events/second
 
   /**
    * Set the main window reference for IPC events
