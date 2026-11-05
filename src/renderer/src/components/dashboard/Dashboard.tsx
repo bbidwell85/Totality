@@ -206,7 +206,8 @@ export function Dashboard({
 
       const val = <T,>(r: PromiseSettledResult<T>, fallback: T): T => {
         if (r.status === 'fulfilled') return r.value
-        console.warn('[Dashboard] IPC call failed, using fallback:', r.reason)
+        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason)
+        console.warn('[Dashboard] IPC call failed, using fallback:', msg)
         return fallback
       }
 

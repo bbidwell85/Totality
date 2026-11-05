@@ -271,45 +271,42 @@ export function PlexAuthFlow({ onSuccess, onBack }: PlexAuthFlowProps) {
             Select a Plex server to connect:
           </p>
 
-          {servers.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground">
-              No servers found on your Plex account
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {servers.map(server => (
-                <button
-                  key={server.id}
-                  onClick={() => handleSelectServer(server.id)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
-                    selectedServerId === server.id
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border hover:bg-muted'
-                  }`}
-                >
-                  <div className="w-10 h-10 bg-[#e5a00d] rounded-lg flex items-center justify-center text-white">
-                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-medium flex items-center gap-2">
-                      {server.name}
-                      {server.isOwned && (
-                        <span className="text-caption bg-[#e5a00d]/20 text-[#e5a00d] px-1.5 py-0.5 rounded">
-                          Owned
-                        </span>
-                      )}
+          {(() => {
+            const ownedServers = servers.filter(s => s.isOwned)
+
+            return ownedServers.length === 0 ? (
+              <div className="p-4 text-center text-muted-foreground">
+                No owned servers found on your Plex account
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {ownedServers.map(server => (
+                  <button
+                    key={server.id}
+                    onClick={() => handleSelectServer(server.id)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
+                      selectedServerId === server.id
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:bg-muted'
+                    }`}
+                  >
+                    <div className="w-10 h-10 bg-[#e5a00d] rounded-lg flex items-center justify-center text-white">
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" />
+                      </svg>
                     </div>
-                    <div className="text-label text-muted-foreground">
-                      {server.address}:{server.port}
-                      {server.isLocal && ' (Local)'}
+                    <div className="flex-1">
+                      <div className="font-medium">{server.name}</div>
+                      <div className="text-label text-muted-foreground">
+                        {server.address}:{server.port}
+                        {server.isLocal && ' (Local)'}
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
 
           {error && (
             <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-label">

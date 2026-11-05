@@ -92,8 +92,8 @@ const ARTWORK_RATE_LIMIT = 100 // max requests per window
 const ARTWORK_RATE_WINDOW_MS = 10_000 // 10 seconds
 const MAX_SESSIONS_PER_IP = 10
 const SESSION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
-const RPC_RATE_LIMIT = 60 // max requests per window
-const RPC_RATE_WINDOW_MS = 2_000 // 2 seconds (30 req/s sustained)
+const RPC_RATE_LIMIT = 120 // max requests per window (Dashboard fires ~30 parallel calls)
+const RPC_RATE_WINDOW_MS = 2_000 // 2 seconds (60 req/s sustained)
 
 /** Constant-time string comparison to prevent timing attacks on PIN */
 function timingSafeCompare(a: string, b: string): boolean {
@@ -1089,7 +1089,7 @@ export class WebServerService {
       const rpcMs = Date.now() - rpcStart
       // Sanitize error — never expose stack traces or internal details to web clients
       console.error(`[WebServer] RPC error on ${channel} after ${rpcMs}ms:`, err)
-      ws.send(JSON.stringify({ type: 'response', id, error: 'Internal error' }))
+      ws.send(JSON.stringify({ type: 'response', id, error: `Internal error: ${channel}` }))
     }
   }
 

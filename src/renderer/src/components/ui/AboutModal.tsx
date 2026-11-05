@@ -135,7 +135,8 @@ function AboutTab() {
           <li>Video and audio quality analysis with tier-based scoring and TMDB ratings</li>
           <li>TV series, movie collection, music, and director/actor filmography completeness</li>
           <li>AI-powered assistant with 29 tools for library insights and recommendations</li>
-          <li>Wishlist with Plex and Trakt watchlist sync</li>
+          <li>Wishlist with Plex and Trakt watchlist sync, barcode scanner for quick adds</li>
+          <li>Mobile and web access — browse your library from any device on your network</li>
           <li>Storage analytics, codec migration tracking, and duplicate detection</li>
           <li>Watch history tracking with smart upgrade priority</li>
           <li>Tag sync (mood/genre) across Plex, MediaMonkey, and Kodi</li>
@@ -223,6 +224,22 @@ function CreditsTab() {
         </div>
       </section>
 
+      {/* Barcode Lookup */}
+      <section>
+        <h3 className="text-label font-semibold text-muted-foreground mb-3">
+          Barcode lookup
+        </h3>
+        <div className="text-caption text-muted-foreground leading-relaxed">
+          <p>
+            Barcode scanning uses MusicBrainz for CD lookups and{' '}
+            <ExtLink href="https://www.upcitemdb.com">
+              UPCitemdb
+            </ExtLink>
+            {' '}for movie and TV disc lookups, with TMDB for title matching.
+          </p>
+        </div>
+      </section>
+
       {/* AI Assistant */}
       <section>
         <h3 className="text-label font-semibold text-muted-foreground mb-3">
@@ -289,6 +306,11 @@ function CreditsTab() {
           <TechLink name="dnd-kit" url="https://dndkit.com" license="MIT" />
           <TechLink name="Zod" url="https://zod.dev" license="MIT" />
           <TechLink name="react-markdown" url="https://github.com/remarkjs/react-markdown" license="MIT" />
+          <TechLink name="html5-qrcode" url="https://github.com/mebjas/html5-qrcode" license="Apache 2.0" />
+          <TechLink name="ws" url="https://github.com/websockets/ws" license="MIT" />
+          <TechLink name="selfsigned" url="https://github.com/jfromaniello/selfsigned" license="MIT" />
+          <TechLink name="chokidar" url="https://github.com/paulmillr/chokidar" license="MIT" />
+          <TechLink name="adm-zip" url="https://github.com/cthackers/adm-zip" license="MIT" />
         </div>
       </section>
 

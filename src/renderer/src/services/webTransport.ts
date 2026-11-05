@@ -115,7 +115,7 @@ function connect(): Promise<void> {
     ws.onopen = () => {
       isConnecting = false
       reconnectAttempts = 0
-      const stored = sessionStorage.getItem('web_session_token')
+      const stored = localStorage.getItem('web_session_token')
       if (stored) {
         sessionToken = stored
       }
@@ -198,7 +198,7 @@ function handleMessage(data: { type: string; [key: string]: unknown }): void {
     case 'auth': {
       if (data.success && data.token) {
         sessionToken = data.token as string
-        sessionStorage.setItem('web_session_token', sessionToken)
+        localStorage.setItem('web_session_token', sessionToken)
         authPromise?.resolve(sessionToken)
         authPromise = null
       } else {
@@ -283,7 +283,8 @@ export function authenticate(pin: string): Promise<string> {
 // }
 
 export function isAuthenticated(): boolean {
-  return sessionToken !== null
+  // Check in-memory token first, then localStorage (for initial render before WebSocket connects)
+  return sessionToken !== null || !!localStorage.getItem('web_session_token')
 }
 
 export function isWebMode(): boolean {
@@ -297,16 +298,20 @@ export function isWebMode(): boolean {
 export async function initWebTransport(): Promise<void> {
   await connect()
 
+  console.log('[WebTransport] Connected. Token in localStorage:', !!localStorage.getItem('web_session_token'), 'sessionToken:', !!sessionToken)
+
   // Try authenticating with stored token by making a test RPC
   if (sessionToken) {
     try {
       await sendRpc('app:getVersion', [])
-      // Token is valid
-    } catch {
-      // Token expired, clear it
+      console.log('[WebTransport] Token validated successfully')
+    } catch (err) {
+      console.log('[WebTransport] Token validation failed:', err instanceof Error ? err.message : String(err))
       sessionToken = null
-      sessionStorage.removeItem('web_session_token')
+      localStorage.removeItem('web_session_token')
     }
+  } else {
+    console.log('[WebTransport] No session token available')
   }
 
   // Install the proxy

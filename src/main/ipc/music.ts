@@ -337,8 +337,9 @@ export function registerMusicHandlers(): void {
    */
   ipcMain.handle('music:getAlbumsNeedingUpgrade', async (_event, limit?: unknown, sourceId?: unknown) => {
     try {
-      const validLimit = limit !== undefined ? validateInput(z.number().int().positive().optional(), limit, 'music:getAlbumsNeedingUpgrade') : undefined
-      const validSourceId = sourceId !== undefined ? validateInput(OptionalSourceIdSchema, sourceId, 'music:getAlbumsNeedingUpgrade') : undefined
+      // Web proxy serializes undefined → null in JSON; normalize before validation
+      const validLimit = (limit != null) ? validateInput(z.number().int().positive(), limit, 'music:getAlbumsNeedingUpgrade') : undefined
+      const validSourceId = (sourceId != null) ? validateInput(OptionalSourceIdSchema, sourceId, 'music:getAlbumsNeedingUpgrade') : undefined
       const db = getDatabase()
       return db.getAlbumsNeedingUpgrade(validLimit, validSourceId)
     } catch (error: unknown) {
