@@ -24,7 +24,6 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { SectionErrorBoundary } from './components/ui/SectionErrorBoundary'
 import type { MediaViewType, SeriesStats, CollectionStats, MusicCompletenessStats, AnalysisProgress } from './components/library/types'
 import { isWebMode, isAuthenticated, authenticate } from './services/webTransport'
-import { MobileDevLog } from './components/mobile/MobileDevLog'
 import { stateToHash, parseHash, pushHash, replaceHash } from './services/hashRouting'
 import { useMobileLayout } from './hooks/useMobileLayout'
 import { MobileTabBar, type MobileTab } from './components/mobile/MobileTabBar'
@@ -709,8 +708,6 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
       {showSplash && <SplashScreen onComplete={markSplashShown} />}
       {/* Toast notifications */}
       <ToastContainer />
-      {/* Mobile dev log overlay (web mode only) */}
-      {isWebMode() && <MobileDevLog />}
     </>
   )
 }
