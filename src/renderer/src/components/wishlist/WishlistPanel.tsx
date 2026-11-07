@@ -16,8 +16,16 @@ interface SearchResult {
   poster_url?: string
   tmdb_id?: number
   owned?: boolean
+  quality_tier?: string
+  tier_quality?: string
   release_date?: string
   physical_release_date?: string
+}
+
+function getQualityLabel(tier?: string, level?: string): string | null {
+  if (!tier) return null
+  const levelStr = level ? ` ${level[0]}${level.slice(1).toLowerCase()}` : ''
+  return `${tier}${levelStr}`
 }
 
 function WishlistSearch({ isMobile = false, onBarcodeScan }: { isMobile?: boolean; onBarcodeScan?: () => void }) {
@@ -38,23 +46,28 @@ function WishlistSearch({ isMobile = false, onBarcodeScan }: { isMobile?: boolea
     if (q.length < 2) { setResults([]); return }
     setIsSearching(true)
     try {
-      const [movies, tvShows, local] = await Promise.all([
+      const [movies, tvShows] = await Promise.all([
         window.electronAPI.movieSearchTMDB(q).catch(() => []),
         window.electronAPI.seriesSearchTMDB(q).catch(() => []),
-        window.electronAPI.mediaSearch(q).catch(() => ({ movies: [], tvShows: [], episodes: [], artists: [], albums: [], tracks: [] })),
       ])
 
-      // Build sets of owned TMDB IDs + titles for ownership tagging
-      const localMovies = local.movies as Array<{ id: number; title: string; tmdb_id?: string }>
-      const localShows = local.tvShows as Array<{ id: number; title: string; tmdb_id?: string }>
-      const ownedMovieTmdbIds = new Set(localMovies.filter(m => m.tmdb_id).map(m => m.tmdb_id))
-      const ownedMovieTitles = new Set(localMovies.map(m => m.title.toLowerCase()))
-      const ownedTVTmdbIds = new Set(localShows.filter(s => s.tmdb_id).map(s => s.tmdb_id))
-      const ownedTVTitles = new Set(localShows.map(s => s.title.toLowerCase()))
+      // Collect all TMDB IDs from search results for batch ownership check
+      const movieResults = (movies as Array<{ id: number; title: string; release_date: string; physical_release_date: string | null; poster_url: string | null }>).slice(0, 5)
+      const tvResults = (tvShows as Array<{ id: number; name: string; first_air_date: string; poster_url: string | null }>).slice(0, 5)
+      const allTmdbIds = [
+        ...movieResults.map(m => String(m.id)),
+        ...tvResults.map(s => String(s.id)),
+      ]
+
+      // Direct DB lookup by TMDB ID — reliable ownership check with quality data
+      const owned = allTmdbIds.length > 0
+        ? await window.electronAPI.mediaCheckOwnership(allTmdbIds).catch(() => ({}))
+        : {}
 
       const combined: SearchResult[] = []
 
-      for (const m of (movies as Array<{ id: number; title: string; release_date: string; physical_release_date: string | null; poster_url: string | null }>).slice(0, 5)) {
+      for (const m of movieResults) {
+        const ownershipData = owned[String(m.id)]
         combined.push({
           id: `movie-${m.id}`,
           title: m.title,
@@ -62,13 +75,16 @@ function WishlistSearch({ isMobile = false, onBarcodeScan }: { isMobile?: boolea
           type: 'movie',
           poster_url: m.poster_url || undefined,
           tmdb_id: m.id,
-          owned: ownedMovieTmdbIds.has(String(m.id)) || ownedMovieTitles.has(m.title.toLowerCase()),
+          owned: !!ownershipData,
+          quality_tier: ownershipData?.quality_tier,
+          tier_quality: ownershipData?.tier_quality,
           release_date: m.release_date || undefined,
           physical_release_date: m.physical_release_date || undefined,
         })
       }
 
-      for (const s of (tvShows as Array<{ id: number; name: string; first_air_date: string; poster_url: string | null }>).slice(0, 5)) {
+      for (const s of tvResults) {
+        const ownershipData = owned[String(s.id)]
         combined.push({
           id: `tv-${s.id}`,
           title: s.name,
@@ -76,7 +92,7 @@ function WishlistSearch({ isMobile = false, onBarcodeScan }: { isMobile?: boolea
           type: 'tv',
           poster_url: s.poster_url || undefined,
           tmdb_id: s.id,
-          owned: ownedTVTmdbIds.has(String(s.id)) || ownedTVTitles.has(s.name.toLowerCase()),
+          owned: !!ownershipData,
           release_date: s.first_air_date || undefined,
         })
       }
@@ -189,7 +205,15 @@ function WishlistSearch({ isMobile = false, onBarcodeScan }: { isMobile?: boolea
                     )}
                   </div>
                   {result.owned ? (
-                    <span className="shrink-0 text-label text-muted-foreground/60 px-1.5">Owned</span>
+                    <div className="shrink-0 flex flex-col items-end gap-0.5">
+                      <span className="text-label text-muted-foreground/60">Owned</span>
+                      {(() => {
+                        const label = getQualityLabel(result.quality_tier, result.tier_quality)
+                        return label ? (
+                          <span className="text-caption px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground">{label}</span>
+                        ) : null
+                      })()}
+                    </div>
                   ) : (
                     <button
                       onClick={() => handleAdd(result)}
@@ -265,7 +289,15 @@ function WishlistSearch({ isMobile = false, onBarcodeScan }: { isMobile?: boolea
                   )}
                 </div>
                 {result.owned ? (
-                  <span className="shrink-0 text-caption text-muted-foreground/60 px-1.5">Owned</span>
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <span className="text-caption text-muted-foreground/60">Owned</span>
+                    {(() => {
+                      const label = getQualityLabel(result.quality_tier, result.tier_quality)
+                      return label ? (
+                        <span className="text-micro px-1 py-0.5 rounded bg-muted/50 text-muted-foreground">{label}</span>
+                      ) : null
+                    })()}
+                  </div>
                 ) : (
                   <button
                     onClick={() => handleAdd(result)}
@@ -940,7 +972,7 @@ export function WishlistPanel({ isOpen, onClose, isMobile = false, inline = fals
             artist_name: result.artist_name,
             poster_url: result.poster_url,
             priority: 3,
-            reason: 'missing' as WishlistReason,
+            reason: (result.owned ? 'upgrade' : 'missing') as WishlistReason,
             status: 'active' as WishlistStatus,
           })
         } catch (err) {

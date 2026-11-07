@@ -229,6 +229,7 @@ export const RPC_CHANNEL_MAP: Record<string, string> = {
 
   // Search
   mediaSearch: 'media:search',
+  mediaCheckOwnership: 'media:checkOwnership',
 
   // Exclusions
   addExclusion: 'db:addExclusion',

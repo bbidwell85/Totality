@@ -501,6 +501,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Database - Global Search
   mediaSearch: (query: string) => ipcRenderer.invoke('media:search', query),
+  mediaCheckOwnership: (tmdbIds: string[]) => ipcRenderer.invoke('media:checkOwnership', tmdbIds),
 
   // Database - Exclusions
   addExclusion: (exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string, title?: string) =>
@@ -1616,6 +1617,7 @@ export interface ElectronAPI {
     albums: Array<{ id: number; title: string; artist_name: string; year?: number; thumb_url?: string }>
     tracks: Array<{ id: number; title: string; album_id?: number; album_title?: string; artist_name?: string }>
   }>
+  mediaCheckOwnership: (tmdbIds: string[]) => Promise<Record<string, { quality_tier?: string; tier_quality?: string }>>
 
   // Exclusions
   addExclusion: (exclusionType: string, referenceId?: number, referenceKey?: string, parentKey?: string, title?: string) => Promise<number>

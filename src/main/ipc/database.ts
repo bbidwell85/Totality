@@ -850,6 +850,29 @@ export function registerDatabaseHandlers() {
     }
   })
 
+  /**
+   * Check ownership + quality for a batch of TMDB IDs
+   */
+  ipcMain.handle('media:checkOwnership', async (_event, tmdbIds: unknown) => {
+    try {
+      const ids = validateInput(z.array(z.string()), tmdbIds, 'media:checkOwnership')
+      if (ids.length === 0) return {}
+      const items = db.getMediaItemsByTmdbIds(ids)
+      const result: Record<string, { quality_tier?: string; tier_quality?: string }> = {}
+      for (const [tmdbId, item] of items) {
+        const score = db.getQualityScore(item.id)
+        result[tmdbId] = {
+          quality_tier: score?.quality_tier || undefined,
+          tier_quality: score?.tier_quality || undefined,
+        }
+      }
+      return result
+    } catch (error) {
+      console.error('Error checking ownership:', error)
+      return {}
+    }
+  })
+
   // ============================================================================
   // EXCLUSIONS
   // ============================================================================
