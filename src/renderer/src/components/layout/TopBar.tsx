@@ -153,6 +153,44 @@ export function TopBar({
   const searchContainerRef = useRef<HTMLDivElement>(null)
   const searchDebounceRef = useRef<NodeJS.Timeout>()
 
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+
+      // Ctrl/Cmd+K — focus search (works even from inputs)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+        return
+      }
+
+      // Ctrl/Cmd+, — open settings (works even from inputs)
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault()
+        onOpenSettings()
+        return
+      }
+
+      // Don't trigger letter shortcuts when typing in inputs
+      if (isInput) return
+
+      // Escape — close any open panel
+      if (e.key === 'Escape') {
+        if (showCompletenessPanel) { onToggleCompleteness(); return }
+        if (showWishlistPanel) { onToggleWishlist(); return }
+        if (showChatPanel) { onToggleChat(); return }
+        if (showMoodSyncPanel) { onToggleMoodSync(); return }
+        if (showTaskQueuePanel) { onToggleTaskQueue(); return }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onOpenSettings, onToggleCompleteness, onToggleWishlist, onToggleChat, onToggleMoodSync, onToggleTaskQueue, showCompletenessPanel, showWishlistPanel, showChatPanel, showMoodSyncPanel, showTaskQueuePanel])
+
   // Debounced search
   const performSearch = useCallback(async (query: string) => {
     if (!query || query.length < 2) {
@@ -305,7 +343,7 @@ export function TopBar({
             <input
               ref={searchInputRef}
               type="text"
-              placeholder="Search all libraries..."
+              placeholder={`Search all libraries...${!isMobile ? '  ⌘K' : ''}`}
               value={searchInput}
               onChange={(e) => handleSearchInputChange(e.target.value)}
               onFocus={() => setShowSearchResults(true)}

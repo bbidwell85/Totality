@@ -338,31 +338,6 @@ export function MediaBrowser({
     setActiveLibraryId(null)
   }, [view, activeSourceId])
 
-  // Global keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in input fields
-      const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return
-      }
-
-      // W - Toggle wishlist panel
-      if (e.key === 'w' || e.key === 'W') {
-        e.preventDefault()
-        setShowWishlistPanel(prev => {
-          const newState = !prev
-          if (newState) setShowCompletenessPanel(false)
-          return newState
-        })
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   // Handle navigation state restore (back/forward from history stack)
   useEffect(() => {
     const handleRestore = (e: Event) => {
