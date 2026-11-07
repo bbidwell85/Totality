@@ -422,8 +422,9 @@ export class PlexProvider implements MediaProvider {
   // ============================================================================
 
   async scanLibrary(libraryId: string, options?: ScanOptions): Promise<ScanResult> {
-    // Reset cancellation flag at start
+    // Reset cancellation flag and per-scan dedup sets
     this.scanCancelled = false
+    this.warnedSkippedItems.clear()
 
     const { onProgress, sinceTimestamp, forceFullScan } = options || {}
     const isIncremental = !!sinceTimestamp && !forceFullScan
@@ -1812,8 +1813,9 @@ export class PlexProvider implements MediaProvider {
    * Scan a music library
    */
   async scanMusicLibrary(libraryId: string, onProgress?: ProgressCallback): Promise<ScanResult> {
-    // Reset cancellation flag at start
+    // Reset cancellation flag and per-scan dedup sets
     this.musicScanCancelled = false
+    this.warnedSkippedItems.clear()
 
     const startTime = Date.now()
     const result: ScanResult = {
