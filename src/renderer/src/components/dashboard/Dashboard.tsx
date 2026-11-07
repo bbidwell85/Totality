@@ -1900,6 +1900,15 @@ export function Dashboard({
                           }`}>
                           <tab.icon className="w-3.5 h-3.5" />
                           <span>{tab.label}</span>
+                          {tab.count > 0 && (
+                            <span className={`text-micro px-1 min-w-[16px] text-center rounded-full ${
+                              activeTab === tab.key
+                                ? 'bg-primary-foreground/20'
+                                : 'bg-muted-foreground/20'
+                            }`}>
+                              {tab.count}
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
