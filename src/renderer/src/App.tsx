@@ -455,8 +455,9 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
 
   if (isLoading) {
     return (
-      <div className="h-full bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+      <div className="h-full bg-background flex flex-col items-center justify-center gap-4">
+        <img src={logoImage} alt="Totality" className="h-10 opacity-80" />
+        <div className="w-6 h-6 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
       </div>
     )
   }

@@ -3,7 +3,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Bell, X } from 'lucide-react'
+import { Bell, X, CheckCircle2, RefreshCw, AlertCircle, Info } from 'lucide-react'
 import { Button } from './Button'
 
 interface AppNotification {
@@ -90,13 +90,29 @@ export function NotificationBell() {
     loadNotifications()
   }, [loadNotifications])
 
-  const getIconStyle = (type: string) => {
+  const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'scan_complete': return { icon: '✓', color: 'text-foreground' }
-      case 'source_change': return { icon: '↻', color: 'text-foreground' }
-      case 'error': return { icon: '!', color: 'text-destructive' }
-      default: return { icon: 'i', color: 'text-muted-foreground' }
+      case 'scan_complete': return { Icon: CheckCircle2, color: 'text-foreground' }
+      case 'source_change': return { Icon: RefreshCw, color: 'text-foreground' }
+      case 'error': return { Icon: AlertCircle, color: 'text-destructive' }
+      default: return { Icon: Info, color: 'text-muted-foreground' }
     }
+  }
+
+  const formatRelativeTime = (dateStr: string) => {
+    const now = Date.now()
+    const then = new Date(dateStr).getTime()
+    const diffMs = now - then
+    const diffMin = Math.floor(diffMs / 60000)
+    const diffHr = Math.floor(diffMs / 3600000)
+    const diffDay = Math.floor(diffMs / 86400000)
+
+    if (diffMin < 1) return 'Just now'
+    if (diffMin < 60) return `${diffMin}m ago`
+    if (diffHr < 24) return `${diffHr}h ago`
+    if (diffDay < 2) return 'Yesterday'
+    if (diffDay < 7) return `${diffDay}d ago`
+    return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   }
 
   // Get active theme to escape TopBar's forced dark mode
@@ -166,7 +182,7 @@ export function NotificationBell() {
           ) : (
             <div className="space-y-0.5">
               {notifications.map((n) => {
-                const style = getIconStyle(n.type)
+                const { Icon, color } = getNotificationIcon(n.type)
                 return (
                   <div
                     key={n.id}
@@ -176,9 +192,7 @@ export function NotificationBell() {
                     onClick={() => !n.isRead && handleMarkRead(n.id)}
                   >
                     <div className="flex items-start gap-2">
-                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-caption font-semibold shrink-0 mt-0.5 ${style.color}`}>
-                        {style.icon}
-                      </span>
+                      <Icon className={`w-4 h-4 shrink-0 mt-0.5 ${color}`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-caption font-medium truncate text-foreground">{n.title}</span>
@@ -186,7 +200,7 @@ export function NotificationBell() {
                         </div>
                         <p className="text-caption text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
                         <span className="text-caption text-muted-foreground/50 mt-0.5 block">
-                          {new Date(n.createdAt).toLocaleString()}
+                          {formatRelativeTime(n.createdAt)}
                         </span>
                       </div>
                     </div>
