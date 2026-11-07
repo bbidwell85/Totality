@@ -495,6 +495,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                   ? 'bg-foreground text-background'
                   : 'bg-muted/20 text-muted-foreground hover:bg-muted/30'
               }`}
+              title="Replace all tags with source of truth"
             >
               Overwrite
             </button>
@@ -507,6 +508,7 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
                   ? 'bg-foreground text-background'
                   : 'bg-muted/20 text-muted-foreground hover:bg-muted/30'
               }`}
+              title="Add missing tags without removing existing"
             >
               Append
             </button>
@@ -620,6 +622,18 @@ export function MoodSyncPanel({ isOpen, onClose }: MoodSyncPanelProps) {
             {syncResult.failed === 0 ? <CheckCircle2 className="w-3.5 h-3.5 text-foreground shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
             <span className="text-muted-foreground">{syncResult.synced} synced{syncResult.failed > 0 ? `, ${syncResult.failed} failed` : ''}</span>
           </div>
+          {syncResult.errors.length > 0 && (
+            <details className="mt-1.5">
+              <summary className="text-caption text-muted-foreground/60 cursor-pointer hover:text-muted-foreground">
+                Show errors
+              </summary>
+              <ul className="mt-1 space-y-0.5 max-h-24 overflow-y-auto">
+                {syncResult.errors.map((err, i) => (
+                  <li key={i} className="text-caption text-destructive/80 truncate" title={err}>{err}</li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       )}
 

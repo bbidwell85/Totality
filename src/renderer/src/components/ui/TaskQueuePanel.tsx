@@ -188,7 +188,7 @@ export function TaskQueuePanel({ isOpen, onClose }: TaskQueuePanelProps) {
           <div className="flex items-center gap-1">
             <Button variant="tertiary" size="icon-sm" onClick={handlePauseResume}
               icon={queueState.isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-              title={queueState.isPaused ? 'Resume queue' : 'Pause queue'}
+              title={queueState.isPaused ? 'Resume queue' : 'Pause queue — current task will finish'}
             />
             <Button ref={closeButtonRef} variant="tertiary" size="icon-sm" onClick={onClose}
               icon={<X className="w-4 h-4" />}

@@ -15,6 +15,7 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
   const { messages, isLoading, activeTools, rateLimit, error, sendMessage, clearHistory } = useChat(viewContext)
   const [input, setInput] = useState('')
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -116,13 +117,25 @@ export function ChatPanel({ isOpen, onClose, onOpenSettings, viewContext }: Chat
         </div>
         <div className="flex items-center gap-1">
           {messages.length > 0 && (
-            <Button
-              variant="tertiary"
-              size="icon-sm"
-              onClick={clearHistory}
-              icon={<Trash2 className="w-3.5 h-3.5" />}
-              title="Clear chat history"
-            />
+            confirmClear ? (
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => { clearHistory(); setConfirmClear(false) }}
+                onBlur={() => setTimeout(() => setConfirmClear(false), 200)}
+                className="text-destructive"
+              >
+                Clear?
+              </Button>
+            ) : (
+              <Button
+                variant="tertiary"
+                size="icon-sm"
+                onClick={() => setConfirmClear(true)}
+                icon={<Trash2 className="w-3.5 h-3.5" />}
+                title="Clear chat history"
+              />
+            )
           )}
           <Button
             variant="tertiary"
