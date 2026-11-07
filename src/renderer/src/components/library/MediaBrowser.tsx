@@ -4,6 +4,7 @@ import { SETTING_KEYS } from '../../../../shared/settingKeys'
 import { isWebMode as isWebModeCheck } from '../../services/webTransport'
 import { stateToHash, replaceHash } from '../../services/hashRouting'
 import { MobileScanBanner } from '../mobile/MobileScanBanner'
+import MobileAlphabetScrubber from '../mobile/MobileAlphabetScrubber'
 import { MobileScanButton } from '../mobile/MobileScanButton'
 import { MediaDetails } from './MediaDetails'
 import { CompletenessPanel } from './CompletenessPanel'
@@ -217,7 +218,7 @@ export function MediaBrowser({
     totalCount: totalArtistCount, loading: artistsLoading,
     load: loadPaginatedArtists, loadMore: loadMoreArtists,
   } = usePagination<MusicArtist>({
-    pageSize: isMobile ? 100 : 200,
+    pageSize: isMobile ? 10000 : 200,
     fetchItems: (f) => window.electronAPI.musicGetArtists(f) as Promise<MusicArtist[]>,
     fetchCount: (f) => window.electronAPI.musicCountArtists(f) as Promise<number>,
     buildFilters: () => {
@@ -254,7 +255,7 @@ export function MediaBrowser({
     totalCount: totalAlbumCount, loading: albumsLoading,
     load: loadPaginatedAlbums, loadMore: loadMoreAlbums,
   } = usePagination<MusicAlbum>({
-    pageSize: isMobile ? 50 : 200,
+    pageSize: isMobile ? 10000 : 200,
     fetchItems: (f) => window.electronAPI.musicGetAlbums(f) as Promise<MusicAlbum[]>,
     fetchCount: (f) => window.electronAPI.musicCountAlbums(f) as Promise<number>,
     buildFilters: () => {
@@ -1334,7 +1335,8 @@ export function MediaBrowser({
               }}
               onFocus={() => setShowSearchResults(true)}
               onKeyDown={handleSearchKeyDown}
-              className="w-full pl-10 pr-8 py-2 bg-muted/50 border border-border/50 rounded-lg text-label placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
+              className="w-full pl-10 pr-8 py-2 bg-muted/50 border border-border/50 text-label placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-primary"
+              style={{ borderRadius: '9999px' }}
               aria-label="Search all libraries"
               aria-autocomplete="list"
               aria-controls="search-results-listbox"
@@ -2302,6 +2304,11 @@ export function MediaBrowser({
           />
         ))}
           </div>
+
+          {/* Mobile alphabet scrubber — Plex-style drag-to-letter */}
+          {isMobile && !isMobileDetail && (
+            <MobileAlphabetScrubber scrollContainerRef={scrollContainerRef} />
+          )}
 
           {/* Vertical Alphabet Filter - positioned left of scrollbar (hidden on mobile) */}
           <div className={`absolute right-3 top-0 bottom-0 flex flex-col items-center justify-between py-2 ${isMobile ? 'hidden' : ''}`} role="group" aria-label="Filter by letter">

@@ -49,7 +49,7 @@ export function useTVShowPagination({
   const [selectedShowEpisodesLoading, setSelectedShowEpisodesLoading] = useState(false)
 
   const { items, setItems, totalCount, loading, load, loadMore } = usePagination<TVShowSummary>({
-    pageSize: isMobile ? 50 : 200,
+    pageSize: isMobile ? 10000 : 200,
     fetchItems: async (filters) => {
       const [shows, , episodeCount] = await Promise.all([
         window.electronAPI.getTVShows(filters),
