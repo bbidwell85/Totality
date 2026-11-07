@@ -115,7 +115,11 @@ export class BetterSQLiteService {
   private static buildFtsQuery(query: string): string {
     const words = query.trim().split(/\s+/).filter(w => w.length > 0)
     if (words.length === 0) return '""'
-    return words.map(w => `"${w.replace(/"/g, '""')}"`).join(' ')
+    // Last word gets prefix wildcard for type-ahead matching (e.g., "What" "A"*)
+    return words.map((w, i) => {
+      const escaped = w.replace(/"/g, '""')
+      return i === words.length - 1 ? `"${escaped}"*` : `"${escaped}"`
+    }).join(' ')
   }
 
   /** Check if database is initialized */
@@ -609,6 +613,19 @@ export class BetterSQLiteService {
       }
     } catch (error: unknown) {
       console.warn('[BetterSQLite] FTS population skipped:', getErrorMessage(error))
+    }
+
+    // Verify FTS index consistency — rebuild if row counts diverge
+    try {
+      const mediaCount = (this.db.prepare('SELECT COUNT(*) as c FROM media_items').get() as { c: number }).c
+      const ftsCount = (this.db.prepare('SELECT COUNT(*) as c FROM media_fts').get() as { c: number }).c
+      if (mediaCount > 0 && ftsCount === 0) {
+        console.log('[BetterSQLite] FTS5 index empty but media_items has data — rebuilding...')
+        this.db.exec("INSERT INTO media_fts(media_fts) VALUES('rebuild')")
+        console.log('[BetterSQLite] FTS5 index rebuilt')
+      }
+    } catch (error: unknown) {
+      console.warn('[BetterSQLite] FTS consistency check failed:', getErrorMessage(error))
     }
 
     // Fix music track album_id references — prior bug in upsertMusicAlbum returned
@@ -6169,7 +6186,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
    * Global search across all media types
    */
   globalSearch(query: string, maxResults = 15): {
-    movies: Array<{ id: number; title: string; year?: number; poster_url?: string; tmdb_id?: string }>
+    movies: Array<{ id: number; title: string; year?: number; poster_url?: string; tmdb_id?: string; quality_tier?: string; tier_quality?: string }>
     tvShows: Array<{ id: number; title: string; poster_url?: string; tmdb_id?: string }>
     episodes: Array<{ id: number; title: string; series_title: string; season_number: number; episode_number: number; poster_url?: string }>
     artists: Array<{ id: number; name: string; thumb_url?: string }>
@@ -6180,49 +6197,83 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       return { movies: [], tvShows: [], episodes: [], artists: [], albums: [], tracks: [] }
     }
 
-    // For very short queries (1-2 chars), use exact title match to avoid overly broad LIKE results
+    // For very short queries (1-2 chars), use exact title match (FTS doesn't handle single chars well)
     const isShortQuery = query.length <= 2
-    const searchQuery = isShortQuery ? query.toLowerCase() : `%${query.toLowerCase()}%`
+    const likeQuery = isShortQuery ? query.toLowerCase() : `%${query.toLowerCase()}%`
     const likeOp = isShortQuery ? '=' : 'LIKE'
+    const ftsQuery = isShortQuery ? null : BetterSQLiteService.buildFtsQuery(query)
 
-    // Search movies
-    const moviesStmt = this.db.prepare(`
-      SELECT id, title, year, poster_url, tmdb_id
-      FROM media_items
-      WHERE type = 'movie' AND LOWER(title) ${likeOp} ?
-      ORDER BY title
-      LIMIT ?
-    `)
-    const movies = moviesStmt.all(searchQuery, maxResults) as Array<{
-      id: number; title: string; year?: number; poster_url?: string; tmdb_id?: string
+    // Search movies — use FTS5 for longer queries, LIKE for short
+    const moviesStmt = ftsQuery
+      ? this.db.prepare(`
+        SELECT m.id, m.title, m.year, m.poster_url, m.tmdb_id, q.quality_tier, q.tier_quality
+        FROM media_items m
+        LEFT JOIN quality_scores q ON m.id = q.media_item_id
+        WHERE m.type = 'movie' AND m.id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH ?)
+        ORDER BY m.title
+        LIMIT ?
+      `)
+      : this.db.prepare(`
+        SELECT m.id, m.title, m.year, m.poster_url, m.tmdb_id, q.quality_tier, q.tier_quality
+        FROM media_items m
+        LEFT JOIN quality_scores q ON m.id = q.media_item_id
+        WHERE m.type = 'movie' AND LOWER(m.title) ${likeOp} ?
+        ORDER BY m.title
+        LIMIT ?
+      `)
+    const movies = moviesStmt.all(ftsQuery || likeQuery, maxResults) as Array<{
+      id: number; title: string; year?: number; poster_url?: string; tmdb_id?: string; quality_tier?: string; tier_quality?: string
     }>
 
-    // Search TV shows (unique series titles)
-    const tvShowsStmt = this.db.prepare(`
-      SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url, MIN(tmdb_id) as tmdb_id
-      FROM media_items
-      WHERE type = 'episode' AND series_title IS NOT NULL AND LOWER(series_title) ${likeOp} ?
-      GROUP BY series_title
-      ORDER BY series_title
-      LIMIT ?
-    `)
-    const tvShows = tvShowsStmt.all(searchQuery, maxResults) as Array<{
+    // Search TV shows (unique series titles) — FTS matches on series_title too
+    const tvShowsStmt = ftsQuery
+      ? this.db.prepare(`
+        SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url, MIN(tmdb_id) as tmdb_id
+        FROM media_items
+        WHERE type = 'episode' AND series_title IS NOT NULL
+          AND id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH ?)
+        GROUP BY series_title
+        ORDER BY series_title
+        LIMIT ?
+      `)
+      : this.db.prepare(`
+        SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url, MIN(tmdb_id) as tmdb_id
+        FROM media_items
+        WHERE type = 'episode' AND series_title IS NOT NULL AND LOWER(series_title) ${likeOp} ?
+        GROUP BY series_title
+        ORDER BY series_title
+        LIMIT ?
+      `)
+    const tvShows = tvShowsStmt.all(ftsQuery || likeQuery, maxResults) as Array<{
       id: number; title: string; poster_url?: string; tmdb_id?: string
     }>
 
-    // Search episodes
-    const episodesStmt = this.db.prepare(`
-      SELECT id, title, series_title, season_number, episode_number, episode_thumb_url as poster_url
-      FROM media_items
-      WHERE type = 'episode' AND (LOWER(title) ${likeOp} ? OR LOWER(series_title) ${likeOp} ?)
-      ORDER BY series_title, season_number, episode_number
-      LIMIT ?
-    `)
-    const episodes = episodesStmt.all(searchQuery, searchQuery, maxResults) as Array<{
-      id: number; title: string; series_title: string; season_number: number; episode_number: number; poster_url?: string
-    }>
+    // Search episodes — FTS matches on both title and series_title
+    const episodesStmt = ftsQuery
+      ? this.db.prepare(`
+        SELECT id, title, series_title, season_number, episode_number, episode_thumb_url as poster_url
+        FROM media_items
+        WHERE type = 'episode'
+          AND id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH ?)
+        ORDER BY series_title, season_number, episode_number
+        LIMIT ?
+      `)
+      : this.db.prepare(`
+        SELECT id, title, series_title, season_number, episode_number, episode_thumb_url as poster_url
+        FROM media_items
+        WHERE type = 'episode' AND (LOWER(title) ${likeOp} ? OR LOWER(series_title) ${likeOp} ?)
+        ORDER BY series_title, season_number, episode_number
+        LIMIT ?
+      `)
+    const episodes = ftsQuery
+      ? episodesStmt.all(ftsQuery, maxResults) as Array<{
+          id: number; title: string; series_title: string; season_number: number; episode_number: number; poster_url?: string
+        }>
+      : episodesStmt.all(likeQuery, likeQuery, maxResults) as Array<{
+          id: number; title: string; series_title: string; season_number: number; episode_number: number; poster_url?: string
+        }>
 
-    // Search artists
+    // Search artists (no FTS table — use LIKE)
     const artistsStmt = this.db.prepare(`
       SELECT id, name, thumb_url
       FROM music_artists
@@ -6230,11 +6281,11 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       ORDER BY name
       LIMIT ?
     `)
-    const artists = artistsStmt.all(searchQuery, maxResults) as Array<{
+    const artists = artistsStmt.all(likeQuery, maxResults) as Array<{
       id: number; name: string; thumb_url?: string
     }>
 
-    // Search albums
+    // Search albums (no FTS table — use LIKE)
     const albumsStmt = this.db.prepare(`
       SELECT id, title, artist_name, year, thumb_url
       FROM music_albums
@@ -6242,11 +6293,11 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       ORDER BY title
       LIMIT ?
     `)
-    const albums = albumsStmt.all(searchQuery, searchQuery, maxResults) as Array<{
+    const albums = albumsStmt.all(likeQuery, likeQuery, maxResults) as Array<{
       id: number; title: string; artist_name: string; year?: number; thumb_url?: string
     }>
 
-    // Search tracks with album info
+    // Search tracks with album info (no FTS table — use LIKE)
     const tracksStmt = this.db.prepare(`
       SELECT t.id, t.title, t.album_id, a.title as album_title, t.artist_name, a.thumb_url as album_thumb_url
       FROM music_tracks t
@@ -6255,7 +6306,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       ORDER BY t.title
       LIMIT ?
     `)
-    const tracks = tracksStmt.all(searchQuery, searchQuery, maxResults) as Array<{
+    const tracks = tracksStmt.all(likeQuery, likeQuery, maxResults) as Array<{
       id: number; title: string; album_id?: number; album_title?: string; artist_name?: string; album_thumb_url?: string
     }>
 
