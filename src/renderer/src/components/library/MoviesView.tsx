@@ -397,17 +397,10 @@ const CollectionCard = memo(({ collection, onClick }: { collection: MovieCollect
             <Layers className="w-12 h-12 text-muted-foreground" />
           </div>
         )}
-        {/* Collection icon — top-left to distinguish from movie cards */}
-        <div className="absolute top-2 left-2 z-10">
-          <div className="w-6 h-6 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
-            <Layers className="w-3.5 h-3.5 text-white" />
-          </div>
-        </div>
-        {/* Completeness badge — over poster */}
-        <div className="absolute bottom-2 right-2 z-10">
-          <div className="bg-foreground text-background text-caption font-semibold px-1.5 py-0.5 rounded shadow-md">
-            {collection.owned_movies}/{collection.total_movies}
-          </div>
+        {/* Collection badge — flush to poster edge */}
+        <div className="absolute bottom-0 right-0 z-10 bg-foreground text-background text-caption font-semibold px-1.5 py-0.5 rounded-tl-lg flex items-center gap-1">
+          <Layers className="w-3 h-3" />
+          {collection.owned_movies}/{collection.total_movies}
         </div>
       </div>
 
