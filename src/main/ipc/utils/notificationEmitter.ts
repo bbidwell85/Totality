@@ -9,6 +9,12 @@
 import { BrowserWindow } from 'electron'
 import { safeSend } from './safeSend'
 
+let trayUpdateCallback: (() => void) | null = null
+
+export function setTrayUpdateCallback(cb: () => void): void {
+  trayUpdateCallback = cb
+}
+
 /**
  * Emit 'notifications:new' to the first available BrowserWindow.
  * Call this after every db.createNotification() to push updates to the UI.
@@ -18,4 +24,5 @@ export function emitNotificationCreated(): void {
   if (win) {
     safeSend(win, 'notifications:new', {})
   }
+  trayUpdateCallback?.()
 }

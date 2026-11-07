@@ -84,6 +84,7 @@ import { registerMoodHandlers, setMoodMainWindow } from './ipc/mood'
 import { registerBarcodeHandlers } from './ipc/barcode'
 import { getLiveMonitoringService } from './services/LiveMonitoringService'
 import { getTaskQueueService } from './services/TaskQueueService'
+import { setTrayUpdateCallback } from './ipc/utils/notificationEmitter'
 import { getLoggingService } from './services/LoggingService'
 import { getAutoUpdateService } from './services/AutoUpdateService'
 import { getWishlistCompletionService } from './services/WishlistCompletionService'
@@ -235,12 +236,7 @@ function createTray() {
   tray = new Tray(trayIcon)
   tray.setToolTip('Totality')
 
-  const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show Totality', click: () => { win?.show(); win?.focus() } },
-    { type: 'separator' },
-    { label: 'Quit', click: () => { isQuitting = true; app.quit() } },
-  ])
-  tray.setContextMenu(contextMenu)
+  updateTrayMenu()
 
   tray.on('click', () => {
     if (win?.isVisible()) {
@@ -250,6 +246,59 @@ function createTray() {
       win?.focus()
     }
   })
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+
+  let taskLabel = ''
+  try {
+    const tqs = getTaskQueueService()
+    const state = tqs.getQueueState()
+    if (state.currentTask) {
+      const pct = state.currentTask.progress?.percentage
+      taskLabel = pct !== undefined ? `${state.currentTask.label} (${Math.round(pct)}%)` : state.currentTask.label
+    }
+  } catch { /* service not ready */ }
+
+  let unreadCount = 0
+  try {
+    const db = getDatabase()
+    const counts = db.getNotificationCount()
+    unreadCount = counts.unread
+  } catch { /* db not ready */ }
+
+  const monitoringService = getLiveMonitoringService()
+  const isMonitoring = monitoringService.getStatus().isActive
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    { label: 'Show Totality', click: () => { win?.show(); win?.focus() } },
+    { type: 'separator' },
+  ]
+
+  if (taskLabel) {
+    template.push({ label: taskLabel, enabled: false })
+    template.push({ type: 'separator' })
+  }
+
+  if (unreadCount > 0) {
+    template.push({ label: `${unreadCount} notification${unreadCount !== 1 ? 's' : ''}`, enabled: false })
+    template.push({ type: 'separator' })
+  }
+
+  template.push({
+    label: isMonitoring ? 'Pause monitoring' : 'Resume monitoring',
+    click: () => {
+      if (isMonitoring) monitoringService.stop()
+      else monitoringService.start()
+      updateTrayMenu()
+    },
+  })
+
+  template.push({ type: 'separator' })
+  template.push({ label: 'Quit', click: () => { isQuitting = true; app.quit() } })
+
+  tray.setContextMenu(Menu.buildFromTemplate(template))
 }
 
 // GPU crash detection: if the GPU process dies, write a flag so the next launch
@@ -491,6 +540,7 @@ app.whenReady().then(async () => {
     // Create main window and system tray
     createWindow()
     createTray()
+    setTrayUpdateCallback(() => updateTrayMenu())
 
     // Handle "start minimized to tray" setting
     const startMinimized = db.getSetting('start_minimized_to_tray')
@@ -524,6 +574,10 @@ app.whenReady().then(async () => {
     // Load persisted history and re-enqueue any tasks that were pending at last quit
     taskQueueService.loadPersistedHistory()
     console.log('Task queue service initialized')
+
+    // Update tray menu when task queue state changes or periodically during scans
+    taskQueueService.onStateChange(() => updateTrayMenu())
+    setInterval(() => updateTrayMenu(), 30000)
 
   } catch (error) {
     console.error('Failed to initialize app:', error)

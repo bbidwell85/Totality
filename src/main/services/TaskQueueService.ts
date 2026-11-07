@@ -106,6 +106,7 @@ export class TaskQueueService {
   private isPaused = false
   private isProcessing = false
   private mainWindow: BrowserWindow | null = null
+  private stateChangeListeners: Array<() => void> = []
   private completedTasks: QueuedTask[] = []
   private taskHistory: ActivityLogEntry[] = []
   private monitoringHistory: ActivityLogEntry[] = []
@@ -1007,6 +1008,13 @@ export class TaskQueueService {
 
   private emitQueueUpdate(): void {
     this.sendToRenderer('taskQueue:updated', this.getQueueState())
+    for (const listener of this.stateChangeListeners) {
+      try { listener() } catch { /* ignore */ }
+    }
+  }
+
+  onStateChange(listener: () => void): void {
+    this.stateChangeListeners.push(listener)
   }
 
   /**
