@@ -357,8 +357,11 @@ app.on('before-quit', async (event) => {
   // Stop live monitoring (close file watchers and polling timers)
   getLiveMonitoringService().stop()
 
-  // Cleanup auto-update timers
-  getAutoUpdateService().cleanup()
+  // Auto-install downloaded update on quit (if available)
+  const autoUpdateService = getAutoUpdateService()
+  const updateState = autoUpdateService.getState()
+  const willAutoInstall = updateState.status === 'downloaded'
+  autoUpdateService.cleanup()
 
   // Shutdown FFprobe worker pool (terminate workers before closing DB)
   try {
@@ -378,7 +381,14 @@ app.on('before-quit', async (event) => {
   const db = getDatabaseServiceSync()
   await db.close()
 
-  app.exit()
+  // If an update was downloaded, install it now instead of just exiting
+  if (willAutoInstall) {
+    console.log('[AutoUpdate] Installing downloaded update on quit...')
+    const { autoUpdater } = await import('electron-updater')
+    autoUpdater.quitAndInstall(false, true)
+  } else {
+    app.exit()
+  }
 })
 
 app.on('activate', () => {
