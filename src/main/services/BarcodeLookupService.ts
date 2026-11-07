@@ -1,7 +1,7 @@
 import { fetchJSON, buildUrl } from './utils/httpClient'
 import { getLoggingService } from './LoggingService'
 
-interface BarcodeResult {
+export interface BarcodeResult {
   type: 'movie' | 'tv' | 'album'
   title: string
   year?: number
@@ -10,6 +10,9 @@ interface BarcodeResult {
   musicbrainz_id?: string
   artist_name?: string
   barcode: string
+  owned?: boolean
+  quality_tier?: string
+  tier_quality?: string
 }
 
 interface UPCitemdbResponse {

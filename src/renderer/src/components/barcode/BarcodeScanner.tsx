@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Loader2, Music, Film, Tv, Plus } from 'lucide-react'
+import { X, Loader2, Music, Film, Tv, Plus, Check } from 'lucide-react'
 import { Button } from '../ui/Button'
 
 interface BarcodeResult {
@@ -11,6 +11,9 @@ interface BarcodeResult {
   musicbrainz_id?: string
   artist_name?: string
   barcode: string
+  owned?: boolean
+  quality_tier?: string
+  tier_quality?: string
 }
 
 interface BarcodeScannerProps {
@@ -20,6 +23,16 @@ interface BarcodeScannerProps {
 }
 
 const typeLabels: Record<string, string> = { movie: 'Movie', tv: 'TV show', album: 'Album' }
+
+const musicTierLabels: Record<string, string> = { ultra: 'Hi-Res', high: 'Lossless', medium: 'Medium', low: 'Low' }
+
+function getQualityLabel(result: BarcodeResult): string | null {
+  if (!result.owned || !result.quality_tier) return null
+  if (result.type === 'album') return musicTierLabels[result.quality_tier] || result.quality_tier
+  const tier = result.quality_tier
+  const level = result.tier_quality ? ` ${result.tier_quality[0]}${result.tier_quality.slice(1).toLowerCase()}` : ''
+  return `${tier}${level}`
+}
 
 export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScannerProps) {
   const [scanning, setScanning] = useState(false)
@@ -50,13 +63,12 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
     setAddedIndex(null)
     lastBarcodeRef.current = null
 
-    // Pre-check camera permission before loading scanner library
+    // Advisory permission check — don't block, let getUserMedia handle actual prompting
     try {
       if (navigator.permissions) {
         const status = await navigator.permissions.query({ name: 'camera' as PermissionName })
         if (status.state === 'denied') {
-          setError('Camera access denied. Allow camera access in your browser settings.')
-          return
+          window.electronAPI?.clientLog?.('warn', 'BarcodeScanner', 'Camera permission previously denied, attempting anyway')
         }
       }
     } catch { /* permissions API not available — proceed to scanner */ }
@@ -147,16 +159,16 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-50 bg-background flex flex-col">
       {/* Header */}
       <div
         className="shrink-0 flex items-center justify-between px-4"
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)', paddingBottom: '12px' }}
       >
-        <h2 className="text-title font-semibold text-white">Scan barcode</h2>
+        <h2 className="text-title font-semibold text-foreground">Scan barcode</h2>
         <button
           onClick={() => { stopCamera(); onClose() }}
-          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-white/10 text-white/80 hover:text-white transition-colors"
+          className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
@@ -165,7 +177,7 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
       {/* Camera viewfinder */}
       <div className={`w-full ${scanning ? '' : 'hidden'}`}>
         <div id="barcode-reader" className="overflow-hidden" style={{ minHeight: '280px' }} />
-        <p className="text-caption text-white/40 text-center mt-3 px-4">
+        <p className="text-caption text-muted-foreground text-center mt-3 px-4">
           Hold steady over a barcode
         </p>
       </div>
@@ -174,8 +186,8 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
       {looking && (
         <div className="flex-1 flex items-center justify-center">
           <div className="flex items-center gap-3">
-            <Loader2 className="w-5 h-5 text-white/50 animate-spin" />
-            <p className="text-label text-white/60">Looking up barcode...</p>
+            <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+            <p className="text-label text-muted-foreground">Looking up barcode...</p>
           </div>
         </div>
       )}
@@ -183,7 +195,7 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
       {/* Error — inline, not replacing the whole view */}
       {error && !scanning && !looking && results.length === 0 && (
         <div className="flex-1 flex flex-col items-center justify-center px-6">
-          <p className="text-label text-white/60 text-center mb-4">{error}</p>
+          <p className="text-label text-muted-foreground text-center mb-4">{error}</p>
           <Button onClick={startCamera} variant="tertiary" size="sm">
             Try again
           </Button>
@@ -195,7 +207,7 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
         <div className="flex-1 flex flex-col px-4 pt-4"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}
         >
-          <p className="text-caption text-white/40 mb-3">
+          <p className="text-caption text-muted-foreground mb-3">
             {results.length} match{results.length !== 1 ? 'es' : ''} found
           </p>
 
@@ -208,15 +220,15 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
                 className={`w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-colors ${
                   addedIndex === i
                     ? 'bg-foreground text-background'
-                    : 'bg-white/8 hover:bg-white/12'
+                    : 'bg-muted/30 hover:bg-muted/50'
                 }`}
               >
                 {/* Poster */}
-                <div className={`shrink-0 rounded-lg overflow-hidden bg-white/5 ${result.type === 'album' ? 'w-14 h-14' : 'w-12 h-[4.5rem]'}`}>
+                <div className={`shrink-0 rounded-lg overflow-hidden bg-muted/20 ${result.type === 'album' ? 'w-14 h-14' : 'w-12 h-[4.5rem]'}`}>
                   {result.poster_url ? (
                     <img src={result.poster_url} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                       <TypeIcon type={result.type} />
                     </div>
                   )}
@@ -226,24 +238,40 @@ export function BarcodeScanner({ isOpen, onClose, onAddToWishlist }: BarcodeScan
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <TypeIcon type={result.type} />
-                    <span className={`text-caption ${addedIndex === i ? 'opacity-70' : 'text-white/40'}`}>
+                    <span className={`text-caption ${addedIndex === i ? 'opacity-70' : 'text-muted-foreground'}`}>
                       {typeLabels[result.type] || result.type}
                     </span>
+                    {result.owned && (
+                      <span className="flex items-center gap-0.5 text-caption text-foreground">
+                        <Check className="w-3 h-3" />
+                        Owned
+                      </span>
+                    )}
                   </div>
-                  <h3 className="text-label font-medium truncate">{result.title}</h3>
+                  <h3 className="text-label font-medium truncate text-foreground">{result.title}</h3>
                   {result.artist_name && (
-                    <p className={`text-caption truncate ${addedIndex === i ? 'opacity-70' : 'text-white/50'}`}>{result.artist_name}</p>
+                    <p className={`text-caption truncate ${addedIndex === i ? 'opacity-70' : 'text-muted-foreground'}`}>{result.artist_name}</p>
                   )}
-                  {result.year && (
-                    <p className={`text-caption ${addedIndex === i ? 'opacity-70' : 'text-white/40'}`}>{result.year}</p>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {result.year && (
+                      <span className={`text-caption ${addedIndex === i ? 'opacity-70' : 'text-muted-foreground'}`}>{result.year}</span>
+                    )}
+                    {(() => {
+                      const label = getQualityLabel(result)
+                      return label ? (
+                        <span className={`text-caption px-1.5 py-0.5 rounded ${addedIndex === i ? 'bg-background/20' : 'bg-muted/50 text-muted-foreground'}`}>
+                          {label}
+                        </span>
+                      ) : null
+                    })()}
+                  </div>
                 </div>
 
                 {/* Add indicator */}
                 {addedIndex === i ? (
                   <span className="text-caption font-medium shrink-0">Added</span>
                 ) : (
-                  <Plus className="w-5 h-5 text-white/30 shrink-0" />
+                  <Plus className="w-5 h-5 text-muted-foreground shrink-0" />
                 )}
               </button>
             ))}
