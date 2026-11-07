@@ -5652,6 +5652,8 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     const tables = [
       'media_sources',
       'media_items',
+      'media_item_versions',
+      'media_item_collections',
       'quality_scores',
       'settings',
       'series_completeness',
@@ -5662,6 +5664,11 @@ WHERE m.type = 'episode' AND m.series_title = ?`
       'music_quality_scores',
       'artist_completeness',
       'album_completeness',
+      'library_scans',
+      'exclusions',
+      'wishlist_items',
+      'person_completeness',
+      'notifications',
     ]
 
     const exportedData: Record<string, unknown[]> = {
