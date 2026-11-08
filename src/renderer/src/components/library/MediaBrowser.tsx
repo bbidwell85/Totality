@@ -218,7 +218,7 @@ export function MediaBrowser({
     totalCount: totalArtistCount, loading: artistsLoading,
     load: loadPaginatedArtists, loadMore: loadMoreArtists,
   } = usePagination<MusicArtist>({
-    pageSize: isMobile ? 10000 : 200,
+    pageSize: isMobile ? 100 : 200,
     fetchItems: (f) => window.electronAPI.musicGetArtists(f) as Promise<MusicArtist[]>,
     fetchCount: (f) => window.electronAPI.musicCountArtists(f) as Promise<number>,
     buildFilters: () => {
@@ -255,7 +255,7 @@ export function MediaBrowser({
     totalCount: totalAlbumCount, loading: albumsLoading,
     load: loadPaginatedAlbums, loadMore: loadMoreAlbums,
   } = usePagination<MusicAlbum>({
-    pageSize: isMobile ? 10000 : 200,
+    pageSize: isMobile ? 50 : 200,
     fetchItems: (f) => window.electronAPI.musicGetAlbums(f) as Promise<MusicAlbum[]>,
     fetchCount: (f) => window.electronAPI.musicCountAlbums(f) as Promise<number>,
     buildFilters: () => {
@@ -934,12 +934,55 @@ export function MediaBrowser({
     return true
   }, [searchQuery, debouncedTierFilter, debouncedQualityFilter])
 
-  // Alphabet navigation — server-side filter, Plex-style
+  // Alphabet navigation — server-side filter for desktop, offset-jump for mobile
   const scrollToLetter = useCallback((letter: string | null) => {
     setAlphabetFilter(letter)
     const container = scrollContainerRef.current
     if (container) container.scrollTop = 0
   }, [setAlphabetFilter])
+
+  // Mobile scrubber: jump to letter offset without filtering
+  const handleMobileScrubLetter = useCallback(async (letter: string | null) => {
+    if (!letter) {
+      // Reset to beginning
+      if (view === 'movies') loadPaginatedMovies(true, 0)
+      else if (view === 'tv') loadPaginatedShows(true, 0)
+      else if (view === 'music') {
+        if (musicViewMode === 'albums') loadPaginatedAlbums(true, 0)
+        else loadPaginatedArtists(true, 0)
+      }
+      const container = scrollContainerRef.current
+      if (container) container.scrollTop = 0
+      return
+    }
+
+    const tableMap = { movies: 'movies', tv: 'tvshows', music: musicViewMode === 'albums' ? 'albums' : 'artists' } as const
+    const table = tableMap[view]
+
+    try {
+      const offset = await window.electronAPI.getLetterOffset({
+        table,
+        letter,
+        sourceId: activeSourceId || undefined,
+      })
+
+      // Load from that offset
+      if (view === 'movies') await loadPaginatedMovies(true, offset)
+      else if (view === 'tv') await loadPaginatedShows(true, offset)
+      else if (view === 'music') {
+        if (musicViewMode === 'albums') await loadPaginatedAlbums(true, offset)
+        else await loadPaginatedArtists(true, offset)
+      }
+
+      // Scroll to top since we just loaded from the letter's position
+      const container = scrollContainerRef.current
+      if (container) container.scrollTop = 0
+    } catch {
+      // Fallback: just scroll to top
+      const container = scrollContainerRef.current
+      if (container) container.scrollTop = 0
+    }
+  }, [view, musicViewMode, activeSourceId, loadPaginatedMovies, loadPaginatedShows, loadPaginatedArtists, loadPaginatedAlbums])
 
   // Compute which letters have items for the current view (to dim empty letters)
   // Movies are now loaded from the server pre-filtered/sorted/paginated
@@ -2280,9 +2323,9 @@ export function MediaBrowser({
         ))}
           </div>
 
-          {/* Mobile alphabet scrubber — Plex-style drag-to-letter */}
+          {/* Mobile alphabet scrubber — jump to letter offset */}
           {isMobile && !isMobileDetail && (
-            <MobileAlphabetScrubber scrollContainerRef={scrollContainerRef} />
+            <MobileAlphabetScrubber scrollContainerRef={scrollContainerRef} onSelectLetter={handleMobileScrubLetter} />
           )}
 
           {/* Vertical Alphabet Filter - positioned left of scrollbar (hidden on mobile) */}

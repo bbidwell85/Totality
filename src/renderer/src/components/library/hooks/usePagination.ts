@@ -15,6 +15,7 @@ interface UsePaginationReturn<T> {
   loading: boolean
   load: (reset?: boolean, startOffset?: number) => Promise<void>
   loadMore: () => void
+  startOffset: number
 }
 
 /**
@@ -33,6 +34,7 @@ export function usePagination<T>({
   const [items, setItems] = useState<T[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [currentStartOffset, setCurrentStartOffset] = useState(0)
   const loadingRef = useRef(false)
   const offsetRef = useRef(0)
   const requestIdRef = useRef(0)
@@ -59,7 +61,8 @@ export function usePagination<T>({
 
       if (reset) {
         setItems(fetchedItems)
-        offsetRef.current = pageSize
+        setCurrentStartOffset(startOffset ?? 0)
+        offsetRef.current = (startOffset ?? 0) + pageSize
       } else {
         setItems(prev => [...prev, ...fetchedItems])
         offsetRef.current = offset + pageSize
@@ -82,5 +85,5 @@ export function usePagination<T>({
     }
   }, [totalCount, load])
 
-  return { items, setItems, totalCount, loading, load, loadMore }
+  return { items, setItems, totalCount, loading, load, loadMore, startOffset: currentStartOffset }
 }

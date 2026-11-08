@@ -8,10 +8,12 @@ const BOTTOM_BOUND = 100 // space for tab bar + safe area
 
 interface MobileAlphabetScrubberProps {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>
+  onSelectLetter: (letter: string | null) => void
 }
 
 export default function MobileAlphabetScrubber({
   scrollContainerRef,
+  onSelectLetter,
 }: MobileAlphabetScrubberProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -19,7 +21,7 @@ export default function MobileAlphabetScrubber({
   const [handleY, setHandleY] = useState<number | null>(null)
 
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastScrolledLetterRef = useRef<string | null>(null)
+  const lastSelectedLetterRef = useRef<string | null>(null)
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current) {
@@ -63,27 +65,11 @@ export default function MobileAlphabetScrubber({
     return LETTERS[Math.max(0, Math.min(LETTERS.length - 1, index))]
   }, [])
 
-  const scrollToLetter = useCallback((letter: string) => {
-    if (letter === lastScrolledLetterRef.current) return
-    lastScrolledLetterRef.current = letter
-
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    const items = container.querySelectorAll('[data-title]')
-    for (const el of items) {
-      const title = el.getAttribute('data-title') || ''
-      const firstChar = title[0]?.toUpperCase() || ''
-      const isMatch = letter === '#'
-        ? !/^[A-Z]/.test(firstChar)
-        : firstChar === letter
-
-      if (isMatch) {
-        el.scrollIntoView({ behavior: 'instant', block: 'start' })
-        break
-      }
-    }
-  }, [scrollContainerRef])
+  const selectLetter = useCallback((letter: string) => {
+    if (letter === lastSelectedLetterRef.current) return
+    lastSelectedLetterRef.current = letter
+    onSelectLetter(letter)
+  }, [onSelectLetter])
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault()
@@ -95,8 +81,8 @@ export default function MobileAlphabetScrubber({
     const letter = getLetterFromY(clientY)
     setActiveLetter(letter)
     setHandleY(clientY)
-    scrollToLetter(letter)
-  }, [clearHideTimer, getLetterFromY, scrollToLetter])
+    selectLetter(letter)
+  }, [clearHideTimer, getLetterFromY, selectLetter])
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging) return
@@ -108,13 +94,13 @@ export default function MobileAlphabetScrubber({
 
     setActiveLetter(letter)
     setHandleY(clampedY)
-    scrollToLetter(letter)
-  }, [isDragging, getLetterFromY, scrollToLetter])
+    selectLetter(letter)
+  }, [isDragging, getLetterFromY, selectLetter])
 
   const handleTouchEnd = useCallback(() => {
     if (!isDragging) return
     setIsDragging(false)
-    lastScrolledLetterRef.current = null
+    lastSelectedLetterRef.current = null
 
     setTimeout(() => {
       setActiveLetter(null)
