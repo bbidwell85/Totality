@@ -271,7 +271,7 @@ Two additional client-side completeness filters applied in `loadCompletenessData
 ### State Management (Renderer)
 
 **React Contexts** (`src/renderer/src/contexts/`):
-- **SourceContext**: Source CRUD, scan progress, provider authentication flows
+- **SourceContext**: Source CRUD, scan progress, provider authentication flows. Tracks per-source library types via `sourceLibraryTypes` Map — `hasMovies`/`hasTV`/`hasMusic` derive from `activeSourceId` (not global). When a source is selected, only that source's library types are reported.
 - **WishlistContext**: Wishlist state management
 - **ToastContext**: Toast notification display
 - **NavigationContext**: Page/view navigation state
@@ -339,7 +339,7 @@ After any scan (manual rescan or live monitoring) that adds, updates, or removes
 
 ### Dashboard & Library Live Refresh
 
-- **Dashboard** reloads via `loadDashboardData()` which makes ~30 parallel `Promise.allSettled` IPC calls in 3 tiers (settings → upgrades/completeness → analytics). Debounced (300ms). Triggers: `scan:completed`, `library:updated` (all types), `exclusions-changed`, `settings:changed`, `activeSourceId` change. Rejected promises are logged via `console.warn` (not silently swallowed). Loads `collection_theatrical_lag_days` setting for collection filtering. Debounce timer cleaned up on unmount.
+- **Dashboard** reloads via `loadDashboardData()` which makes ~30 parallel `Promise.allSettled` IPC calls in 3 tiers (settings → upgrades/completeness → analytics). All Tier 2 and Tier 3 calls pass `sourceId` (from `activeSourceId`) for per-source scoping. Debounced (300ms). Triggers: `scan:completed`, `library:updated` (all types), `exclusions-changed`, `settings:changed`, `activeSourceId` change. Rejected promises are logged via `console.warn` (not silently swallowed). Loads `collection_theatrical_lag_days` setting for collection filtering. Debounce timer cleaned up on unmount.
 - **Library view** (`useLibraryEventListeners`) reloads on `library:updated` events: `type: 'media'` → `loadMedia()` + `loadCompletenessData()`; `type: 'music'` → `loadMusicData()` + `loadMusicCompletenessData()`. Also reloads on `scan:completed` when items changed. Debounced (500ms).
 - **`loadMusicData()`** reloads stats, paginated artists, paginated albums, and refreshes `selectedArtist` to update track/album counts in subtitle.
 - **`sendLibraryUpdated(type)`** in TaskQueueService accepts `'media'` or `'music'` type to route refresh correctly. Music completeness tasks emit `'music'` type.
@@ -592,7 +592,7 @@ Components in `src/renderer/src/components/` organized by domain: `dashboard/`, 
 - `MusicView.tsx`: Artist/album/track views (extracted view component). Album list `itemSize={104}`, track list `itemSize={40}`
 - `hooks/`: Custom hooks for library state (`useLibraryState`, `useLibraryDataLoading`, `useLibraryEventListeners`, etc.)
 
-**Alphabet Navigation**: The A-Z sidebar smooth-scrolls to the first item starting with the selected letter using `smoothScrollTo()` (eased `requestAnimationFrame`, 400ms). All items remain visible — no server-side filtering. Page sizes set to 10000 to load full datasets. `alphabetFilter` state is UI-only (highlights active letter in sidebar). Letters without matching items are dimmed (`text-muted-foreground/20`) and non-clickable. `availableLetters` computed via `useMemo` from loaded data arrays.
+**Alphabet Navigation**: Desktop A-Z sidebar uses `alphabetFilter` for server-side filtering (shows only items starting with that letter). Letters without matching items are dimmed (`text-muted-foreground/20`) and non-clickable. `availableLetters` computed via `useMemo` from loaded data arrays. Mobile uses `MobileAlphabetScrubber` which calls `getLetterOffset` IPC to find the item position, then loads a page starting at that offset via `usePagination.load(true, offset)`. Mobile page sizes are 50-100 (not 10,000). Skeleton placeholders render after loaded items to indicate more content.
 
 **Collections Display**: `MoviesView.tsx` uses append-aware `displayItems` logic to prevent scroll mixing during infinite scroll pagination. When `collectionsOnly` is true, all collections render at once (no pagination). When false, new pages are appended without re-sorting existing items.
 
