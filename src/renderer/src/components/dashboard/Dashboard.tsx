@@ -192,6 +192,17 @@ export function Dashboard({
     }
   }, [hasMovies, hasTV, hasMusic, isLoading])
 
+  // Auto-switch upgrade tab when library types change (e.g., music-only source)
+  useEffect(() => {
+    if (upgradeTab === 'movies' && !hasMovies) {
+      setUpgradeTab(hasTV ? 'tv' : hasMusic ? 'music' : 'movies')
+    } else if (upgradeTab === 'tv' && !hasTV) {
+      setUpgradeTab(hasMovies ? 'movies' : hasMusic ? 'music' : 'movies')
+    } else if (upgradeTab === 'music' && !hasMusic) {
+      setUpgradeTab(hasMovies ? 'movies' : hasTV ? 'tv' : 'movies')
+    }
+  }, [hasMovies, hasTV, hasMusic, upgradeTab])
+
   const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const requestIdRef = useRef(0)
 
@@ -1839,7 +1850,7 @@ export function Dashboard({
             if (hasMovies) tabs.push({ key: 'collections', label: 'Collections', count: collections.length, icon: Film })
             if (hasTV) tabs.push({ key: 'series', label: 'Series', count: series.length, icon: Tv })
             if (hasMusic) tabs.push({ key: 'music', label: 'Music', count: artists.length, icon: Music })
-            tabs.push({ key: 'filmography', label: 'Filmography', count: personCompleteness.length, icon: Film })
+            if (hasMovies) tabs.push({ key: 'filmography', label: 'Filmography', count: personCompleteness.length, icon: Film })
             const activeTab = tabs.find(t => t.key === completenessTab) ? completenessTab : tabs[0]?.key || 'collections'
             if (activeTab !== completenessTab) setCompletenessTab(activeTab)
 
