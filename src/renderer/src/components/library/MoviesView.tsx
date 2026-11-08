@@ -349,6 +349,18 @@ export function MoviesView({
           )
         })}
       </div>
+      {/* Skeleton placeholders — show while more items are available */}
+      {isMobile && movies.length < totalMovieCount && (
+        <div className={gridClassName} style={gridStyle}>
+          {Array.from({ length: Math.min(12, totalMovieCount - movies.length) }).map((_, i) => (
+            <div key={`skel-${i}`}>
+              <div className="aspect-2/3 bg-muted/30 rounded-lg animate-pulse" />
+              <div className="mt-2 h-3 bg-muted/30 rounded animate-pulse" />
+              <div className="mt-1 h-3 w-2/3 bg-muted/20 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      )}
       <div ref={gridSentinelRef} className="h-1" />
       <div className="py-1.5 text-caption text-muted-foreground flex items-center gap-2">
         {moviesLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
@@ -586,6 +598,13 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
           </div>
         )}
 
+        {/* Quality Upgrade Badge — flush to poster edge */}
+        {needsUpgrade && (
+          <div className="absolute bottom-0 left-0 z-10 bg-destructive text-white text-caption font-semibold px-1.5 py-0.5 rounded-tr-lg flex items-center gap-1" title="Quality upgrade recommended">
+            <CircleFadingArrowUp className="w-3.5 h-3.5" />
+          </div>
+        )}
+
         {movie.poster_url ? (
           <img
             src={movie.poster_url}
@@ -621,12 +640,6 @@ const MovieCard = memo(({ movie, onClick, collectionData, showSourceBadge, onFix
             >
               <Layers className="w-3 h-3" />
               <span>{collectionData.owned_movies}/{collectionData.total_movies}</span>
-            </div>
-          )}
-          {/* Quality Upgrade Badge */}
-          {(movie.tier_quality === 'LOW' || !!movie.needs_upgrade) && (
-            <div title="Quality upgrade recommended">
-              <CircleFadingArrowUp className="w-5 h-5 text-destructive" />
             </div>
           )}
         </div>

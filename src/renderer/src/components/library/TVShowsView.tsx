@@ -78,12 +78,10 @@ const ShowListItem = memo(({ show, onClick, completenessData, showSourceBadge, o
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-muted/50"><TvPlaceholder className="w-8 h-8 text-muted-foreground" /></div>
         )}
-        {/* Completeness badge — over poster */}
+        {/* Completeness badge — flush to poster edge */}
         {completenessData && (
-          <div className="absolute bottom-1 right-1 z-10">
-            <div className="bg-foreground text-background text-caption font-semibold px-1 py-0.5 rounded shadow-md">
-              {completenessData.owned_episodes}/{completenessData.total_episodes}
-            </div>
+          <div className="absolute bottom-0 right-0 z-10 bg-foreground text-background text-caption font-semibold px-1.5 py-0.5 rounded-tl-lg">
+            {completenessData.owned_episodes}/{completenessData.total_episodes}
           </div>
         )}
         {/* Source badge */}
@@ -537,6 +535,17 @@ export function TVShowsView({
             return <div key={`${show.source_id || ''}-${show.series_title}`} data-title={show.series_title}><ShowCard show={show} onClick={() => onSelectShow(show.series_title)} completenessData={completeness} showSourceBadge={showSourceBadge} onAnalyzeSeries={() => onAnalyzeSeries(show.series_title)} onFixMatch={onFixMatch ? (sourceId: string, folderPath?: string) => onFixMatch(show.series_title, sourceId, folderPath) : undefined} /></div>
           })}
         </div>
+        {/* Skeleton placeholders — show while more items are available */}
+        {isMobile && shows.length < totalShowCount && (
+          <div className={gridClassName} style={gridStyle}>
+            {Array.from({ length: Math.min(12, totalShowCount - shows.length) }).map((_, i) => (
+              <div key={`skel-${i}`}>
+                <div className="aspect-2/3 bg-muted/30 rounded-lg animate-pulse" />
+                <div className="mt-2 h-3 bg-muted/30 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+        )}
         <div ref={showSentinelRef} className="h-1" />
         {showsLoading && <div className="flex justify-center py-4"><RefreshCw className="w-5 h-5 animate-spin text-muted-foreground" /></div>}
         {totalShowCount > 0 && (
@@ -1066,12 +1075,10 @@ const ShowCard = memo(({ show, onClick, completenessData, showSourceBadge, onAna
           </div>
         )}
 
-        {/* Completeness badge — over poster */}
+        {/* Completeness badge — flush to poster edge */}
         {completenessData && (
-          <div className="absolute bottom-2 right-2 z-10">
-            <div className="bg-foreground text-background text-caption font-semibold px-1.5 py-0.5 rounded shadow-md">
-              {completenessData.owned_episodes}/{completenessData.total_episodes}
-            </div>
+          <div className="absolute bottom-0 right-0 z-10 bg-foreground text-background text-caption font-semibold px-1.5 py-0.5 rounded-tl-lg">
+            {completenessData.owned_episodes}/{completenessData.total_episodes}
           </div>
         )}
 
@@ -1300,12 +1307,10 @@ const SeasonCard = memo(({ season, showTitle, onClick, missingCount = 0 }: { sea
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-muted/50"><Folder className="w-16 h-16 text-white/30" strokeWidth={1.5} /></div>
         )}
-        {/* Completeness badge — over poster */}
+        {/* Completeness badge — flush to poster edge */}
         {total > 0 && missingCount > 0 && (
-          <div className="absolute bottom-2 right-2 z-10">
-            <div className="bg-foreground text-background text-caption font-semibold px-1.5 py-0.5 rounded shadow-md">
-              {owned}/{total}
-            </div>
+          <div className="absolute bottom-0 right-0 z-10 bg-foreground text-background text-caption font-semibold px-1.5 py-0.5 rounded-tl-lg">
+            {owned}/{total}
           </div>
         )}
       </div>

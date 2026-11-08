@@ -1586,6 +1586,18 @@ export function MusicView({
               ))}
             </div>
           )}
+          {/* Skeleton placeholders — show while more items are available */}
+          {isMobile && allFilteredAlbums.length < totalAlbumCount && (
+            <div className={gridClassName} style={gridStyle}>
+              {Array.from({ length: Math.min(12, totalAlbumCount - allFilteredAlbums.length) }).map((_, i) => (
+                <div key={`skel-${i}`}>
+                  <div className="aspect-square bg-muted/30 rounded-lg animate-pulse" />
+                  <div className="mt-2 h-3 bg-muted/30 rounded animate-pulse" />
+                  <div className="mt-1 h-3 w-2/3 bg-muted/20 rounded animate-pulse" />
+                </div>
+              ))}
+            </div>
+          )}
           <div ref={albumSentinelRef} className="h-1" />
           {/* Album count footer */}
           <div className="px-4 py-1.5 text-caption text-muted-foreground flex items-center gap-2" aria-live="polite" role="status">
@@ -2177,12 +2189,12 @@ const AlbumCard = memo(({ album, onClick, showArtist = true, showSourceBadge, on
           const isHiRes = isLossless && ((album.best_bit_depth || 0) > 16 || (album.best_sample_rate || 0) > 48000)
           if (!isLossless && !isHiRes) return null
           return (
-            <div className="absolute top-2 right-2 z-10 flex flex-col gap-1 items-end">
+            <div className="absolute top-0 right-0 z-10">
               {isHiRes && (
-                <span className="px-1.5 py-0.5 text-caption font-semibold bg-purple-600 text-white rounded shadow-sm">Hi-Res</span>
+                <span className="block px-1.5 py-0.5 text-caption font-semibold bg-purple-600 text-white rounded-bl-lg">Hi-Res</span>
               )}
               {isLossless && !isHiRes && (
-                <span className="px-1.5 py-0.5 text-caption font-semibold bg-green-600 text-white rounded shadow-sm">Lossless</span>
+                <span className="block px-1.5 py-0.5 text-caption font-semibold bg-green-600 text-white rounded-bl-lg">Lossless</span>
               )}
             </div>
           )
@@ -2196,12 +2208,10 @@ const AlbumCard = memo(({ album, onClick, showArtist = true, showSourceBadge, on
           </div>
         )}
 
-        {/* Completeness badge - bottom right */}
+        {/* Completeness badge — flush to poster edge */}
         {hasCompleteness && (
-          <div className="absolute bottom-2 right-2 z-10">
-            <div className="bg-foreground text-background text-caption font-semibold px-1.5 py-0.5 rounded shadow-md">
-              {album.track_count || completeness!.owned_tracks}/{completeness!.total_tracks}
-            </div>
+          <div className="absolute bottom-0 right-0 z-10 bg-foreground text-background text-caption font-semibold px-1.5 py-0.5 rounded-tl-lg">
+            {album.track_count || completeness!.owned_tracks}/{completeness!.total_tracks}
           </div>
         )}
 
