@@ -51,9 +51,10 @@ export function registerQualityHandlers() {
     }
   })
 
-  ipcMain.handle('quality:getDistribution', async () => {
+  ipcMain.handle('quality:getDistribution', async (_event, sourceId?: unknown) => {
     try {
-      return analyzer.getQualityDistribution()
+      const validSourceId = sourceId && typeof sourceId === 'string' ? sourceId : undefined
+      return analyzer.getQualityDistribution(validSourceId)
     } catch (error) {
       console.error('Error getting quality distribution:', error)
       throw error

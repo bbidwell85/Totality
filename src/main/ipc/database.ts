@@ -310,18 +310,20 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  ipcMain.handle('db:getStorageAnalytics', async () => {
+  ipcMain.handle('db:getStorageAnalytics', async (_event, sourceId?: unknown) => {
     try {
-      return db.getStorageAnalytics()
+      const validSourceId = sourceId && typeof sourceId === 'string' ? sourceId : undefined
+      return db.getStorageAnalytics(validSourceId)
     } catch (error) {
       console.error('Error getting storage analytics:', error)
       throw error
     }
   })
 
-  ipcMain.handle('db:getDuplicateMedia', async () => {
+  ipcMain.handle('db:getDuplicateMedia', async (_event, sourceId?: unknown) => {
     try {
-      return db.getDuplicateMedia()
+      const validSourceId = sourceId && typeof sourceId === 'string' ? sourceId : undefined
+      return db.getDuplicateMedia(validSourceId)
     } catch (error) {
       console.error('Error getting duplicate media:', error)
       throw error
@@ -337,10 +339,11 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  ipcMain.handle('db:getRecentlyUpgraded', async (_event, days?: unknown) => {
+  ipcMain.handle('db:getRecentlyUpgraded', async (_event, days?: unknown, sourceId?: unknown) => {
     try {
       const validDays = days !== undefined ? validateInput(z.number().int().min(1).max(365), days, 'db:getRecentlyUpgraded') : 30
-      return db.getRecentlyUpgraded(validDays)
+      const validSourceId = sourceId && typeof sourceId === 'string' ? sourceId : undefined
+      return db.getRecentlyUpgraded(validDays, validSourceId)
     } catch (error) {
       console.error('Error getting recently upgraded items:', error)
       throw error
@@ -362,10 +365,11 @@ export function registerDatabaseHandlers() {
   // PERSON FILMOGRAPHY COMPLETENESS
   // ============================================================================
 
-  ipcMain.handle('person:getCompleteness', async (_event, personType?: unknown) => {
+  ipcMain.handle('person:getCompleteness', async (_event, personType?: unknown, sourceId?: unknown) => {
     try {
       const validType = personType ? validateInput(z.enum(['director', 'actor']), personType, 'person:getCompleteness') : undefined
-      return db.getPersonCompleteness(validType)
+      const validSourceId = sourceId && typeof sourceId === 'string' ? sourceId : undefined
+      return db.getPersonCompleteness(validType, validSourceId)
     } catch (error) {
       console.error('Error getting person completeness:', error)
       throw error

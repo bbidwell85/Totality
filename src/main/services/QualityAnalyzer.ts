@@ -674,7 +674,7 @@ export class QualityAnalyzer {
   /**
    * Get quality summary statistics
    */
-  getQualityDistribution(): {
+  getQualityDistribution(sourceId?: string): {
     byTier: {
       [tier: string]: { low: number; medium: number; high: number }
     }
@@ -685,7 +685,9 @@ export class QualityAnalyzer {
     }
   } {
     const db = getDatabase()
-    const scores = db.getQualityScores()
+    const scores = sourceId
+      ? db.getQualityScoresForSource(sourceId)
+      : db.getQualityScores()
 
     const distribution = {
       byTier: {

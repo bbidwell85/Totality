@@ -294,7 +294,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Quality Analysis
   qualityAnalyzeAll: () => ipcRenderer.invoke('quality:analyzeAll'),
-  qualityGetDistribution: () => ipcRenderer.invoke('quality:getDistribution'),
+  qualityGetDistribution: (sourceId?: string) => ipcRenderer.invoke('quality:getDistribution', sourceId),
   qualityGetRecommendedFormat: (mediaItemId: number) =>
     ipcRenderer.invoke('quality:getRecommendedFormat', mediaItemId),
   onQualityAnalysisProgress: (callback: (progress: unknown) => void) => {
@@ -360,7 +360,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   seriesAnalyze: (seriesTitle: string) => ipcRenderer.invoke('series:analyze', seriesTitle),
   seriesGetAll: (sourceId?: string) => ipcRenderer.invoke('series:getAll', sourceId),
   seriesGetIncomplete: (sourceId?: string) => ipcRenderer.invoke('series:getIncomplete', sourceId),
-  seriesGetStats: () => ipcRenderer.invoke('series:getStats'),
+  seriesGetStats: (sourceId?: string) => ipcRenderer.invoke('series:getStats', sourceId),
   seriesGetEpisodes: (seriesTitle: string, sourceId?: string) => ipcRenderer.invoke('series:getEpisodes', seriesTitle, sourceId),
   seriesDelete: (id: number) => ipcRenderer.invoke('series:delete', id),
   tmdbGetMovieDetails: (tmdbId: string) =>
@@ -394,7 +394,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   collectionsAnalyzeAll: (sourceId?: string, libraryId?: string) => ipcRenderer.invoke('collections:analyzeAll', sourceId, libraryId),
   collectionsGetAll: (sourceId?: string) => ipcRenderer.invoke('collections:getAll', sourceId),
   collectionsGetIncomplete: (sourceId?: string) => ipcRenderer.invoke('collections:getIncomplete', sourceId),
-  collectionsGetStats: () => ipcRenderer.invoke('collections:getStats'),
+  collectionsGetStats: (sourceId?: string) => ipcRenderer.invoke('collections:getStats', sourceId),
   collectionsDelete: (id: number) => ipcRenderer.invoke('collections:delete', id),
   collectionsCancelAnalysis: () => ipcRenderer.invoke('collections:cancelAnalysis'),
   onCollectionsProgress: (callback: (progress: unknown) => void) => {
@@ -481,9 +481,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Database - Statistics
   getLibraryStats: (sourceId?: string) => ipcRenderer.invoke('db:getLibraryStats', sourceId),
-  getStorageAnalytics: () => ipcRenderer.invoke('db:getStorageAnalytics'),
+  getStorageAnalytics: (sourceId?: string) => ipcRenderer.invoke('db:getStorageAnalytics', sourceId),
   // Person filmography completeness
-  personGetCompleteness: (personType?: string) => ipcRenderer.invoke('person:getCompleteness', personType),
+  personGetCompleteness: (personType?: string, sourceId?: string) => ipcRenderer.invoke('person:getCompleteness', personType, sourceId),
   personSearchTMDB: (query: string) => ipcRenderer.invoke('person:searchTMDB', query),
   personAnalyze: (personName: string, personType: string) => ipcRenderer.invoke('person:analyze', personName, personType),
   personDelete: (id: number) => ipcRenderer.invoke('person:delete', id),
@@ -494,9 +494,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchTraktWatchlist: (username: string) => ipcRenderer.invoke('sync:fetchTrakt', username) as Promise<Array<{ title: string; media_type: string; year?: number; tmdb_id?: string; poster_url?: string }>>,
   // Release alerts
   releaseAlertsCheck: () => ipcRenderer.invoke('release-alerts:check'),
-  getDuplicateMedia: () => ipcRenderer.invoke('db:getDuplicateMedia'),
+  getDuplicateMedia: (sourceId?: string) => ipcRenderer.invoke('db:getDuplicateMedia', sourceId),
   getLibraryHealthScores: () => ipcRenderer.invoke('db:getLibraryHealthScores'),
-  getRecentlyUpgraded: (days?: number) => ipcRenderer.invoke('db:getRecentlyUpgraded', days),
+  getRecentlyUpgraded: (days?: number, sourceId?: string) => ipcRenderer.invoke('db:getRecentlyUpgraded', days, sourceId),
   getRecentlyAdded: (days?: number, limit?: number) => ipcRenderer.invoke('db:getRecentlyAdded', days, limit),
 
   // Database - Global Search
@@ -1314,7 +1314,7 @@ export interface ElectronAPI {
 
   // Quality Analysis
   qualityAnalyzeAll: () => Promise<number>
-  qualityGetDistribution: () => Promise<{
+  qualityGetDistribution: (sourceId?: string) => Promise<{
     byTier: {
       [tier: string]: { low: number; medium: number; high: number }
     }
@@ -1384,7 +1384,7 @@ export interface ElectronAPI {
   seriesAnalyze: (seriesTitle: string) => Promise<unknown | null>
   seriesGetAll: (sourceId?: string) => Promise<unknown[]>
   seriesGetIncomplete: (sourceId?: string) => Promise<unknown[]>
-  seriesGetStats: () => Promise<{
+  seriesGetStats: (sourceId?: string) => Promise<{
     totalSeries: number
     completeSeries: number
     incompleteSeries: number
@@ -1437,7 +1437,7 @@ export interface ElectronAPI {
   collectionsAnalyzeAll: (sourceId?: string, libraryId?: string) => Promise<{ success: boolean; completed: boolean; analyzed: number }>
   collectionsGetAll: (sourceId?: string) => Promise<unknown[]>
   collectionsGetIncomplete: (sourceId?: string) => Promise<unknown[]>
-  collectionsGetStats: () => Promise<{
+  collectionsGetStats: (sourceId?: string) => Promise<{
     total: number
     complete: number
     incomplete: number
@@ -1551,7 +1551,7 @@ export interface ElectronAPI {
   }>
 
   // Person filmography completeness
-  personGetCompleteness: (personType?: string) => Promise<Array<{
+  personGetCompleteness: (personType?: string, sourceId?: string) => Promise<Array<{
     id: number; person_type: string; person_name: string; tmdb_person_id: number
     total_movies: number; owned_movies: number; missing_movies: string; owned_movie_ids: string
     completeness_percentage: number; profile_url: string | null
@@ -1569,7 +1569,7 @@ export interface ElectronAPI {
   // Release alerts
   releaseAlertsCheck: () => Promise<number>
 
-  getStorageAnalytics: () => Promise<{
+  getStorageAnalytics: (sourceId?: string) => Promise<{
     totalSize: number; totalItems: number
     byCodec: Array<{ codec: string; count: number; size: number }>
     byTier: Array<{ tier: string; count: number; size: number }>
@@ -1579,7 +1579,7 @@ export interface ElectronAPI {
       redundantSize: number; redundantCount: number
     }
   }>
-  getDuplicateMedia: () => Promise<Array<{
+  getDuplicateMedia: (sourceId?: string) => Promise<Array<{
     tmdb_id: string
     title: string
     year: number | null
@@ -1595,7 +1595,7 @@ export interface ElectronAPI {
     source_id: string; library_id: string; library_name: string
     library_type: string; avg_score: number; item_count: number
   }>>
-  getRecentlyUpgraded: (days?: number) => Promise<Array<{
+  getRecentlyUpgraded: (days?: number, sourceId?: string) => Promise<Array<{
     id: number; title: string; year: number | null; type: string
     poster_url: string | null; quality_tier: string
     previous_quality_tier: string; upgraded_at: string

@@ -72,9 +72,10 @@ export function registerCollectionHandlers() {
   })
 
   // Get collection stats
-  ipcMain.handle('collections:getStats', async () => {
+  ipcMain.handle('collections:getStats', async (_event, sourceId?: unknown) => {
     try {
-      return service.getStats()
+      const validSourceId = sourceId && typeof sourceId === 'string' ? sourceId : undefined
+      return service.getStats(validSourceId)
     } catch (error) {
       console.error('Error getting collection stats:', error)
       throw error

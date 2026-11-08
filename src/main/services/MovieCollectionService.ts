@@ -775,9 +775,9 @@ export class MovieCollectionService extends CancellableOperation {
   /**
    * Get collection stats
    */
-  getStats(): { total: number; complete: number; incomplete: number; totalMissing: number; avgCompleteness: number } {
+  getStats(sourceId?: string): { total: number; complete: number; incomplete: number; totalMissing: number; avgCompleteness: number } {
     const db = getDatabase()
-    return db.getMovieCollectionStats()
+    return db.getMovieCollectionStats(sourceId)
   }
 }
 

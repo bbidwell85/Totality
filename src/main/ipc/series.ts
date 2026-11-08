@@ -120,10 +120,11 @@ export function registerSeriesHandlers() {
   /**
    * Get series completeness statistics
    */
-  ipcMain.handle('series:getStats', async () => {
+  ipcMain.handle('series:getStats', async (_event, sourceId?: unknown) => {
     try {
       const db = getDatabase()
-      return db.getSeriesCompletenessStats()
+      const validSourceId = sourceId && typeof sourceId === 'string' ? sourceId : undefined
+      return db.getSeriesCompletenessStats(validSourceId)
     } catch (error) {
       console.error('Error getting series stats:', error)
       throw error

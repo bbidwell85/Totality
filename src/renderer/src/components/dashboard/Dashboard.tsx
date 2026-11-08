@@ -389,13 +389,13 @@ export function Dashboard({
 
       // --- Tier 3: Optional — analytics, filmography, extra bento cards ---
       const tier3 = await Promise.allSettled([
-        window.electronAPI.getDuplicateMedia(),
-        window.electronAPI.getRecentlyUpgraded(30),
-        window.electronAPI.getStorageAnalytics(),
-        window.electronAPI.personGetCompleteness(),
-        window.electronAPI.collectionsGetStats(),
-        window.electronAPI.seriesGetStats(),
-        window.electronAPI.qualityGetDistribution(),
+        window.electronAPI.getDuplicateMedia(sourceId),
+        window.electronAPI.getRecentlyUpgraded(30, sourceId),
+        window.electronAPI.getStorageAnalytics(sourceId),
+        window.electronAPI.personGetCompleteness(undefined, sourceId),
+        window.electronAPI.collectionsGetStats(sourceId),
+        window.electronAPI.seriesGetStats(sourceId),
+        window.electronAPI.qualityGetDistribution(sourceId),
         window.electronAPI.wishlistGetCountsByReason(),
       ])
 

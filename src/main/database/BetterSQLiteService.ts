@@ -1112,7 +1112,7 @@ export class BetterSQLiteService {
   /**
    * Get storage analytics — codec breakdown, quality tiers, and size stats
    */
-  getStorageAnalytics(): {
+  getStorageAnalytics(sourceId?: string): {
     totalSize: number
     totalItems: number
     byCodec: Array<{ codec: string; count: number; size: number }>
@@ -1133,13 +1133,18 @@ export class BetterSQLiteService {
   } {
     if (!this.db) throw new Error('Database not initialized')
 
+    const mediaSourceFilter = sourceId ? ' AND m.source_id = ?' : ''
+    const trackSourceFilter = sourceId ? ' AND t.source_id = ?' : ''
+    const mediaParams = sourceId ? [sourceId] : []
+    const trackParams = sourceId ? [sourceId] : []
+
     const totalRow = this.db.prepare(`
       SELECT COUNT(*) as count, COALESCE(SUM(m.file_size), 0) as size
       FROM media_items m
       LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
       WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
-        AND m.file_size > 0
-    `).get() as { count: number; size: number }
+        AND m.file_size > 0${mediaSourceFilter}
+    `).get(...mediaParams) as { count: number; size: number }
 
     const byCodec = this.db.prepare(`
       SELECT
@@ -1149,10 +1154,10 @@ export class BetterSQLiteService {
       FROM media_items m
       LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
       WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
-        AND m.file_size > 0
+        AND m.file_size > 0${mediaSourceFilter}
       GROUP BY UPPER(COALESCE(m.video_codec, 'unknown'))
       ORDER BY size DESC
-    `).all() as Array<{ codec: string; count: number; size: number }>
+    `).all(...mediaParams) as Array<{ codec: string; count: number; size: number }>
 
     const byTier = this.db.prepare(`
       SELECT
@@ -1163,10 +1168,10 @@ export class BetterSQLiteService {
       LEFT JOIN quality_scores q ON m.id = q.media_item_id
       LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
       WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
-        AND m.file_size > 0
+        AND m.file_size > 0${mediaSourceFilter}
       GROUP BY COALESCE(q.quality_tier, 'Unknown')
       ORDER BY CASE tier WHEN '4K' THEN 1 WHEN '1080p' THEN 2 WHEN '720p' THEN 3 WHEN 'SD' THEN 4 ELSE 5 END
-    `).all() as Array<{ tier: string; count: number; size: number }>
+    `).all(...mediaParams) as Array<{ tier: string; count: number; size: number }>
 
     const migration = this.db.prepare(`
       SELECT
@@ -1176,8 +1181,8 @@ export class BetterSQLiteService {
       FROM media_items m
       LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
       WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
-        AND m.video_codec IS NOT NULL AND m.video_codec != ''
-    `).get() as { h264Count: number; modernCount: number; totalCount: number }
+        AND m.video_codec IS NOT NULL AND m.video_codec != ''${mediaSourceFilter}
+    `).get(...mediaParams) as { h264Count: number; modernCount: number; totalCount: number }
 
     // Music storage analytics
     const musicTotal = this.db.prepare(`
@@ -1185,8 +1190,8 @@ export class BetterSQLiteService {
       FROM music_tracks t
       LEFT JOIN library_scans ls ON t.source_id = ls.source_id AND t.library_id = ls.library_id
       WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
-        AND t.file_size > 0
-    `).get() as { count: number; size: number } | undefined
+        AND t.file_size > 0${trackSourceFilter}
+    `).get(...trackParams) as { count: number; size: number } | undefined
 
     const musicByCodec = this.db.prepare(`
       SELECT
@@ -1196,10 +1201,10 @@ export class BetterSQLiteService {
       FROM music_tracks t
       LEFT JOIN library_scans ls ON t.source_id = ls.source_id AND t.library_id = ls.library_id
       WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
-        AND t.file_size > 0
+        AND t.file_size > 0${trackSourceFilter}
       GROUP BY UPPER(COALESCE(t.audio_codec, 'unknown'))
       ORDER BY size DESC
-    `).all() as Array<{ codec: string; count: number; size: number }>
+    `).all(...trackParams) as Array<{ codec: string; count: number; size: number }>
 
     const musicByTier = this.db.prepare(`
       SELECT
@@ -1215,10 +1220,10 @@ export class BetterSQLiteService {
       FROM music_tracks t
       LEFT JOIN library_scans ls ON t.source_id = ls.source_id AND t.library_id = ls.library_id
       WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
-        AND t.file_size > 0
+        AND t.file_size > 0${trackSourceFilter}
       GROUP BY tier
       ORDER BY size DESC
-    `).all() as Array<{ tier: string; count: number; size: number }>
+    `).all(...trackParams) as Array<{ tier: string; count: number; size: number }>
 
     // Version storage stats — redundant versions that could be removed
     const versionStats = this.db.prepare(`
@@ -1232,8 +1237,8 @@ export class BetterSQLiteService {
       LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
       WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
         AND v.file_size > 0
-        AND (SELECT COUNT(*) FROM media_item_versions v2 WHERE v2.media_item_id = v.media_item_id) > 1
-    `).get() as { items_with_versions: number; total_versions: number; redundant_size: number; redundant_count: number } | undefined
+        AND (SELECT COUNT(*) FROM media_item_versions v2 WHERE v2.media_item_id = v.media_item_id) > 1${mediaSourceFilter}
+    `).get(...mediaParams) as { items_with_versions: number; total_versions: number; redundant_size: number; redundant_count: number } | undefined
 
     return {
       totalSize: (totalRow?.size || 0) + (musicTotal?.size || 0),
@@ -1263,7 +1268,7 @@ export class BetterSQLiteService {
   /**
    * Get duplicate media items (same TMDB ID across different sources or paths)
    */
-  getDuplicateMedia(): Array<{
+  getDuplicateMedia(sourceId?: string): Array<{
     tmdb_id: string
     title: string
     year: number | null
@@ -1283,6 +1288,10 @@ export class BetterSQLiteService {
   }> {
     if (!this.db) throw new Error('Database not initialized')
 
+    const sourceFilter = sourceId ? ' AND m.source_id = ?' : ''
+    const subquerySourceFilter = sourceId ? ' AND source_id = ?' : ''
+    const params = sourceId ? [sourceId, sourceId] : []
+
     const sql = `
       SELECT m.tmdb_id, m.title, m.year, m.type,
              m.id, m.source_id, m.source_type, m.library_id, m.file_path, m.file_size,
@@ -1293,15 +1302,15 @@ export class BetterSQLiteService {
       LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
       WHERE m.tmdb_id IS NOT NULL AND m.tmdb_id != ''
         AND m.type = 'movie'
-        AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+        AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)${sourceFilter}
         AND m.tmdb_id IN (
           SELECT tmdb_id FROM media_items
-          WHERE tmdb_id IS NOT NULL AND tmdb_id != '' AND type = 'movie'
+          WHERE tmdb_id IS NOT NULL AND tmdb_id != '' AND type = 'movie'${subquerySourceFilter}
           GROUP BY tmdb_id HAVING COUNT(*) > 1
         )
       ORDER BY m.tmdb_id, q.overall_score DESC
     `
-    const rows = this.db.prepare(sql).all() as Array<{
+    const rows = this.db.prepare(sql).all(...params) as Array<{
       tmdb_id: string; title: string; year: number | null; type: string
       id: number; source_id: string; source_type: string; library_id: string
       file_path: string | null; file_size: number | null
@@ -1422,13 +1431,23 @@ export class BetterSQLiteService {
   /**
    * Get items that recently received a quality tier upgrade
    */
-  getRecentlyUpgraded(days: number = 30): Array<{
+  getRecentlyUpgraded(days: number = 30, sourceId?: string): Array<{
     id: number; title: string; year: number | null; type: string
     poster_url: string | null; quality_tier: string
     previous_quality_tier: string; upgraded_at: string
     series_title: string | null; season_number: number | null; episode_number: number | null
   }> {
     if (!this.db) throw new Error('Database not initialized')
+    const conditions: string[] = [
+      'qs.upgraded_at IS NOT NULL',
+      'qs.upgraded_at >= datetime(\'now\', ?)',
+      '(ls.is_enabled = 1 OR ls.is_enabled IS NULL)',
+    ]
+    const params: (string | number)[] = [`-${days} days`]
+    if (sourceId) {
+      conditions.push('m.source_id = ?')
+      params.push(sourceId)
+    }
     return this.db.prepare(`
       SELECT m.id, m.title, m.year, m.type, m.poster_url,
         qs.quality_tier, qs.previous_quality_tier, qs.upgraded_at,
@@ -1436,12 +1455,10 @@ export class BetterSQLiteService {
       FROM quality_scores qs
       JOIN media_items m ON m.id = qs.media_item_id
       LEFT JOIN library_scans ls ON m.source_id = ls.source_id AND m.library_id = ls.library_id
-      WHERE qs.upgraded_at IS NOT NULL
-        AND qs.upgraded_at >= datetime('now', ?)
-        AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+      WHERE ${conditions.join(' AND ')}
       ORDER BY qs.upgraded_at DESC
       LIMIT 50
-    `).all(`-${days} days`) as Array<{
+    `).all(...params) as Array<{
       id: number; title: string; year: number | null; type: string
       poster_url: string | null; quality_tier: string
       previous_quality_tier: string; upgraded_at: string
@@ -1449,21 +1466,29 @@ export class BetterSQLiteService {
     }>
   }
 
-  getRecentlyUpgradedMusic(days: number = 30): Array<{
+  getRecentlyUpgradedMusic(days: number = 30, sourceId?: string): Array<{
     album_id: number; title: string; artist_name: string
     quality_tier: string; previous_quality_tier: string; upgraded_at: string
   }> {
     if (!this.db) throw new Error('Database not initialized')
+    const conditions: string[] = [
+      'mqs.upgraded_at IS NOT NULL',
+      'mqs.upgraded_at >= datetime(\'now\', ?)',
+    ]
+    const params: (string | number)[] = [`-${days} days`]
+    if (sourceId) {
+      conditions.push('a.source_id = ?')
+      params.push(sourceId)
+    }
     return this.db.prepare(`
       SELECT a.id as album_id, a.title, a.artist_name,
         mqs.quality_tier, mqs.previous_quality_tier, mqs.upgraded_at
       FROM music_quality_scores mqs
       JOIN music_albums a ON a.id = mqs.album_id
-      WHERE mqs.upgraded_at IS NOT NULL
-        AND mqs.upgraded_at >= datetime('now', ?)
+      WHERE ${conditions.join(' AND ')}
       ORDER BY mqs.upgraded_at DESC
       LIMIT 50
-    `).all(`-${days} days`) as Array<{
+    `).all(...params) as Array<{
       album_id: number; title: string; artist_name: string
       quality_tier: string; previous_quality_tier: string; upgraded_at: string
     }>
@@ -4390,7 +4415,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   /**
    * Get series completeness statistics
    */
-  getSeriesCompletenessStats(): {
+  getSeriesCompletenessStats(sourceId?: string): {
     totalSeries: number
     completeSeries: number
     incompleteSeries: number
@@ -4399,15 +4424,19 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   } {
     if (!this.db) throw new Error('Database not initialized')
 
+    const sourceFilter = sourceId ? ' AND sc.source_id = ?' : ''
+    const sourceFilter2 = sourceId ? ' AND sc2.source_id = ?' : ''
+    const params = sourceId ? [sourceId] : []
+
     // Get unique series with their best completeness
     const stmt = this.db.prepare(`
       SELECT sc.series_title, MAX(sc.completeness_percentage) as best_completeness, sc.tmdb_id
       FROM series_completeness sc
       LEFT JOIN library_scans ls ON sc.source_id = ls.source_id AND sc.library_id = ls.library_id
-      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)${sourceFilter}
       GROUP BY sc.series_title
     `)
-    const rows = stmt.all() as Array<{
+    const rows = stmt.all(...params) as Array<{
       series_title: string
       best_completeness: number
       tmdb_id: string | null
@@ -4425,6 +4454,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     }
 
     // Count missing episodes
+    const missingParams = sourceId ? [sourceId, sourceId] : []
     const missingStmt = this.db.prepare(`
       SELECT sc.missing_episodes
       FROM series_completeness sc
@@ -4433,13 +4463,13 @@ WHERE m.type = 'episode' AND m.series_title = ?`
         SELECT sc2.series_title, MAX(sc2.completeness_percentage) as max_pct
         FROM series_completeness sc2
         LEFT JOIN library_scans ls2 ON sc2.source_id = ls2.source_id AND sc2.library_id = ls2.library_id
-        WHERE sc2.tmdb_id IS NOT NULL AND (ls2.is_enabled = 1 OR ls2.is_enabled IS NULL)
+        WHERE sc2.tmdb_id IS NOT NULL AND (ls2.is_enabled = 1 OR ls2.is_enabled IS NULL)${sourceFilter2}
         GROUP BY sc2.series_title
       ) best ON sc.series_title = best.series_title AND sc.completeness_percentage = best.max_pct
-      WHERE sc.tmdb_id IS NOT NULL AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+      WHERE sc.tmdb_id IS NOT NULL AND (ls.is_enabled = 1 OR ls.is_enabled IS NULL)${sourceFilter}
       GROUP BY sc.series_title
     `)
-    const missingRows = missingStmt.all() as Array<{ missing_episodes: string }>
+    const missingRows = missingStmt.all(...missingParams) as Array<{ missing_episodes: string }>
 
     let totalMissingEpisodes = 0
     for (const row of missingRows) {
@@ -4683,7 +4713,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   /**
    * Get movie collection statistics
    */
-  getMovieCollectionStats(): {
+  getMovieCollectionStats(sourceId?: string): {
     total: number
     complete: number
     incomplete: number
@@ -4692,32 +4722,35 @@ WHERE m.type = 'episode' AND m.series_title = ?`
   } {
     if (!this.db) throw new Error('Database not initialized')
 
+    const sourceFilter = sourceId ? ' AND mc.source_id = ?' : ''
+    const params = sourceId ? [sourceId] : []
+
     const enabledFilter = `
       FROM movie_collections mc
       LEFT JOIN library_scans ls ON mc.source_id = ls.source_id AND mc.library_id = ls.library_id
-      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)
+      WHERE (ls.is_enabled = 1 OR ls.is_enabled IS NULL)${sourceFilter}
     `
 
     const totalStmt = this.db.prepare(`SELECT COUNT(*) as count ${enabledFilter}`)
-    const total = (totalStmt.get() as { count: number }).count
+    const total = (totalStmt.get(...params) as { count: number }).count
 
     const completeStmt = this.db.prepare(
       `SELECT COUNT(*) as count ${enabledFilter} AND mc.completeness_percentage = 100`
     )
-    const complete = (completeStmt.get() as { count: number }).count
+    const complete = (completeStmt.get(...params) as { count: number }).count
 
     const incompleteStmt = this.db.prepare(
       `SELECT COUNT(*) as count ${enabledFilter} AND mc.completeness_percentage < 100`
     )
-    const incomplete = (incompleteStmt.get() as { count: number }).count
+    const incomplete = (incompleteStmt.get(...params) as { count: number }).count
 
     const missingStmt = this.db.prepare(
       `SELECT SUM(json_array_length(mc.missing_movies)) as count ${enabledFilter} AND mc.missing_movies IS NOT NULL`
     )
-    const totalMissing = (missingStmt.get() as { count: number | null }).count || 0
+    const totalMissing = (missingStmt.get(...params) as { count: number | null }).count || 0
 
     const avgStmt = this.db.prepare(`SELECT AVG(mc.completeness_percentage) as avg ${enabledFilter}`)
-    const avgCompleteness = Math.round((avgStmt.get() as { avg: number | null }).avg || 0)
+    const avgCompleteness = Math.round((avgStmt.get(...params) as { avg: number | null }).avg || 0)
 
     return { total, complete, incomplete, totalMissing, avgCompleteness }
   }
@@ -5434,6 +5467,18 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     if (!this.db) throw new Error('Database not initialized')
     const stmt = this.db.prepare('SELECT * FROM quality_scores')
     return stmt.all() as QualityScore[]
+  }
+
+  /**
+   * Get quality scores filtered by source
+   */
+  getQualityScoresForSource(sourceId: string): QualityScore[] {
+    if (!this.db) throw new Error('Database not initialized')
+    return this.db.prepare(`
+      SELECT qs.* FROM quality_scores qs
+      JOIN media_items m ON qs.media_item_id = m.id
+      WHERE m.source_id = ?
+    `).all(sourceId) as QualityScore[]
   }
 
   /**
@@ -6708,17 +6753,32 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     return row?.id || 0
   }
 
-  getPersonCompleteness(personType?: string): Array<{
+  getPersonCompleteness(personType?: string, sourceId?: string): Array<{
     id: number; person_type: string; person_name: string; tmdb_person_id: number
     total_movies: number; owned_movies: number
     missing_movies: string; owned_movie_ids: string
     completeness_percentage: number; profile_url: string | null
   }> {
     if (!this.db) return []
-    const where = personType ? ' WHERE person_type = ?' : ''
-    const params = personType ? [personType] : []
+    const conditions: string[] = []
+    const params: string[] = []
+    if (personType) {
+      conditions.push('pc.person_type = ?')
+      params.push(personType)
+    }
+    if (sourceId) {
+      // person_completeness has no source_id; filter to persons who have at least one owned movie in the given source
+      conditions.push(`EXISTS (
+        SELECT 1 FROM media_items m
+        WHERE m.source_id = ? AND m.tmdb_id IS NOT NULL
+          AND (',' || REPLACE(REPLACE(REPLACE(pc.owned_movie_ids, '[', ''), ']', ''), ' ', '') || ',')
+          LIKE ('%,' || m.tmdb_id || ',%')
+      )`)
+      params.push(sourceId)
+    }
+    const where = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : ''
     return this.db.prepare(
-      `SELECT * FROM person_completeness${where} ORDER BY completeness_percentage DESC, person_name ASC`
+      `SELECT pc.* FROM person_completeness pc${where} ORDER BY pc.completeness_percentage DESC, pc.person_name ASC`
     ).all(...params) as Array<{
       id: number; person_type: string; person_name: string; tmdb_person_id: number
       total_movies: number; owned_movies: number
