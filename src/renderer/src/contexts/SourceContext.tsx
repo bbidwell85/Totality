@@ -135,10 +135,11 @@ export function SourceProvider({ children }: SourceProviderProps) {
   const { addToast } = useToast()
   const hasShownStartupToast = useRef(false)
 
-  // Library type availability
-  const [hasMovies, setHasMovies] = useState(false)
-  const [hasTV, setHasTV] = useState(false)
-  const [hasMusic, setHasMusic] = useState(false)
+  // Library type availability (global + per-source)
+  const [globalHasMovies, setGlobalHasMovies] = useState(false)
+  const [globalHasTV, setGlobalHasTV] = useState(false)
+  const [globalHasMusic, setGlobalHasMusic] = useState(false)
+  const [sourceLibraryTypes, setSourceLibraryTypes] = useState<Map<string, { movies: boolean; tv: boolean; music: boolean }>>(new Map())
 
   // Computed: active (enabled) sources
   const activeSources = sources.filter(s => s.is_enabled)
@@ -285,20 +286,26 @@ export function SourceProvider({ children }: SourceProviderProps) {
       })
     )
 
+    const perSource = new Map<string, { movies: boolean; tv: boolean; music: boolean }>()
+
     for (const result of results) {
       if (result.status !== 'fulfilled') continue
-      for (const lib of result.value.libraries) {
+      const { source, libraries } = result.value
+      const srcTypes = { movies: false, tv: false, music: false }
+      for (const lib of libraries) {
         if (lib.isEnabled) {
-          if (lib.type === 'movie') movies = true
-          if (lib.type === 'show') tv = true
-          if (lib.type === 'music') music = true
+          if (lib.type === 'movie') { movies = true; srcTypes.movies = true }
+          if (lib.type === 'show') { tv = true; srcTypes.tv = true }
+          if (lib.type === 'music') { music = true; srcTypes.music = true }
         }
       }
+      perSource.set(source.source_id, srcTypes)
     }
 
-    setHasMovies(movies)
-    setHasTV(tv)
-    setHasMusic(music)
+    setGlobalHasMovies(movies)
+    setGlobalHasTV(tv)
+    setGlobalHasMusic(music)
+    setSourceLibraryTypes(perSource)
 
     return unreachable
   }
@@ -502,6 +509,17 @@ export function SourceProvider({ children }: SourceProviderProps) {
   const plexGetServers = useCallback(async (sourceId: string) => {
     return await window.electronAPI.plexGetServersForSource(sourceId)
   }, [])
+
+  // Derive effective library types from selected source (or global if none selected)
+  const hasMovies = activeSourceId
+    ? sourceLibraryTypes.get(activeSourceId)?.movies ?? false
+    : globalHasMovies
+  const hasTV = activeSourceId
+    ? sourceLibraryTypes.get(activeSourceId)?.tv ?? false
+    : globalHasTV
+  const hasMusic = activeSourceId
+    ? sourceLibraryTypes.get(activeSourceId)?.music ?? false
+    : globalHasMusic
 
   const value: SourceContextType = {
     sources,
