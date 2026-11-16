@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.6](https://github.com/bbidwell85/Totality/compare/v0.4.5...v0.4.6) (2026-11-16)
+
+
+### Bug Fixes
+
+* resolve TypeScript strict mode errors breaking CI build ([de7fa0d](https://github.com/bbidwell85/Totality/commit/de7fa0d8fab78aaef177f8149c1bf9aa8efbcc1e))
+
 ### [0.4.5](https://github.com/bbidwell85/Totality/compare/v0.4.4...v0.4.5) (2026-11-16)
 
 
