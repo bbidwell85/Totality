@@ -122,7 +122,7 @@ function AboutTab() {
 
       {/* Description */}
       <p className="text-label text-muted-foreground">
-        Analyze media library quality, track completeness, and discover upgrades across your Plex, Jellyfin, Emby, Kodi, and local folder collections.
+        Analyze media library quality, track completeness, and discover upgrades across your Plex, Jellyfin, Emby, Kodi, MediaMonkey, and local folder collections.
       </p>
 
       {/* Features */}
@@ -134,7 +134,6 @@ function AboutTab() {
           <li>Multi-source library scanning (Plex, Jellyfin, Emby, Kodi, Local Folders, MediaMonkey)</li>
           <li>Video and audio quality analysis with tier-based scoring and TMDB ratings</li>
           <li>TV series, movie collection, music, and director/actor filmography completeness</li>
-          <li>AI-powered assistant with 29 tools for library insights and recommendations</li>
           <li>Wishlist with Plex and Trakt watchlist sync, barcode scanner for quick adds</li>
           <li>Mobile and web access — browse your library from any device on your network</li>
           <li>Storage analytics, codec migration tracking, and duplicate detection</li>
@@ -240,27 +239,6 @@ function CreditsTab() {
         </div>
       </section>
 
-      {/* AI Assistant */}
-      <section>
-        <h3 className="text-label font-semibold text-muted-foreground mb-3">
-          AI assistant
-        </h3>
-        <div className="text-caption text-muted-foreground leading-relaxed">
-          <p className="font-medium text-foreground mb-1">Google Gemini</p>
-          <p>
-            AI chat and library analysis powered by{' '}
-            <ExtLink href="https://ai.google.dev">
-              Google Gemini
-            </ExtLink>
-            {' '}via the{' '}
-            <ExtLink href="https://www.npmjs.com/package/@google/genai">
-              @google/genai
-            </ExtLink>
-            {' '}SDK. Features include natural language library queries, quality and upgrade reports, completeness analysis, and personalized recommendations. Requires a personal Gemini API key.
-          </p>
-        </div>
-      </section>
-
       {/* Media Analysis */}
       <section>
         <h3 className="text-label font-semibold text-muted-foreground mb-3">
@@ -305,8 +283,8 @@ function CreditsTab() {
           <TechLink name="react-window" url="https://react-window.vercel.app" license="MIT" />
           <TechLink name="dnd-kit" url="https://dndkit.com" license="MIT" />
           <TechLink name="Zod" url="https://zod.dev" license="MIT" />
-          <TechLink name="react-markdown" url="https://github.com/remarkjs/react-markdown" license="MIT" />
           <TechLink name="html5-qrcode" url="https://github.com/mebjas/html5-qrcode" license="Apache 2.0" />
+          <TechLink name="mysql2" url="https://github.com/sidorares/node-mysql2" license="MIT" />
           <TechLink name="ws" url="https://github.com/websockets/ws" license="MIT" />
           <TechLink name="selfsigned" url="https://github.com/jfromaniello/selfsigned" license="MIT" />
           <TechLink name="chokidar" url="https://github.com/paulmillr/chokidar" license="MIT" />
@@ -356,9 +334,6 @@ function LegalTab() {
             <span className="text-foreground font-semibold">Credential Security:</span> Server credentials and API keys are encrypted using your operating system's secure storage (Windows DPAPI, macOS Keychain, or Linux Secret Service).
           </p>
           <p>
-            <span className="text-foreground font-semibold">AI Features:</span> When enabled, AI chat and reports send library metadata (titles, quality specs, statistics) to Google&apos;s Gemini API using your personal API key. No data passes through Totality&apos;s servers. Chat history is not saved to disk.
-          </p>
-          <p>
             <span className="text-foreground font-semibold">Auto-Updates:</span> Totality periodically checks GitHub Releases for new versions. No personal data is transmitted during update checks.
           </p>
           <p>
@@ -383,9 +358,6 @@ function LegalTab() {
             <span className="text-foreground font-semibold">Retailers:</span> Amazon, eBay, Discogs, Bandcamp, and HDtracks are trademarks of their respective owners.
           </p>
           <p>
-            <span className="text-foreground font-semibold">AI Services:</span> Google and Gemini are trademarks of Google LLC.
-          </p>
-          <p>
             <span className="text-foreground font-semibold">Data Services:</span> TMDB and MusicBrainz are trademarks of their respective owners.
           </p>
           <p className="text-muted-foreground/70 italic">
@@ -408,9 +380,6 @@ function LegalTab() {
           </p>
           <p>
             Quality analysis is based on technical metadata (resolution, bitrate, codecs) and may not reflect subjective viewing or listening experience. Upgrade recommendations are suggestions only.
-          </p>
-          <p>
-            AI-generated responses and reports may contain inaccuracies. Always verify recommendations before making purchase decisions.
           </p>
         </div>
       </section>

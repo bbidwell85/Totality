@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { SETTING_KEYS } from '../../../../shared/settingKeys'
-import { Search, X, Home, Film, Tv, Music, Tags, ListChecks, Star, Settings, RefreshCw, Disc3, User, MessageSquare, ArrowLeft, ArrowRight, Activity, Loader2 } from 'lucide-react'
+import { Search, X, Home, Film, Tv, Music, Tags, ListChecks, Star, Settings, RefreshCw, Disc3, User, ArrowLeft, ArrowRight, Activity, Loader2 } from 'lucide-react'
 import { useSources } from '../../contexts/SourceContext'
 import { useWishlist } from '../../contexts/WishlistContext'
 import { useNavigation } from '../../contexts/NavigationContext'
@@ -32,12 +32,10 @@ interface TopBarProps {
   onOpenSettings: () => void
   onToggleCompleteness: () => void
   onToggleWishlist: () => void
-  onToggleChat: () => void
   onToggleMoodSync: () => void
   onToggleTaskQueue: () => void
   showCompletenessPanel: boolean
   showWishlistPanel: boolean
-  showChatPanel: boolean
   showMoodSyncPanel: boolean
   showTaskQueuePanel: boolean
   isAutoRefreshing?: boolean
@@ -79,12 +77,10 @@ export function TopBar({
   onOpenSettings,
   onToggleCompleteness,
   onToggleWishlist,
-  onToggleChat,
   onToggleMoodSync,
   onToggleTaskQueue,
   showCompletenessPanel,
   showWishlistPanel,
-  showChatPanel,
   showMoodSyncPanel,
   showTaskQueuePanel,
   isAutoRefreshing = false,
@@ -181,7 +177,6 @@ export function TopBar({
       if (e.key === 'Escape') {
         if (showCompletenessPanel) { onToggleCompleteness(); return }
         if (showWishlistPanel) { onToggleWishlist(); return }
-        if (showChatPanel) { onToggleChat(); return }
         if (showMoodSyncPanel) { onToggleMoodSync(); return }
         if (showTaskQueuePanel) { onToggleTaskQueue(); return }
       }
@@ -189,7 +184,7 @@ export function TopBar({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onOpenSettings, onToggleCompleteness, onToggleWishlist, onToggleChat, onToggleMoodSync, onToggleTaskQueue, showCompletenessPanel, showWishlistPanel, showChatPanel, showMoodSyncPanel, showTaskQueuePanel])
+  }, [onOpenSettings, onToggleCompleteness, onToggleWishlist, onToggleMoodSync, onToggleTaskQueue, showCompletenessPanel, showWishlistPanel, showMoodSyncPanel, showTaskQueuePanel])
 
   // Debounced search
   const performSearch = useCallback(async (query: string) => {
@@ -719,22 +714,6 @@ export function TopBar({
 
         {/* Right Section: Panel Toggles & Settings — hidden on mobile (accessible from bottom tab) */}
         <div className={`flex items-center justify-end flex-1 gap-2 ${isMobile ? 'hidden' : ''}`}>
-          {/* AI Chat Toggle */}
-          <Tooltip label="AI Chat">
-            <button
-              onClick={onToggleChat}
-              className={`p-2 rounded-lg transition-colors ${
-                showChatPanel
-                  ? 'bg-white text-black'
-                  : 'text-white hover:bg-white/10'
-              }`}
-              aria-label="Toggle AI chat"
-              aria-pressed={showChatPanel}
-            >
-              <MessageSquare className="w-5 h-5" />
-            </button>
-          </Tooltip>
-
           {/* Completeness Panel Toggle */}
           <Tooltip label={!tmdbApiKeySet ? 'Completeness — TMDB key needed' : 'Completeness'}>
             <button

@@ -486,30 +486,6 @@ export const MoodComparisonArgsSchema = z.union([
 ])
 
 // ============================================================================
-// AI (GEMINI) SCHEMAS
-// ============================================================================
-
-export const AiMessageSchema = z.object({
-  role: z.enum(['user', 'assistant']),
-  content: z.string().min(1).max(100000),
-})
-
-export const AiSendMessageSchema = z.object({
-  messages: z.array(AiMessageSchema).min(1),
-  system: z.string().max(50000).optional(),
-  maxTokens: z.number().int().positive().max(8192).optional(),
-})
-
-export const AiStreamMessageSchema = z.object({
-  messages: z.array(AiMessageSchema).min(1),
-  system: z.string().max(50000).optional(),
-  maxTokens: z.number().int().positive().max(8192).optional(),
-  requestId: z.string().min(1).max(100),
-})
-
-export const AiTestApiKeySchema = z.string().min(1).max(500)
-
-// ============================================================================
 // LETTER OFFSET SCHEMA
 // ============================================================================
 

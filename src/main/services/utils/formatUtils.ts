@@ -1,6 +1,6 @@
 /**
  * Shared format utilities for the main process.
- * Used by GeminiTools, GeminiAnalysisService, and other services.
+ * Used by various main process services.
  */
 
 export const formatSize = (b: number): string =>

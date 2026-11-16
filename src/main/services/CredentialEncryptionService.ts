@@ -27,7 +27,6 @@ const SENSITIVE_SETTINGS_KEYS = [
   'plex_token',
   'tmdb_api_key',
   'musicbrainz_api_token',
-  'gemini_api_key',
   'web_access_pin',
 ]
 

@@ -289,21 +289,6 @@ export const RPC_CHANNEL_MAP: Record<string, string> = {
   autoUpdateDownloadUpdate: 'autoUpdate:downloadUpdate',
   autoUpdateInstallUpdate: 'autoUpdate:installUpdate',
 
-  // AI
-  aiIsConfigured: 'ai:isConfigured',
-  aiGetRateLimitInfo: 'ai:getRateLimitInfo',
-  aiTestApiKey: 'ai:testApiKey',
-  aiSendMessage: 'ai:sendMessage',
-  aiStreamMessage: 'ai:streamMessage',
-  aiChatMessage: 'ai:chatMessage',
-  aiQualityReport: 'ai:qualityReport',
-  aiUpgradePriorities: 'ai:upgradePriorities',
-  aiCompletenessInsights: 'ai:completenessInsights',
-  aiWishlistAdvice: 'ai:wishlistAdvice',
-  aiStorageOptimization: 'ai:storageOptimization',
-  aiMusicQualityReport: 'ai:musicQualityReport',
-  aiExplainQuality: 'ai:explainQuality',
-
   // Logging
   getLogs: 'logs:getAll',
   clearLogs: 'logs:clear',
@@ -356,14 +341,7 @@ export const EVENT_CHANNEL_MAP: Record<string, string> = {
   onWishlistChanged: 'wishlist:changed',
   onMessage: 'main-process-message',
   onAutoUpdateStateChanged: 'autoUpdate:stateChanged',
-  onAiStreamDelta: 'ai:streamDelta',
-  onAiStreamComplete: 'ai:streamComplete',
-  onAiToolUse: 'ai:toolUse',
-  onAiChatStreamDelta: 'ai:chatStreamDelta',
-  onAiChatStreamComplete: 'ai:chatStreamComplete',
-  onAiAnalysisStreamDelta: 'ai:analysisStreamDelta',
-  onAiAnalysisStreamComplete: 'ai:analysisStreamComplete',
-  onNewLog: 'logs:new',
+onNewLog: 'logs:new',
 }
 
 /** Channels that must NOT be exposed to web clients */
@@ -403,8 +381,7 @@ export const WEB_DENIED_CHANNELS = new Set([
 export const WEB_SENSITIVE_SETTINGS = new Set([
   'plex_token',
   'tmdb_api_key',
-  'gemini_api_key',
-  'musicbrainz_api_token',
+'musicbrainz_api_token',
   'web_access_pin',
   'web_access_enabled',
   'web_access_port',

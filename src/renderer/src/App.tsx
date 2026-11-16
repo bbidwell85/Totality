@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { SETTING_KEYS } from '../../shared/settingKeys'
 import { Sidebar } from './components/layout/Sidebar'
 import { TopBar } from './components/layout/TopBar'
@@ -6,10 +6,8 @@ import { MediaBrowser } from './components/library/MediaBrowser'
 import { Dashboard } from './components/dashboard'
 import { WishlistPanel } from './components/wishlist/WishlistPanel'
 import { CompletenessPanel } from './components/library/CompletenessPanel'
-import { ChatPanel } from './components/chat/ChatPanel'
 import { MoodSyncPanel } from './components/mood/MoodSyncPanel'
 import { TaskQueuePanel } from './components/ui/TaskQueuePanel'
-import type { ViewContext } from './hooks/useChat'
 import { SourceProvider, useSources } from './contexts/SourceContext'
 import { WishlistProvider } from './contexts/WishlistContext'
 import { NavigationProvider, useNavigation } from './contexts/NavigationContext'
@@ -52,8 +50,7 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
   // Panel states - managed at app level for TopBar to control
   const [showCompletenessPanel, setShowCompletenessPanel] = useState(false)
   const [showWishlistPanel, setShowWishlistPanel] = useState(false)
-  const [showChatPanel, setShowChatPanel] = useState(false)
-  const [showMoodSyncPanel, setShowMoodSyncPanel] = useState(false)
+const [showMoodSyncPanel, setShowMoodSyncPanel] = useState(false)
   const [showTaskQueuePanel, setShowTaskQueuePanel] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
   const [wsConnected, setWsConnected] = useState(true)
@@ -425,7 +422,7 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
     setShowSettingsModal(true)
   }
 
-  const closeAllPanels = () => { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowChatPanel(false); setShowMoodSyncPanel(false); setShowTaskQueuePanel(false) }
+  const closeAllPanels = () => { setShowCompletenessPanel(false); setShowWishlistPanel(false); setShowMoodSyncPanel(false); setShowTaskQueuePanel(false) }
 
   const handleToggleCompleteness = () => {
     setShowCompletenessPanel(prev => { const v = !prev; if (v) closeAllPanels(); setShowCompletenessPanel(v); return v })
@@ -433,10 +430,6 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
 
   const handleToggleWishlist = () => {
     setShowWishlistPanel(prev => { const v = !prev; if (v) closeAllPanels(); setShowWishlistPanel(v); return v })
-  }
-
-  const handleToggleChat = () => {
-    setShowChatPanel(prev => { const v = !prev; if (v) closeAllPanels(); setShowChatPanel(v); return v })
   }
 
   const handleToggleMoodSync = () => {
@@ -447,11 +440,6 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
     setShowTaskQueuePanel(prev => { const v = !prev; if (v) closeAllPanels(); setShowTaskQueuePanel(v); return v })
   }
 
-  const chatViewContext = useMemo((): ViewContext => ({
-    currentView: currentView as 'dashboard' | 'library',
-    libraryTab: currentView === 'library' ? libraryTab as 'movies' | 'tv' | 'music' : undefined,
-    activeSourceId: activeSourceId || undefined,
-  }), [currentView, libraryTab, activeSourceId])
 
   if (isLoading) {
     return (
@@ -499,12 +487,10 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
           onOpenSettings={() => handleOpenSettings()}
           onToggleCompleteness={handleToggleCompleteness}
           onToggleWishlist={handleToggleWishlist}
-          onToggleChat={handleToggleChat}
           onToggleMoodSync={handleToggleMoodSync}
           onToggleTaskQueue={handleToggleTaskQueue}
           showCompletenessPanel={showCompletenessPanel}
           showWishlistPanel={showWishlistPanel}
-          showChatPanel={showChatPanel}
           showMoodSyncPanel={showMoodSyncPanel}
           showTaskQueuePanel={showTaskQueuePanel}
           isAutoRefreshing={isAutoRefreshing}
@@ -565,10 +551,8 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
                 hideHeader={true}
                 showCompletenessPanel={showCompletenessPanel}
                 showWishlistPanel={showWishlistPanel}
-                showChatPanel={showChatPanel}
                 onToggleCompleteness={handleToggleCompleteness}
                 onToggleWishlist={handleToggleWishlist}
-                onToggleChat={handleToggleChat}
                 libraryTab={libraryTab}
                 onLibraryTabChange={setLibraryTab}
                 onAutoRefreshChange={setIsAutoRefreshing}
@@ -640,13 +624,6 @@ function AppContent({ isMobile = false, isTablet = false }: { isMobile?: boolean
         <TaskQueuePanel
           isOpen={showTaskQueuePanel}
           onClose={() => setShowTaskQueuePanel(false)}
-        />
-        {/* Chat Panel - rendered at App level, available in all views */}
-        <ChatPanel
-          isOpen={showChatPanel}
-          onClose={() => setShowChatPanel(false)}
-          onOpenSettings={() => handleOpenSettings('services')}
-          viewContext={chatViewContext}
         />
         {/* Mobile search overlay */}
         {isMobile && showMobileSearch && (

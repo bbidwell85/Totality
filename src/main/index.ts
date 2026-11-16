@@ -79,7 +79,6 @@ import { registerNotificationHandlers } from './ipc/notifications'
 import { registerTaskQueueHandlers } from './ipc/taskQueue'
 import { registerLoggingHandlers } from './ipc/logging'
 import { registerAutoUpdateHandlers } from './ipc/autoUpdate'
-import { registerGeminiHandlers } from './ipc/gemini'
 import { registerMoodHandlers, setMoodMainWindow } from './ipc/mood'
 import { registerBarcodeHandlers } from './ipc/barcode'
 import { getLiveMonitoringService } from './services/LiveMonitoringService'
@@ -526,7 +525,6 @@ app.whenReady().then(async () => {
     registerTaskQueueHandlers()
     registerLoggingHandlers()
     registerAutoUpdateHandlers()
-    registerGeminiHandlers()
     registerMoodHandlers()
     registerBarcodeHandlers()
     registerWebAccessHandlers()

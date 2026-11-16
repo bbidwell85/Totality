@@ -109,7 +109,6 @@ const PROTECTED_SETTINGS: Set<string> = new Set([
   SETTING_KEYS.web_access_enabled,
   SETTING_KEYS.web_access_port,
   SETTING_KEYS.web_access_session_timeout,
-  SETTING_KEYS.gemini_api_key,
   SETTING_KEYS.tmdb_api_key,
   SETTING_KEYS.musicbrainz_api_token,
   SETTING_KEYS.plex_token,

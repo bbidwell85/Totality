@@ -832,7 +832,7 @@ export class BetterSQLiteService {
     if (!row) return null
 
     // Decrypt sensitive settings
-    const sensitiveKeys = ['plex_token', 'tmdb_api_key', 'musicbrainz_api_token', 'gemini_api_key']
+    const sensitiveKeys = ['plex_token', 'tmdb_api_key', 'musicbrainz_api_token']
     if (sensitiveKeys.includes(key)) {
       const encryption = getCredentialEncryptionService()
       return encryption.decryptSetting(key, row.value)
@@ -848,7 +848,7 @@ export class BetterSQLiteService {
     if (!this.db) throw new Error('Database not initialized')
 
     // Encrypt sensitive settings
-    const sensitiveKeys = ['plex_token', 'tmdb_api_key', 'musicbrainz_api_token', 'gemini_api_key']
+    const sensitiveKeys = ['plex_token', 'tmdb_api_key', 'musicbrainz_api_token']
     let storedValue = value
     if (sensitiveKeys.includes(key)) {
       const encryption = getCredentialEncryptionService()

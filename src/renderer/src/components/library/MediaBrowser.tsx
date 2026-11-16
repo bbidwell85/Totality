@@ -74,10 +74,8 @@ export function MediaBrowser({
   hideHeader = false,
   showCompletenessPanel: externalShowCompletenessPanel,
   showWishlistPanel: externalShowWishlistPanel,
-  showChatPanel: externalShowChatPanel,
   onToggleCompleteness: externalToggleCompleteness,
   onToggleWishlist: externalToggleWishlist,
-  onToggleChat: externalToggleChat,
   libraryTab,
   onLibraryTabChange,
   onAutoRefreshChange,
@@ -95,7 +93,7 @@ export function MediaBrowser({
   // Use extracted hooks
   const themeAccentColor = useThemeAccent()
 
-  // Panel state (completeness/wishlist/chat panels)
+  // Panel state (completeness/wishlist panels)
   const {
     showCompletenessPanel,
     showWishlistPanel,
@@ -104,10 +102,8 @@ export function MediaBrowser({
   } = usePanelState({
     externalShowCompletenessPanel,
     externalShowWishlistPanel,
-    externalShowChatPanel,
     onToggleCompleteness: externalToggleCompleteness,
     onToggleWishlist: externalToggleWishlist,
-    onToggleChat: externalToggleChat,
   })
 
   const [loading, setLoading] = useState(true)

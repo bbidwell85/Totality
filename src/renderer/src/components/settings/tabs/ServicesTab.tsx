@@ -15,10 +15,9 @@ import {
   Wrench,
   Network,
   Circle,
-  Bot,
 } from 'lucide-react'
 import { Toggle } from '../../ui/Toggle'
-import { Button, Input, Select } from '../../ui'
+import { Button, Input } from '../../ui'
 
 interface ServiceCardProps {
   title: string
@@ -150,16 +149,6 @@ export function ServicesTab() {
     >
   >({})
 
-  // Gemini AI state
-  const [geminiApiKey, setGeminiApiKey] = useState('')
-  const [showGeminiKey, setShowGeminiKey] = useState(false)
-  const [geminiStatus, setGeminiStatus] = useState<'idle' | 'testing' | 'valid' | 'invalid'>('idle')
-  const [geminiError, setGeminiError] = useState<string | null>(null)
-  const [originalGemini, setOriginalGemini] = useState('')
-  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash')
-  const [originalGeminiModel, setOriginalGeminiModel] = useState('gemini-2.5-flash')
-  const [aiEnabled, setAiEnabled] = useState(true)
-
   // General state
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -167,9 +156,6 @@ export function ServicesTab() {
 
   const tmdbId = useId()
   const toggleId = useId()
-  const geminiId = useId()
-  const geminiModelId = useId()
-  const aiToggleId = useId()
 
   const toggleCard = (card: string) => {
     setExpandedCards((prev) => {
@@ -190,9 +176,8 @@ export function ServicesTab() {
   useEffect(() => {
     const tmdbChanged = tmdbApiKey !== originalTmdb
     const nfsChanged = JSON.stringify(nfsMappings) !== JSON.stringify(originalNfsMappings)
-    const geminiChanged = geminiApiKey !== originalGemini || geminiModel !== originalGeminiModel
-    setHasChanges(tmdbChanged || nfsChanged || geminiChanged)
-  }, [tmdbApiKey, originalTmdb, nfsMappings, originalNfsMappings, geminiApiKey, originalGemini, geminiModel, originalGeminiModel])
+    setHasChanges(tmdbChanged || nfsChanged)
+  }, [tmdbApiKey, originalTmdb, nfsMappings, originalNfsMappings])
 
   useEffect(() => {
     const cleanup = window.electronAPI.onFFprobeInstallProgress?.((progress: unknown) => {
@@ -218,17 +203,6 @@ export function ServicesTab() {
       if (tmdb) {
         setTmdbStatus('valid')
       }
-
-      const gemini = allSettings.gemini_api_key || ''
-      setGeminiApiKey(gemini)
-      setOriginalGemini(gemini)
-      if (gemini) {
-        setGeminiStatus('valid')
-      }
-      const model = allSettings.gemini_model || 'gemini-2.5-flash'
-      setGeminiModel(model)
-      setOriginalGeminiModel(model)
-      setAiEnabled(allSettings.ai_enabled !== 'false')
 
       setFfprobeAvailable(ffAvailable)
       setFfprobeBundled(ffBundled)
@@ -257,37 +231,15 @@ export function ServicesTab() {
     }
   }
 
-  const handleTestGemini = async () => {
-    if (!geminiApiKey.trim()) return
-    setGeminiStatus('testing')
-    setGeminiError(null)
-    try {
-      const result = await window.electronAPI.aiTestApiKey(geminiApiKey)
-      if (result.success) {
-        setGeminiStatus('valid')
-      } else {
-        setGeminiStatus('invalid')
-        setGeminiError(result.error || 'Invalid API key')
-      }
-    } catch {
-      setGeminiStatus('invalid')
-      setGeminiError('Failed to test API key')
-    }
-  }
-
   const handleSave = async () => {
     setIsSaving(true)
     try {
       await Promise.all([
         window.electronAPI.setSetting('tmdb_api_key', tmdbApiKey),
         window.electronAPI.setNfsMappings(nfsMappings),
-        window.electronAPI.setSetting('gemini_api_key', geminiApiKey),
-        window.electronAPI.setSetting('gemini_model', geminiModel),
       ])
       setOriginalTmdb(tmdbApiKey)
       setOriginalNfsMappings({ ...nfsMappings })
-      setOriginalGemini(geminiApiKey)
-      setOriginalGeminiModel(geminiModel)
       setHasChanges(false)
     } catch (error) {
       console.error('Failed to save settings:', error)
@@ -423,8 +375,6 @@ export function ServicesTab() {
       : 'partial'
     : 'not-configured'
   const nfsConfigured = Object.keys(nfsMappings).length > 0
-  const geminiConfigured = !!geminiApiKey.trim() && aiEnabled
-
   const getFFprobeStatusText = () => {
     if (!ffprobeAvailable) return 'Not installed'
     if (!ffprobeEnabled) return 'Installed but disabled'
@@ -599,102 +549,6 @@ export function ServicesTab() {
               {isUninstalling ? 'Uninstalling…' : confirmUninstall ? 'Click again to confirm' : 'Uninstall'}
             </button>
           )}
-
-        </div>
-      </ServiceCard>
-
-      {/* Google Gemini AI Card */}
-      <ServiceCard
-        title="Google Gemini AI"
-        description="Free AI-powered library insights, recommendations, and chat"
-        icon={<Bot className="w-5 h-5" />}
-        status={geminiConfigured ? 'configured' : 'not-configured'}
-        statusText={geminiConfigured ? 'Configured' : 'Not configured'}
-        expanded={expandedCards.has('gemini')}
-        onToggle={() => toggleCard('gemini')}
-        enableToggle={geminiApiKey.trim() ? {
-          enabled: aiEnabled,
-          onToggle: () => {
-            const newValue = !aiEnabled
-            setAiEnabled(newValue)
-            window.electronAPI.setSetting('ai_enabled', String(newValue))
-          },
-          id: aiToggleId,
-        } : undefined}
-      >
-        <div className="space-y-3">
-          <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input
-                  id={geminiId}
-                  type={showGeminiKey ? 'text' : 'password'}
-                  value={geminiApiKey}
-                  onChange={(e) => {
-                    setGeminiApiKey(e.target.value)
-                    setGeminiStatus('idle')
-                    setGeminiError(null)
-                  }}
-                  placeholder="Enter your Gemini API key"
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowGeminiKey(!showGeminiKey)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-                  aria-label={showGeminiKey ? 'Hide API key' : 'Show API key'}
-                >
-                  {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <button
-                onClick={handleTestGemini}
-                disabled={!geminiApiKey.trim() || geminiStatus === 'testing' || geminiStatus === 'valid'}
-                className={`px-3 py-2 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 ${
-                  geminiStatus === 'valid' ? 'text-foreground' :
-                  geminiStatus === 'invalid' ? 'text-destructive bg-destructive/10' :
-                  'text-label bg-muted hover:bg-muted/80'
-                }`}
-                title={geminiStatus === 'valid' ? 'API key is valid' : geminiStatus === 'invalid' ? (geminiError || 'Invalid API key') : 'Test API key'}
-              >
-                {geminiStatus === 'testing' ? <Loader2 className="w-4 h-4 animate-spin" /> :
-                 geminiStatus === 'valid' ? <CheckCircle className="w-4 h-4" /> :
-                 geminiStatus === 'invalid' ? <><XCircle className="w-4 h-4" /><span className="text-caption">Invalid</span></> :
-                 <span className="text-label">Test</span>}
-              </button>
-              {geminiApiKey.trim() && (
-                <button
-                  onClick={() => {
-                    setGeminiApiKey('')
-                    setGeminiStatus('idle')
-                    setGeminiError(null)
-                  }}
-                  className="px-3 py-2 text-label text-muted-foreground hover:text-destructive rounded-lg transition-colors"
-                  aria-label="Clear Gemini API key"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          <p className="text-caption text-muted-foreground">
-            Free API key from{' '}
-            <button type="button" onClick={() => window.electronAPI.openExternal('https://aistudio.google.com/apikey')} className="text-muted-foreground hover:text-foreground hover:underline">aistudio.google.com</button>
-            {' '}(no credit card required)
-          </p>
-
-          <div className="space-y-2">
-            <label htmlFor={geminiModelId} className="block text-caption font-medium text-muted-foreground">
-              Model
-            </label>
-            <Select
-              id={geminiModelId}
-              value={geminiModel}
-              onChange={(e) => setGeminiModel(e.target.value)}
-              className="w-full"
-            >
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended)</option>
-              <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most capable)</option>
-            </Select>
-          </div>
 
         </div>
       </ServiceCard>

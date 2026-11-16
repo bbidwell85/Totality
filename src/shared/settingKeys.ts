@@ -12,10 +12,7 @@ export const SETTING_KEYS = {
 
   // API keys & services
   tmdb_api_key: 'tmdb_api_key',
-  gemini_api_key: 'gemini_api_key',
-  gemini_model: 'gemini_model',
-  ai_enabled: 'ai_enabled',
-  musicbrainz_api_token: 'musicbrainz_api_token',
+musicbrainz_api_token: 'musicbrainz_api_token',
   musicbrainz_name_correction: 'musicbrainz_name_correction',
   plex_token: 'plex_token',
   plex_server_id: 'plex_server_id',

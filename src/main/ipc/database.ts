@@ -3,7 +3,6 @@ import * as path from 'path'
 import { z } from 'zod'
 import { getDatabase } from '../database/getDatabase'
 import { getQualityAnalyzer } from '../services/QualityAnalyzer'
-import { getGeminiService } from '../services/GeminiService'
 import { getTMDBService } from '../services/TMDBService'
 import { invalidateNfsMappingsCache } from '../providers/kodi/KodiDatabaseSchema'
 import { getErrorMessage, isNodeError } from './utils'
@@ -194,7 +193,7 @@ export function registerDatabaseHandlers() {
     }
   })
 
-  const sensitiveSettingKeys = new Set(['plex_token', 'tmdb_api_key', 'musicbrainz_api_token', 'gemini_api_key'])
+  const sensitiveSettingKeys = new Set(['plex_token', 'tmdb_api_key', 'musicbrainz_api_token'])
 
   ipcMain.handle('db:setSetting', async (event, key: unknown, value: unknown) => {
     try {
@@ -211,11 +210,6 @@ export function registerDatabaseHandlers() {
       // Refresh TMDB API key when it changes (no restart needed)
       if (validKey === 'tmdb_api_key') {
         getTMDBService().refreshApiKey()
-      }
-
-      // Refresh Gemini API key/model/enabled when they change (no restart needed)
-      if (validKey === 'gemini_api_key' || validKey === 'gemini_model' || validKey === 'ai_enabled') {
-        getGeminiService().refreshApiKey()
       }
 
       // Broadcast settings change event to all windows
