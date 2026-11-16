@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.5](https://github.com/bbidwell85/Totality/compare/v0.4.4...v0.4.5) (2026-11-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* AI chat panel, Gemini API key settings, and all
+ai:* IPC channels have been removed.
+
+Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+
+### Features
+
+* auto-install downloaded update on quit ([af920f8](https://github.com/bbidwell85/Totality/commit/af920f8ab6d740b9c1ee583e634115276d86d412))
+* barcode scanner ownership and quality display ([bcb54b3](https://github.com/bbidwell85/Totality/commit/bcb54b35d64e26dd48a92c41b9505313f17aa266))
+* enhanced system tray with live status ([47b5d33](https://github.com/bbidwell85/Totality/commit/47b5d3399ead98ac2ca5066aae0f6bfba63e2f78))
+* global keyboard shortcuts ([6cf23fc](https://github.com/bbidwell85/Totality/commit/6cf23fcd3614b11260cb4be8b65050440fff20f2))
+* mobile Plex-style alphabet scrubber for library navigation ([c739944](https://github.com/bbidwell85/Totality/commit/c739944fbd88594e71b9077db1308807f3b8e3c4))
+* remove AI/Gemini chat and analysis features ([197c461](https://github.com/bbidwell85/Totality/commit/197c4614da61a7eb7f2b9892235d1e1be6c45c48))
+* scope all dashboard analytics to selected source ([7ec7ab8](https://github.com/bbidwell85/Totality/commit/7ec7ab8289888950d4e0a2da96915f2d4d6725ec))
+* upgrade globalSearch to FTS5 with prefix matching and consistency check ([5209abf](https://github.com/bbidwell85/Totality/commit/5209abf188598675a9600bb2897c40566f2e03ee))
+* wishlist search ownership via direct TMDB ID matching ([27f6411](https://github.com/bbidwell85/Totality/commit/27f6411cabd5d21fa543c403c0560025bc9998a5))
+
+
+### Bug Fixes
+
+* clear PlexProvider.warnedSkippedItems at scan start to prevent memory leak ([21046f6](https://github.com/bbidwell85/Totality/commit/21046f62edc9baff171d13b58ac1ad0ad7e89ec7))
+* collection card distinction and completeness tab counts ([88df620](https://github.com/bbidwell85/Totality/commit/88df620ae086d5803a272a764504c088f449cfec))
+* dashboard tabs auto-switch for music-only libraries ([9ae12cf](https://github.com/bbidwell85/Totality/commit/9ae12cf1364c6aad5b2ecbfa7d49480516e2fd63))
+* flush-edge poster badges across all library views ([727aded](https://github.com/bbidwell85/Totality/commit/727aded3898f79bc5f0aa20d2afd7b637a71258a))
+* include all tables in database JSON export ([2368c1f](https://github.com/bbidwell85/Totality/commit/2368c1fe0aac52c2020584fa7af59ed8ffff289e))
+* library type flags reflect selected source ([8c45407](https://github.com/bbidwell85/Totality/commit/8c45407609c459e31c6a9327085f153597ea2f22))
+* merge collection icon and count into single edge badge ([7310a01](https://github.com/bbidwell85/Totality/commit/7310a018055e2b8b03c4dc36eaf04420a214257e))
+* mobile scrubber uses offset-jump instead of filtering ([13900c4](https://github.com/bbidwell85/Totality/commit/13900c462a8d02e57e9bc2430a67804291d9ac4b))
+* polish notification icons and app loading screen ([dad8bf8](https://github.com/bbidwell85/Totality/commit/dad8bf88c113b3b8180a8581698bab1a64be66b7))
+* strip brand prefix from UPCitemdb titles in barcode scanner ([a6259aa](https://github.com/bbidwell85/Totality/commit/a6259aac9a9b8e13312b04218b9117d0ad24f86b))
+* UX feedback improvements across panels ([74e3861](https://github.com/bbidwell85/Totality/commit/74e38615b7681335fc0c1ae80dc9ea9a1c6f1fe6))
+
 ### [0.4.4](https://github.com/bbidwell85/Totality/compare/v0.4.3...v0.4.4) (2026-11-05)
 
 

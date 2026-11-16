@@ -1,6 +1,6 @@
 {
   "name": "totality",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Analyze media library quality and recommend upgrades",
   "main": "dist-electron/main/index.cjs",
   "scripts": {
@@ -39,7 +39,7 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-"adm-zip": "^0.6.1",
+    "adm-zip": "^0.6.1",
     "better-sqlite3": "^12.8.0",
     "chokidar": "^5.0.0",
     "electron-updater": "^6.8.3",
