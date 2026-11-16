@@ -107,15 +107,15 @@ export interface DatabaseServiceInterface {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getLibraryStats(sourceId?: string): any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getStorageAnalytics(): any
+  getStorageAnalytics(sourceId?: string): any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getDuplicateMedia(): any[]
+  getDuplicateMedia(sourceId?: string): any[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getLibraryHealthScores(): any[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getRecentlyAdded(days?: number, limit?: number): any[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getRecentlyUpgraded(days?: number): any[]
+  getRecentlyUpgraded(days?: number, sourceId?: string): any[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getRecentlyUpgradedMusic(days?: number): any[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -142,7 +142,7 @@ export interface DatabaseServiceInterface {
   getIncompleteSeries(sourceId?: string): SeriesCompleteness[]
   deleteSeriesCompleteness(id: number): boolean | Promise<boolean>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getSeriesCompletenessStats(): any
+  getSeriesCompletenessStats(sourceId?: string): any
   invalidateStaleSeriesCompleteness(sourceId?: string): number
 
   // --- Movie Collections ---
@@ -155,7 +155,7 @@ export interface DatabaseServiceInterface {
   clearMovieCollections(sourceId?: string): void | Promise<void>
   deleteSingleMovieCollections(): number | Promise<number>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getMovieCollectionStats(): any
+  getMovieCollectionStats(sourceId?: string): any
   updateCollectionsAfterDeletion(deletedTmdbIds: string[], sourceId: string): void | Promise<void>
 
   // --- Music Artists ---
@@ -271,7 +271,7 @@ export interface DatabaseServiceInterface {
 
   // --- Person Completeness ---
   upsertPersonCompleteness(data: Record<string, unknown>): void | Promise<void>
-  getPersonCompleteness(personType?: string): Array<Record<string, unknown>>
+  getPersonCompleteness(personType?: string, sourceId?: string): Array<Record<string, unknown>>
   deletePersonCompleteness(id: number): void | Promise<void>
 
   // --- Metadata Matching ---

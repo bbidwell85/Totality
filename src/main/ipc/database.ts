@@ -858,7 +858,7 @@ export function registerDatabaseHandlers() {
       const items = db.getMediaItemsByTmdbIds(ids)
       const result: Record<string, { quality_tier?: string; tier_quality?: string }> = {}
       for (const [tmdbId, item] of items) {
-        const score = db.getQualityScore(item.id)
+        const score = db.getQualityScore(item.id!)
         result[tmdbId] = {
           quality_tier: score?.quality_tier || undefined,
           tier_quality: score?.tier_quality || undefined,

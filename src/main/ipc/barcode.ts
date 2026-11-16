@@ -35,7 +35,7 @@ function enrichWithOwnership(db: ReturnType<typeof getDatabase>, result: Barcode
       const item = items.get(String(result.tmdb_id))
       if (item) {
         result.owned = true
-        const score = db.getQualityScore(item.id)
+        const score = db.getQualityScore(item.id!)
         result.quality_tier = score?.quality_tier || undefined
         result.tier_quality = score?.tier_quality || undefined
       }
@@ -44,7 +44,7 @@ function enrichWithOwnership(db: ReturnType<typeof getDatabase>, result: Barcode
       const album = albums.get(result.musicbrainz_id)
       if (album) {
         result.owned = true
-        const qualityScore = db.getMusicQualityScore(album.id)
+        const qualityScore = db.getMusicQualityScore(album.id!)
         if (qualityScore) {
           result.quality_tier = qualityScore.quality_tier || undefined
         }

@@ -60,7 +60,7 @@ function WishlistSearch({ isMobile = false, onBarcodeScan }: { isMobile?: boolea
       ]
 
       // Direct DB lookup by TMDB ID — reliable ownership check with quality data
-      const owned = allTmdbIds.length > 0
+      const owned: Record<string, { quality_tier?: string; tier_quality?: string }> = allTmdbIds.length > 0
         ? await window.electronAPI.mediaCheckOwnership(allTmdbIds).catch(() => ({}))
         : {}
 
