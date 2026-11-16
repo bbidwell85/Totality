@@ -38,10 +38,18 @@ interface MusicBrainzReleaseSearch {
   }>
 }
 
-// Strip format/edition tags from UPC product titles
-// e.g., "Star Wars: The Force Awakens [4K UHD Blu-ray + Digital]" → "Star Wars: The Force Awakens"
-function cleanProductTitle(title: string): string {
-  return title
+// Strip format/edition tags and brand prefixes from UPC product titles
+// e.g., "Disney - Return to Oz [DIGITAL VIDEO DISC]" → "Return to Oz"
+function cleanProductTitle(title: string, brand?: string): string {
+  let cleaned = title
+
+  // Strip brand prefix (e.g., "Disney - Return to Oz" → "Return to Oz")
+  if (brand) {
+    const escapedBrand = brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    cleaned = cleaned.replace(new RegExp(`^${escapedBrand}\\s*[-:–—]\\s*`, 'i'), '')
+  }
+
+  return cleaned
     .replace(/\s*[[(](?:4K|UHD|Blu-ray|DVD|Digital|HD|Blu Ray|BD|Ultra HD|Steelbook|Limited Edition|Special Edition|Collector'?s? Edition|Widescreen|Fullscreen|Region \w+|NTSC|PAL|Import|Remastered|Deluxe|Box Set|Complete Series|Season \d+)[\w\s+/,·—–-]*[\])]/gi, '')
     .replace(/\s*[[(].*?(?:Blu-ray|DVD|UHD|Digital|Disc|Edition|Remastered).*?[\])]/gi, '')
     .replace(/\s*-\s*(?:4K|UHD|Blu-ray|DVD|BD)\s*$/i, '')
@@ -140,7 +148,7 @@ export class BarcodeLookupService {
     const rawTitle = item.title
     if (!rawTitle) return []
 
-    const cleanTitle = cleanProductTitle(rawTitle)
+    const cleanTitle = cleanProductTitle(rawTitle, item.brand)
     if (!cleanTitle) return []
 
     getLoggingService().verbose('[BarcodeLookup]', `UPCitemdb title: "${rawTitle}" → cleaned: "${cleanTitle}"`)
