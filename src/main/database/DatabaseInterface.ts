@@ -68,7 +68,7 @@ export interface DatabaseServiceInterface {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateMediaItemVersionQuality(versionId: number, scores: any): void
   deleteMediaItemVersions(mediaItemId: number): void
-  syncMediaItemVersions(mediaItemId: number, versions: MediaItemVersion[]): void
+  syncMediaItemVersions(mediaItemId: number, versions: MediaItemVersion[], mode?: 'replace' | 'merge'): void
   updateBestVersion(mediaItemId: number): void
 
   // --- Quality Scores ---

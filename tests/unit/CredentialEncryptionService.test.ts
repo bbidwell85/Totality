@@ -15,9 +15,17 @@ describe('CredentialEncryptionService — encryption unavailable', () => {
     vi.mocked(safeStorage.isEncryptionAvailable).mockReturnValue(false)
   })
 
-  it('encrypt() returns the original value unchanged', () => {
+  it('rejects credential and sensitive-setting writes without OS encryption', () => {
     const svc = new CredentialEncryptionService()
-    expect(svc.encrypt('my-secret-token')).toBe('my-secret-token')
+    expect(() => svc.encrypt('my-secret-token')).toThrow('OS credential encryption unavailable')
+    expect(() => svc.encryptSetting('web_access_pin', '123456')).toThrow('OS credential encryption unavailable')
+    expect(() => svc.encryptConnectionConfig({ token: 'my-secret-token' })).toThrow('OS credential encryption unavailable')
+    expect(svc.encryptSetting('language', 'he')).toBe('he')
+  })
+
+  it('does not return encrypted credentials as plaintext when OS encryption is unavailable', () => {
+    const svc = new CredentialEncryptionService()
+    expect(() => svc.decrypt('ENC:YWJj')).toThrow('OS credential encryption unavailable')
   })
 
   it('isEncryptionAvailable() returns false', () => {

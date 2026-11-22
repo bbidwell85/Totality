@@ -133,12 +133,12 @@ export class WishlistCompletionService {
         let found = false
 
         // Primary: match by TMDB ID
-        if (item.tmdb_id && foundMovies.has(item.tmdb_id)) {
+        if (item.tmdb_id && foundMovies.get(item.tmdb_id)?.type === 'movie') {
           found = true
         }
 
         // Fallback: match by title + year (case-insensitive)
-        if (!found && item.title) {
+        if (!found && !item.tmdb_id && item.title) {
           const matches = db.getMediaItems({ type: 'movie', searchQuery: item.title })
           found = matches.some((m: { title?: string; year?: number }) =>
             m.title?.toLowerCase() === item.title.toLowerCase() &&
@@ -169,18 +169,12 @@ export class WishlistCompletionService {
       }
 
       // Fallback: check series_completeness table by TMDB ID
-      if (count === 0 && item.tmdb_id) {
-        // series_completeness stores the series TMDB ID, media_items stores episode TMDB IDs
+      if (count === 0 && item.tmdb_id && item.season_number == null) {
+        // Series-level evidence cannot establish ownership of a particular season.
         const seriesRecord = db.getSeriesCompletenessByTmdbId?.(item.tmdb_id)
         if (seriesRecord && seriesRecord.owned_episodes > 0) {
           count = seriesRecord.owned_episodes
         }
-      }
-
-      // Final fallback: check media_items by TMDB ID directly (works for movies in collections)
-      if (count === 0 && item.tmdb_id) {
-        const found = db.getMediaItemsByTmdbIds([item.tmdb_id])
-        if (found.size > 0) count = 1
       }
 
       console.log(`[WishlistCompletion]   Season check: "${seriesName}" S${item.season_number ?? 'any'} tmdb=${item.tmdb_id} → ${count} episodes found`)
@@ -222,10 +216,11 @@ export class WishlistCompletionService {
         }
 
         // Fallback: match by title + artist_name (case-insensitive)
-        if (!found && item.title) {
+        if (!found && !item.musicbrainz_id && item.title && item.artist_name) {
           const albums = db.getMusicAlbums({ artistName: item.artist_name })
-          found = (albums as { title?: string }[]).some((a) =>
-            a.title?.toLowerCase() === item.title.toLowerCase()
+          found = (albums as { title?: string; artist_name?: string }[]).some((a) =>
+            a.title?.toLowerCase() === item.title.toLowerCase() &&
+            a.artist_name?.toLowerCase() === item.artist_name!.toLowerCase()
           )
         }
 
@@ -255,10 +250,11 @@ export class WishlistCompletionService {
         }
 
         // Fallback: match by title + artist_name (case-insensitive)
-        if (!found && item.title && item.artist_name) {
+        if (!found && !item.musicbrainz_id && item.title && item.artist_name) {
           const tracks = db.getMusicTracks({ artistName: item.artist_name, limit: 100 })
-          found = (tracks as { title?: string }[]).some((t) =>
-            t.title?.toLowerCase() === item.title.toLowerCase()
+          found = (tracks as { title?: string; artist_name?: string }[]).some((t) =>
+            t.title?.toLowerCase() === item.title.toLowerCase() &&
+            t.artist_name?.toLowerCase() === item.artist_name!.toLowerCase()
           )
         }
 

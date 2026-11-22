@@ -239,7 +239,7 @@ export class MediaMonkeyProvider implements MediaProvider {
     this.musicScanCancelled = false
     const startTime = Date.now()
     const result: ScanResult = {
-      success: true,
+      success: false,
       itemsScanned: 0,
       itemsAdded: 0,
       itemsUpdated: 0,
@@ -369,16 +369,22 @@ export class MediaMonkeyProvider implements MediaProvider {
       }
 
       await db.endBatch()
-
       this.closeDatabase()
+
+      if (this.musicScanCancelled) {
+        result.cancelled = true
+        result.durationMs = Date.now() - startTime
+        return result
+      }
 
       // Phase 2: Extract album artwork (after DB batch to avoid locking)
       try {
         await this.resolveAlbumArtwork(db, onProgress, processedTracks, totalTracks)
       } catch (artworkError) {
-        console.error('[MediaMonkeyProvider] Artwork resolution failed:', getErrorMessage(artworkError))
+        result.errors.push(`MediaMonkey artwork resolution failed: ${getErrorMessage(artworkError)}`)
       }
 
+      result.success = result.errors.length === 0
       result.durationMs = Date.now() - startTime
       console.log(`[MediaMonkeyProvider] Scan complete: ${result.itemsScanned} tracks in ${result.durationMs}ms`)
     } catch (error) {

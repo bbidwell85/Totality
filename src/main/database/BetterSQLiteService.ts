@@ -127,9 +127,8 @@ export class BetterSQLiteService {
     return this._isInitialized
   }
 
-  constructor() {
-    const userDataPath = app.getPath('userData')
-    this.dbPath = path.join(userDataPath, 'totality-v2.db')
+  constructor(databasePath?: string) {
+    this.dbPath = databasePath ?? path.join(app.getPath('userData'), 'totality-v2.db')
   }
 
   /**
@@ -1695,8 +1694,15 @@ export class BetterSQLiteService {
   getMediaItemByPath(filePath: string): MediaItem | null {
     if (!this.db) throw new Error('Database not initialized')
 
-    const stmt = this.db.prepare('SELECT * FROM media_items WHERE file_path = ?')
-    return (stmt.get(filePath) as MediaItem) || null
+    const direct = this.db.prepare('SELECT * FROM media_items WHERE file_path = ?')
+      .get(filePath) as MediaItem | undefined
+    if (direct) return direct
+
+    const parents = this.db.prepare(
+      'SELECT m.* FROM media_items m JOIN media_item_versions v ON v.media_item_id = m.id WHERE v.file_path = ? LIMIT 2'
+    ).all(filePath) as MediaItem[]
+    if (parents.length > 1) throw new Error(`Multiple media parents own version path ${filePath}`)
+    return parents[0] || null
   }
 
   /**
@@ -2492,18 +2498,20 @@ export class BetterSQLiteService {
    * Sync versions for a media item: delete stale versions not in the current
    * file paths, upsert current versions, and update best version + version_count.
    */
-  syncMediaItemVersions(mediaItemId: number, versions: MediaItemVersion[]): void {
+  syncMediaItemVersions(mediaItemId: number, versions: MediaItemVersion[], mode: 'replace' | 'merge' = 'replace'): void {
     if (!this.db) throw new Error('Database not initialized')
 
     const currentFilePaths = versions.map(v => v.file_path).filter(Boolean)
 
-    if (currentFilePaths.length > 0) {
-      const placeholders = currentFilePaths.map(() => '?').join(',')
-      this.db.prepare(
-        `DELETE FROM media_item_versions WHERE media_item_id = ? AND file_path NOT IN (${placeholders})`
-      ).run(mediaItemId, ...currentFilePaths)
-    } else {
-      this.db.prepare('DELETE FROM media_item_versions WHERE media_item_id = ?').run(mediaItemId)
+    if (mode === 'replace') {
+      if (currentFilePaths.length > 0) {
+        const placeholders = currentFilePaths.map(() => '?').join(',')
+        this.db.prepare(
+          `DELETE FROM media_item_versions WHERE media_item_id = ? AND file_path NOT IN (${placeholders})`
+        ).run(mediaItemId, ...currentFilePaths)
+      } else {
+        this.db.prepare('DELETE FROM media_item_versions WHERE media_item_id = ?').run(mediaItemId)
+      }
     }
 
     for (const version of versions) {
@@ -6280,7 +6288,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
     // Search TV shows (unique series titles) — FTS matches on series_title too
     const tvShowsStmt = ftsQuery
       ? this.db.prepare(`
-        SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url, MIN(tmdb_id) as tmdb_id
+        SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url, MAX(series_tmdb_id) as tmdb_id
         FROM media_items
         WHERE type = 'episode' AND series_title IS NOT NULL
           AND id IN (SELECT rowid FROM media_fts WHERE media_fts MATCH ?)
@@ -6289,7 +6297,7 @@ WHERE m.type = 'episode' AND m.series_title = ?`
         LIMIT ?
       `)
       : this.db.prepare(`
-        SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url, MIN(tmdb_id) as tmdb_id
+        SELECT MIN(id) as id, series_title as title, MIN(poster_url) as poster_url, MAX(series_tmdb_id) as tmdb_id
         FROM media_items
         WHERE type = 'episode' AND series_title IS NOT NULL AND LOWER(series_title) ${likeOp} ?
         GROUP BY series_title

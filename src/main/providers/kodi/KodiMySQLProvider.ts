@@ -643,6 +643,8 @@ export class KodiMySQLProvider implements MediaProvider {
               await db.upsertQualityScore(qualityScore)
 
               result.itemsScanned++
+            } else {
+              throw new Error('Could not convert Kodi media metadata')
             }
           } catch (error: unknown) {
             const names = group.map(g => g.title).join(', ')
@@ -664,6 +666,12 @@ export class KodiMySQLProvider implements MediaProvider {
         await db.endBatch()
       }
 
+      // Failed or cancelled inventories cannot authorize destructive reconciliation.
+      if (result.errors.length > 0) {
+        result.durationMs = Date.now() - startTime
+        return result
+      }
+
       // Remove stale items
       {
         const itemType = libraryId === 'movies' ? 'movie' : 'episode'
@@ -671,7 +679,7 @@ export class KodiMySQLProvider implements MediaProvider {
 
         // Safety guard: refuse deletion when scan returned 0 items but DB has items
         if (scannedProviderIds.size === 0 && existingItems.length > 0) {
-          console.warn(`[KodiMySQLProvider ${this.sourceId}] Scan found 0 items but DB has ${existingItems.length} — skipping deletion (possible database connection failure)`)
+          throw new Error(`Incomplete KodiMySQLProvider inventory: server returned no items while ${existingItems.length} are stored`)
         } else for (const item of existingItems) {
           if (!scannedProviderIds.has(item.plex_id)) {
             if (item.id) {
@@ -1257,7 +1265,7 @@ export class KodiMySQLProvider implements MediaProvider {
         }
       }
 
-      result.success = true
+      result.success = result.errors.length === 0
       result.durationMs = Date.now() - startTime
 
       console.log(`[KodiMySQLProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks in ${result.durationMs}ms`)
