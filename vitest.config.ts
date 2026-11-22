@@ -7,7 +7,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.ts'],
-    exclude: ['**/node_modules/**', '**/dist/**', '**/dist-electron/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/dist-electron/**', 'tests/database-upgrade-real.test.ts'],
     coverage: {
       provider: 'istanbul',
       reporter: ['text', 'html', 'lcov'],

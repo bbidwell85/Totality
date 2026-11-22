@@ -32,19 +32,6 @@
         overflow: hidden;
       }
     </style>
-    <script>
-      function updateAppHeight() {
-        var full = window.screen.height;
-        var vv = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-        // Use screen.height normally (full-screen coverage), but switch to
-        // visualViewport.height when keyboard is open (significant height reduction)
-        var h = (vv && vv < full * 0.75) ? vv : full;
-        document.documentElement.style.setProperty('--app-height', h + 'px');
-      }
-      updateAppHeight();
-      window.addEventListener('resize', updateAppHeight);
-      if (window.visualViewport) window.visualViewport.addEventListener('resize', updateAppHeight);
-    </script>
   </head>
   <body style="background-color: #000;">
     <div id="root"></div>

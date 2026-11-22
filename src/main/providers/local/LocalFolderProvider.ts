@@ -36,6 +36,16 @@ import type { MediaItem, MediaItemVersion, AudioTrack } from '../../types/databa
 import { extractVersionNames } from '../utils/VersionNaming'
 import { scoreVersion } from '../utils/ProviderUtils'
 
+/** Reject invalid batch settings instead of entering a non-advancing scan loop. */
+export function readFfprobeBatchSize(value: string | null | undefined, defaultSize: number): number {
+  if (value == null || value.trim() === '') return defaultSize
+  const size = Number(value)
+  if (!Number.isSafeInteger(size) || size < 1 || size > 128) {
+    throw new Error('Invalid ffprobe_batch_size: expected an integer from 1 to 128')
+  }
+  return size
+}
+
 export interface LocalFolderConfig {
   folderPath: string
   mediaType: 'movies' | 'tvshows' | 'music' | 'mixed'
@@ -464,9 +474,8 @@ export class LocalFolderProvider implements MediaProvider {
 
       // Parallel FFprobe settings
       const ffprobeParallelEnabled = db.getSetting('ffprobe_parallel_enabled') !== 'false'
-      const ffprobeBatchSize = parseInt(db.getSetting('ffprobe_batch_size') || '25', 10)
+      const ffprobeBatchSize = readFfprobeBatchSize(db.getSetting('ffprobe_batch_size'), 25)
 
-      const scannedFilePaths = new Set<string>()
       const scanType = libraryType === 'movies' ? 'movie' : 'episode'
 
       // Phase 1: Discover all media files
@@ -481,10 +490,13 @@ export class LocalFolderProvider implements MediaProvider {
 
       const mediaFiles = await this.discoverMediaFiles(scanPath, scanType, onProgress, isIncremental ? sinceTimestamp : undefined)
       const totalFiles = mediaFiles.length
+      // Enumeration proves presence even when parsing or metadata analysis is skipped.
+      const scannedFilePaths = new Set(mediaFiles.map(file => file.filePath))
 
       console.log(`[LocalFolderProvider ${this.sourceId}] Found ${totalFiles} ${scanType} files`)
 
-      if (totalFiles === 0) {
+      // An empty incremental result only means no files changed since the cursor.
+      if (isIncremental && totalFiles === 0) {
         result.success = true
         result.durationMs = Date.now() - startTime
         return result
@@ -548,8 +560,7 @@ export class LocalFolderProvider implements MediaProvider {
               const existingItem = db.getMediaItemByPath(filePath)
 
               if (existingItem?.file_mtime === fileMtime) {
-                // File unchanged, mark as present and skip processing
-                scannedFilePaths.add(filePath)
+                // File unchanged, skip processing
                 result.itemsScanned++
                 continue
               }
@@ -635,7 +646,6 @@ export class LocalFolderProvider implements MediaProvider {
               }
 
               processedItems.push({ metadata, parsed, fileMtime })
-              scannedFilePaths.add(filePath)
             } catch (error: unknown) {
               result.errors.push(`Failed to process ${path.basename(filePath)}: ${getErrorMessage(error)}`)
             }
@@ -691,20 +701,27 @@ export class LocalFolderProvider implements MediaProvider {
             mediaItem.library_id = libraryId
             mediaItem.file_mtime = bestItem.fileMtime
             mediaItem.version_count = versions.length
-            // Use first item's plex_id as canonical (stable across rescans)
-            mediaItem.plex_id = group[0].metadata.itemId
+            // Reuse the parent of an already-known edition, even when the best file is absent.
+            const parents = versions
+              .map(version => db.getMediaItemByPath(version.file_path))
+              .filter((item): item is MediaItem => !!item && item.source_id === this.sourceId && item.library_id === libraryId)
+            if (parents.some(parent => parent.id !== parents[0].id)) {
+              throw new Error('Conflicting existing movie version parents')
+            }
+            mediaItem.plex_id = parents[0]?.plex_id ?? group[0].metadata.itemId
 
             const id = await db.upsertMediaItem(mediaItem)
 
-            // Sync versions: delete stale, upsert current, update best version
+            // A scan cannot authorize deletion of editions that are temporarily unobserved.
             const scoredVersions = versions.map(version => {
               const vScore = analyzer.analyzeVersion(version as MediaItemVersion)
               return { ...version, media_item_id: id, ...vScore } as MediaItemVersion
             })
-            db.syncMediaItemVersions(id, scoredVersions)
+            db.syncMediaItemVersions(id, scoredVersions, 'merge')
 
-            mediaItem.id = id
-            const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
+            const canonical = db.getMediaItem(id)
+            if (!canonical) throw new Error('Updated local media parent is missing')
+            const qualityScore = await analyzer.analyzeMediaItem(canonical)
             await db.upsertQualityScore(qualityScore)
 
             result.itemsScanned++
@@ -721,30 +738,41 @@ export class LocalFolderProvider implements MediaProvider {
         await db.endBatch()
       }
 
-      // Phase 3: Remove stale items (only for full scans)
-      // During incremental scans, we only process changed files, so we can't determine stale items
+      // A partial scan cannot establish which stored media files are truly absent.
+      if (result.errors.length > 0) {
+        result.durationMs = Date.now() - startTime
+        return result
+      }
+
+      // Only a complete full inventory establishes absence. Enumeration failures and
+      // processing errors return above without deleting stored media or editions.
       if (!isIncremental) {
-        onProgress?.({
-          current: totalFiles,
-          total: totalFiles,
-          phase: 'saving',
-          currentItem: 'Removing stale entries...',
-          percentage: 100,
-        })
-
         const existingItems = db.getMediaItems({ type: scanType, sourceId: this.sourceId, libraryId })
+        for (const item of existingItems) {
+          if (!item.id) continue
 
-        // Safety guard: refuse deletion when scan found 0 files but DB has items
-        if (scannedFilePaths.size === 0 && existingItems.length > 0) {
-          console.warn(`[LocalFolderProvider ${this.sourceId}] Scan returned 0 files but DB has ${existingItems.length} — skipping deletion (possible access issue)`)
-        } else {
-          for (const item of existingItems) {
+          const versions = db.getMediaItemVersions(item.id)
+          if (versions.length === 0) {
             if (!scannedFilePaths.has(item.file_path)) {
-              if (item.id) {
-                await db.deleteMediaItem(item.id)
-                result.itemsRemoved++
-              }
+              await db.deleteMediaItem(item.id)
+              result.itemsRemoved++
             }
+            continue
+          }
+
+          const observedVersions = versions.filter(version => scannedFilePaths.has(version.file_path))
+          if (observedVersions.length === 0) {
+            await db.deleteMediaItem(item.id)
+            result.itemsRemoved++
+            continue
+          }
+
+          if (observedVersions.length !== versions.length) {
+            db.syncMediaItemVersions(item.id, observedVersions)
+            const canonical = db.getMediaItem(item.id)
+            if (!canonical) throw new Error('Reconciled local media parent is missing')
+            const qualityScore = await analyzer.analyzeMediaItem(canonical)
+            await db.upsertQualityScore(qualityScore)
           }
         }
       }
@@ -836,19 +864,16 @@ export class LocalFolderProvider implements MediaProvider {
         return parser.isVideoFile(path.basename(filePath))
       })
 
-      // Handle deleted files
-      const deletedFiles = filePaths.filter(filePath => !fs.existsSync(filePath))
-      for (const filePath of deletedFiles) {
-        const existingItem = db.getMediaItemByPath(filePath)
-        if (existingItem?.id) {
-          await db.deleteMediaItem(existingItem.id)
-          result.itemsRemoved++
-          console.log(`[LocalFolderProvider ${this.sourceId}] Removed deleted file: ${path.basename(filePath)}`)
+      // A targeted filesystem event is not proof of deletion (the volume may be unavailable).
+      const missingFiles = filePaths.filter(filePath => !fs.existsSync(filePath))
+      for (const filePath of missingFiles) {
+        if (db.getMediaItemByPath(filePath)) {
+          result.errors.push(`Cannot verify deletion of ${path.basename(filePath)} from a targeted event; stored item retained`)
         }
       }
 
-      if (validFiles.length === 0 && deletedFiles.length === 0) {
-        result.success = true
+      if (validFiles.length === 0) {
+        result.success = result.errors.length === 0
         result.durationMs = Date.now() - startTime
         return result
       }
@@ -935,16 +960,21 @@ export class LocalFolderProvider implements MediaProvider {
               mediaItem.library_id = libraryId
               mediaItem.file_mtime = fileMtime
 
+              const existingParent = db.getMediaItemByPath(filePath)
+              if (existingParent?.source_id === this.sourceId && existingParent.library_id === libraryId) {
+                mediaItem.plex_id = existingParent.plex_id
+              }
               const id = await db.upsertMediaItem(mediaItem)
 
-              // Sync version: delete stale, upsert current, update best version
+              // Targeted inventories are partial; retain sibling editions.
               const version = this.convertMetadataToVersion(metadata, parsed as ParsedMovieInfo | ParsedEpisodeInfo, fileMtime)
               const vScore = analyzer.analyzeVersion(version as MediaItemVersion)
-              db.syncMediaItemVersions(id, [{ ...version, media_item_id: id, ...vScore } as MediaItemVersion])
+              db.syncMediaItemVersions(id, [{ ...version, media_item_id: id, ...vScore } as MediaItemVersion], 'merge')
 
-              // Analyze quality
-              mediaItem.id = id
-              const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
+              // Analyze the canonical parent, not the last updated lower-quality edition.
+              const canonical = db.getMediaItem(id)
+              if (!canonical) throw new Error('Updated local media parent is missing')
+              const qualityScore = await analyzer.analyzeMediaItem(canonical)
               await db.upsertQualityScore(qualityScore)
 
               result.itemsScanned++
@@ -981,7 +1011,7 @@ export class LocalFolderProvider implements MediaProvider {
         console.log(`[LocalFolderProvider ${this.sourceId}] TMDB matches: ${parts.join(', ')}`)
       }
 
-      result.success = true
+      result.success = result.errors.length === 0
       result.durationMs = Date.now() - startTime
 
       console.log(`[LocalFolderProvider ${this.sourceId}] Targeted scan complete: ${result.itemsAdded} added, ${result.itemsUpdated} updated, ${result.itemsRemoved} removed`)
@@ -1029,23 +1059,15 @@ export class LocalFolderProvider implements MediaProvider {
         return parser.isAudioFile(path.basename(filePath))
       })
 
-      // Handle deleted files
-      const deletedFiles = filePaths.filter(filePath => !fs.existsSync(filePath))
-      console.log(`[LocalFolderProvider ${this.sourceId}] Checking ${deletedFiles.length} deleted files`)
-      for (const filePath of deletedFiles) {
-        console.log(`[LocalFolderProvider ${this.sourceId}] Looking up deleted track: ${path.basename(filePath)}`)
-        const existingTrack = db.getMusicTrackByPath(filePath)
-        if (existingTrack?.id) {
-          await db.deleteMusicTrack(existingTrack.id)
-          result.itemsRemoved++
-          console.log(`[LocalFolderProvider ${this.sourceId}] Removed deleted track: ${path.basename(filePath)}`)
-        } else {
-          console.log(`[LocalFolderProvider ${this.sourceId}] Track not found in database for: ${path.basename(filePath)}`)
+      const missingFiles = filePaths.filter(filePath => !fs.existsSync(filePath))
+      for (const filePath of missingFiles) {
+        if (db.getMusicTrackByPath(filePath)) {
+          result.errors.push(`Cannot verify deletion of ${path.basename(filePath)} from a targeted event; stored track retained`)
         }
       }
 
-      if (validFiles.length === 0 && deletedFiles.length === 0) {
-        result.success = true
+      if (validFiles.length === 0) {
+        result.success = result.errors.length === 0
         result.durationMs = Date.now() - startTime
         return result
       }
@@ -1235,7 +1257,7 @@ export class LocalFolderProvider implements MediaProvider {
         await db.updateMusicArtistCounts(artistId, albums.length, tracks.length)
       }
 
-      result.success = true
+      result.success = result.errors.length === 0
       result.durationMs = Date.now() - startTime
 
       console.log(`[LocalFolderProvider ${this.sourceId}] Targeted music scan complete: ${result.itemsAdded} added, ${result.itemsUpdated} updated, ${result.itemsRemoved} removed`)
@@ -1264,7 +1286,7 @@ export class LocalFolderProvider implements MediaProvider {
     let skippedUnchanged = 0
 
     const scanDir = async (dir: string, depth = 0): Promise<void> => {
-      if (depth > 15) return // Prevent infinite recursion
+      if (depth > 15) throw new Error('Media directory nesting exceeds scan limit')
 
       try {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true })
@@ -1317,8 +1339,7 @@ export class LocalFolderProvider implements MediaProvider {
           await new Promise(resolve => setImmediate(resolve))
         }
       } catch (error) {
-        // Skip inaccessible directories
-        console.warn(`[LocalFolderProvider] Cannot access directory: ${path.basename(dir)}`)
+        throw new Error(`Cannot complete media inventory in ${dir}: ${getErrorMessage(error)}`)
       }
     }
 
@@ -2154,7 +2175,7 @@ export class LocalFolderProvider implements MediaProvider {
 
       // Parallel FFprobe settings
       const ffprobeParallelEnabled = db.getSetting('ffprobe_parallel_enabled') !== 'false'
-      const ffprobeBatchSize = parseInt(db.getSetting('ffprobe_batch_size') || '50', 10)
+      const ffprobeBatchSize = readFfprobeBatchSize(db.getSetting('ffprobe_batch_size'), 50)
 
       if (mbNameCorrectionEnabled) {
         console.log(`[LocalFolderProvider ${this.sourceId}] MusicBrainz name correction enabled`)
@@ -2175,7 +2196,12 @@ export class LocalFolderProvider implements MediaProvider {
       console.log(`[LocalFolderProvider ${this.sourceId}] Found ${totalFiles} audio files`)
 
       if (totalFiles === 0) {
-        result.success = true
+        const existing = db.getMusicTracks({ sourceId: this.sourceId })
+        if (existing.length > 0) {
+          result.errors.push(`Empty music inventory but ${existing.length} stored tracks exist; scan incomplete`)
+        } else {
+          result.success = true
+        }
         result.durationMs = Date.now() - startTime
         return result
       }
@@ -2468,10 +2494,12 @@ export class LocalFolderProvider implements MediaProvider {
       // Update artist stats (album count, track count)
       await this.updateArtistStats(db, artistMap)
 
-      // Update scan time
-      await db.updateSourceScanTime(this.sourceId)
+      // An incomplete music scan must be retried rather than advancing the cursor.
+      if (result.errors.length === 0) {
+        await db.updateSourceScanTime(this.sourceId)
+      }
 
-      result.success = true
+      result.success = result.errors.length === 0
       result.durationMs = Date.now() - startTime
 
       console.log(`[LocalFolderProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks, ${artistMap.size} artists, ${albumMap.size} albums`)
@@ -2492,7 +2520,7 @@ export class LocalFolderProvider implements MediaProvider {
     let directoriesProcessed = 0
 
     const scanDir = async (dir: string, depth = 0): Promise<void> => {
-      if (depth > 15) return // Prevent infinite recursion
+      if (depth > 15) throw new Error(`Music directory scan exceeded the supported depth at ${dir}`)
 
       try {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true })
@@ -2519,8 +2547,7 @@ export class LocalFolderProvider implements MediaProvider {
           await new Promise(resolve => setImmediate(resolve))
         }
       } catch (error) {
-        // Skip inaccessible directories
-        console.warn(`[LocalFolderProvider] Cannot access directory: ${path.basename(dir)}`)
+        throw new Error(`Cannot complete music inventory in ${dir}: ${getErrorMessage(error)}`)
       }
     }
 

@@ -69,6 +69,7 @@ export interface QueuedTask {
     itemsUpdated?: number
     itemsRemoved?: number
     isFirstScan?: boolean
+    errors?: string[]
   }
 }
 
@@ -738,10 +739,11 @@ export class TaskQueueService {
       itemsUpdated: result.itemsUpdated,
       itemsRemoved: result.itemsRemoved,
       isFirstScan,
+      errors: result.errors,
     }
 
-    if (!result.success && result.errors?.length > 0) {
-      throw new Error(result.errors.join(', '))
+    if (!result.success) {
+      throw new Error(result.errors.length > 0 ? result.errors.join('; ') : 'Library scan did not complete successfully')
     }
   }
 
@@ -762,6 +764,8 @@ export class TaskQueueService {
     let totalAdded = 0
     let totalUpdated = 0
     let totalRemoved = 0
+    const scanFailures: string[] = []
+    const scanItemErrors: string[] = []
 
     for (let i = 0; i < enabledLibraries.length; i++) {
       const lib = enabledLibraries[i]
@@ -790,6 +794,8 @@ export class TaskQueueService {
       totalAdded += result.itemsAdded || 0
       totalUpdated += result.itemsUpdated || 0
       totalRemoved += result.itemsRemoved || 0
+      if (!result.success) scanFailures.push(`${lib.libraryName}: ${result.errors.join('; ') || 'scan failed'}`)
+      else if (result.errors.length > 0) scanItemErrors.push(`${lib.libraryName}: ${result.errors.join('; ')}`)
     }
 
     task.result = {
@@ -797,6 +803,10 @@ export class TaskQueueService {
       itemsAdded: totalAdded,
       itemsUpdated: totalUpdated,
       itemsRemoved: totalRemoved,
+      errors: [...scanFailures, ...scanItemErrors],
+    }
+    if (scanFailures.length > 0) {
+      throw new Error(`Source scan failed for ${scanFailures.length} libraries: ${scanFailures.join(' | ')}`)
     }
   }
 
@@ -926,8 +936,8 @@ export class TaskQueueService {
       itemsRemoved: result.itemsRemoved,
     }
 
-    if (!result.success && result.errors?.length > 0) {
-      throw new Error(result.errors.join(', '))
+    if (!result.success) {
+      throw new Error(result.errors.length > 0 ? result.errors.join('; ') : 'Music scan did not complete successfully')
     }
 
     // Analyze quality for all albums after scan

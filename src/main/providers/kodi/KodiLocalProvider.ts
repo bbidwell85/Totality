@@ -1091,6 +1091,8 @@ export class KodiLocalProvider implements MediaProvider {
               await db.upsertQualityScore(qualityScore)
 
               result.itemsScanned++
+            } else {
+              throw new Error('Could not convert Kodi media metadata')
             }
           } catch (error: unknown) {
             const msg = getErrorMessage(error)
@@ -1107,6 +1109,12 @@ export class KodiLocalProvider implements MediaProvider {
         await db.endBatch()
       }
 
+      // Failed or cancelled inventories cannot authorize destructive reconciliation.
+      if (result.errors.length > 0 || this.scanCancelled) {
+        result.durationMs = Date.now() - startTime
+        return result
+      }
+
       // Remove stale items (only for full scans, not incremental)
       if (!isIncremental) {
         const itemType = libraryId === 'movies' ? 'movie' : 'episode'
@@ -1114,7 +1122,7 @@ export class KodiLocalProvider implements MediaProvider {
 
         // Safety guard: refuse deletion when scan returned 0 items but DB has items
         if (scannedProviderIds.size === 0 && existingItems.length > 0) {
-          console.warn(`[KodiLocalProvider ${this.sourceId}] Scan found 0 items but DB has ${existingItems.length} — skipping deletion (possible database read failure)`)
+          throw new Error(`Incomplete KodiLocalProvider inventory: server returned no items while ${existingItems.length} are stored`)
         } else for (const item of existingItems) {
           if (!scannedProviderIds.has(item.plex_id)) {
             if (item.id) {
@@ -1275,6 +1283,8 @@ export class KodiLocalProvider implements MediaProvider {
               result.itemsScanned++
               result.itemsUpdated++
               console.log(`[KodiLocalProvider ${this.sourceId}] Updated: ${metadata.title}`)
+            } else {
+              throw new Error(`Could not convert Kodi media metadata for ${metadata.title}`)
             }
           } catch (error: unknown) {
             result.errors.push(`Failed to process ${inputFilePath}: ${getErrorMessage(error)}`)
@@ -1284,7 +1294,7 @@ export class KodiLocalProvider implements MediaProvider {
         this.closeDatabase()
       }
 
-      result.success = true
+      result.success = result.errors.length === 0
       result.durationMs = Date.now() - startTime
 
       console.log(`[KodiLocalProvider ${this.sourceId}] Targeted scan complete: ${result.itemsScanned} items updated in ${result.durationMs}ms`)
@@ -2268,12 +2278,12 @@ export class KodiLocalProvider implements MediaProvider {
       try {
         this.fetchAndUpdateGenres(db)
       } catch (genreError) {
-        console.warn(`[KodiLocalProvider ${this.sourceId}] Genre fetch failed:`, getErrorMessage(genreError))
+        result.errors.push(`Failed to fetch Kodi music genres: ${getErrorMessage(genreError)}`)
       }
 
       this.closeMusicDatabase()
 
-      result.success = true
+      result.success = result.errors.length === 0
       result.durationMs = Date.now() - startTime
 
       console.log(`[KodiLocalProvider ${this.sourceId}] Music scan complete: ${result.itemsScanned} tracks scanned in ${result.durationMs}ms`)

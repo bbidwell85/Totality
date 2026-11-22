@@ -442,7 +442,7 @@ export class PlexProvider implements MediaProvider {
     }
 
     try {
-      const items = await this.getPlexLibraryItems(libraryId, sinceTimestamp)
+      const items = await this.getPlexLibraryItems(libraryId, isIncremental ? sinceTimestamp : undefined)
       const db = getDatabase()
       const analyzer = getQualityAnalyzer()
       await analyzer.loadThresholdsFromDatabase()
@@ -490,6 +490,9 @@ export class PlexProvider implements MediaProvider {
 
           // Get all episodes
           const episodes = await this.getAllEpisodes(item.ratingKey)
+          if (episodes.length === 0) {
+            throw new Error(`Plex returned no episodes for ${item.title}; cannot verify a complete inventory`)
+          }
           for (const ep of episodes) {
             const epExt = ep as PlexMediaItem & { _showTmdbId?: string; _showTitleSort?: string }
             epExt._showTmdbId = showTmdbId
@@ -544,7 +547,7 @@ export class PlexProvider implements MediaProvider {
 
               const detailed = metaResult.value
               if (!detailed || !detailed.Media || detailed.Media.length === 0) {
-                console.warn(`[PlexProvider ${this.sourceId}] Skipping ${item.title}: no media data available`)
+                result.errors.push(`Plex metadata for ${item.title} has no media data; scan incomplete`)
                 continue
               }
 
@@ -611,6 +614,8 @@ export class PlexProvider implements MediaProvider {
                 } else {
                   result.itemsAdded++
                 }
+              } else {
+                result.errors.push(`Could not convert Plex metadata for ${item.title}; incomplete scan cannot verify deletions`)
               }
 
               if (onProgress) {
@@ -636,6 +641,12 @@ export class PlexProvider implements MediaProvider {
         await db.endBatch()
       }
 
+      // Partial or cancelled scans cannot establish absence; retain existing media.
+      if (result.cancelled || result.errors.length > 0) {
+        result.durationMs = Date.now() - startTime
+        return result
+      }
+
       // Remove stale items
       // If libraryType is null (Plex returned 0 items), detect from existing DB items
       if (!isIncremental && !libraryType) {
@@ -653,54 +664,36 @@ export class PlexProvider implements MediaProvider {
         const removedCount = await this.removeStaleItems(currentPlexIds, itemType, libraryId)
         result.itemsRemoved = removedCount
       } else if (isIncremental) {
-        // Incremental scan: use lightweight count check before expensive full ID reconciliation
+        // Verify the full inventory before reconciling additions or deletions.
+        // Item counts alone cannot detect replacement of one item by another.
         const libType = libraryType || await this.getPlexLibraryType(libraryId)
-        if (libType) {
-          const itemType = libType === 'show' ? 'episode' : 'movie'
-          const plexCount = await this.getLibraryItemCount(libraryId, libType)
-          const dbCount = db.countMediaItems({ type: itemType, sourceId: this.sourceId, libraryId, includeDisabledLibraries: true })
+        if (!libType) throw new Error(`Could not determine Plex library type for ${libraryId}`)
+        const itemType = libType === 'show' ? 'episode' : 'movie'
+        const currentPlexIds = await this.getPlexLibraryItemIds(libraryId, libType)
+        const dbItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId }) as Array<{ plex_id?: string }>
+        const dbIds = new Set(dbItems.map(item => item.plex_id).filter(Boolean))
+        const missingIds = [...currentPlexIds].filter(id => !dbIds.has(id))
 
-          if (plexCount !== dbCount) {
-            // Counts differ — do full ID reconciliation to find additions and deletions
-            console.log(`[PlexProvider ${this.sourceId}] Count mismatch in ${libType} library: Plex=${plexCount}, DB=${dbCount} — running full reconciliation`)
-            const currentPlexIds = await this.getPlexLibraryItemIds(libraryId, libType)
-
-            // Check for deletions (items in DB but not in Plex)
-            const removedCount = await this.removeStaleItems(currentPlexIds, itemType, libraryId)
-            if (removedCount > 0) {
-              console.log(`[PlexProvider ${this.sourceId}] Removed ${removedCount} deleted items`)
-            }
-            result.itemsRemoved = removedCount
-
-            // Check for additions (items in Plex but not in DB)
-            const dbItems = db.getMediaItems({ type: itemType, sourceId: this.sourceId, libraryId }) as Array<{ plex_id?: string }>
-            const dbIds = new Set(dbItems.map((item: typeof dbItems[0]) => item.plex_id).filter(Boolean))
-            const missingIds: string[] = []
-            for (const plexId of currentPlexIds) {
-              if (!dbIds.has(plexId)) {
-                missingIds.push(plexId)
-              }
-            }
-
-            if (missingIds.length > 0) {
-              console.log(`[PlexProvider ${this.sourceId}] Found ${missingIds.length} items in Plex not in DB, fetching...`)
-              const addedCount = await this.fetchAndProcessMissingItems(missingIds, libraryId, libType, analyzer, onProgress)
-              result.itemsAdded += addedCount
-              console.log(`[PlexProvider ${this.sourceId}] Added ${addedCount} missing items`)
-            }
-          } else {
-            getLoggingService().verbose('[PlexProvider]', `${libType} library counts match (${plexCount}) — skipping reconciliation`)
-          }
+        if (missingIds.length > 0) {
+          const addedCount = await this.fetchAndProcessMissingItems(missingIds, libraryId, libType, analyzer, onProgress)
+          result.itemsAdded += addedCount
         }
+
+        // An addition failure throws before any stale record is deleted.
+        result.itemsRemoved = await this.removeStaleItems(currentPlexIds, itemType, libraryId)
       }
 
-      // Update scan time
-      await db.updateSourceScanTime(this.sourceId)
-
       // Clean up any orphaned data (collections, series, music validated inside)
-      try { db.cleanupOrphanedMediaData() } catch { /* non-critical */ }
+      try {
+        db.cleanupOrphanedMediaData()
+      } catch (error) {
+        result.errors.push(`Failed to clean orphaned media: ${getErrorMessage(error)}`)
+      }
 
-      result.success = true
+      if (result.errors.length === 0) {
+        await db.updateSourceScanTime(this.sourceId)
+      }
+      result.success = result.errors.length === 0
       result.durationMs = Date.now() - startTime
       console.log(`[PlexProvider ${this.sourceId}] Scan complete: ${result.itemsScanned} scanned, ${result.itemsAdded} added, ${result.itemsUpdated} updated, ${result.itemsRemoved} removed, ${result.errors.length} errors (${(result.durationMs / 1000).toFixed(1)}s)`)
 
@@ -722,8 +715,7 @@ export class PlexProvider implements MediaProvider {
     // Safety guard: refuse bulk deletion when Plex returns 0 IDs but DB has items
     // (likely a Plex API failure, not an actual empty library)
     if (validIds.size === 0 && items.length > 0) {
-      console.warn(`[PlexProvider ${this.sourceId}] Plex returned 0 ${type} IDs but DB has ${items.length} — skipping deletion (possible API failure)`)
-      return 0
+      throw new Error(`Incomplete Plex ${type} inventory: 0 IDs returned while ${items.length} stored media items exist`)
     }
 
     let removedCount = 0
@@ -782,6 +774,7 @@ export class PlexProvider implements MediaProvider {
       if (libraryType === 'show') {
         // For TV, we need episode ratingKeys
         const episodes = await this.getAllEpisodes(item.ratingKey)
+        if (episodes.length === 0) throw new Error(`Incomplete Plex episode inventory for show ${item.ratingKey}`)
         for (const ep of episodes) {
           ids.add(ep.ratingKey)
         }
@@ -811,7 +804,7 @@ export class PlexProvider implements MediaProvider {
       try {
         // Fetch the item metadata
         const metadata = await this.getPlexItemMetadata(ratingKey)
-        if (!metadata) continue
+        if (!metadata) throw new Error(`Metadata unavailable for ${ratingKey}`)
 
         // Convert and add the item
         const itemType = libraryType === 'show' ? 'episode' : 'movie'
@@ -838,17 +831,19 @@ export class PlexProvider implements MediaProvider {
             mediaItem.id = itemId
             const qualityScore = await analyzer.analyzeMediaItem(mediaItem)
             if (qualityScore) {
-              db.upsertQualityScore(qualityScore)
+              await db.upsertQualityScore(qualityScore)
             }
           } catch (qualityError) {
-            console.warn(`[PlexProvider ${this.sourceId}] Failed to analyze quality for ${mediaItem.title}`)
+            throw new Error(`Failed to analyze quality for ${mediaItem.title}: ${getErrorMessage(qualityError)}`)
           }
 
           addedCount++
           console.log(`[PlexProvider ${this.sourceId}] Added missing ${itemType}: "${mediaItem.title}"`)
+        } else {
+          throw new Error(`Could not convert Plex metadata for ${ratingKey}`)
         }
       } catch (error) {
-        console.error(`[PlexProvider ${this.sourceId}] Failed to fetch item ${ratingKey}:`, error)
+        throw new Error(`Failed to process Plex item ${ratingKey}: ${getErrorMessage(error)}`)
       }
     }
 
@@ -891,11 +886,17 @@ export class PlexProvider implements MediaProvider {
       )
 
       const container = responseData?.MediaContainer
-      const items = container?.Metadata || []
+      if (!container) throw new Error('Invalid Plex library response: missing MediaContainer')
+      const items = container.Metadata || []
       allItems.push(...items)
 
-      const totalSize = container?.totalSize
-      if (items.length === 0 || (totalSize != null && allItems.length >= totalSize)) {
+      const totalSize = container.totalSize
+      if (items.length === 0) {
+        if (totalSize != null && allItems.length < totalSize) {
+          throw new Error(`Incomplete Plex inventory: received ${allItems.length} of ${totalSize} items`)
+        }
+        hasMore = false
+      } else if (totalSize != null && allItems.length >= totalSize) {
         hasMore = false
       } else {
         offset += items.length
@@ -948,13 +949,8 @@ export class PlexProvider implements MediaProvider {
       throw new Error('No server selected')
     }
 
-    try {
-      const url = `${this.selectedServer.uri}/library/metadata/${showKey}/allLeaves`
-      return await this.paginatedPlexFetch<PlexMediaItem>(url)
-    } catch (error) {
-      console.error('Failed to get episodes:', error)
-      return []
-    }
+    const url = `${this.selectedServer.uri}/library/metadata/${showKey}/allLeaves`
+    return this.paginatedPlexFetch<PlexMediaItem>(url)
   }
 
   private async getSeasonMetadata(seasonKey: string): Promise<PlexMediaItem | null> {
@@ -1380,32 +1376,6 @@ export class PlexProvider implements MediaProvider {
     }
 
     return albums
-  }
-
-  /**
-   * Get total item count from Plex library without fetching item data.
-   * Uses X-Plex-Container-Size=0 to only get the totalSize from the container.
-   * For TV show libraries, use type=4 (episodes) to get episode count.
-   */
-  private async getLibraryItemCount(libraryId: string, libraryType: 'movie' | 'show'): Promise<number> {
-    if (!this.selectedServer) return 0
-
-    const url = `${this.selectedServer.uri}/library/sections/${libraryId}/all`
-    // type=1 for movies, type=4 for episodes
-    const plexType = libraryType === 'show' ? 4 : 1
-    const responseData = await fetchJSON<{ MediaContainer?: { totalSize?: number } }>(
-      buildUrl(url, { type: plexType }),
-      {
-        headers: {
-          'X-Plex-Token': this.selectedServer.accessToken,
-          'X-Plex-Container-Start': '0',
-          'X-Plex-Container-Size': '0',
-          Accept: 'application/json',
-        },
-      }
-    )
-
-    return responseData?.MediaContainer?.totalSize || 0
   }
 
   /**
@@ -1839,7 +1809,7 @@ export class PlexProvider implements MediaProvider {
 
       // Collect existing track provider IDs to track new vs updated
       const existingTrackIds = new Set(
-        (db.getMusicTracks({ sourceId: this.sourceId }) as Array<{ provider_id?: string }>)
+        (db.getMusicTracks({ sourceId: this.sourceId, libraryId }) as Array<{ provider_id?: string }>)
           .map((t: { provider_id?: string }) => t.provider_id)
           .filter(Boolean)
       )
@@ -1877,7 +1847,8 @@ export class PlexProvider implements MediaProvider {
 
         for (const plexTrack of tracks) {
           const trackData = this.convertToMusicTrack(plexTrack, undefined, artistId, libraryId)
-          if (trackData) {
+          if (!trackData) throw new Error(`Could not convert Plex music track ${plexTrack.ratingKey}`)
+          {
             trackDataList.push(trackData)
             totalDuration += trackData.duration || 0
             totalSize += trackData.file_size || 0
@@ -2059,29 +2030,26 @@ export class PlexProvider implements MediaProvider {
         }
       }
 
-      // Update scan time
-      await db.updateSourceScanTime(this.sourceId)
-
-      result.success = true
-      result.durationMs = Date.now() - startTime
+      if (result.errors.length > 0 || result.cancelled) {
+        result.durationMs = Date.now() - startTime
+        return result
+      }
 
       // Reconcile music: remove tracks not in scanned set
-      const existingTracks = db.getMusicTracks({ sourceId: this.sourceId }) as MusicTrack[]
+      const existingTracks = db.getMusicTracks({ sourceId: this.sourceId, libraryId }) as MusicTrack[]
       const existingTrackCount = existingTracks.length
 
       // Safety guard: refuse bulk deletion when scan appears incomplete (API failures, timeouts)
       if (scannedTrackIds.size === 0 && existingTrackCount > 0) {
-        console.warn(`[PlexProvider ${this.sourceId}] Scan found 0 tracks but DB has ${existingTrackCount} — skipping reconciliation (possible API failure)`)
+        throw new Error(`Incomplete Plex music inventory: 0 scanned tracks but ${existingTrackCount} stored tracks exist`)
       } else if (existingTrackCount > 0 && scannedTrackIds.size < existingTrackCount * 0.5) {
-        console.warn(`[PlexProvider ${this.sourceId}] Scan found only ${scannedTrackIds.size}/${existingTrackCount} tracks — skipping reconciliation (possible partial scan failure)`)
+        throw new Error(`Incomplete Plex music inventory: ${scannedTrackIds.size} of ${existingTrackCount} stored tracks scanned`)
       } else {
         let musicRemoved = 0
         for (const track of existingTracks) {
           if (track.provider_id && !scannedTrackIds.has(track.provider_id) && track.id) {
-            try {
-              db.deleteMusicTrack(track.id)
-              musicRemoved++
-            } catch { /* best effort */ }
+            await db.deleteMusicTrack(track.id)
+            musicRemoved++
           }
         }
         if (musicRemoved > 0) {
@@ -2100,9 +2068,14 @@ export class PlexProvider implements MediaProvider {
         await this.fetchAndUpdateTags(libraryId, db, 'mood')
         await this.fetchAndUpdateTags(libraryId, db, 'genre')
       } catch (tagError) {
-        console.warn(`[PlexProvider ${this.sourceId}] Tag fetch failed:`, getErrorMessage(tagError))
+        result.errors.push(`Failed to fetch Plex music tags: ${getErrorMessage(tagError)}`)
       }
 
+      if (result.errors.length === 0) {
+        await db.updateSourceScanTime(this.sourceId)
+      }
+      result.success = result.errors.length === 0
+      result.durationMs = Date.now() - startTime
       return result
     } catch (error: unknown) {
       result.errors.push(getErrorMessage(error))

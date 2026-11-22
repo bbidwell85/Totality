@@ -1,14 +1,14 @@
-; Custom NSIS uninstall script for Totality
-; Ensures complete cleanup of installation directory and optionally app data
+; Preserve user data during upgrades and silent uninstallations.
+; An explicit interactive uninstall may remove it with user approval.
 
 !macro customUnInstall
-  ; Ask user if they want to delete app data BEFORE removing install dir
-  MessageBox MB_YESNO|MB_ICONEXCLAMATION "Do you want to PERMANENTLY DELETE your Totality data?$\n$\nThis will remove your database, settings, and all scan history.$\nThis action cannot be undone.$\n$\nLocation: $APPDATA\totality" IDYES deleteAppData IDNO skipDelete
-
-  deleteAppData:
-    RMDir /r "$APPDATA\totality"
-
-  skipDelete:
-    ; Remove installation directory completely (fixes leftover files issue)
-    RMDir /r "$INSTDIR"
+  ${ifNot} ${isUpdated}
+    ${ifNot} ${Silent}
+      MessageBox MB_YESNO|MB_ICONEXCLAMATION|MB_DEFBUTTON2 "Do you want to PERMANENTLY DELETE your Totality data?$\n$\nThis will remove your database, settings, and all scan history.$\nThis action cannot be undone.$\n$\nLocation: $APPDATA\totality" IDYES deleteAppData
+      Goto keepAppData
+      deleteAppData:
+      RMDir /r "$APPDATA\totality"
+      keepAppData:
+    ${endIf}
+  ${endIf}
 !macroend

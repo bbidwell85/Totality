@@ -14,6 +14,7 @@ vi.mock('../../src/main/services/SourceManager', () => ({
   getSourceManager: vi.fn().mockReturnValue({
     getProvider: vi.fn(),
     getSources: vi.fn().mockReturnValue([]),
+    scanLibrary: vi.fn(),
   }),
 }))
 
@@ -42,6 +43,8 @@ vi.mock('../../src/main/database/getDatabase', () => ({
   getDatabase: vi.fn().mockReturnValue({
     getSources: vi.fn().mockReturnValue([]),
     getMediaItems: vi.fn().mockReturnValue([]),
+    getLibraryScanTime: vi.fn().mockReturnValue(null),
+    getSourceLibraries: vi.fn().mockReturnValue([]),
   }),
 }))
 
@@ -56,7 +59,9 @@ vi.mock('../../src/main/services/LiveMonitoringService', () => ({
 }))
 
 // Import after mocks
-import { TaskQueueService, TaskDefinition } from '../../src/main/services/TaskQueueService'
+import { TaskQueueService, TaskDefinition, type QueuedTask } from '../../src/main/services/TaskQueueService'
+import { getDatabase } from '../../src/main/database/getDatabase'
+import { getSourceManager } from '../../src/main/services/SourceManager'
 
 describe('TaskQueueService', () => {
   let service: TaskQueueService
@@ -67,6 +72,47 @@ describe('TaskQueueService', () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+  })
+
+  describe('scan failure propagation', () => {
+    function task(type: 'library-scan' | 'source-scan'): QueuedTask {
+      return {
+        id: 'scan-test', type, label: 'Scan test', sourceId: 'source-1',
+        libraryId: 'movies', status: 'queued', createdAt: '2026-11-01T00:00:00Z',
+      }
+    }
+
+    const failedScan = {
+      success: false, itemsScanned: 1, itemsAdded: 0,
+      itemsUpdated: 0, itemsRemoved: 0, errors: [], durationMs: 1,
+    }
+
+    it('fails single-library scans even if the provider supplies no error string', async () => {
+      vi.mocked(getSourceManager().scanLibrary).mockResolvedValueOnce(failedScan)
+      const current = task('library-scan')
+      const execute = Reflect.get(service, 'executeLibraryScan') as
+        (task: QueuedTask, progress: () => void) => Promise<void>
+      await expect(execute.call(service, current, () => {})).rejects.toThrow(
+        'Library scan did not complete successfully'
+      )
+      expect(current.result?.itemsScanned).toBe(1)
+    })
+
+    it('propagates failure of one library in a multi-library source scan', async () => {
+      vi.mocked(getDatabase().getSourceLibraries).mockReturnValueOnce([
+        { libraryId: 'movies', libraryName: 'Movies', libraryType: 'movie', isEnabled: true, lastScanAt: null, itemsScanned: 0 },
+        { libraryId: 'shows', libraryName: 'Shows', libraryType: 'show', isEnabled: true, lastScanAt: null, itemsScanned: 0 },
+      ])
+      vi.mocked(getSourceManager().scanLibrary)
+        .mockResolvedValueOnce({ ...failedScan, errors: ['Plex unavailable'] })
+        .mockResolvedValueOnce({ ...failedScan, success: true, itemsScanned: 4 })
+      const current = task('source-scan')
+      const execute = Reflect.get(service, 'executeSourceScan') as
+        (task: QueuedTask, progress: () => void) => Promise<void>
+      await expect(execute.call(service, current, () => {})).rejects.toThrow('Movies: Plex unavailable')
+      expect(current.result?.itemsScanned).toBe(5)
+      expect(current.result?.errors).toEqual(['Movies: Plex unavailable'])
+    })
   })
 
   describe('queue management', () => {

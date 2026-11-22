@@ -13,22 +13,32 @@ import crypto from 'crypto'
 // Mock getDatabase and getCredentialEncryptionService before importing the module
 const mockGetSetting = vi.fn<(key: string) => string | null>().mockReturnValue(null)
 const mockSetSetting = vi.fn()
+const mockDeleteSetting = vi.fn()
 const mockDecryptSetting = vi.fn((_key: string, val: string) => val)
 const mockEncryptSetting = vi.fn((_key: string, val: string) => val)
+const mockDecrypt = vi.fn<(val: string) => string>(() => '')
 
 vi.mock('@main/database/getDatabase', () => ({
   getDatabase: () => ({
     getSetting: mockGetSetting,
     setSetting: mockSetSetting,
+    deleteSetting: mockDeleteSetting,
   }),
 }))
 
 vi.mock('@main/services/CredentialEncryptionService', () => ({
   getCredentialEncryptionService: () => ({
+    isEncrypted: (val: string) => val.startsWith('encrypted:'),
+    decrypt: mockDecrypt,
+    encrypt: (val: string) => `encrypted:${val}`,
     decryptSetting: mockDecryptSetting,
     encryptSetting: mockEncryptSetting,
   }),
 }))
+
+vi.mock('electron', () => ({ app: { getPath: () => 'C:/test' } }))
+
+import { WebServerService } from '@main/services/WebServerService'
 
 vi.mock('@main/services/LoggingService', () => ({
   getLoggingService: () => ({
@@ -66,6 +76,35 @@ describe('timingSafeCompare', () => {
   it('handles different lengths safely (via hashing)', () => {
     // Hash makes them equal length — no timingSafeEqual length mismatch error
     expect(timingSafeCompare('short', 'a-much-longer-string')).toBe(false)
+  })
+})
+
+describe('persisted web sessions', () => {
+  beforeEach(() => {
+    mockGetSetting.mockReset()
+    mockGetSetting.mockReturnValue('encrypted:unreadable')
+    mockDeleteSetting.mockReset()
+    mockDecrypt.mockReset()
+    mockDecrypt.mockImplementation(() => { throw new Error('invalid ciphertext') })
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('revokes unreadable encrypted sessions and keeps startup able to use fresh PIN login', () => {
+    const service = Object.create(WebServerService.prototype) as {
+      loadPersistedSessions: () => void
+      sessions: Map<string, unknown>
+    }
+    service.sessions = new Map([['stale-token', {}]])
+
+    expect(() => service.loadPersistedSessions()).not.toThrow()
+    expect(service.sessions.size).toBe(0)
+    expect(mockDeleteSetting).toHaveBeenCalledWith('web_sessions')
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('fresh PIN login is required:'),
+      expect.any(Error),
+    )
   })
 })
 

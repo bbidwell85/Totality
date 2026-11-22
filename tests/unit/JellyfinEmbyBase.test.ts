@@ -3,6 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockFetchJSON = vi.hoisted(() => vi.fn())
 const mockFetchWithTimeout = vi.hoisted(() => vi.fn())
+const mockGetMediaItems = vi.hoisted(() => vi.fn((): Array<{ id: number; plex_id: string }> => []))
+const mockDeleteMediaItem = vi.hoisted(() => vi.fn())
+const mockCountMediaItems = vi.hoisted(() => vi.fn(() => 0))
+const mockUpdateSourceScanTime = vi.hoisted(() => vi.fn())
 
 vi.mock('../../src/main/services/utils/httpClient', () => ({
   fetchJSON: mockFetchJSON,
@@ -23,9 +27,13 @@ vi.mock('../../src/main/database/getDatabase', () => ({
   getDatabase: vi.fn(() => ({
     getSetting: vi.fn(() => null),
     setSetting: vi.fn(),
-    getMediaItems: vi.fn(() => []),
+    getMediaItems: mockGetMediaItems,
     upsertMediaItem: vi.fn(),
-    deleteMediaItem: vi.fn(),
+    deleteMediaItem: mockDeleteMediaItem,
+    countMediaItems: mockCountMediaItems,
+    updateSourceScanTime: mockUpdateSourceScanTime,
+    startBatch: vi.fn(),
+    endBatch: vi.fn(),
     getLibraryScan: vi.fn(() => null),
     upsertLibraryScan: vi.fn(),
   })),
@@ -94,7 +102,120 @@ describe('JellyfinEmbyBase (via JellyfinProvider)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockGetMediaItems.mockReset().mockReturnValue([])
+    mockCountMediaItems.mockReset().mockReturnValue(0)
     provider = new JellyfinProvider(makeConfig())
+  })
+
+  describe('scan-safety reconciliation', () => {
+    it('reports missing video libraries instead of assuming movie type', async () => {
+      vi.spyOn(provider, 'getLibraries').mockResolvedValue([])
+      const result = await provider.scanLibrary('unknown-library')
+      expect(result.success).toBe(false)
+      expect(result.errors.join(' ')).toContain('Library unknown-library not found')
+      expect(mockDeleteMediaItem).not.toHaveBeenCalled()
+    })
+
+    it('rejects partial library pagination before deleting existing media', async () => {
+      vi.spyOn(provider, 'getLibraries').mockResolvedValue([{ id: 'lib-1', type: 'movie' }] as any)
+      mockFetchJSON
+        .mockResolvedValueOnce({ Items: [{ Id: 'film-1', Type: 'Movie' }], TotalRecordCount: 2 })
+        .mockResolvedValueOnce({ Items: [], TotalRecordCount: 2 })
+      const result = await provider.scanLibrary('lib-1')
+      expect(result.success).toBe(false)
+      expect(result.errors.join(' ')).toContain('Incomplete jellyfin library inventory')
+      expect(mockDeleteMediaItem).not.toHaveBeenCalled()
+      expect(mockUpdateSourceScanTime).not.toHaveBeenCalled()
+    })
+
+    it('rejects empty inventories that conflict with stored media', async () => {
+      vi.spyOn(provider, 'getLibraries').mockResolvedValue([{ id: 'lib-1', type: 'movie' }] as any)
+      mockFetchJSON.mockResolvedValueOnce({ Items: [], TotalRecordCount: 0 })
+      mockGetMediaItems.mockReturnValueOnce([{ id: 1, plex_id: 'stored-1' }])
+      const result = await provider.scanLibrary('lib-1')
+      expect(result.success).toBe(false)
+      expect(result.errors.join(' ')).toContain('server returned no items while 1 are stored')
+      expect(mockDeleteMediaItem).not.toHaveBeenCalled()
+    })
+
+    it('rejects sourceless media without deleting the stored inventory', async () => {
+      vi.spyOn(provider, 'getLibraries').mockResolvedValue([{ id: 'lib-1', type: 'movie' }] as any)
+      mockFetchJSON.mockResolvedValueOnce({
+        Items: [{ Id: 'film-1', Name: 'No media', Type: 'Movie', MediaSources: [] }],
+        TotalRecordCount: 1,
+      })
+      const result = await provider.scanLibrary('lib-1')
+      expect(result.success).toBe(false)
+      expect(result.errors.join(' ')).toContain('No media sources returned for No media')
+      expect(mockDeleteMediaItem).not.toHaveBeenCalled()
+    })
+
+    it('rejects truncated deletion inventory pages', async () => {
+      mockFetchJSON
+        .mockResolvedValueOnce({ Items: [{ Id: 'film-1' }], TotalRecordCount: 2 })
+        .mockResolvedValueOnce({ Items: [], TotalRecordCount: 2 })
+      await expect((provider as any).getAllLibraryItemIds('lib-1', 'movie'))
+        .rejects.toThrow('Incomplete deletion inventory')
+      expect(mockDeleteMediaItem).not.toHaveBeenCalled()
+    })
+
+    it('requests subsequent pages of movies in large BoxSets', async () => {
+      vi.spyOn(provider, 'getLibraries').mockResolvedValue([{ id: 'lib-1', type: 'movie', collectionType: 'boxsets' }] as any)
+      mockFetchJSON
+        .mockResolvedValueOnce({ Items: [{ Id: 'box-1', ProviderIds: {} }], TotalRecordCount: 1 })
+        .mockResolvedValueOnce({ Items: [{ Id: 'film-1' }], TotalRecordCount: 2 })
+        .mockResolvedValueOnce({ Items: [{ Id: 'film-2' }], TotalRecordCount: 2 })
+      await provider.scanLibrary('lib-1')
+      const requests = mockFetchJSON.mock.calls.filter(([url]) => String(url).includes('ParentId=box-1'))
+      expect(requests).toHaveLength(2)
+      expect(requests[1][0]).toContain('StartIndex=1')
+    })
+
+    it('fails an incremental scan when an empty server count conflicts with stored media', async () => {
+      vi.spyOn(provider, 'getLibraries').mockResolvedValue([{ id: 'lib-1', type: 'movie' }] as any)
+      mockCountMediaItems.mockReturnValueOnce(1)
+      mockFetchJSON
+        .mockResolvedValueOnce({ Items: [], TotalRecordCount: 0 })
+        .mockResolvedValueOnce({ Items: [], TotalRecordCount: 0 })
+      const result = await provider.scanLibrary('lib-1', { sinceTimestamp: new Date('2026-01-01') })
+      expect(result.success).toBe(false)
+      expect(result.errors.join(' ')).toContain('server reported no items while 1 are stored')
+      expect(mockDeleteMediaItem).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('music inventory completeness', () => {
+    it('continues through short artist and album pages', async () => {
+      mockFetchJSON
+        .mockResolvedValueOnce({ Items: [{ Id: 'artist-1' }], TotalRecordCount: 2 })
+        .mockResolvedValueOnce({ Items: [{ Id: 'artist-2' }], TotalRecordCount: 2 })
+      const artists = await provider.getMusicArtists('music-lib')
+      expect(artists.map(a => a.Id)).toEqual(['artist-1', 'artist-2'])
+      expect(String(mockFetchJSON.mock.calls[1][0])).toContain('StartIndex=1')
+      mockFetchJSON
+        .mockResolvedValueOnce({ Items: [{ Id: 'album-1' }], TotalRecordCount: 2 })
+        .mockResolvedValueOnce({ Items: [{ Id: 'album-2' }], TotalRecordCount: 2 })
+      const albums = await provider.getMusicAlbums('music-lib')
+      expect(albums.map(a => a.Id)).toEqual(['album-1', 'album-2'])
+    })
+
+    it('retrieves every track rather than only the first page', async () => {
+      mockFetchJSON
+        .mockResolvedValueOnce({ Items: [{ Id: 'track-1' }], TotalRecordCount: 2 })
+        .mockResolvedValueOnce({ Items: [{ Id: 'track-2' }], TotalRecordCount: 2 })
+      const tracks = await provider.getMusicTracks('album-1')
+      expect(tracks.map(t => t.Id)).toEqual(['track-1', 'track-2'])
+      expect(String(mockFetchJSON.mock.calls[1][0])).toContain('StartIndex=1')
+    })
+
+    it('reports failed artists as unsuccessful music scans', async () => {
+      vi.spyOn(provider, 'getMusicArtists').mockResolvedValue([{ Id: 'artist-1', Name: 'Artist' }] as any)
+      vi.spyOn(provider, 'getMusicAlbums').mockResolvedValue([])
+      vi.spyOn(provider, 'convertToMusicArtist').mockImplementation(() => { throw new Error('Invalid artist metadata') })
+      const result = await provider.scanMusicLibrary('music-lib')
+      expect(result.success).toBe(false)
+      expect(result.errors.join(' ')).toContain('Invalid artist metadata')
+    })
   })
 
   // ==========================================================================
